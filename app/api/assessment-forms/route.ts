@@ -7,13 +7,7 @@
  */
 
 import { NextResponse } from "next/server";
-import sql from "mssql";
-
-// Database configuration using the environment variable from .env.local
-// Ensure your DATABASE_URL is correctly set up.
-const dbConfig = {
-  connectionString: process.env.DATABASE_URL,
-};
+import { getDbPool } from "@/lib/db";
 
 /**
  * Handles GET requests to /api/assessment-forms
@@ -22,19 +16,8 @@ const dbConfig = {
 export async function GET() {
   console.log("API call to /api/assessment-forms received.");
 
-  let pool;
   try {
-    // Validate that the database connection string is configured
-    if (!dbConfig.connectionString) {
-      console.error(
-        "Database connection string is not defined in environment variables."
-      );
-      throw new Error("Database connection string is not configured.");
-    }
-
-    console.log("Connecting to the database...");
-    pool = await sql.connect(dbConfig.connectionString);
-    console.log("Database connection successful.");
+    const pool = await getDbPool(); // Get the shared pool
 
     // Execute the user-provided query to get all assessment form types
     const query = `
@@ -66,12 +49,5 @@ export async function GET() {
       },
       { status: 500 }
     );
-  } finally {
-    // This block ensures the database connection is always closed,
-    // even if an error occurs.
-    if (pool) {
-      await pool.close();
-      console.log("Database connection closed.");
-    }
   }
 }

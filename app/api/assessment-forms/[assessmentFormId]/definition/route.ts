@@ -4,20 +4,14 @@
  * Description: This API route fetches the detailed field definition for a specific
  * AssessmentForm. It retrieves all fields and, for dropdown-type fields,
  * fetches their corresponding lookup options.
+ * V2 Update: Conditionally adds the 'options' key only for select-list fields.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getDbPool } from "@/lib/db";
 import sql from "mssql";
-
-// Database configuration from .env.local
-const dbConfig = {
-  connectionString: process.env.DATABASE_URL,
-};
-
 /**
  * Maps the integer dataType from the database to a human-readable string.
- * @param {number} dataType - The integer code for the data type.
- * @returns {string} The string representation of the field type.
  */
 function mapDataType(dataType: number): string {
   const typeMap: { [key: number]: string } = {
@@ -25,7 +19,7 @@ function mapDataType(dataType: number): string {
     2: "UserList",
     3: "CalculatedValue",
     4: "Information",
-    5: "SourceList", // Note: 5 and 56 both exist in the provided mapping
+    5: "SourceList",
     56: "Integer",
     58: "DateTime",
     61: "Date",
@@ -40,18 +34,10 @@ function mapDataType(dataType: number): string {
   return typeMap[dataType] || "Unknown";
 }
 
-/**
- * Handles GET requests to /api/assessment-forms/[assessmentFormId]/definition
- * The [assessmentFormId] is a dynamic route parameter.
- * @param {NextRequest} request - The incoming request object.
- * @param {{ params: { assessmentFormId: string } }} context - Contains the dynamic route parameters.
- * @returns {Promise<NextResponse>} A JSON response containing the AssessmentFormDefinition or an error.
- */
 export async function GET(
   request: NextRequest,
   { params }: { params: { assessmentFormId: string } }
 ) {
-  // Extract the assessmentFormId from the URL path
   const { assessmentFormId } = params;
   console.log(
     `API call to fetch definition for assessmentFormId: ${assessmentFormId}`
@@ -64,21 +50,11 @@ export async function GET(
     );
   }
 
-  let pool;
   try {
-    if (!dbConfig.connectionString) {
-      throw new Error("Database connection string is not configured.");
-    }
+    const pool = await getDbPool();
 
-    pool = await sql.connect(dbConfig.connectionString);
-    console.log("Database connection successful.");
-
-    // First query: Get all the fields for the given assessmentFormId
     const fieldsQuery = `
-      SELECT 
-        att.name, 
-        att.dataType, 
-        att.id as AttributeTypeID
+      SELECT att.name, att.dataType, att.id as AttributeTypeID
       FROM SilhouetteAIDashboard.dbo.AssessmentTypeVersion atv
       INNER JOIN SilhouetteAIDashboard.dbo.AttributeSetAssessmentTypeVersion asatv ON atv.id = asatv.assessmentTypeVersionFk
       INNER JOIN SilhouetteAIDashboard.dbo.AttributeSet ats ON asatv.attributeSetFk = ats.id
@@ -103,48 +79,41 @@ export async function GET(
 
     console.log(`Found ${fieldsResult.recordset.length} fields for the form.`);
 
-    // Prepare to build the final definition object
+    // Use a more specific type for the definition object
     const assessmentFormDefinition: {
-      [key: string]: { fieldtype: string; options: string[] };
+      [key: string]: { fieldtype: string; options?: string[] };
     } = {};
 
-    // Loop through each field to fetch its options if it's a select list
     for (const field of fieldsResult.recordset) {
       const fieldName = field.name;
       const fieldType = mapDataType(field.dataType);
-      let options: string[] = [];
 
-      // If the field is a Single or Multi-select list, fetch its options
+      // Define the base field object, note that 'options' is now optional
+      const fieldDefinition: { fieldtype: string; options?: string[] } = {
+        fieldtype: fieldType,
+      };
+
+      // *** FIX: Only add the 'options' key if the field type is a select list ***
       if (fieldType === "SingleSelectList" || fieldType === "MultiSelectList") {
-        console.log(
-          `Fetching options for field: '${fieldName}' (ID: ${field.AttributeTypeID})`
-        );
-
         const optionsQuery = `
           SELECT [text] 
           FROM SilhouetteAIDashboard.dbo.AttributeLookup 
           WHERE attributeTypeFk = @attributeTypeFk AND isDeleted = 0
           ORDER BY orderIndex;
         `;
-
         const optionsResult = await pool
           .request()
           .input("attributeTypeFk", sql.UniqueIdentifier, field.AttributeTypeID)
           .query(optionsQuery);
 
-        // Extract the 'text' from each option record
-        options = optionsResult.recordset.map((option) => option.text);
-        console.log(`Found ${options.length} options for '${fieldName}'.`);
+        fieldDefinition.options = optionsResult.recordset.map(
+          (option) => option.text
+        );
       }
 
-      // Add the field and its details to our definition object
-      assessmentFormDefinition[fieldName] = {
-        fieldtype: fieldType,
-        options: options,
-      };
+      assessmentFormDefinition[fieldName] = fieldDefinition;
     }
-
-    // Return the fully constructed definition object
+    console.log(JSON.stringify(assessmentFormDefinition, null, 2));
     return NextResponse.json(assessmentFormDefinition);
   } catch (error: any) {
     console.error("API Error:", error);
@@ -155,10 +124,5 @@ export async function GET(
       },
       { status: 500 }
     );
-  } finally {
-    if (pool) {
-      await pool.close();
-      console.log("Database connection closed.");
-    }
   }
 }

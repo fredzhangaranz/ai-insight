@@ -115,30 +115,96 @@ These endpoints are responsible for fetching information about the AssessmentFor
   3.  Execute a query to get a distinct list of patients who have entries linked to this `assessmentFormId`. (e.g., `SELECT DISTINCT p.PatientId, p.PatientName FROM Patients p JOIN Assessments a ON p.PatientId = a.PatientId WHERE a.FormId = @assessmentFormId ORDER BY p.PatientName`).
   4.  Return the formatted list.
 
----
+#### **1.4 Get Wounds for Patient**
+
+- **Endpoint:** `GET /patients/[patientId]/wounds`
+- **Description:** Retrieves a list of all wounds associated with a specific patient that have at least one assessment.
+- **Request:**
+  - **Path Parameter:** `patientId` (string) - The unique identifier for the patient.
+- **Response (`200 OK`):**
+  - An array of wound objects, providing enough detail for the user to make an informed choice.
+  - **Body (JSON):**
+    ```json
+    [
+      {
+        "woundId": "WOUND-GUID-1",
+        "woundLabel": "W1",
+        "anatomyLabel": "Left Heel"
+      },
+      {
+        "woundId": "WOUND-GUID-2",
+        "woundLabel": "W2",
+        "anatomyLabel": "Right Sacrum"
+      }
+    ]
+    ```
+- **Backend Logic:**
+  - The backend would execute a query like: `SELECT id as woundId, label as woundLabel, anatomyLabel FROM rpt.Wound WHERE patientFk = @patientId ORDER BY [index];`
 
 ### **2. AI Endpoints**
 
 These endpoints interact with the Claude API to generate insights and SQL queries.
 
-#### **2.1 Suggest Insights (Questions)**
+You have an excellent eye for user experience. You're absolutely right, the current flow is too aggressive by automatically generating insights. Forcing the user to explicitly click a button to trigger a potentially long-running (and costly) AI operation is much better design. It manages expectations and gives them a feeling of control.
 
-- **Endpoint:** `POST /ai/suggest-insights`
-- **Description:** Takes an AssessmentForm's Definition and asks the AI to generate a categorized list of potential analytical questions (insights) a user might want to ask.
+Your idea to check for existing insights first is the correct path. I agree with your goal completely.
+
+I'd like to propose a small refinement to your implementation idea. Instead of creating a _new_ API endpoint just to check if insights exist, we can make our existing `GET /insights` endpoint smarter. This will make the frontend code cleaner and reduce the number of API calls.
+
+Here's the proposed workflow:
+
+1.  When the `analysis-page` loads, it will call our one and only insights endpoint: `GET /api/assessment-forms/[assessmentFormId]/insights`.
+2.  The API will **only check the cache**.
+    - If insights are found in the database, it will return them with a `200 OK` status.
+    - If no insights are found, it will return an empty response with a special status code (`204 No Content`) that tells the frontend "I looked, but found nothing."
+3.  The frontend will then decide what to display based on the API's response:
+    - If it gets a `200 OK` with data, it shows the questions and a "Regenerate" button.
+    - If it gets a `204 No Content`, it shows the "Analyze with AI" button.
+4.  Clicking **either** the "Analyze with AI" button or the "Regenerate" button will call the exact same endpoint, but with a special instruction: `GET .../insights?regenerate=true`. This tells the API to skip the cache, call the AI, save the results, and return them.
+
+This approach is more efficient and keeps the logic clean. Here is the updated API documentation reflecting this improved design.
+
+---
+
+### **Updated API Documentation (v5)**
+
+#### **2.1 Get or Generate Suggested Insights**
+
+- **Endpoint:** `GET /assessment-forms/[assessmentFormId]/insights`
+
+- **Method:** `GET`
+
+- **Description:**
+  This is a smart endpoint that serves as the single source for retrieving AI-generated analytical questions. It uses a cache-first strategy and its behavior is determined by the `regenerate` query parameter.
+
 - **Request:**
-  - **Body (JSON):**
-    ```json
-    {
-      "assessmentFormDefinition": {
-        // The full JSON definition obtained from GET /assessment-forms/[assessmentFormId]/definition
-        "Etiology": { "fieldtype": "SingleSelect", "options": [...] },
-        "Exudate Volume": { "fieldtype": "SingleSelect", "options": [...] }
-        // ...
-      }
-    }
-    ```
-- **Response (`200 OK`):**
-  - A structured object containing categorized questions. Each question must have a `type` to inform the UI what to do next.
+
+  - **Path Parameter:** `assessmentFormId` (string) - The unique identifier for the AssessmentForm.
+  - **Query Parameter (Optional):** `regenerate` (boolean, e.g., `?regenerate=true`) - Controls the caching and generation behavior.
+
+- **Behavior without `regenerate` flag (`GET .../insights`):**
+
+  - This is the "cache-check only" mode.
+  - The endpoint queries the `rpt.AIInsights` table for a stored record.
+  - **If found:** Returns a `200 OK` status with the `insightsJson` payload.
+  - **If not found:** Returns a `204 No Content` status with an empty body. It **will not** call the AI service.
+
+- **Behavior with `regenerate=true` flag (`GET .../insights?regenerate=true`):**
+
+  - This is the "force generate" mode.
+  - The endpoint will bypass the cache check, call the Claude AI service to generate fresh insights, save (or update) the results in the database, and return the new data with a `200 OK` status.
+
+- **Frontend Interaction Flow:**
+
+  1.  When the `analysis-page` initially loads, it should call `GET .../insights`.
+  2.  The page should display a loading indicator.
+  3.  If the response status is `200 OK`, the frontend receives the insight data and displays the list of questions along with a "Regenerate Insights" button.
+  4.  If the response status is `204 No Content`, the frontend knows no cached insights exist and should display the "Analyze with AI" button.
+  5.  When the user clicks either "Analyze with AI" or "Regenerate Insights", the frontend should call `GET .../insights?regenerate=true`.
+
+- **Success Response (`200 OK`):**
+
+  - The standard JSON structure containing the insights.
   - **Body (JSON):**
     ```json
     {
@@ -149,38 +215,30 @@ These endpoints interact with the Claude API to generate insights and SQL querie
             {
               "text": "Show the wound healing trend (area over time) for a patient.",
               "type": "single-patient"
-            },
-            {
-              "text": "Which patients have wounds that have increased in size?",
-              "type": "all-patient"
             }
           ]
         }
       ]
     }
     ```
-- **Backend Logic:**
-  1.  Receive the `assessmentFormDefinition` in the request body.
-  2.  Construct a detailed prompt for the Claude API. The prompt should instruct the AI to act as a clinical data analyst, analyze the provided `AssessmentFormDefinition` (and its possible values), and generate insightful questions.
-  3.  Crucially, the prompt must instruct the AI to categorize the questions and to add a `type` field (`"single-patient"` or `"all-patient"`) to each question.
-  4.  Call the Claude API.
-  5.  Parse the AI's text response into the required JSON structure. Add error handling for malformed AI responses.
 
-#### **2.2 Generate Query and Fetch Data**
+- **Success Response (`204 No Content`):**
+
+  - Indicates that no cached insights were found.
+  - The response will have no body.
+
+#### **2.2 Generate Query and Fetch Data (v2)**
 
 - **Endpoint:** `POST /ai/generate-query`
-- **Description:** The main workhorse endpoint. It takes a user-selected question and context, asks the AI to generate a SQL query and suggest a chart type, executes the query against the database, and returns the complete package for visualization.
+- **Description:** The main workhorse endpoint. It takes a user-selected question and the dynamic context (the form definition), combines it with the static context (the database schema) on the backend, asks the AI to generate a SQL query, executes it, and returns the results.
 - **Request:**
 
-  - **Body (JSON):**
+  - **Body (JSON):** _(Notice the `databaseSchemaContext` has been removed from the request)_
 
     ```json
     {
       // The definition of the AssessmentForm being analyzed
       "assessmentFormDefinition": { "...": { "...": [] } },
-
-      // The database schema context (for the AI)
-      "databaseSchemaContext": "Table Assessments has columns [AssessmentId, PatientId, WoundId, ...]. Table Wounds has [WoundId, Etiology, Area, Volume...].",
 
       // The exact question the user selected
       "question": "Compare healing rates for different treatment types.",
@@ -191,39 +249,70 @@ These endpoints interact with the Claude API to generate insights and SQL querie
     ```
 
 - **Response (`200 OK`):**
+  - (The response structure remains the same)
+    ```json
+    {
+      "chartType": "bar",
+      "generatedSql": "SELECT w.TreatmentType, AVG(w.HealingRate) ...",
+      "data": [ ... ]
+    }
+    ```
+- **Backend Logic (Updated):**
+  1.  The backend will have a hardcoded string or will read from a local file containing the `databaseSchemaContext`.
+  2.  It will construct a `system` prompt for the Claude API that includes both the role-playing instructions and this static database schema context.
+  3.  It will receive the `assessmentFormDefinition` and `question` from the client's request body.
+  4.  It will construct a `user` message for the Claude API containing only this dynamic information.
+  5.  The rest of the logic (calling the AI, executing the SQL, returning the data) remains the same.
 
-  - An object containing everything the frontend needs to render the result.
-  - **Body (JSON):**
+That is a fantastic idea, and it's a very common feature in AI-powered developer tools. Providing a "Show your work" or "Explain this" feature is incredibly powerful for building trust, debugging, and allowing technical users to verify the AI's logic.
+
+You are absolutely right not to modify the existing `generate-query` API. Its job is to be fast and efficient. Adding the "thinking" to it would slow it down and complicate the response. A separate, dedicated API is the perfect solution.
+
+I completely agree with your proposal. Here is the API documentation for this new endpoint.
+
+---
+
+#### **2.3 Explain Query Generation**
+
+- **Endpoint:** `POST /ai/explain-query`
+
+- **Description:**
+  This is a supplementary endpoint designed for transparency and debugging. It takes the exact same inputs as the `generate-query` API but, instead of generating and executing a SQL query, it asks the AI to provide a step-by-step, human-readable explanation of its thought process for how it would arrive at the SQL query. This endpoint **does not** execute any database queries.
+
+- **Use Case:**
+  This API would be called if a user clicks a "Show AI Thinking" or "How was this generated?" button next to the displayed SQL query in the UI.
+
+- **Request:**
+
+  - **Body (JSON):** _(Identical to the `generate-query` request body)_
 
     ```json
     {
-      // The suggested chart type for the frontend to use
-      "chartType": "bar", // e.g., "bar", "line", "pie", "kpi"
+      // The definition of the AssessmentForm being analyzed
+      "assessmentFormDefinition": { "...": { "...": [] } },
 
-      // The exact SQL query generated by the AI for transparency
-      "generatedSql": "SELECT w.TreatmentType, AVG(w.HealingRate) FROM Wounds w GROUP BY w.TreatmentType;",
+      // The exact question the user selected
+      "question": "What is the healing rate progression for this patient's wound over time?",
 
-      // The dataset returned from executing the query
-      "data": [
-        { "TreatmentType": "Compression Bandage", "HealingRate": 0.5 },
-        { "TreatmentType": "Simple Bandage", "HealingRate": 0.2 }
-      ]
+      // Optional: Only include for single-patient questions
+      "patientId": "PAT-001"
     }
     ```
 
-- **Response (`400 Bad Request`):**
-  - If the request body is missing required fields.
-- **Response (`500 Internal Server Error`):**
-  - If the AI API call fails, or if the generated SQL query fails to execute on the database.
+- **Response (`200 OK`):**
+
+  - An object containing a single key, `explanation`, with a Markdown-formatted string as its value.
+  - **Body (JSON):**
+    ```json
+    {
+      "explanation": "### Step 1: Analyze the User's Question\nThe user is asking for a 'healing rate progression' for a specific patient 'over time'. This clearly indicates a time-series analysis is needed, which is best visualized as a line chart. My primary goal is to select a date and a quantitative wound measurement.\n\n### Step 2: Consult the Database Schema\n- To get a date for each event, I will use the `date` column from the `rpt.Assessment` table.\n- For a 'healing rate' metric, the `rpt.Measurement` table is the correct source. The `area` column is an excellent proxy for healing.\n- These two tables can be joined using `rpt.Measurement.assessmentFk = rpt.Assessment.id`.\n\n### Step 3: Construct the SQL Query\nBased on the analysis, I will construct the query as follows:\n- `SELECT CAST(A.date AS DATE) AS assessmentDate, M.area AS woundArea`: I am selecting the date and the area, giving them clear aliases for the chart.\n- `FROM rpt.Measurement M JOIN rpt.Assessment A ON M.assessmentFk = A.id`: I am joining the necessary tables.\n- `WHERE M.patientFk = '...' AND M.woundFk = '...'`: The query must be filtered for the specific patient and wound in question.\n- `ORDER BY A.date ASC`: This is crucial to ensure the line chart plots the points in the correct chronological order."
+    }
+    ```
+
 - **Backend Logic:**
-  1.  Construct a highly specific prompt for the Claude API, including:
-      - The `databaseSchemaContext` (a simplified text description of relevant tables and columns).
-      - The `assessmentFormDefinition` (for context on field names and options).
-      - The user's `question`.
-      - The optional `patientId` if present.
-      - Instructions to return a single, executable MS SQL query AND a suggested `chartType`.
-  2.  Call the Claude API and parse the response to extract the SQL and chart type.
-  3.  **Safety Step:** Perform a basic sanitization check on the returned SQL (e.g., ensure it only contains `SELECT` statements).
-  4.  Connect to the database.
-  5.  Execute the AI-generated SQL query.
-  6.  Format the database result, the SQL string, and the chart type into the final JSON response.
+
+  1.  This API will be almost identical to the `generate-query` API, but with a different prompt.
+  2.  It will read the same `database-schema-context.md` file.
+  3.  It will construct a new `system` prompt for the Claude API, instructing it to act as an expert data analyst and to provide a step-by-step explanation in Markdown format. The prompt will explicitly tell it **not** to generate JSON or SQL.
+  4.  It will call the Claude API with the user's question and form definition.
+  5.  It will take the text response from Claude and place it inside the `explanation` key of the JSON response object.

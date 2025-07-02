@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.66",
+    "@anthropic-ai/sdk": "^0.55.1",
     "@heroicons/react": "^2.0.18",
     "@radix-ui/react-accordion": "^1.1.2",
     "@radix-ui/react-dialog": "^1.0.5",

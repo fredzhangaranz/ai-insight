@@ -1,251 +1,272 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { SparklesIcon, DocumentDuplicateIcon } from "@/components/heroicons"
-import { ChartComponent } from "./chart-component"
-import { LoadingDots } from "./loading-dots"
-import { CodeBlock } from "./code-block"
-import { DataTable } from "./data-table"
-import { FormFieldDisplay } from "./form-field-display"
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  SparklesIcon,
+  DocumentDuplicateIcon,
+  ArrowPathIcon,
+} from "@/components/heroicons";
+import { ChartComponent } from "./chart-component";
+import { LoadingDots } from "./loading-dots";
+import { CodeBlock } from "./code-block";
+import { DataTable } from "./data-table";
+import { FormFieldDisplay } from "./form-field-display";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+// --- TYPE DEFINITIONS ---
+type FormField = { fieldtype: string; options: string[] };
+type AssessmentFormDefinition = { [key: string]: FormField };
+type InsightQuestion = { text: string; type: "single-patient" | "all-patient" };
+type InsightCategory = { category: string; questions: InsightQuestion[] };
+type InsightsResponse = { insights: InsightCategory[] };
 
 interface AnalysisPageProps {
-  formName: string
-  onBack: () => void
+  assessmentFormId: string;
+  assessmentFormName: string;
+  onBack: () => void;
 }
 
-type AnalysisState = "initial" | "loading" | "insights" | "results"
+// Redefined states to better match the new workflow
+type AnalysisState = "loading" | "initial" | "insights" | "results" | "error";
 
-// Real form field data from the JSON
-const formFieldsData = {
-  "At dressing change": { fieldtype: "Integer", options: [] },
-  "Clinical Signs of Infection": {
-    fieldtype: "MultiSelect",
-    options: [
-      "Cellulitis",
-      "Suppuration",
-      "Lymphangitis",
-      "Sepsis",
-      "Bacteremia",
-      "Granulation changes",
-      "Exudate increase",
-      "Increase/new pain",
-      "Impaired/delayed healing",
-      "Wound breakdown/new slough",
-    ],
-  },
-  Comments: { fieldtype: "Text", options: [] },
-  "Current interventions": {
-    fieldtype: "MultiSelect",
-    options: ["Pharmacological", "Non-pharmacological", "Dressing/removal technique", "Other"],
-  },
-  Etiology: {
-    fieldtype: "SingleSelect",
-    options: [
-      "Pressure Ulcer: Stage 1",
-      "Pressure Ulcer: Stage 2",
-      "Pressure Ulcer: Stage 3",
-      "Pressure Ulcer: Stage 4",
-      "Pressure Ulcer: Unstageable (dressing/device)",
-      "Pressure Ulcer: Unstageable (eschar/slough)",
-      "Deep Tissue Injury",
-      "Venous Ulcer",
-      "Arterial insufficiency",
-      "Mixed Venous/Arterial",
-      "Diabetic",
-      "Neuropathic: Non-diabetic",
-      "Surgical: Closed",
-      "Surgical: Full thickness",
-      "Surgical: Partial thickness",
-      "Surgical: Dehiscence",
-      "Drainage Device",
-      "Trauma: Full thickness",
-      "Trauma: Partial thickness",
-      "Trauma: Superficial",
-      "Skin tear: Category 1",
-      "Skin tear: Category 2a",
-      "Skin tear: Category 2b",
-      "Skin tear: Category 3",
-      "Burn: Superficial thickness",
-      "Burn: Partial thickness",
-      "Burn: Full thickness",
-      "Cancerous: Fungating lesion",
-      "Cancerous: Ulcerating lesion",
-      "Cancerous: Other",
-      "Skin graft",
-      "Donor site",
-      "Pilonidal wound",
-    ],
-  },
-  "Exudate Type": {
-    fieldtype: "SingleSelect",
-    options: ["Serous", "Serosanguineous", "Sanguineous", "Purulent"],
-  },
-  "Exudate Volume": {
-    fieldtype: "SingleSelect",
-    options: ["None", "Low", "Moderate", "High"],
-  },
-  Frequency: {
-    fieldtype: "SingleSelect",
-    options: ["Absent", "Intermittent", "Continuous"],
-  },
-  "Nature of pain": {
-    fieldtype: "MultiSelect",
-    options: [
-      "Throbbing",
-      "Shooting",
-      "Stabbing",
-      "Sharp",
-      "Cramping",
-      "Gnawing",
-      "Hot/burning",
-      "Aching",
-      "Heavy",
-      "Tender",
-      "Splitting",
-      "Tiring/exhausting",
-      "Sickening",
-      "Fearful",
-      "Cruel/punishing",
-      "Other",
-    ],
-  },
-  "Night pain": { fieldtype: "Integer", options: [] },
-  "On elevation": { fieldtype: "Integer", options: [] },
-  "On walking": { fieldtype: "Integer", options: [] },
-  Recurring: { fieldtype: "Boolean", options: [] },
-  "Surrounding Skin": {
-    fieldtype: "MultiSelect",
-    options: [
-      "Tissue paper skin",
-      "Peri-wound edema",
-      "Macerated",
-      "Erythema",
-      "Inflammation",
-      "Pustules",
-      "Eczema",
-      "Dry/scaly",
-      "Healthy",
-    ],
-  },
-  "Treatment Applied": {
-    fieldtype: "SingleSelect",
-    options: [
-      "Simple Bandage",
-      "Compression Bandage",
-      "Traditional Negative Pressure",
-      "Disposable Negative Pressure",
-      "Skin Substitute",
-      "Other",
-    ],
-  },
-  "Wound Images": { fieldtype: "File", options: [] },
-  "Wound Margins": {
-    fieldtype: "MultiSelect",
-    options: ["Sloping", "Punched out", "Rolled", "Everted", "Undermining", "Sinus", "Inflamed"],
-  },
-}
-
-const aiInsights = {
-  "Wound Progression and Healing Trajectory": [
-    "Show wound healing trend over time for individual patients",
-    "Compare healing rates across different wound etiologies",
-    "Identify patients with delayed healing patterns",
-  ],
-  "Clinical Patterns and Outcomes": [
-    "What are the 5 most common wound etiologies?",
-    "Distribution of wound locations across patient population",
-    "Average healing time by wound type and severity",
-  ],
-  "Operational Insights": [
-    "Assessment frequency patterns by clinician",
-    "Most commonly documented exudate types",
-    "Pain level trends during treatment",
-  ],
-}
-
+// Mock data for the final results page
 const mockChartData = [
   { name: "Diabetic", value: 145, percentage: 35 },
   { name: "Pressure Ulcer: Stage 2", value: 98, percentage: 24 },
-  { name: "Venous Ulcer", value: 76, percentage: 18 },
-  { name: "Arterial insufficiency", value: 52, percentage: 13 },
-  { name: "Surgical: Full thickness", value: 41, percentage: 10 },
-]
-
-const mockSqlQuery = `SELECT 
-    etiology,
-    COUNT(*) as count,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1) as percentage
-FROM wound_assessments 
-WHERE assessment_date >= DATEADD(year, -1, GETDATE())
-GROUP BY etiology
-ORDER BY count DESC
-LIMIT 5;`
-
+];
+const mockSqlQuery = `SELECT etiology, COUNT(*) as count FROM wound_assessments GROUP BY etiology;`;
 const mockTableData = [
-  { etiology: "Diabetic", count: 145, percentage: 35.0 },
-  { etiology: "Pressure Ulcer: Stage 2", count: 98, percentage: 24.0 },
-  { etiology: "Venous Ulcer", count: 76, percentage: 18.0 },
-  { etiology: "Arterial insufficiency", count: 52, percentage: 13.0 },
-  { etiology: "Surgical: Full thickness", count: 41, percentage: 10.0 },
-]
+  { etiology: "Diabetic", count: 145 },
+  { etiology: "Pressure Ulcer: Stage 2", count: 98 },
+];
 
-export default function AnalysisPage({ formName, onBack }: AnalysisPageProps) {
-  const [state, setState] = useState<AnalysisState>("initial")
-  const [selectedQuestion, setSelectedQuestion] = useState<string>("")
+export default function AnalysisPage({
+  assessmentFormId,
+  assessmentFormName,
+  onBack,
+}: AnalysisPageProps) {
+  const [state, setState] = useState<AnalysisState>("loading");
+  const [selectedQuestion, setSelectedQuestion] = useState<string>("");
+  const [definition, setDefinition] = useState<AssessmentFormDefinition | null>(
+    null
+  );
+  const [insights, setInsights] = useState<InsightsResponse | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleAnalyze = () => {
-    setState("loading")
-    setTimeout(() => {
-      setState("insights")
-    }, 2000)
-  }
+  /**
+   * Fetches data. The `regenerate` flag forces a new AI call.
+   */
+  const fetchData = async (regenerate = false) => {
+    setState("loading");
+    setErrorMessage(null);
+
+    try {
+      // We always need the definition, so fetch it regardless.
+      const defPromise = fetch(
+        `/api/assessment-forms/${assessmentFormId}/definition`
+      );
+
+      // Fetch insights with the appropriate URL
+      const insightsUrl = `/api/assessment-forms/${assessmentFormId}/insights${
+        regenerate ? "?regenerate=true" : ""
+      }`;
+      const insightsPromise = fetch(insightsUrl);
+
+      const [defResponse, insightsResponse] = await Promise.all([
+        defPromise,
+        insightsPromise,
+      ]);
+
+      // Handle definition response
+      if (!defResponse.ok) throw new Error("Failed to fetch form definition.");
+      setDefinition(await defResponse.json());
+
+      // Handle insights response
+      if (insightsResponse.status === 204) {
+        // *** NEW BEHAVIOR: No cached insights were found ***
+        setInsights(null);
+        setState("initial"); // Go to the state that shows the "Analyze" button
+      } else if (insightsResponse.ok) {
+        setInsights(await insightsResponse.json());
+        setState("insights"); // Go to the state that shows the questions
+      } else {
+        const errorData = await insightsResponse.json();
+        throw new Error(errorData.message || "Failed to get insights.");
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setState("error");
+      console.error("Analysis fetch error:", err);
+    }
+  };
+
+  // Automatically fetch data on initial component mount
+  useEffect(() => {
+    fetchData(false); // Initial fetch is always a cache check
+  }, [assessmentFormId]);
 
   const handleQuestionSelect = (question: string) => {
-    setSelectedQuestion(question)
-    setState("results")
-  }
+    setSelectedQuestion(question);
+    setState("results");
+  };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-  }
+  // Helper to render the main content for the right panel
+  const renderRightPanelContent = () => {
+    switch (state) {
+      case "loading":
+        return (
+          <Card className="border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-8 text-center">
+              <LoadingDots />
+              <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                Fetching Analysis Data...
+              </h3>
+              <p className="text-slate-600">Please wait a moment.</p>
+            </CardContent>
+          </Card>
+        );
+      case "initial": // State for when no cached insights are found
+        return (
+          <Card className="border-slate-200 bg-white shadow-sm animate-in fade-in duration-300">
+            <CardContent className="p-8 text-center">
+              <div className="mb-6">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <SparklesIcon className="w-8 h-8 text-blue-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 mb-2">
+                  No Insights Found
+                </h3>
+                <p className="text-slate-600">
+                  Click the button below to generate AI-powered insights for
+                  this form.
+                </p>
+              </div>
+              <Button
+                onClick={() => fetchData(true)}
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+              >
+                <SparklesIcon className="w-5 h-5 mr-2" />
+                Analyze with AI
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      case "insights":
+        if (insights) {
+          return (
+            <Card className="border-slate-200 bg-white shadow-sm animate-in fade-in duration-500">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-xl text-slate-900">
+                      AI-Generated Insights
+                    </CardTitle>
+                    <p className="text-slate-600 text-sm">
+                      Select a question to explore your data
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchData(true)}
+                  >
+                    <ArrowPathIcon className="w-4 h-4 mr-2" />
+                    Regenerate
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Accordion type="single" collapsible className="space-y-2">
+                  {insights.insights.map((cat, index) => (
+                    <AccordionItem
+                      key={index}
+                      value={`item-${index}`}
+                      className="border border-slate-200 rounded-lg px-4"
+                    >
+                      <AccordionTrigger className="text-left font-semibold text-slate-900 hover:no-underline">
+                        {cat.category}
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-2 pt-2">
+                        {cat.questions.map((question, qIndex) => (
+                          <div
+                            key={qIndex}
+                            onClick={() => handleQuestionSelect(question.text)}
+                            className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 cursor-pointer transition-all duration-200 hover:scale-[1.01] border border-transparent hover:border-blue-200"
+                          >
+                            <p className="text-slate-700 hover:text-blue-700 font-medium">
+                              {question.text}
+                            </p>
+                          </div>
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </CardContent>
+            </Card>
+          );
+        }
+        return null;
+      case "error":
+        return (
+          <Alert variant="destructive" className="text-left">
+            <AlertTitle>An Error Occurred</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Back button */}
-      <Button variant="ghost" onClick={onBack} className="mb-6 text-slate-600 hover:text-slate-900">
+      <Button
+        variant="ghost"
+        onClick={onBack}
+        className="mb-6 text-slate-600 hover:text-slate-900"
+      >
         ← Back to Forms
       </Button>
-
       {state === "results" ? (
-        // State C: Results Dashboard
         <div className="space-y-8 animate-in fade-in duration-500">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">{selectedQuestion}</h1>
-            <p className="text-slate-600">Analysis based on {formName} data</p>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">
+              {selectedQuestion}
+            </h1>
+            <p className="text-slate-600">
+              Analysis based on {assessmentFormName} data
+            </p>
           </div>
-
-          {/* Hero Chart */}
           <Card className="border-slate-200 bg-white shadow-sm">
             <CardHeader>
-              <CardTitle className="text-xl text-slate-900">Most Common Wound Etiologies</CardTitle>
+              <CardTitle className="text-xl text-slate-900">
+                Most Common Wound Etiologies
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <ChartComponent data={mockChartData} />
             </CardContent>
           </Card>
-
-          {/* SQL and Data Panels */}
           <div className="grid lg:grid-cols-2 gap-6">
             <Card className="border-slate-200 bg-white shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg text-slate-900">Generated SQL</CardTitle>
+                <CardTitle className="text-lg text-slate-900">
+                  Generated SQL
+                </CardTitle>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => copyToClipboard(mockSqlQuery)}
+                  onClick={() => navigator.clipboard.writeText(mockSqlQuery)}
                   className="text-slate-600 hover:text-slate-900"
                 >
                   <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
@@ -256,10 +277,11 @@ export default function AnalysisPage({ formName, onBack }: AnalysisPageProps) {
                 <CodeBlock code={mockSqlQuery} />
               </CardContent>
             </Card>
-
             <Card className="border-slate-200 bg-white shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-900">Raw Data</CardTitle>
+                <CardTitle className="text-lg text-slate-900">
+                  Raw Data
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <DataTable data={mockTableData} />
@@ -268,99 +290,41 @@ export default function AnalysisPage({ formName, onBack }: AnalysisPageProps) {
           </div>
         </div>
       ) : (
-        // States A & B: Two-panel layout
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Left Panel: Form Schema */}
           <Card className="border-slate-200 bg-slate-50/50 h-fit">
             <CardHeader>
-              <CardTitle className="text-xl text-slate-900">{formName} Definition</CardTitle>
-              <p className="text-sm text-slate-600">Form fields available for analysis</p>
+              <CardTitle className="text-xl text-slate-900">
+                {assessmentFormName} Definition
+              </CardTitle>
+              <p className="text-sm text-slate-600">
+                Form fields available for analysis
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {Object.entries(formFieldsData).map(([fieldName, fieldData], index) => (
-                  <FormFieldDisplay
-                    key={index}
-                    fieldName={fieldName}
-                    fieldType={fieldData.fieldtype}
-                    options={fieldData.options}
-                  />
-                ))}
-              </div>
+              {definition ? (
+                <div className="space-y-3 max-h-[32rem] overflow-y-auto">
+                  {Object.entries(definition).map(([fieldName, fieldData]) => (
+                    <FormFieldDisplay
+                      key={fieldName}
+                      fieldName={fieldName}
+                      fieldType={fieldData.fieldtype}
+                      options={fieldData.options}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center p-6">
+                  <LoadingDots />
+                  <p className="text-sm text-slate-600 mt-2">
+                    Loading form definition...
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          {/* Right Panel: Dynamic Content */}
-          <div className="space-y-6">
-            {state === "initial" && (
-              <Card className="border-slate-200 bg-white shadow-sm animate-in fade-in duration-300">
-                <CardContent className="p-8 text-center">
-                  <div className="mb-6">
-                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <SparklesIcon className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-slate-900 mb-2">Ready to Analyze</h3>
-                    <p className="text-slate-600">Let AI discover insights from your {formName} data</p>
-                  </div>
-                  <Button
-                    onClick={handleAnalyze}
-                    size="lg"
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
-                  >
-                    <SparklesIcon className="w-5 h-5 mr-2" />
-                    Analyze with AI
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {state === "loading" && (
-              <Card className="border-slate-200 bg-white shadow-sm animate-in fade-in duration-300">
-                <CardContent className="p-8 text-center">
-                  <LoadingDots />
-                  <h3 className="text-xl font-semibold text-slate-900 mb-2">Analyzing Form Structure</h3>
-                  <p className="text-slate-600">AI is generating relevant insights for your data...</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {state === "insights" && (
-              <Card className="border-slate-200 bg-white shadow-sm animate-in fade-in duration-500">
-                <CardHeader>
-                  <CardTitle className="text-xl text-slate-900">AI-Generated Insights</CardTitle>
-                  <p className="text-slate-600">Select a question to explore your data</p>
-                </CardHeader>
-                <CardContent>
-                  <Accordion type="single" collapsible className="space-y-2">
-                    {Object.entries(aiInsights).map(([category, questions], index) => (
-                      <AccordionItem
-                        key={index}
-                        value={`item-${index}`}
-                        className="border border-slate-200 rounded-lg px-4"
-                      >
-                        <AccordionTrigger className="text-left font-semibold text-slate-900 hover:no-underline">
-                          {category}
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-2 pt-2">
-                          {questions.map((question, qIndex) => (
-                            <div
-                              key={qIndex}
-                              onClick={() => handleQuestionSelect(question)}
-                              className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 cursor-pointer transition-all duration-200 hover:scale-[1.01] border border-transparent hover:border-blue-200"
-                            >
-                              <p className="text-slate-700 hover:text-blue-700 font-medium">{question}</p>
-                            </div>
-                          ))}
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          <div className="space-y-6">{renderRightPanelContent()}</div>
         </div>
       )}
     </div>
-  )
+  );
 }
