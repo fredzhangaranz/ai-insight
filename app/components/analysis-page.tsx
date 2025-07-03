@@ -13,6 +13,7 @@ import {
   SparklesIcon,
   DocumentDuplicateIcon,
   ArrowPathIcon,
+  UserIcon,
 } from "@/components/heroicons";
 import { ChartComponent } from "./chart-component";
 import { LoadingDots } from "./loading-dots";
@@ -20,6 +21,7 @@ import { CodeBlock } from "./code-block";
 import { DataTable } from "./data-table";
 import { FormFieldDisplay } from "./form-field-display";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PatientSelectionDialog } from "./patient-selection-dialog";
 
 // --- TYPE DEFINITIONS ---
 type FormField = { fieldtype: string; options: string[] };
@@ -34,7 +36,6 @@ interface AnalysisPageProps {
   onBack: () => void;
 }
 
-// Redefined states to better match the new workflow
 type AnalysisState = "loading" | "initial" | "insights" | "results" | "error";
 
 // Mock data for the final results page
@@ -54,49 +55,42 @@ export default function AnalysisPage({
   onBack,
 }: AnalysisPageProps) {
   const [state, setState] = useState<AnalysisState>("loading");
-  const [selectedQuestion, setSelectedQuestion] = useState<string>("");
   const [definition, setDefinition] = useState<AssessmentFormDefinition | null>(
     null
   );
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  /**
-   * Fetches data. The `regenerate` flag forces a new AI call.
-   */
+  // State for the patient selection dialog
+  const [isPatientDialogOpen, setIsPatientDialogOpen] = useState(false);
+  const [currentQuestion, setCurrentQuestion] =
+    useState<InsightQuestion | null>(null);
+
   const fetchData = async (regenerate = false) => {
     setState("loading");
     setErrorMessage(null);
-
     try {
-      // We always need the definition, so fetch it regardless.
       const defPromise = fetch(
         `/api/assessment-forms/${assessmentFormId}/definition`
       );
-
-      // Fetch insights with the appropriate URL
       const insightsUrl = `/api/assessment-forms/${assessmentFormId}/insights${
         regenerate ? "?regenerate=true" : ""
       }`;
       const insightsPromise = fetch(insightsUrl);
-
       const [defResponse, insightsResponse] = await Promise.all([
         defPromise,
         insightsPromise,
       ]);
 
-      // Handle definition response
       if (!defResponse.ok) throw new Error("Failed to fetch form definition.");
       setDefinition(await defResponse.json());
 
-      // Handle insights response
       if (insightsResponse.status === 204) {
-        // *** NEW BEHAVIOR: No cached insights were found ***
         setInsights(null);
-        setState("initial"); // Go to the state that shows the "Analyze" button
+        setState("initial");
       } else if (insightsResponse.ok) {
         setInsights(await insightsResponse.json());
-        setState("insights"); // Go to the state that shows the questions
+        setState("insights");
       } else {
         const errorData = await insightsResponse.json();
         throw new Error(errorData.message || "Failed to get insights.");
@@ -104,21 +98,35 @@ export default function AnalysisPage({
     } catch (err: any) {
       setErrorMessage(err.message);
       setState("error");
-      console.error("Analysis fetch error:", err);
     }
   };
 
-  // Automatically fetch data on initial component mount
   useEffect(() => {
-    fetchData(false); // Initial fetch is always a cache check
+    fetchData(false);
   }, [assessmentFormId]);
 
-  const handleQuestionSelect = (question: string) => {
-    setSelectedQuestion(question);
+  const handleQuestionSelect = (question: InsightQuestion) => {
+    setCurrentQuestion(question);
+    if (question.type === "single-patient") {
+      setIsPatientDialogOpen(true);
+    } else {
+      // For now, all-patient questions go directly to mock results
+      setState("results");
+    }
+  };
+
+  const handleGenerateChartForPatient = (patientId: string) => {
+    console.log(
+      "Generating chart for patient:",
+      patientId,
+      "and question:",
+      currentQuestion?.text
+    );
+    setIsPatientDialogOpen(false);
+    // This is where you would call API 2.2 with the patientId
     setState("results");
   };
 
-  // Helper to render the main content for the right panel
   const renderRightPanelContent = () => {
     switch (state) {
       case "loading":
@@ -129,13 +137,12 @@ export default function AnalysisPage({
               <h3 className="text-xl font-semibold text-slate-900 mb-2">
                 Fetching Analysis Data...
               </h3>
-              <p className="text-slate-600">Please wait a moment.</p>
             </CardContent>
           </Card>
         );
-      case "initial": // State for when no cached insights are found
+      case "initial":
         return (
-          <Card className="border-slate-200 bg-white shadow-sm animate-in fade-in duration-300">
+          <Card className="border-slate-200 bg-white shadow-sm">
             <CardContent className="p-8 text-center">
               <div className="mb-6">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -145,14 +152,13 @@ export default function AnalysisPage({
                   No Insights Found
                 </h3>
                 <p className="text-slate-600">
-                  Click the button below to generate AI-powered insights for
-                  this form.
+                  Click to generate AI-powered insights for this form.
                 </p>
               </div>
               <Button
                 onClick={() => fetchData(true)}
                 size="lg"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 <SparklesIcon className="w-5 h-5 mr-2" />
                 Analyze with AI
@@ -161,9 +167,9 @@ export default function AnalysisPage({
           </Card>
         );
       case "insights":
-        if (insights) {
-          return (
-            <Card className="border-slate-200 bg-white shadow-sm animate-in fade-in duration-500">
+        return (
+          insights && (
+            <Card className="border-slate-200 bg-white shadow-sm">
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <div>
@@ -199,12 +205,15 @@ export default function AnalysisPage({
                         {cat.questions.map((question, qIndex) => (
                           <div
                             key={qIndex}
-                            onClick={() => handleQuestionSelect(question.text)}
-                            className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 cursor-pointer transition-all duration-200 hover:scale-[1.01] border border-transparent hover:border-blue-200"
+                            onClick={() => handleQuestionSelect(question)}
+                            className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
                           >
-                            <p className="text-slate-700 hover:text-blue-700 font-medium">
+                            <p className="text-slate-700 hover:text-blue-700 font-medium flex-1">
                               {question.text}
                             </p>
+                            {question.type === "single-patient" && (
+                              <UserIcon className="w-5 h-5 text-slate-400 ml-4" />
+                            )}
                           </div>
                         ))}
                       </AccordionContent>
@@ -213,12 +222,11 @@ export default function AnalysisPage({
                 </Accordion>
               </CardContent>
             </Card>
-          );
-        }
-        return null;
+          )
+        );
       case "error":
         return (
-          <Alert variant="destructive" className="text-left">
+          <Alert variant="destructive">
             <AlertTitle>An Error Occurred</AlertTitle>
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
@@ -229,102 +237,115 @@ export default function AnalysisPage({
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <Button
-        variant="ghost"
-        onClick={onBack}
-        className="mb-6 text-slate-600 hover:text-slate-900"
-      >
-        ← Back to Forms
-      </Button>
-      {state === "results" ? (
-        <div className="space-y-8 animate-in fade-in duration-500">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">
-              {selectedQuestion}
-            </h1>
-            <p className="text-slate-600">
-              Analysis based on {assessmentFormName} data
-            </p>
-          </div>
-          <Card className="border-slate-200 bg-white shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-900">
-                Most Common Wound Etiologies
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartComponent data={mockChartData} />
-            </CardContent>
-          </Card>
-          <div className="grid lg:grid-cols-2 gap-6">
-            <Card className="border-slate-200 bg-white shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg text-slate-900">
-                  Generated SQL
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigator.clipboard.writeText(mockSqlQuery)}
-                  className="text-slate-600 hover:text-slate-900"
-                >
-                  <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
-                  Copy SQL
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <CodeBlock code={mockSqlQuery} />
-              </CardContent>
-            </Card>
+    <>
+      {currentQuestion && (
+        <PatientSelectionDialog
+          isOpen={isPatientDialogOpen}
+          onClose={() => setIsPatientDialogOpen(false)}
+          assessmentFormId={assessmentFormId}
+          onPatientSelect={handleGenerateChartForPatient}
+          question={currentQuestion.text}
+        />
+      )}
+      <div className="max-w-7xl mx-auto">
+        <Button
+          variant="ghost"
+          onClick={onBack}
+          className="mb-6 text-slate-600 hover:text-slate-900"
+        >
+          ← Back to Forms
+        </Button>
+        {state === "results" ? (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="text-center">
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                {currentQuestion?.text}
+              </h1>
+              <p className="text-slate-600">
+                Analysis based on {assessmentFormName} data
+              </p>
+            </div>
             <Card className="border-slate-200 bg-white shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-900">
-                  Raw Data
+                <CardTitle className="text-xl text-slate-900">
+                  Most Common Wound Etiologies
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <DataTable data={mockTableData} />
+                <ChartComponent data={mockChartData} />
               </CardContent>
             </Card>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <Card className="border-slate-200 bg-white shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-lg text-slate-900">
+                    Generated SQL
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigator.clipboard.writeText(mockSqlQuery)}
+                    className="text-slate-600 hover:text-slate-900"
+                  >
+                    <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
+                    Copy SQL
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <CodeBlock code={mockSqlQuery} />
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 bg-white shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg text-slate-900">
+                    Raw Data
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DataTable data={mockTableData} />
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="grid lg:grid-cols-2 gap-8">
-          <Card className="border-slate-200 bg-slate-50/50 h-fit">
-            <CardHeader>
-              <CardTitle className="text-xl text-slate-900">
-                {assessmentFormName} Definition
-              </CardTitle>
-              <p className="text-sm text-slate-600">
-                Form fields available for analysis
-              </p>
-            </CardHeader>
-            <CardContent>
-              {definition ? (
-                <div className="space-y-3 max-h-[32rem] overflow-y-auto">
-                  {Object.entries(definition).map(([fieldName, fieldData]) => (
-                    <FormFieldDisplay
-                      key={fieldName}
-                      fieldName={fieldName}
-                      fieldType={fieldData.fieldtype}
-                      options={fieldData.options}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center p-6">
-                  <LoadingDots />
-                  <p className="text-sm text-slate-600 mt-2">
-                    Loading form definition...
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <div className="space-y-6">{renderRightPanelContent()}</div>
-        </div>
-      )}
-    </div>
+        ) : (
+          <div className="grid lg:grid-cols-2 gap-8">
+            <Card className="border-slate-200 bg-slate-50/50 h-fit">
+              <CardHeader>
+                <CardTitle className="text-xl text-slate-900">
+                  {assessmentFormName} Definition
+                </CardTitle>
+                <p className="text-sm text-slate-600">
+                  Form fields available for analysis
+                </p>
+              </CardHeader>
+              <CardContent>
+                {definition ? (
+                  <div className="space-y-3 max-h-[32rem] overflow-y-auto">
+                    {Object.entries(definition).map(
+                      ([fieldName, fieldData]) => (
+                        <FormFieldDisplay
+                          key={fieldName}
+                          fieldName={fieldName}
+                          fieldType={fieldData.fieldtype}
+                          options={fieldData.options}
+                        />
+                      )
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center p-6">
+                    <LoadingDots />
+                    <p className="text-sm text-slate-600 mt-2">
+                      Loading form definition...
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <div className="space-y-6">{renderRightPanelContent()}</div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
