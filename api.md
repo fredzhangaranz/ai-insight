@@ -227,13 +227,14 @@ This approach is more efficient and keeps the logic clean. Here is the updated A
   - Indicates that no cached insights were found.
   - The response will have no body.
 
-#### **2.2 Generate Query and Fetch Data (v2)**
+#### **2.2 Generate Generate Analysis Plan**
 
 - **Endpoint:** `POST /ai/generate-query`
-- **Description:** The main workhorse endpoint. It takes a user-selected question and the dynamic context (the form definition), combines it with the static context (the database schema) on the backend, asks the AI to generate a SQL query, executes it, and returns the results.
+- **Description:** This is the main AI workhorse endpoint. It takes a user's question and the form context, and asks the AI to generate a complete analysis plan in a single call. This plan includes a step-by-step explanation of its thinking, the executable SQL query, and a suggested chart type.
+
 - **Request:**
 
-  - **Body (JSON):** _(Notice the `databaseSchemaContext` has been removed from the request)_
+  - **Body (JSON):**
 
     ```json
     {
@@ -249,70 +250,53 @@ This approach is more efficient and keeps the logic clean. Here is the updated A
     ```
 
 - **Response (`200 OK`):**
-  - (The response structure remains the same)
-    ```json
-    {
-      "chartType": "bar",
-      "generatedSql": "SELECT w.TreatmentType, AVG(w.HealingRate) ...",
-      "data": [ ... ]
-    }
-    ```
+- Returns the complete analysis plan from the AI.
+  ```json
+  {
+    "chartType": "bar",
+    "generatedSql": "SELECT w.TreatmentType, AVG(w.HealingRate) ..."
+    "generatedSql": "SELECT w.TreatmentType, AVG(w.HealingRate) ...",
+    "explanation": "### Step 1: Analyze the User's Question\nThe user is asking for a 'healing rate progression' for a specific patient 'over time'. This clearly indicates a time-series analysis is needed...\n\n### Step 2: Consult the Database Schema\n- To get a date for each event, I will use the `date` column from the `rpt.Assessment` table...\n\n### Step 3: Construct the SQL Query\nBased on the analysis, I will construct the query as follows..."
+  }
+  ```
 - **Backend Logic (Updated):**
   1.  The backend will have a hardcoded string or will read from a local file containing the `databaseSchemaContext`.
-  2.  It will construct a `system` prompt for the Claude API that includes both the role-playing instructions and this static database schema context.
+  2.  It will construct a single, comprehensive `system` prompt for the Claude API. This prompt will instruct the AI to return a single JSON object containing three keys: `explanation`, `generatedSql`, and `chartType`.
   3.  It will receive the `assessmentFormDefinition` and `question` from the client's request body.
   4.  It will construct a `user` message for the Claude API containing only this dynamic information.
-  5.  The rest of the logic (calling the AI, executing the SQL, returning the data) remains the same.
 
-That is a fantastic idea, and it's a very common feature in AI-powered developer tools. Providing a "Show your work" or "Explain this" feature is incredibly powerful for building trust, debugging, and allowing technical users to verify the AI's logic.
+#### **2.3 Execute Query**
 
-You are absolutely right not to modify the existing `generate-query` API. Its job is to be fast and efficient. Adding the "thinking" to it would slow it down and complicate the response. A separate, dedicated API is the perfect solution.
-
-I completely agree with your proposal. Here is the API documentation for this new endpoint.
-
----
-
-#### **2.3 Explain Query Generation**
-
-- **Endpoint:** `POST /ai/explain-query`
+- **Endpoint:** `POST /ai/execute-query`
 
 - **Description:**
-  This is a supplementary endpoint designed for transparency and debugging. It takes the exact same inputs as the `generate-query` API but, instead of generating and executing a SQL query, it asks the AI to provide a step-by-step, human-readable explanation of its thought process for how it would arrive at the SQL query. This endpoint **does not** execute any database queries.
-
-- **Use Case:**
-  This API would be called if a user clicks a "Show AI Thinking" or "How was this generated?" button next to the displayed SQL query in the UI.
+  This endpoint takes a SQL query string, performs a basic security validation, executes it against the database, and returns the resulting data. It is designed to be called after `generate-query` and after the user has had a chance to review the generated SQL.
 
 - **Request:**
 
-  - **Body (JSON):** _(Identical to the `generate-query` request body)_
-
+  - **Body (JSON):**
     ```json
     {
-      // The definition of the AssessmentForm being analyzed
-      "assessmentFormDefinition": { "...": { "...": [] } },
-
-      // The exact question the user selected
-      "question": "What is the healing rate progression for this patient's wound over time?",
-
-      // Optional: Only include for single-patient questions
-      "patientId": "PAT-001"
+      "query": "SELECT TOP 5 L.text as etiology, COUNT(N.id) as count FROM ..."
     }
     ```
 
 - **Response (`200 OK`):**
 
-  - An object containing a single key, `explanation`, with a Markdown-formatted string as its value.
+  - An object containing the `data` from the query execution.
   - **Body (JSON):**
     ```json
     {
-      "explanation": "### Step 1: Analyze the User's Question\nThe user is asking for a 'healing rate progression' for a specific patient 'over time'. This clearly indicates a time-series analysis is needed, which is best visualized as a line chart. My primary goal is to select a date and a quantitative wound measurement.\n\n### Step 2: Consult the Database Schema\n- To get a date for each event, I will use the `date` column from the `rpt.Assessment` table.\n- For a 'healing rate' metric, the `rpt.Measurement` table is the correct source. The `area` column is an excellent proxy for healing.\n- These two tables can be joined using `rpt.Measurement.assessmentFk = rpt.Assessment.id`.\n\n### Step 3: Construct the SQL Query\nBased on the analysis, I will construct the query as follows:\n- `SELECT CAST(A.date AS DATE) AS assessmentDate, M.area AS woundArea`: I am selecting the date and the area, giving them clear aliases for the chart.\n- `FROM rpt.Measurement M JOIN rpt.Assessment A ON M.assessmentFk = A.id`: I am joining the necessary tables.\n- `WHERE M.patientFk = '...' AND M.woundFk = '...'`: The query must be filtered for the specific patient and wound in question.\n- `ORDER BY A.date ASC`: This is crucial to ensure the line chart plots the points in the correct chronological order."
+      "data": [
+        { "etiology": "Diabetic", "count": 145 },
+        { "etiology": "Pressure Ulcer: Stage 2", "count": 98 }
+      ]
     }
     ```
 
 - **Backend Logic:**
-
-  1.  This API will be almost identical to the `generate-query` API, but with a different prompt.
-  2.  It will read the same `database-schema-context.md` file.
-  3.  It will construct a new `system` prompt for the Claude API, instructing it to act as an expert data analyst and to provide a step-by-step explanation in Markdown format. The prompt will explicitly tell it **not** to generate JSON or SQL.
-  4.  It will call the Claude API with the user's question and form definition.
-  5.  It will take the text response from Claude and place it inside the `explanation` key of the JSON response object.
+  1.  Receives the `query` string from the request body.
+  2.  **Security Check:** Validates that the query is a read-only `SELECT` statement. If not, it rejects the request with a 400 Bad Request error.
+  3.  Connects to the database.
+  4.  Executes the validated query.
+  5.  Returns the `recordset` from the database as the `data` property in the response.
