@@ -119,14 +119,12 @@ export function PatientSelectionDialog({
                 </Button>
               </PopoverTrigger>
               <PopoverContent
-                className="w-[400px] p-0"
-                // *** FIX 1: Align the popover to the start of the trigger ***
+                className="w-[--radix-popover-trigger-width] p-0"
                 align="start"
               >
                 <Command>
                   <CommandInput placeholder="Search patient..." />
                   <CommandEmpty>No patient found.</CommandEmpty>
-                  {/* *** FIX 2: Make the list scrollable *** */}
                   <CommandList className="max-h-[200px] overflow-y-auto">
                     <CommandGroup>
                       {patients.map((patient) => (
