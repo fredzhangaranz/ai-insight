@@ -153,7 +153,7 @@ export function PatientSelectionDialog({
         </div>
         <DialogFooter>
           <Button onClick={handleGenerate} disabled={!selectedPatient}>
-            Generate Chart
+            Fetch Data & Generate Chart
           </Button>
         </DialogFooter>
       </DialogContent>

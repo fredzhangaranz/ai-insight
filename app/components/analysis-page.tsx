@@ -118,23 +118,15 @@ export default function AnalysisPage({
   const handleQuestionSelect = (question: InsightQuestion) => {
     setCurrentQuestion(question);
     setCurrentPatientId(null); // Reset patient ID on new question
-    if (question.type === "single-patient") {
-      setIsPatientDialogOpen(true);
-    } else {
-      // TODO: Implement the new multi-step flow for all-patient questions
-      // For now, we will just log it.
-      console.log("Selected all-patient question:", question.text);
-      // In the new flow, this would trigger the "Generate SQL & Explanation" step
-      handleGenerateSqlAndExplanation(question);
-    }
+    // Always generate the plan first, regardless of question type.
+    // For single-patient questions, this will generate a template with @patientId.
+    handleGenerateSqlAndExplanation(question);
   };
 
-  const handleGenerateChartForPatient = (patientId: string) => {
+  const handlePatientSelectedAndExecute = (patientId: string) => {
     setIsPatientDialogOpen(false);
-    setCurrentPatientId(patientId); // Store patient ID for regeneration
-    if (currentQuestion) {
-      handleGenerateSqlAndExplanation(currentQuestion, patientId);
-    }
+    setCurrentPatientId(patientId); // Store for potential re-runs or display
+    executeQuery(patientId);
   };
 
   // --- NEW HANDLERS FOR MULTI-STEP FLOW ---
@@ -195,39 +187,53 @@ export default function AnalysisPage({
     }
   };
 
-  const handleFetchChartData = async () => {
+  const executeQuery = async (patientId?: string) => {
+    if (!generatedSql) {
+      setErrorMessage("No SQL query has been generated to execute.");
+      setState("error");
+      return;
+    }
+
     setState("fetchingData");
     setErrorMessage(null);
 
-    // MOCK API: Simulate calling /generate-query?execute=true
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const requestBody: { query: string; params?: { [key: string]: string } } =
+        {
+          query: generatedSql,
+        };
 
-    const isSinglePatient =
-      !!currentQuestion && currentQuestion.type === "single-patient";
-    const mockChartData = isSinglePatient
-      ? [
-          { name: "2023-01-15", value: 30 },
-          { name: "2023-01-22", value: 25 },
-          { name: "2023-01-29", value: 22 },
-          { name: "2023-02-05", value: 18 },
-        ]
-      : [
-          { name: "Diabetic", value: 145, percentage: 35 },
-          { name: "Pressure Ulcer: Stage 2", value: 98, percentage: 24 },
-          { name: "Venous Ulcer", value: 75, percentage: 18 },
-          { name: "Surgical", value: 55, percentage: 13 },
-          { name: "Arterial", value: 32, percentage: 8 },
-        ];
-    const mockTableData = isSinglePatient
-      ? mockChartData.map((d) => ({
-          assessmentDate: d.name,
-          woundArea: d.value,
-        }))
-      : mockChartData.map((d) => ({ etiology: d.name, count: d.value }));
+      if (patientId) {
+        requestBody.params = { patientId: patientId };
+      }
 
-    setChartData(mockChartData);
-    setTableData(mockTableData);
-    setState("results");
+      const response = await fetch("/api/ai/execute-query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to execute query.");
+      }
+
+      const result = await response.json();
+      setTableData(result.data);
+      setChartData(result.data); // The chart component will need to adapt to this
+      setState("results");
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setState("error");
+    }
+  };
+
+  const handleFetchChartData = () => {
+    if (currentQuestion?.type === "single-patient") {
+      setIsPatientDialogOpen(true);
+    } else {
+      executeQuery();
+    }
   };
 
   const handleResetToInsights = () => {
@@ -457,7 +463,7 @@ export default function AnalysisPage({
           isOpen={isPatientDialogOpen}
           onClose={() => setIsPatientDialogOpen(false)}
           assessmentFormId={assessmentFormId}
-          onPatientSelect={handleGenerateChartForPatient}
+          onPatientSelect={handlePatientSelectedAndExecute}
           question={currentQuestion.text}
         />
       )}
