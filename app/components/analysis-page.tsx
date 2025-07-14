@@ -65,6 +65,7 @@ export default function AnalysisPage({
   const [isPatientDialogOpen, setIsPatientDialogOpen] = useState(false);
   const [currentQuestion, setCurrentQuestion] =
     useState<InsightQuestion | null>(null);
+  const [currentPatientId, setCurrentPatientId] = useState<string | null>(null);
 
   // New state for the multi-step result flow
   const [generatedSql, setGeneratedSql] = useState<string | null>(null);
@@ -116,6 +117,7 @@ export default function AnalysisPage({
 
   const handleQuestionSelect = (question: InsightQuestion) => {
     setCurrentQuestion(question);
+    setCurrentPatientId(null); // Reset patient ID on new question
     if (question.type === "single-patient") {
       setIsPatientDialogOpen(true);
     } else {
@@ -129,33 +131,68 @@ export default function AnalysisPage({
 
   const handleGenerateChartForPatient = (patientId: string) => {
     setIsPatientDialogOpen(false);
+    setCurrentPatientId(patientId); // Store patient ID for regeneration
     if (currentQuestion) {
       handleGenerateSqlAndExplanation(currentQuestion, patientId);
     }
   };
 
   // --- NEW HANDLERS FOR MULTI-STEP FLOW ---
-
   const handleGenerateSqlAndExplanation = async (
     question: InsightQuestion,
-    patientId?: string
+    patientId?: string | null,
+    regenerate = false
   ) => {
     setState("generatingSql");
     setErrorMessage(null);
+    if (!definition) {
+      setErrorMessage("Form definition is not loaded. Cannot generate query.");
+      setState("error");
+      return;
+    }
 
-    // MOCK API: Simulate calling /explain-query and /generate-query?execute=false
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const requestBody: {
+        assessmentFormId: string;
+        assessmentFormDefinition: AssessmentFormDefinition;
+        question: string;
+        patientId?: string;
+        regenerate: boolean;
+      } = {
+        assessmentFormId,
+        assessmentFormDefinition: definition,
+        question: question.text,
+        regenerate,
+      };
 
-    const mockSql = patientId
-      ? `SELECT CAST(A.date AS DATE) as assessmentDate, M.area as woundArea\nFROM rpt.Measurement M\nJOIN rpt.Assessment A ON M.assessmentFk = A.id\nWHERE A.patientFk = '${patientId}'\nORDER BY A.date ASC;`
-      : `SELECT TOP 5 L.text as etiology, COUNT(N.id) as count\nFROM rpt.Note N\nJOIN rpt.AttributeValue V ON N.attributeValueFk = V.id\nJOIN rpt.AttributeLookup L ON V.attributeLookupFk = L.id\nGROUP BY L.text\nORDER BY count DESC;`;
+      if (patientId) {
+        requestBody.patientId = patientId;
+      }
 
-    const mockExplanation = `### Step 1: Analyze the User's Question\nThe user is asking for: "${question.text}". This requires me to identify the key entities and metrics needed for the analysis.\n\n### Step 2: Consult the Database Schema\n- For aggregate counts of wound etiologies, I need to look at tables that store categorical data. The 'rpt.AttributeLookup' table contains the text for options like 'Diabetic' or 'Venous Ulcer'.\n- I will need to join this with 'rpt.Note' and 'rpt.AttributeValue' to link these options back to the actual assessments where they were recorded.\n\n### Step 3: Construct the SQL Query\n- I will use COUNT(N.id) to get the total number of assessments for each etiology.\n- A GROUP BY L.text clause is necessary to aggregate the counts correctly.\n- Finally, I'll use TOP 5 and ORDER BY count DESC to find the most common etiologies as requested.`;
+      const response = await fetch("/api/ai/generate-query", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-    setGeneratedSql(mockSql);
-    setExplanation(mockExplanation);
-    setRecommendedChartType(patientId ? "line" : "bar");
-    setState("sqlGenerated");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.message || "Failed to generate analysis plan."
+        );
+      }
+
+      const data = await response.json();
+      setGeneratedSql(data.generatedSql);
+      setExplanation(data.explanation);
+      setRecommendedChartType(data.chartType);
+      setState("sqlGenerated");
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setState("error");
+    }
   };
 
   const handleFetchChartData = async () => {
@@ -196,6 +233,7 @@ export default function AnalysisPage({
   const handleResetToInsights = () => {
     setState("insights");
     setCurrentQuestion(null);
+    setCurrentPatientId(null);
     setGeneratedSql(null);
     setExplanation(null);
     setChartData(null);
@@ -370,17 +408,33 @@ export default function AnalysisPage({
               </CardContent>
             </Card>
 
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center pt-4">
               <Button variant="ghost" onClick={handleResetToInsights}>
                 ← Ask a different question
               </Button>
-              <Button
-                size="lg"
-                onClick={handleFetchChartData}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Fetch Data & Generate Chart
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    currentQuestion &&
+                    handleGenerateSqlAndExplanation(
+                      currentQuestion,
+                      currentPatientId,
+                      true
+                    )
+                  }
+                >
+                  <ArrowPathIcon className="w-4 h-4 mr-2" />
+                  Regenerate Plan
+                </Button>
+                <Button
+                  size="lg"
+                  onClick={handleFetchChartData}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  Fetch Data & Generate Chart
+                </Button>
+              </div>
             </div>
           </div>
         );

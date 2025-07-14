@@ -227,10 +227,10 @@ This approach is more efficient and keeps the logic clean. Here is the updated A
   - Indicates that no cached insights were found.
   - The response will have no body.
 
-#### **2.2 Generate Generate Analysis Plan**
+#### **2.2 Get or Generate Analysis Plan**
 
 - **Endpoint:** `POST /ai/generate-query`
-- **Description:** This is the main AI workhorse endpoint. It takes a user's question and the form context, and asks the AI to generate a complete analysis plan in a single call. This plan includes a step-by-step explanation of its thinking, the executable SQL query, and a suggested chart type.
+- **Description:** This is a smart endpoint that acts as the single source for retrieving an AI-generated analysis plan. It uses a cache-first strategy. Its behavior is determined by the `regenerate` flag in the request body.
 
 - **Request:**
 
@@ -245,16 +245,27 @@ This approach is more efficient and keeps the logic clean. Here is the updated A
       "question": "Compare healing rates for different treatment types.",
 
       // Optional: Only include for single-patient questions
-      "patientId": "PAT-001"
+      "patientId": "PAT-001",
+
+      // Optional: Force regeneration, bypassing the cache
+      "regenerate": false
     }
     ```
 
+- **Behavior:**
+
+  - **If `regenerate` is `false` or omitted (Cache-check mode):**
+    - The endpoint first queries a cache table (e.g., `rpt.AIAnalysisPlan`) for a stored plan matching the `assessmentFormId` and `question`.
+    - **If found:** Returns a `200 OK` status with the cached analysis plan.
+    - **If not found:** Proceeds to the "generate" mode logic below.
+  - **If `regenerate` is `true` (Force-generate mode):**
+    - The endpoint will bypass the cache check, call the Claude AI service to generate a fresh analysis plan, save (or update) the result in the database, and then return the new data.
+
 - **Response (`200 OK`):**
-- Returns the complete analysis plan from the AI.
+- Returns the complete analysis plan from the AI or the cache.
   ```json
   {
     "chartType": "bar",
-    "generatedSql": "SELECT w.TreatmentType, AVG(w.HealingRate) ..."
     "generatedSql": "SELECT w.TreatmentType, AVG(w.HealingRate) ...",
     "explanation": "### Step 1: Analyze the User's Question\nThe user is asking for a 'healing rate progression' for a specific patient 'over time'. This clearly indicates a time-series analysis is needed...\n\n### Step 2: Consult the Database Schema\n- To get a date for each event, I will use the `date` column from the `rpt.Assessment` table...\n\n### Step 3: Construct the SQL Query\nBased on the analysis, I will construct the query as follows..."
   }
