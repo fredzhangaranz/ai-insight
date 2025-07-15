@@ -21,31 +21,37 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
+    console.log("Query params:", params);
+    console.log("Executing query:", query);
     // 2. Security Check: Ensure it's a read-only SELECT statement.
     // A simple but crucial check to prevent modifications.
-    if (!query.trim().toUpperCase().startsWith("SELECT")) {
+    const upperQuery = query.trim().toUpperCase();
+    if (!upperQuery.startsWith("SELECT") && !upperQuery.startsWith("WITH")) {
       return NextResponse.json(
-        { message: "Invalid query. Only SELECT statements are allowed." },
+        {
+          message: "Invalid query. Only SELECT or WITH statements are allowed.",
+        },
         { status: 400 }
       );
     }
 
     // 3. Execute the query
     const pool = await getDbPool();
-    const request = pool.request();
+    const dbRequest = pool.request();
 
     // 3a. Safely add parameters to the request if they exist
     if (params && typeof params === "object") {
       for (const key in params) {
         // The mssql library will determine the SQL type based on the JS type.
         // For a production app, we might add explicit type mapping here.
-        request.input(key, params[key]);
+        dbRequest.input(key, params[key]);
       }
     }
 
     // 3b. Execute the query with the bound parameters
-    const result = await request.query(query);
+    const result = await dbRequest.query(query);
+
+    console.log("Query execution result:", result);
 
     // 4. Return the data
     return NextResponse.json({

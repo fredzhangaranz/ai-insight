@@ -33,10 +33,6 @@
 
 import sql from "mssql";
 
-const dbConfig = {
-  connectionString: process.env.DATABASE_URL,
-};
-
 // Store the connection promise, not the pool object itself, to prevent race conditions.
 let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
@@ -51,7 +47,7 @@ export function getDbPool(): Promise<sql.ConnectionPool> {
     return poolPromise;
   }
 
-  if (!dbConfig.connectionString) {
+  if (!process.env.DATABASE_URL) {
     const err = new Error(
       "Database connection string is not configured in environment variables."
     );
@@ -62,7 +58,45 @@ export function getDbPool(): Promise<sql.ConnectionPool> {
   // Store the promise in the shared variable immediately to handle concurrent requests.
   poolPromise = (async () => {
     try {
-      const pool = new sql.ConnectionPool(dbConfig.connectionString);
+      // The user's connection string is not a URL, but a series of key-value pairs.
+      // We need to parse it to build the config object that `mssql` expects,
+      // as it cannot handle mixed configuration (e.g. connectionString + other properties).
+      const connectionString = process.env.DATABASE_URL!;
+      const params = connectionString.split(";").reduce((acc, part) => {
+        const eqIndex = part.indexOf("=");
+        if (eqIndex > -1) {
+          const key = part.substring(0, eqIndex).trim().toLowerCase();
+          let value = part.substring(eqIndex + 1).trim();
+          // Remove surrounding quotes from value, which can be present in passwords
+          if (value.startsWith("'") && value.endsWith("'")) {
+            value = value.substring(1, value.length - 1);
+          }
+          acc[key] = value;
+        }
+        return acc;
+      }, {} as Record<string, string>);
+
+      const dbConfig: sql.config = {
+        user: params["user id"] || params.user,
+        password: params.password,
+        server: params.server,
+        port: params.port ? Number(params.port) : 1433,
+        database: "SilhouetteAIDashboard", // Always use the correct database for this app
+        pool: {
+          max: 10,
+          min: 0,
+          idleTimeoutMillis: 30000,
+        },
+        options: {
+          encrypt: params.encrypt
+            ? params.encrypt.toLowerCase() === "true"
+            : true,
+          trustServerCertificate: params.trustservercertificate
+            ? params.trustservercertificate.toLowerCase() === "true"
+            : true,
+        },
+      };
+      const pool = new sql.ConnectionPool(dbConfig);
 
       // Attach an error handler to the pool to clean up on unexpected errors.
       pool.on("error", (err) => {

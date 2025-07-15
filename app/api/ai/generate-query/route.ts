@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
     // 2. Cache Check (if not regenerating)
     if (!regenerate) {
       const cacheQuery = `
-        SELECT analysisPlanJson FROM SilhouetteAIDashboard.rpt.AIAnalysisPlan
+        SELECT analysisPlanJson FROM rpt.AIAnalysisPlan
         WHERE assessmentFormVersionFk = @assessmentFormId AND question = @question;
       `;
       console.log("Checking cache for analysis plan...", cacheQuery);
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
     // 4. Save to Cache
     const analysisPlanJsonString = JSON.stringify(plan);
     const upsertQuery = `
-      MERGE SilhouetteAIDashboard.rpt.AIAnalysisPlan AS target
+      MERGE rpt.AIAnalysisPlan AS target
       USING (SELECT @assessmentFormId AS assessmentFormVersionFk, @question AS question) AS source
       ON (target.assessmentFormVersionFk = source.assessmentFormVersionFk AND target.question = source.question)
       WHEN MATCHED THEN
