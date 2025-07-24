@@ -6,11 +6,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import sql from "mssql";
+import { getDbPool } from "@/lib/db";
+import type { AnalysisPlan } from "@/lib/types/analysis-plan";
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
-import { getDbPool } from "@/lib/db";
+import sql from "mssql";
 
 // --- CONFIGURATION ---
 const anthropic = new Anthropic({
@@ -38,17 +39,33 @@ function extractJsonObject(str: string): object | null {
 }
 
 /**
+ * Validates that an object matches the AnalysisPlan interface
+ */
+function isValidAnalysisPlan(obj: any): obj is AnalysisPlan {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    typeof obj.explanation === "string" &&
+    typeof obj.recommendedChartType === "string" &&
+    typeof obj.generatedSql === "string" &&
+    typeof obj.availableMappings === "object" &&
+    obj.availableMappings !== null &&
+    ["bar", "line", "pie", "kpi", "table"].includes(obj.recommendedChartType)
+  );
+}
+
+/**
  * Generates an analysis plan by calling the Anthropic AI API.
  * @param assessmentFormDefinition The definition of the form.
  * @param question The user's question.
  * @param patientId Optional patient ID to signal a patient-specific query.
- * @returns The generated analysis plan { generatedSql, chartType, explanation }.
+ * @returns The generated analysis plan { generatedSql, chartType, explanation, availableMappings }.
  */
 async function generateAIPlan(
   assessmentFormDefinition: any,
   question: string,
   patientId?: string
-) {
+): Promise<AnalysisPlan> {
   // 1. Load static context and construct prompts
   const start = Date.now();
   console.log("Starting AI plan generation...");
@@ -67,11 +84,30 @@ async function generateAIPlan(
 
       You MUST return a single JSON object and nothing else. Do not include any other text, explanations, or markdown formatting outside of the JSON object.
 
-      The JSON object must have three keys:
-      1.  \`explanation\`: A markdown-formatted string explaining your thought process step-by-step. Start with "### Step 1: ...", "### Step 2: ...", etc. Explain how you interpreted the user's question, which tables and columns you need to use from the schema, and why you are constructing the query in a specific way.
-      2.  \`chartType\`: A string suggesting the best chart type for the data. Options are: 'bar', 'line', 'pie', 'kpi' (for a single number result), or 'table'.
+      The JSON object must have FOUR keys:
+      1.  \`explanation\`: A markdown-formatted string explaining your thought process step-by-step.
+      2.  \`recommendedChartType\`: A string suggesting the single best chart type for the data. Options are: 'bar', 'line', 'kpi', or 'table'.
       3.  \`generatedSql\`: A string containing the complete, syntactically correct, and executable MS SQL query.
+      4.  \`availableMappings\`: An object containing mappings for ALL plausible chart types for the generated SQL. The keys of this object are the chart types, and the values are the column mapping objects.
+          - For a 'bar' chart, the mapping must be: \`{ "category": "your_category_column_alias", "value": "your_value_column_alias" }\`.
+          - For a 'line' chart, the mapping must be: \`{ "x": "your_x_axis_column_alias", "y": "your_y_axis_column_alias" }\`.
+          - For a 'kpi' chart, the mapping must be: \`{ "label": "your_label_column_alias", "value": "your_value_column_alias" }\`.
+          - For a 'table' chart, you can provide a mapping for columns: \`{ "columns": [{ "key": "col1_alias", "header": "Column 1" }, { "key": "col2_alias", "header": "Column 2" }] }\`. If no special headers are needed, you can return an empty object: \`{}\`.
+          - If a chart type is not plausible for the data, do not include it in \`availableMappings\`.
 
+      **EXAMPLE:**
+      If the question is "What are the 5 most common wound etiologies?" and your SQL is \`SELECT L.text as etiology, COUNT(N.id) as total_count FROM ...\`, your response should be:
+      \`\`\`json
+      {
+        "explanation": "...",
+        "recommendedChartType": "bar",
+        "generatedSql": "SELECT L.text as etiology, COUNT(N.id) as total_count FROM ...",
+        "availableMappings": {
+          "bar": { "category": "etiology", "value": "total_count" },
+          "table": { "columns": [{ "key": "etiology", "header": "Etiology" }, { "key": "total_count", "header": "Total Count" }] }
+        }
+      }
+      \`\`\`
       **IMPORTANT RULE FOR PATIENT-SPECIFIC QUERIES:**
       If the user's question is about a single patient, you MUST use a SQL parameter placeholder for the patient's ID. The placeholder MUST be \`@patientId\`. Do NOT hardcode a specific patient ID in the WHERE clause.
       Example of a correct patient-specific WHERE clause: \`WHERE A.patientFk = @patientId\`
@@ -92,7 +128,6 @@ async function generateAIPlan(
 
     // Add patient-specific context if provided
     if (patientId) {
-      // Just signal that it's a single-patient query. The system prompt handles the placeholder instruction.
       userPrompt += `\n\nThis is a single-patient query. Remember to use the @patientId placeholder.`;
     }
 
@@ -109,16 +144,13 @@ async function generateAIPlan(
     const end = Date.now();
     console.log(`Claude AI API call finished. Duration: ${end - start}ms`);
 
-    const responseText = aiResponse.content[0].text;
+    // Get the response text from the content array
+    const responseText =
+      aiResponse.content[0].type === "text" ? aiResponse.content[0].text : "";
+
     const responseObject = extractJsonObject(responseText);
 
-    if (
-      !responseObject ||
-      typeof responseObject !== "object" ||
-      !("generatedSql" in responseObject) ||
-      !("chartType" in responseObject) ||
-      !("explanation" in responseObject)
-    ) {
+    if (!responseObject || !isValidAnalysisPlan(responseObject)) {
       console.error("AI returned an invalid or malformed JSON object.", {
         responseText,
       });
@@ -127,13 +159,7 @@ async function generateAIPlan(
       );
     }
 
-    const { generatedSql, chartType, explanation } = responseObject as {
-      generatedSql: string;
-      chartType: string;
-      explanation: string;
-    };
-
-    return { generatedSql, chartType, explanation };
+    return responseObject;
   } catch (error: any) {
     console.error("Error during AI plan generation:", error);
     // Re-throw to be caught by the main handler
@@ -182,7 +208,12 @@ export async function POST(request: NextRequest) {
       if (cachedResult.recordset.length > 0) {
         console.log("Cached analysis plan found. Returning from database.");
         const plan = JSON.parse(cachedResult.recordset[0].analysisPlanJson);
-        return NextResponse.json(plan);
+        // Validate the cached plan
+        if (!isValidAnalysisPlan(plan)) {
+          console.error("Cached analysis plan is invalid, regenerating...");
+        } else {
+          return NextResponse.json(plan);
+        }
       }
       console.log("No cached analysis plan found for this question.");
     }
@@ -226,8 +257,6 @@ export async function POST(request: NextRequest) {
       {
         message: "Failed to generate analysis plan.",
         error: error.message,
-        // For debugging, you might want to include the stack in development
-        // stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
       { status: 500 }
     );

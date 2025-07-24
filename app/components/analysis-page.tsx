@@ -17,7 +17,7 @@ import {
   BeakerIcon,
   CpuChipIcon,
 } from "@/components/heroicons";
-import { ChartComponent } from "./chart-component";
+import { ChartComponent, type ChartDataType } from "./charts/chart-component";
 import { LoadingDots } from "./loading-dots";
 import { CodeBlock } from "./code-block";
 import { DataTable } from "./data-table";
@@ -25,6 +25,22 @@ import { FormFieldDisplay } from "./form-field-display";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PatientSelectionDialog } from "./patient-selection-dialog";
 import ReactMarkdown from "react-markdown";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { ChartType, TableData } from "@/lib/chart-contracts";
+import {
+  exampleBarData,
+  exampleLineData,
+  examplePieData,
+  exampleKpiData,
+  exampleTableData,
+  exampleAvailableMappings,
+} from "./charts/example-data";
 
 // --- TYPE DEFINITIONS ---
 type FormField = { fieldtype: string; options: string[] };
@@ -41,7 +57,7 @@ interface AnalysisPageProps {
 
 type AnalysisState =
   | "loading"
-  | "loading" // Initial page load
+  | "initial"
   | "insights"
   | "generatingSql" // Loading after question selected
   | "sqlGenerated" // SQL + Explanation are shown
@@ -73,8 +89,53 @@ export default function AnalysisPage({
   const [recommendedChartType, setRecommendedChartType] = useState<
     string | null
   >(null);
-  const [chartData, setChartData] = useState<any[] | null>(null);
-  const [tableData, setTableData] = useState<any[] | null>(null);
+  // Use the ChartDataType from ChartComponentProps
+  const [chartData, setChartData] = useState<ChartDataType | null>(null);
+  const [tableData, setTableData] = useState<TableData["rows"] | null>(null);
+  const [selectedChartType, setSelectedChartType] = useState<ChartType>("bar");
+  const [availableMappings, setAvailableMappings] = useState(
+    exampleAvailableMappings
+  );
+
+  // Add a function to get example data based on chart type
+  const getExampleData = (chartType: ChartType): ChartDataType => {
+    console.log("Getting example data for chart type:", chartType);
+    const data = (() => {
+      switch (chartType) {
+        case "bar":
+          return exampleBarData;
+        case "line":
+          return exampleLineData;
+        case "pie":
+          return examplePieData;
+        case "kpi":
+          return exampleKpiData;
+        case "table":
+          return exampleTableData;
+        default:
+          return exampleBarData;
+      }
+    })();
+    console.log("Example data:", data);
+    return data;
+  };
+
+  // Initialize chart data with bar chart example
+  useEffect(() => {
+    console.log("Initializing chart data");
+    const initialData = getExampleData("bar");
+    setChartData(initialData);
+    console.log("Chart data initialized:", initialData);
+  }, []);
+
+  // Handle chart type changes
+  const handleChartTypeChange = (value: ChartType) => {
+    console.log("Changing chart type to:", value);
+    setSelectedChartType(value);
+    const newData = getExampleData(value);
+    setChartData(newData);
+    console.log("Chart data updated:", newData);
+  };
 
   const fetchData = async (regenerate = false) => {
     setState("loading");
@@ -198,29 +259,10 @@ export default function AnalysisPage({
     setErrorMessage(null);
 
     try {
-      const requestBody: { query: string; params?: { [key: string]: string } } =
-        {
-          query: generatedSql,
-        };
-
-      if (patientId) {
-        requestBody.params = { patientId: patientId };
-      }
-
-      const response = await fetch("/api/ai/execute-query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to execute query.");
-      }
-
-      const result = await response.json();
-      setTableData(result.data);
-      setChartData(result.data); // The chart component will need to adapt to this
+      // For now, we'll use example data instead of making the API call
+      const exampleData = getExampleData(selectedChartType);
+      setTableData(exampleTableData); // Always use table data for the table view
+      setChartData(exampleData);
       setState("results");
     } catch (err: any) {
       setErrorMessage(err.message);
@@ -488,13 +530,41 @@ export default function AnalysisPage({
             </div>
             {/* The final chart, rendered with real data */}
             <Card className="border-slate-200 bg-white shadow-sm">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-xl text-slate-900">
                   Data Visualization
                 </CardTitle>
+                <Select
+                  value={selectedChartType}
+                  onValueChange={handleChartTypeChange}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select chart type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(availableMappings).map((type) => (
+                      <SelectItem key={type} value={type as ChartType}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)} Chart
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </CardHeader>
               <CardContent>
-                {chartData && <ChartComponent data={chartData} />}
+                {chartData ? (
+                  <div className="h-[400px]">
+                    <ChartComponent
+                      chartType={selectedChartType}
+                      data={chartData}
+                      title={currentQuestion?.text}
+                      className="w-full h-full"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-[400px] text-slate-500">
+                    No data available
+                  </div>
+                )}
               </CardContent>
             </Card>
             <div className="grid lg:grid-cols-2 gap-6">

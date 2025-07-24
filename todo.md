@@ -2,10 +2,6 @@
 
 This document outlines the remaining tasks to complete the proof-of-concept application. The tasks are ordered to build foundational pieces first, allowing for verification at each major step.
 
-## 1. Backend API Implementation & Architecture
-
-The backend APIs are complete and include significant architectural improvements for performance and security.
-
 - [x] **Implement `POST /ai/generate-query` Endpoint (Analysis Plan)**
 
   - This is the primary AI endpoint.
@@ -23,36 +19,95 @@ The backend APIs are complete and include significant architectural improvements
   - **Caching:** The `/ai/generate-query` endpoint now caches all analysis plans (both patient-specific and general) in the `rpt.AIAnalysisPlan` table to reduce AI API costs and improve response times for repeated questions. The frontend can force a regeneration via a `regenerate: true` flag.
   - **Security:** The system now uses parameterized queries. The AI generates SQL templates with placeholders (e.g., `@patientId`), and the `/ai/execute-query` endpoint safely injects values, preventing SQL injection vulnerabilities.
 
-## 2. Frontend API Integration
+## 2. Backend API Enhancements
 
-With the backend APIs in place, we will replace the mock data in the UI with live API calls.
+- [x] **Enhance `POST /ai/generate-query` to return `availableMappings`**
+  - Update the system prompt in `app/api/ai/generate-query/route.ts` to instruct the AI to return `recommendedChartType` and a new `availableMappings` object.
+  - `availableMappings` will be an object where keys are chart types (e.g., 'bar', 'pie', 'table') and values are the corresponding column mapping objects (e.g., `{ "category": "etiology", "value": "count" }`).
+  - The AI should determine all plausible chart types for the given query and provide mappings for each.
+  - This allows the frontend to offer user-selectable chart types without extra API calls.
 
-- [x] **Update `analysis-page.tsx` to call `generate-query` API**
+## 3. Frontend Implementation: Dynamic Charting
 
-  - Refactored `handleGenerateSqlAndExplanation` to make a `fetch` call to our new `POST /ai/generate-query` endpoint.
-  - The response populates the `explanation`, `generatedSql`, and `recommendedChartType` state variables.
-  - Added a "Regenerate Plan" button to call the same endpoint with `regenerate: true`.
+This section outlines our progress in building a data-agnostic charting system.
 
-- [ ] **Update `analysis-page.tsx` to call `execute-query` API**
+- [x] **Step 1: Define Chart Data Contracts**
 
-  - Refactor `handleFetchChartData` to make a `fetch` call to `POST /ai/execute-query`.
-  - The request body should include the `generatedSql` from the state.
-  - For patient-specific questions, the request body must also include a `params` object (e.g., `{ "patientId": "..." }`).
-  - The response will populate the `chartData` and `tableData` state variables.
+  - ✅ Created `lib/chart-contracts.ts`
+  - ✅ Defined TypeScript interfaces for all chart types (Bar, Line, Pie, KPI)
+  - ✅ Added support for table data with column definitions
+  - ✅ Implemented chart type union and mapping interfaces
 
-- [ ] **Update `chart-component.tsx` to handle real data**
-  - The component currently expects a specific data shape (`{name, value, percentage}`).
-  - It needs to be updated to dynamically handle different data shapes returned by the API (e.g., `{assessmentDate, woundArea}` or `{etiology, count}`).
-  - It should use the `recommendedChartType` to render the correct chart (e.g., 'line' or 'bar').
+- [x] **Step 2: Create Individual "Dumb" Chart Components**
 
-## 3. Final UI Implementation
+  - ✅ Created `components/charts/` directory
+  - ✅ Implemented `bar-chart.tsx` with recharts
+  - ✅ Implemented `line-chart.tsx` with recharts
+  - ✅ Implemented `pie-chart.tsx` with recharts
+  - ✅ Implemented `kpi-card.tsx` with trend indicators
+  - ✅ Added proper TypeScript contracts to all components
+  - ✅ Added example data for testing
 
-The final step is to build the complete results view as described in the application flow.
+- [x] **Step 4: Create the "Smart" Dispatcher**
 
-- [ ] **Implement the Final `results` UI State**
-  - In `analysis-page.tsx`, integrate the final results display into the main component logic.
-  - Create the final layout which includes:
-    - A main title with the user's selected question (`currentQuestion.text`).
-    - A large card for the `<ChartComponent />` displaying the real `chartData`.
-    - A two-column grid below the chart for the `<CodeBlock />` (showing `generatedSql`) and `<DataTable />` (showing `tableData`).
-  - Add an "Ask Another Question" button at the bottom of the results view that resets the state correctly.
+  - ✅ Implemented `chart-component.tsx` as a dispatcher
+  - ✅ Added type guards for data validation
+  - ✅ Added error boundaries for graceful failure
+  - ✅ Added proper sizing and className support
+  - ✅ Added debugging and error reporting
+
+- [x] **Step 3: Implement the Data Shaper Utility**
+
+  - ✅ Created `lib/data-shaper.ts`
+  - ✅ Implemented `shapeDataForChart` with type safety
+  - ✅ Added support for sorting and limiting
+  - ✅ Added individual shapers for each chart type
+  - ✅ Added comprehensive error handling
+
+- [ ] **Step 5: Connect Real Data Flow** (Next Priority)
+  - Update `analysis-page.tsx` to use real data from API
+  - Connect `availableMappings` from AI response to chart selection
+  - Use `data-shaper.ts` to transform SQL results
+  - Set initial chart type to AI's recommendation
+  - Add loading states during data transformation
+
+## 4. Final UI Implementation
+
+- [x] **Basic Results View Layout**
+
+  - ✅ Added chart type selection dropdown
+  - ✅ Added chart container with proper sizing
+  - ✅ Added SQL and raw data display
+  - ✅ Added proper error states and loading indicators
+
+- [ ] **Polish and Final Features**
+  - Add loading spinners during data transformation
+  - Add error handling for data shaping failures
+  - Add tooltips explaining chart type options
+  - Add "Ask Another Question" button
+  - Add transition animations between states
+  - Add copy-to-clipboard for raw data
+  - Add export options for charts and data
+
+## Next Steps
+
+1. Connect Real Data Flow (Step 5)
+
+   - This is now the main priority
+   - Replace example data with real SQL results
+   - Use the data shaper to transform the data
+   - Connect with AI's recommended chart types
+   - Add proper loading and error states
+
+2. Add Final Polish
+
+   - Focus on user experience improvements
+   - Add helpful tooltips and explanations
+   - Ensure smooth transitions between states
+   - Add export and sharing capabilities
+
+3. Testing and Documentation
+   - Add unit tests for data shaping scenarios
+   - Add integration tests for the complete flow
+   - Document the chart type selection logic
+   - Document the data transformation process
