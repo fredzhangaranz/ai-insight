@@ -12,12 +12,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
 import sql from "mssql";
+import { MetricsMonitor } from "@/lib/monitoring";
 
 // --- CONFIGURATION ---
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
-const AI_MODEL_NAME = process.env.AI_MODEL_NAME;
+const AI_MODEL_NAME = process.env.AI_MODEL_NAME || "claude-3-sonnet-20240229";
 const AI_GENERATED_BY = `Claude-3-5-Sonnet`;
 
 /**
@@ -66,11 +67,13 @@ async function generateAIPlan(
   question: string,
   patientId?: string
 ): Promise<AnalysisPlan> {
-  // 1. Load static context and construct prompts
-  const start = Date.now();
+  const metrics = MetricsMonitor.getInstance();
+  const startTime = Date.now();
+  let aiStartTime = 0;
+
   console.log("Starting AI plan generation...");
   try {
-    // 2. Load the static database schema context from the file
+    // Load the static database schema context from the file
     const schemaContextPath = path.join(
       process.cwd(),
       "lib",
@@ -78,7 +81,7 @@ async function generateAIPlan(
     );
     const databaseSchemaContext = fs.readFileSync(schemaContextPath, "utf-8");
 
-    // 3. Construct the System Prompt for the AI
+    // Construct the System Prompt for the AI
     const systemPrompt = `
       You are an expert MS SQL Server data analyst. Your task is to act as a "query planner" and generate a complete analysis plan based on a user's question and the provided database schema and form definition.
 
@@ -117,7 +120,7 @@ async function generateAIPlan(
       ${databaseSchemaContext}
     `;
 
-    // 4. Construct the User Prompt with dynamic data
+    // Construct the User Prompt with dynamic data
     let userPrompt = `
       Based on the schema, please generate an analysis plan for the following question:
       Question: "${question}"
@@ -126,23 +129,34 @@ async function generateAIPlan(
       ${JSON.stringify(assessmentFormDefinition, null, 2)}
     `;
 
-    // Add patient-specific context if provided
     if (patientId) {
       userPrompt += `\n\nThis is a single-patient query. Remember to use the @patientId placeholder.`;
     }
 
     console.log("Calling Claude AI API...");
+    aiStartTime = Date.now();
 
-    // 5. Call the Claude AI API
+    // Call the Claude AI API
     const aiResponse = await anthropic.messages.create({
-      model: AI_MODEL_NAME!,
-      max_tokens: 2048, // Increased max_tokens for more detailed explanations
+      model: AI_MODEL_NAME,
+      max_tokens: 2048,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     });
 
     const end = Date.now();
-    console.log(`Claude AI API call finished. Duration: ${end - start}ms`);
+    console.log(`Claude AI API call finished. Duration: ${end - startTime}ms`);
+
+    // Log AI metrics
+    await metrics.logAIMetrics({
+      promptTokens: 0, // Claude 3 doesn't expose token counts yet
+      completionTokens: 0,
+      totalTokens: 0,
+      latency: Date.now() - aiStartTime,
+      success: true,
+      model: AI_MODEL_NAME,
+      timestamp: new Date(),
+    });
 
     // Get the response text from the content array
     const responseText =
@@ -154,6 +168,19 @@ async function generateAIPlan(
       console.error("AI returned an invalid or malformed JSON object.", {
         responseText,
       });
+
+      // Log AI failure
+      await metrics.logAIMetrics({
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        latency: Date.now() - aiStartTime,
+        success: false,
+        errorType: "InvalidResponseFormat",
+        model: AI_MODEL_NAME,
+        timestamp: new Date(),
+      });
+
       throw new Error(
         `AI returned an invalid or malformed JSON object. Response: ${responseText}`
       );
@@ -162,15 +189,33 @@ async function generateAIPlan(
     return responseObject;
   } catch (error: any) {
     console.error("Error during AI plan generation:", error);
-    // Re-throw to be caught by the main handler
+
+    // Log AI error if it occurred during AI processing
+    if (aiStartTime) {
+      await metrics.logAIMetrics({
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        latency: Date.now() - aiStartTime,
+        success: false,
+        errorType: error.name || "UnknownError",
+        model: AI_MODEL_NAME,
+        timestamp: new Date(),
+      });
+    }
+
     throw error;
   }
 }
 
 // --- MAIN API HANDLER ---
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  const metrics = MetricsMonitor.getInstance();
+  let cacheHit = false;
+
   try {
-    // 1. Read and validate the request body
+    // Read and validate the request body
     const body = await request.json();
     const {
       assessmentFormId,
@@ -192,8 +237,9 @@ export async function POST(request: NextRequest) {
 
     const pool = await getDbPool();
 
-    // 2. Cache Check (if not regenerating)
+    // Cache Check (if not regenerating)
     if (!regenerate) {
+      const cacheStartTime = Date.now();
       const cacheQuery = `
         SELECT analysisPlanJson FROM rpt.AIAnalysisPlan
         WHERE assessmentFormVersionFk = @assessmentFormId AND question = @question;
@@ -204,21 +250,57 @@ export async function POST(request: NextRequest) {
         .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
         .input("question", sql.NVarChar(1000), question)
         .query(cacheQuery);
+
+      // Log cache check query metrics
+      await metrics.logQueryMetrics({
+        queryId: "check_analysis_plan_cache",
+        executionTime: Date.now() - cacheStartTime,
+        resultSize: cachedResult.recordset.length,
+        timestamp: new Date(),
+        cached: false,
+        sql: cacheQuery,
+        parameters: { assessmentFormId, question },
+      });
+
       console.log("Cached result:", cachedResult);
       if (cachedResult.recordset.length > 0) {
         console.log("Cached analysis plan found. Returning from database.");
         const plan = JSON.parse(cachedResult.recordset[0].analysisPlanJson);
+        cacheHit = true;
+
         // Validate the cached plan
         if (!isValidAnalysisPlan(plan)) {
           console.error("Cached analysis plan is invalid, regenerating...");
+          cacheHit = false;
         } else {
+          // Log cache hit metrics
+          await metrics.logCacheMetrics({
+            cacheHits: 1,
+            cacheMisses: 0,
+            cacheInvalidations: 0,
+            averageHitLatency: Date.now() - startTime,
+            timestamp: new Date(),
+          });
+
           return NextResponse.json(plan);
         }
       }
+
+      // Log cache miss metrics
+      if (!cacheHit) {
+        await metrics.logCacheMetrics({
+          cacheHits: 0,
+          cacheMisses: 1,
+          cacheInvalidations: 0,
+          averageHitLatency: 0,
+          timestamp: new Date(),
+        });
+      }
+
       console.log("No cached analysis plan found for this question.");
     }
 
-    // 3. AI Generation (if regenerate=true or cache miss)
+    // AI Generation (if regenerate=true or cache miss)
     console.log("Generating new analysis plan via AI.");
     const plan = await generateAIPlan(
       assessmentFormDefinition,
@@ -226,7 +308,8 @@ export async function POST(request: NextRequest) {
       patientId
     );
 
-    // 4. Save to Cache
+    // Save to Cache
+    const cacheUpdateStartTime = Date.now();
     const analysisPlanJsonString = JSON.stringify(plan);
     const upsertQuery = `
       MERGE rpt.AIAnalysisPlan AS target
@@ -247,9 +330,31 @@ export async function POST(request: NextRequest) {
       .input("generatedBy", sql.NVarChar, AI_GENERATED_BY)
       .query(upsertQuery);
 
+    // Log cache update metrics
+    await metrics.logQueryMetrics({
+      queryId: "update_analysis_plan_cache",
+      executionTime: Date.now() - cacheUpdateStartTime,
+      resultSize: 1,
+      timestamp: new Date(),
+      cached: false,
+      sql: upsertQuery,
+      parameters: { assessmentFormId, question, generatedBy: AI_GENERATED_BY },
+    });
+
+    // Log cache invalidation if this was a regenerate
+    if (cacheHit) {
+      await metrics.logCacheMetrics({
+        cacheHits: 0,
+        cacheMisses: 0,
+        cacheInvalidations: 1,
+        averageHitLatency: 0,
+        timestamp: new Date(),
+      });
+    }
+
     console.log("Successfully saved new analysis plan to cache.");
 
-    // 5. Return the final payload
+    // Return the final payload
     return NextResponse.json(plan);
   } catch (error: any) {
     console.error("API Error in /ai/generate-query:", error.message);

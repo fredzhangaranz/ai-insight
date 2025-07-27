@@ -9,18 +9,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import Anthropic from "@anthropic-ai/sdk";
-import fs from "fs";
-import path from "path";
 import { getDbPool } from "@/lib/db";
+import {
+  validateInsightsResponse,
+  constructInsightsPrompt,
+  analyzeFormFields,
+  type AIInsightsResponse,
+} from "@/lib/prompts";
+import { MetricsMonitor } from "@/lib/monitoring";
 
 // --- CONFIGURATION ---
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
-const AI_MODEL_NAME = process.env.AI_MODEL_NAME;
+const AI_MODEL_NAME = process.env.AI_MODEL_NAME || "claude-3-sonnet-20240229";
 const AI_GENERATED_BY = `Claude-3-5-Sonnet`;
 
-// --- HELPER FUNCTIONS (No changes needed here) ---
+// --- HELPER FUNCTIONS ---
 function mapDataType(dataType: number): string {
   const typeMap: { [key: number]: string } = {
     1: "File",
@@ -46,7 +51,11 @@ async function getAssessmentFormDefinition(
   pool: sql.ConnectionPool,
   assessmentFormId: string
 ): Promise<object | null> {
-  const fieldsQuery = `
+  const startTime = Date.now();
+  const metrics = MetricsMonitor.getInstance();
+
+  try {
+    const fieldsQuery = `
       SELECT att.name, att.dataType, att.id as AttributeTypeID
       FROM SilhouetteAIDashboard.dbo.AssessmentTypeVersion atv
       INNER JOIN SilhouetteAIDashboard.dbo.AttributeSetAssessmentTypeVersion asatv ON atv.id = asatv.assessmentTypeVersionFk
@@ -55,34 +64,64 @@ async function getAssessmentFormDefinition(
       WHERE atv.id = @id AND atv.isDeleted = 0 AND asatv.isDeleted = 0 AND ats.isDeleted = 0 AND att.isDeleted = 0
       ORDER BY asatv.orderIndex, att.orderIndex;
     `;
-  const fieldsResult = await pool
-    .request()
-    .input("id", sql.UniqueIdentifier, assessmentFormId)
-    .query(fieldsQuery);
+    const fieldsResult = await pool
+      .request()
+      .input("id", sql.UniqueIdentifier, assessmentFormId)
+      .query(fieldsQuery);
 
-  if (fieldsResult.recordset.length === 0) return null;
+    // Log query metrics
+    await metrics.logQueryMetrics({
+      queryId: "get_assessment_form_fields",
+      executionTime: Date.now() - startTime,
+      resultSize: fieldsResult.recordset.length,
+      timestamp: new Date(),
+      cached: false,
+      sql: fieldsQuery,
+      parameters: { assessmentFormId },
+    });
 
-  const definition: {
-    [key: string]: { fieldtype: string; options?: string[] };
-  } = {};
-  for (const field of fieldsResult.recordset) {
-    const fieldType = mapDataType(field.dataType);
-    const fieldDefinition: { fieldtype: string; options?: string[] } = {
-      fieldtype: fieldType,
-    };
-    if (fieldType === "SingleSelectList" || fieldType === "MultiSelectList") {
-      const optionsQuery = `SELECT [text] FROM SilhouetteAIDashboard.dbo.AttributeLookup WHERE attributeTypeFk = @attributeTypeFk AND isDeleted = 0 ORDER BY orderIndex;`;
-      const optionsResult = await pool
-        .request()
-        .input("attributeTypeFk", sql.UniqueIdentifier, field.AttributeTypeID)
-        .query(optionsQuery);
-      fieldDefinition.options = optionsResult.recordset.map(
-        (option: any) => option.text
-      );
+    if (fieldsResult.recordset.length === 0) return null;
+
+    const definition: {
+      [key: string]: { fieldtype: string; options?: string[] };
+    } = {};
+
+    for (const field of fieldsResult.recordset) {
+      const fieldType = mapDataType(field.dataType);
+      const fieldDefinition: { fieldtype: string; options?: string[] } = {
+        fieldtype: fieldType,
+      };
+
+      if (fieldType === "SingleSelectList" || fieldType === "MultiSelectList") {
+        const optionsStartTime = Date.now();
+        const optionsQuery = `SELECT [text] FROM SilhouetteAIDashboard.dbo.AttributeLookup WHERE attributeTypeFk = @attributeTypeFk AND isDeleted = 0 ORDER BY orderIndex;`;
+        const optionsResult = await pool
+          .request()
+          .input("attributeTypeFk", sql.UniqueIdentifier, field.AttributeTypeID)
+          .query(optionsQuery);
+
+        // Log options query metrics
+        await metrics.logQueryMetrics({
+          queryId: "get_attribute_options",
+          executionTime: Date.now() - optionsStartTime,
+          resultSize: optionsResult.recordset.length,
+          timestamp: new Date(),
+          cached: false,
+          sql: optionsQuery,
+          parameters: { attributeTypeFk: field.AttributeTypeID },
+        });
+
+        fieldDefinition.options = optionsResult.recordset.map(
+          (option: any) => option.text
+        );
+      }
+      definition[field.name] = fieldDefinition;
     }
-    definition[field.name] = fieldDefinition;
+    return definition;
+  } catch (error) {
+    console.error("Error in getAssessmentFormDefinition:", error);
+    throw error;
   }
-  return definition;
 }
 
 // --- MAIN API HANDLER ---
@@ -90,6 +129,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { assessmentFormId: string } }
 ) {
+  const startTime = Date.now();
+  const metrics = MetricsMonitor.getInstance();
+  let cacheHit = false;
+  let aiStartTime = 0;
+
   const { assessmentFormId } = params;
   const regenerate = request.nextUrl.searchParams.get("regenerate") === "true";
 
@@ -105,6 +149,7 @@ export async function GET(
 
     // If regenerate flag is NOT present, we only check the cache.
     if (!regenerate) {
+      const cacheStartTime = Date.now();
       const cachedResult = await pool
         .request()
         .input("id", sql.UniqueIdentifier, assessmentFormId)
@@ -112,21 +157,56 @@ export async function GET(
           "SELECT insightsJson FROM SilhouetteAIDashboard.rpt.AIInsights WHERE assessmentFormVersionFk = @id"
         );
 
+      // Log cache check query metrics
+      await metrics.logQueryMetrics({
+        queryId: "check_insights_cache",
+        executionTime: Date.now() - cacheStartTime,
+        resultSize: cachedResult.recordset.length,
+        timestamp: new Date(),
+        cached: false,
+        sql: "SELECT insightsJson FROM rpt.AIInsights WHERE assessmentFormVersionFk = @id",
+        parameters: { assessmentFormId },
+      });
+
       if (cachedResult.recordset.length > 0) {
         console.log("Cached insights found. Returning from database.");
-        return NextResponse.json(
-          JSON.parse(cachedResult.recordset[0].insightsJson)
-        );
+        const insights = JSON.parse(cachedResult.recordset[0].insightsJson);
+        cacheHit = true;
+
+        // Validate cached insights
+        if (!validateInsightsResponse(insights)) {
+          console.log("Cached insights are invalid, regenerating...");
+          cacheHit = false;
+        } else {
+          // Log cache metrics
+          await metrics.logCacheMetrics({
+            cacheHits: 1,
+            cacheMisses: 0,
+            cacheInvalidations: 0,
+            averageHitLatency: Date.now() - startTime,
+            timestamp: new Date(),
+          });
+
+          return NextResponse.json(insights);
+        }
       } else {
-        // *** NEW BEHAVIOR ***
-        // No cache found, so return "No Content" to let the frontend decide what to do.
         console.log("No cached insights found. Returning 204 No Content.");
+
+        // Log cache miss
+        await metrics.logCacheMetrics({
+          cacheHits: 0,
+          cacheMisses: 1,
+          cacheInvalidations: 0,
+          averageHitLatency: 0,
+          timestamp: new Date(),
+        });
+
         return new NextResponse(null, { status: 204 });
       }
     }
 
-    // --- This code only runs if regenerate=true ---
-    console.log("Regenerate flag is true. Generating new insights...");
+    // --- This code only runs if regenerate=true or cache is invalid ---
+    console.log("Generating new insights...");
 
     const definition = await getAssessmentFormDefinition(
       pool,
@@ -139,36 +219,51 @@ export async function GET(
       );
     }
 
-    const promptPath = path.join(
-      process.cwd(),
-      "app",
-      "api",
-      "assessment-forms",
-      "[assessmentFormId]",
-      "insights",
-      "system-prompt.txt"
-    );
-    const systemPrompt = fs.readFileSync(promptPath, "utf-8");
+    // Analyze form fields to enhance context
+    const fieldAnalysis = analyzeFormFields(definition);
+    console.log("Field analysis:", fieldAnalysis);
+
+    // Generate the prompt with form context
+    const prompt = constructInsightsPrompt(definition);
+
+    // Start AI timing
+    aiStartTime = Date.now();
 
     const aiResponse = await anthropic.messages.create({
       model: AI_MODEL_NAME,
       max_tokens: 2048,
-      system: systemPrompt,
+      system: prompt,
       messages: [
         {
           role: "user",
-          content: `Here is the JSON definition of the assessment form:\n\n${JSON.stringify(
-            definition,
-            null,
-            2
-          )}`,
+          content: "Please analyze this form definition and generate insights.",
         },
       ],
     });
 
-    const insightsJsonString = aiResponse.content[0].text;
-    const newInsights = JSON.parse(insightsJsonString);
+    // Get the response text and parse it
+    const responseText =
+      aiResponse.content[0].type === "text" ? aiResponse.content[0].text : "";
+    const newInsights = JSON.parse(responseText) as AIInsightsResponse;
 
+    // Log AI metrics
+    await metrics.logAIMetrics({
+      promptTokens: 0, // Claude 3 doesn't expose token counts yet
+      completionTokens: 0,
+      totalTokens: 0,
+      latency: Date.now() - aiStartTime,
+      success: true,
+      model: AI_MODEL_NAME,
+      timestamp: new Date(),
+    });
+
+    // Validate the AI response
+    if (!validateInsightsResponse(newInsights)) {
+      throw new Error("AI returned invalid insights format");
+    }
+
+    // Save to cache
+    const cacheUpdateStartTime = Date.now();
     const upsertQuery = `
       MERGE SilhouetteAIDashboard.rpt.AIInsights AS target
       USING (SELECT @id AS assessmentFormVersionFk) AS source
@@ -183,13 +278,50 @@ export async function GET(
     await pool
       .request()
       .input("id", sql.UniqueIdentifier, assessmentFormId)
-      .input("insightsJson", sql.NVarChar(sql.MAX), insightsJsonString)
+      .input("insightsJson", sql.NVarChar(sql.MAX), JSON.stringify(newInsights))
       .input("generatedBy", sql.NVarChar, AI_GENERATED_BY)
       .query(upsertQuery);
+
+    // Log cache update metrics
+    await metrics.logQueryMetrics({
+      queryId: "update_insights_cache",
+      executionTime: Date.now() - cacheUpdateStartTime,
+      resultSize: 1,
+      timestamp: new Date(),
+      cached: false,
+      sql: upsertQuery,
+      parameters: { assessmentFormId, generatedBy: AI_GENERATED_BY },
+    });
+
+    // Log cache invalidation if this was a regenerate
+    if (cacheHit) {
+      await metrics.logCacheMetrics({
+        cacheHits: 0,
+        cacheMisses: 0,
+        cacheInvalidations: 1,
+        averageHitLatency: 0,
+        timestamp: new Date(),
+      });
+    }
 
     return NextResponse.json(newInsights);
   } catch (error: any) {
     console.error("API Error:", error);
+
+    // Log AI error if it occurred during AI processing
+    if (aiStartTime) {
+      await metrics.logAIMetrics({
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        latency: Date.now() - aiStartTime,
+        success: false,
+        errorType: error.name || "UnknownError",
+        model: AI_MODEL_NAME,
+        timestamp: new Date(),
+      });
+    }
+
     return NextResponse.json(
       { message: "Failed to get or generate insights.", error: error.message },
       { status: 500 }
