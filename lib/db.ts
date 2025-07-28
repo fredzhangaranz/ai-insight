@@ -86,6 +86,11 @@ export function getDbPool(): Promise<sql.ConnectionPool> {
           max: 10,
           min: 0,
           idleTimeoutMillis: 30000,
+          acquireTimeoutMillis: 30000, // Timeout for acquiring a connection
+          createTimeoutMillis: 30000, // Timeout for creating a new connection
+          destroyTimeoutMillis: 5000, // Timeout for destroying a connection
+          reapIntervalMillis: 1000, // How often to check for idle connections
+          createRetryIntervalMillis: 200, // Time between connection creation retries
         },
         options: {
           encrypt: params.encrypt
@@ -94,6 +99,11 @@ export function getDbPool(): Promise<sql.ConnectionPool> {
           trustServerCertificate: params.trustservercertificate
             ? params.trustservercertificate.toLowerCase() === "true"
             : true,
+          requestTimeout: 30000, // Query timeout
+          connectTimeout: 30000, // Connection timeout
+          cancelTimeout: 30000, // Cancel timeout
+          enableArithAbort: true, // Required for SQL Server 2019+
+          maxRetriesOnTransientErrors: 3, // Retry on transient errors
         },
       };
       const pool = new sql.ConnectionPool(dbConfig);

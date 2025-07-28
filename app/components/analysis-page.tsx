@@ -33,14 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ChartType, TableData } from "@/lib/chart-contracts";
-import {
-  exampleBarData,
-  exampleLineData,
-  examplePieData,
-  exampleKpiData,
-  exampleTableData,
-  exampleAvailableMappings,
-} from "./charts/example-data";
+import { shapeDataForChart } from "@/lib/data-shaper";
 
 // --- TYPE DEFINITIONS ---
 type FormField = { fieldtype: string; options: string[] };
@@ -50,7 +43,8 @@ type InsightCategory = { category: string; questions: InsightQuestion[] };
 type InsightsResponse = { insights: InsightCategory[] };
 
 interface AnalysisPageProps {
-  assessmentFormId: string;
+  assessmentFormId: string; // Version-specific ID
+  assessmentTypeId: string; // Type ID for patient listing
   assessmentFormName: string;
   onBack: () => void;
 }
@@ -67,6 +61,7 @@ type AnalysisState =
 
 export default function AnalysisPage({
   assessmentFormId,
+  assessmentTypeId,
   assessmentFormName,
   onBack,
 }: AnalysisPageProps) {
@@ -83,7 +78,7 @@ export default function AnalysisPage({
     useState<InsightQuestion | null>(null);
   const [currentPatientId, setCurrentPatientId] = useState<string | null>(null);
 
-  // New state for the multi-step result flow
+  // State for the multi-step result flow
   const [generatedSql, setGeneratedSql] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string | null>(null); // For API 2.3
   const [recommendedChartType, setRecommendedChartType] = useState<
@@ -93,48 +88,34 @@ export default function AnalysisPage({
   const [chartData, setChartData] = useState<ChartDataType | null>(null);
   const [tableData, setTableData] = useState<TableData["rows"] | null>(null);
   const [selectedChartType, setSelectedChartType] = useState<ChartType>("bar");
-  const [availableMappings, setAvailableMappings] = useState(
-    exampleAvailableMappings
-  );
-
-  // Add a function to get example data based on chart type
-  const getExampleData = (chartType: ChartType): ChartDataType => {
-    console.log("Getting example data for chart type:", chartType);
-    const data = (() => {
-      switch (chartType) {
-        case "bar":
-          return exampleBarData;
-        case "line":
-          return exampleLineData;
-        case "pie":
-          return examplePieData;
-        case "kpi":
-          return exampleKpiData;
-        case "table":
-          return exampleTableData;
-        default:
-          return exampleBarData;
-      }
-    })();
-    console.log("Example data:", data);
-    return data;
-  };
-
-  // Initialize chart data with bar chart example
-  useEffect(() => {
-    console.log("Initializing chart data");
-    const initialData = getExampleData("bar");
-    setChartData(initialData);
-    console.log("Chart data initialized:", initialData);
-  }, []);
+  const [availableMappings, setAvailableMappings] = useState<
+    Record<string, any>
+  >({});
 
   // Handle chart type changes
   const handleChartTypeChange = (value: ChartType) => {
     console.log("Changing chart type to:", value);
     setSelectedChartType(value);
-    const newData = getExampleData(value);
-    setChartData(newData);
-    console.log("Chart data updated:", newData);
+
+    // If we have raw data, reshape it for the new chart type
+    if (tableData && availableMappings[value]) {
+      try {
+        const shapedData = shapeDataForChart(
+          tableData,
+          {
+            chartType: value,
+            mapping: availableMappings[value],
+          },
+          value
+        );
+        setChartData(shapedData);
+      } catch (err: any) {
+        console.error("Failed to reshape data:", err);
+        setErrorMessage(
+          `Failed to display data as ${value} chart: ${err.message}`
+        );
+      }
+    }
   };
 
   const fetchData = async (regenerate = false) => {
@@ -240,7 +221,17 @@ export default function AnalysisPage({
       const data = await response.json();
       setGeneratedSql(data.generatedSql);
       setExplanation(data.explanation);
-      setRecommendedChartType(data.chartType);
+      setRecommendedChartType(data.recommendedChartType);
+      setAvailableMappings(data.availableMappings);
+
+      // Set the initial chart type to the AI's recommendation
+      if (
+        data.recommendedChartType &&
+        data.availableMappings[data.recommendedChartType]
+      ) {
+        setSelectedChartType(data.recommendedChartType);
+      }
+
       setState("sqlGenerated");
     } catch (err: any) {
       setErrorMessage(err.message);
@@ -259,10 +250,53 @@ export default function AnalysisPage({
     setErrorMessage(null);
 
     try {
-      // For now, we'll use example data instead of making the API call
-      const exampleData = getExampleData(selectedChartType);
-      setTableData(exampleTableData); // Always use table data for the table view
-      setChartData(exampleData);
+      // Execute the query
+      const response = await fetch("/api/ai/execute-query", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: generatedSql,
+          params: patientId ? { patientId } : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to execute query.");
+      }
+
+      const { data } = await response.json(); // Extract data from response
+
+      // Shape the data according to the selected chart type and available mappings
+      if (selectedChartType === "table") {
+        // For table type, use raw data directly
+        setTableData(data);
+        setChartData(data);
+      } else {
+        // For other chart types, use the data shaper
+        const mapping = availableMappings[selectedChartType];
+        if (!mapping) {
+          throw new Error(
+            `No mapping available for chart type: ${selectedChartType}`
+          );
+        }
+
+        const shapedData = shapeDataForChart(
+          data, // Use extracted data
+          {
+            chartType: selectedChartType,
+            mapping: mapping,
+          },
+          selectedChartType
+        );
+
+        setChartData(shapedData);
+        // Also set table data for raw data view
+        setTableData(data);
+      }
+
       setState("results");
     } catch (err: any) {
       setErrorMessage(err.message);
@@ -505,6 +539,7 @@ export default function AnalysisPage({
           isOpen={isPatientDialogOpen}
           onClose={() => setIsPatientDialogOpen(false)}
           assessmentFormId={assessmentFormId}
+          assessmentTypeId={assessmentTypeId}
           onPatientSelect={handlePatientSelectedAndExecute}
           question={currentQuestion.text}
         />

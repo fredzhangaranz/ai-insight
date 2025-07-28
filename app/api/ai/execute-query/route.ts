@@ -8,6 +8,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
 
+/**
+ * Validates and fixes common SQL Server issues in generated queries
+ */
+function validateAndFixQuery(sql: string): string {
+  // 1. Fix: ORDER BY with CASE expressions
+  const orderByAliasRegex = /ORDER BY\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i;
+  const match = sql.match(orderByAliasRegex);
+
+  if (match) {
+    const alias = match[1];
+    // Look for the CASE expression that defines this alias
+    const caseRegex = new RegExp(`CASE[\\s\\S]*?END AS ${alias}`, "i");
+    const caseMatch = sql.match(caseRegex);
+
+    if (caseMatch) {
+      // Replace ORDER BY alias with the full CASE expression
+      return sql.replace(
+        orderByAliasRegex,
+        `ORDER BY ${caseMatch[0].replace(` AS ${alias}`, "")}`
+      );
+    }
+  }
+
+  // 2. Fix: Ensure consistent schema prefixing
+  const tableRegex =
+    /(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
+  sql = sql.replace(tableRegex, "rpt.$1");
+
+  // 3. Fix: Add TOP clause for large result sets if not present
+  if (!sql.match(/\bTOP\s+\d+\b/i) && !sql.match(/\bOFFSET\b/i)) {
+    sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+  }
+
+  return sql;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Read and validate the request body
@@ -39,7 +75,16 @@ export async function POST(request: NextRequest) {
     const pool = await getDbPool();
     const dbRequest = pool.request();
 
-    // 3a. Safely add parameters to the request if they exist
+    // 3a. Validate and fix the query
+    const fixedQuery = validateAndFixQuery(query);
+    if (fixedQuery !== query) {
+      console.log(
+        "Query was modified for SQL Server compatibility:",
+        fixedQuery
+      );
+    }
+
+    // 3b. Safely add parameters to the request if they exist
     if (params && typeof params === "object") {
       for (const key in params) {
         // The mssql library will determine the SQL type based on the JS type.
@@ -48,8 +93,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3b. Execute the query with the bound parameters
-    const result = await dbRequest.query(query);
+    // 3c. Execute the fixed query with the bound parameters
+    const result = await dbRequest.query(fixedQuery);
 
     console.log("Query execution result:", result);
 

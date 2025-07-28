@@ -8,14 +8,16 @@ import { LoadingDots } from "./components/loading-dots";
 
 // Define a type for our assessment form data
 type AssessmentForm = {
-  assessmentFormId: string;
+  assessmentFormId: string; // Version-specific ID
+  assessmentTypeId: string; // Type ID for patient listing
   assessmentFormName: string;
   definitionVersion: string;
 };
 
-// Define a type for the selected form state, which can be an object or null
+// Define a type for the selected form state
 type SelectedForm = {
-  id: string;
+  id: string; // Version-specific ID
+  typeId: string; // Type ID for patient listing
   name: string;
 } | null;
 
@@ -45,11 +47,12 @@ export default function HomePage() {
     fetchAssessmentForms();
   }, []);
 
-  // If a form is selected, render the AnalysisPage with the necessary props
+  // If a form is selected, render the AnalysisPage with both IDs
   if (selectedForm) {
     return (
       <AnalysisPage
         assessmentFormId={selectedForm.id}
+        assessmentTypeId={selectedForm.typeId}
         assessmentFormName={selectedForm.name}
         onBack={() => setSelectedForm(null)}
       />
@@ -83,10 +86,10 @@ export default function HomePage() {
             <Card
               key={form.assessmentFormId}
               className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] border-slate-200 bg-white"
-              // Update onClick to set the selected form object with both id and name
               onClick={() =>
                 setSelectedForm({
-                  id: form.assessmentFormId,
+                  id: form.assessmentFormId, // Version-specific ID for form definition
+                  typeId: form.assessmentTypeId, // Type ID for patient listing
                   name: form.assessmentFormName,
                 })
               }

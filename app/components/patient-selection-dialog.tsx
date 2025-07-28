@@ -38,7 +38,8 @@ type Patient = {
 interface PatientSelectionDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  assessmentFormId: string;
+  assessmentFormId: string; // This is the version-specific ID
+  assessmentTypeId: string; // This is the type ID for patient listing
   onPatientSelect: (patientId: string) => void;
   question: string;
 }
@@ -47,6 +48,7 @@ export function PatientSelectionDialog({
   isOpen,
   onClose,
   assessmentFormId,
+  assessmentTypeId,
   onPatientSelect,
   question,
 }: PatientSelectionDialogProps) {
@@ -62,8 +64,9 @@ export function PatientSelectionDialog({
         setIsLoading(true);
         setError(null);
         try {
+          // Use assessmentTypeId for patient listing
           const response = await fetch(
-            `/api/assessment-forms/${assessmentFormId}/patients`
+            `/api/assessment-forms/${assessmentTypeId}/patients`
           );
           if (!response.ok) {
             throw new Error("Failed to fetch patients.");
@@ -78,7 +81,7 @@ export function PatientSelectionDialog({
       };
       fetchPatients();
     }
-  }, [isOpen, assessmentFormId]);
+  }, [isOpen, assessmentTypeId]); // Changed dependency to assessmentTypeId
 
   const handleSelect = (patient: Patient) => {
     setSelectedPatient(patient);

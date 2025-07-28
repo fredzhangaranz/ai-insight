@@ -48,7 +48,28 @@ KEY REQUIREMENTS:
    - Use proper date handling with DimDate table
    - Use appropriate CAST/CONVERT functions
 
-3. Chart-Specific Requirements:
+3. SQL Server Specific Rules:
+   - Cannot use column aliases in ORDER BY/GROUP BY of same query level
+   - Must repeat CASE expressions in ORDER BY if using them
+   - Use CTEs (WITH clause) for complex aggregations or sorting by computed columns
+   - Schema prefixing rules:
+     * All tables MUST be prefixed with 'rpt.' (e.g., rpt.Note, rpt.Assessment)
+     * Never use double prefixes (NOT rpt.rpt.Note)
+     * Use table aliases after the schema prefix (e.g., FROM rpt.Note N)
+   - Use CASE expressions in ORDER BY for custom sort orders
+   - Avoid using aliases in WHERE clauses of the same query level
+   - Use CAST(x AS DECIMAL(p,s)) for precise decimal calculations
+
+4. Data Aggregation Best Practices:
+   - Use CTEs to break down complex logic into manageable steps
+   - Define sort orders numerically for custom categories
+   - Include percentage calculations in a separate CTE
+   - Always handle NULL values in aggregations
+   - Use DECIMAL(p,s) for percentage calculations
+   - Avoid GROUP BY on computed columns, use CTEs instead
+   - Keep aggregation logic consistent across similar queries
+
+5. Chart-Specific Requirements:
 
    Bar Charts:
    - Best for: Category comparisons, distributions
@@ -80,7 +101,7 @@ KEY REQUIREMENTS:
    - Example: Detailed wound measurements
    - Required mappings: { columns: [{ key, header }] }
 
-4. Common Analysis Patterns:
+6. Common Analysis Patterns:
 
    Trend Analysis:
    \`\`\`sql
@@ -109,13 +130,13 @@ KEY REQUIREMENTS:
    ORDER BY W.id, A.date;
    \`\`\`
 
-5. Data Validation Rules:
+7. Data Validation Rules:
    - Assessment dates must not be in future
    - Measurements must be non-negative
    - Notes must match their AttributeType's dataType
    - Required fields must not be NULL
 
-6. Security Requirements:
+8. Security Requirements:
    - MUST only generate SELECT statements
    - Use parameterization (e.g., @patientId)
    - No dynamic SQL or string concatenation
@@ -123,26 +144,111 @@ KEY REQUIREMENTS:
 
 EXAMPLES OF GOOD RESPONSES:
 
-For "What are the most common wound types?":
+For "What percentage of wounds heal within different time periods?":
 {
-  "explanation": "We'll count distinct wounds grouped by their etiology...",
-  "generatedSql": "SELECT AT.name, N.value, COUNT(DISTINCT W.id) as count...",
-  "recommendedChartType": "bar",
+  "explanation": "We'll analyze wound healing times using state transitions from Open to Healed, then categorize into time periods.",
+  "generatedSql": \`WITH WoundStates AS (
+    SELECT
+        N.woundFk,
+        MIN(CASE WHEN N.value = 'Open' THEN A.date END) AS OpenDate,
+        MIN(CASE WHEN N.value = 'Healed' THEN A.date END) AS HealedDate
+    FROM rpt.Note N
+    JOIN rpt.Assessment A ON N.assessmentFk = A.id
+    JOIN rpt.AttributeType AT ON N.attributeTypeFk = AT.id
+    WHERE AT.name = 'Wound State'
+    GROUP BY N.woundFk
+),
+HealingTime AS (
+    SELECT
+        woundFk,
+        DATEDIFF(day, OpenDate, HealedDate) AS DaysToHeal
+    FROM WoundStates
+    WHERE OpenDate IS NOT NULL 
+    AND HealedDate IS NOT NULL 
+    AND HealedDate > OpenDate
+)
+SELECT
+    CASE 
+        WHEN DaysToHeal <= 30 THEN '30 days'
+        WHEN DaysToHeal <= 60 THEN '60 days'
+        WHEN DaysToHeal <= 90 THEN '90 days'
+        ELSE 'Over 90 days'
+    END AS HealingPeriod,
+    COUNT(*) AS WoundCount,
+    CAST(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER() AS DECIMAL(5,2)) AS Percentage
+FROM HealingTime
+GROUP BY
+    CASE 
+        WHEN DaysToHeal <= 30 THEN '30 days'
+        WHEN DaysToHeal <= 60 THEN '60 days'
+        WHEN DaysToHeal <= 90 THEN '90 days'
+        ELSE 'Over 90 days'
+    END
+ORDER BY
+    CASE HealingPeriod
+        WHEN '30 days' THEN 1
+        WHEN '60 days' THEN 2
+        WHEN '90 days' THEN 3
+        ELSE 4
+    END;\`,
+  "recommendedChartType": "pie",
   "availableMappings": {
-    "bar": { "category": "value", "value": "count" },
-    "pie": { "label": "value", "value": "count" },
-    "table": { "columns": [{ "key": "value", "header": "Wound Type" }] }
+    "pie": { "label": "HealingPeriod", "value": "Percentage" },
+    "bar": { "category": "HealingPeriod", "value": "WoundCount" },
+    "table": {
+      "columns": [
+        { "key": "HealingPeriod", "header": "Healing Period" },
+        { "key": "WoundCount", "header": "Number of Wounds" },
+        { "key": "Percentage", "header": "Percentage" }
+      ]
+    }
   }
 }
 
-For "How has this patient's wound area changed over time?":
+For "What is the average wound size by wound type?":
 {
-  "explanation": "We'll track wound measurements over time...",
-  "generatedSql": "SELECT A.date, M.area FROM rpt.Assessment A...",
-  "recommendedChartType": "line",
+  "explanation": "We'll calculate average wound area for each wound type, using proper CTEs for clarity and performance.",
+  "generatedSql": \`WITH LatestMeasurements AS (
+    SELECT
+        W.id AS wound_id,
+        N.value AS wound_type,
+        M.area,
+        ROW_NUMBER() OVER (PARTITION BY W.id ORDER BY A.date DESC) AS rn
+    FROM rpt.Wound W
+    JOIN rpt.Assessment A ON W.id = A.woundFk
+    JOIN rpt.Measurement M ON A.id = M.assessmentFk
+    JOIN rpt.Note N ON A.id = N.assessmentFk
+    JOIN rpt.AttributeType AT ON N.attributeTypeFk = AT.id
+    WHERE AT.name = 'Wound Type'
+),
+TypeStats AS (
+    SELECT
+        wound_type,
+        COUNT(DISTINCT wound_id) AS wound_count,
+        CAST(AVG(area) AS DECIMAL(10,2)) AS avg_area
+    FROM LatestMeasurements
+    WHERE rn = 1
+    GROUP BY wound_type
+)
+SELECT
+    wound_type,
+    wound_count,
+    avg_area,
+    CAST(100.0 * wound_count / SUM(wound_count) OVER() AS DECIMAL(5,2)) AS percentage
+FROM TypeStats
+ORDER BY wound_count DESC;\`,
+  "recommendedChartType": "bar",
   "availableMappings": {
-    "line": { "x": "date", "y": "area" },
-    "table": { "columns": [{ "key": "date", "header": "Date" }] }
+    "bar": { "category": "wound_type", "value": "avg_area" },
+    "pie": { "label": "wound_type", "value": "percentage" },
+    "table": {
+      "columns": [
+        { "key": "wound_type", "header": "Wound Type" },
+        { "key": "wound_count", "header": "Count" },
+        { "key": "avg_area", "header": "Average Area" },
+        { "key": "percentage", "header": "Percentage" }
+      ]
+    }
   }
 }
 `;
