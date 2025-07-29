@@ -8,3 +8,5 @@ export * from "./generate-query.prompt";
 export * from "./generate-insights.prompt";
 
 // Add any future prompt exports here
+export * from "./funnel-subquestions.prompt";
+export * from "./funnel-sql.prompt";
