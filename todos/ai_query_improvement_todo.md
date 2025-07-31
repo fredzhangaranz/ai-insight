@@ -53,7 +53,7 @@
 
 ### 1.5.1 Database Schema Updates (Milestone 2.5)
 
-- [ ] Create minimal tables for POC:
+- [x] Create minimal tables for POC:
 
   ```sql
   -- Core table for storing question breakdowns
@@ -93,7 +93,7 @@
   );
   ```
 
-- [ ] Create basic indexes:
+- [x] Create basic indexes:
   ```sql
   CREATE INDEX [IX_SubQuestions_FunnelId] ON [rpt].[SubQuestions] ([funnelId]);
   CREATE INDEX [IX_SubQuestions_Order] ON [rpt].[SubQuestions] ([funnelId], [order]);
@@ -102,12 +102,18 @@
 
 ### 1.5.2 Basic Storage Service (Milestone 2.6)
 
-- [ ] Implement FunnelStorageService:
+- [x] Implement FunnelStorageService:
   - Basic CRUD for funnels and sub-questions
   - Simple result storage and retrieval
   - Basic error handling
-- [ ] Add simple cleanup job for old results (e.g., older than 24 hours)
-- **Validation**: Storage service handles basic operations correctly
+- [x] Add simple cleanup job for old results (e.g., older than 24 hours)
+- [x] Create API endpoints for funnel operations:
+  - POST/GET `/api/ai/funnel` (create and list funnels)
+  - POST/GET `/api/ai/funnel/subquestions` (add and list sub-questions)
+  - POST/GET `/api/ai/funnel/results` (store and retrieve results)
+  - PUT `/api/ai/funnel/subquestions/[id]/status` (update sub-question status)
+  - PUT `/api/ai/funnel/subquestions/[id]/sql` (update sub-question SQL)
+- **Validation**: ✅ Storage service handles basic operations correctly with full API coverage
 
 ## Phase 1.6: Dynamic Template Management for Prompts
 
@@ -147,25 +153,28 @@
 
 ### 2.1 Core Services (Milestone 3)
 
-- [ ] Implement SubQuestionGenerator service:
+- [x] Implement SubQuestionGenerator service:
   - Method to break down complex questions
   - Validation of sub-question relationships
-- [ ] Implement FunnelQueryGenerator service:
+- [x] Implement FunnelQueryGenerator service:
   - Generate SQL for each sub-question
   - Validate query safety and performance
-- [ ] Add unit tests for both services
-- **Validation**: Services pass all unit tests with mock data
+- [x] Add unit tests for both services
+- [x] Create API endpoints for AI services:
+  - POST `/api/ai/funnel/generate-subquestions` (break down complex questions)
+  - POST `/api/ai/funnel/generate-query` (generate SQL for sub-questions)
+- **Validation**: ✅ Services pass all unit tests with mock data and are accessible via API endpoints
 
 ### 2.2 API Endpoints (Milestone 4)
 
-- [ ] Create `/api/funnel/generate-subquestions`:
+- [x] Create `/api/funnel/generate-subquestions`:
   - Accept original question and form definition
   - Return structured sub-questions
-- [ ] Create `/api/funnel/generate-query`:
+- [x] Create `/api/funnel/generate-query`:
   - Accept sub-question and context
   - Return validated SQL query
 - [ ] Add API documentation
-- **Validation**: All endpoints respond correctly with mock data
+- **Validation**: ✅ All endpoints respond correctly with mock data and are fully functional
 
 ## Phase 3: Frontend Implementation
 
