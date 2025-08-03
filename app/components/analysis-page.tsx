@@ -24,6 +24,7 @@ import { DataTable } from "./data-table";
 import { FormFieldDisplay } from "./form-field-display";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PatientSelectionDialog } from "./patient-selection-dialog";
+import FunnelTestPage from "../funnel-test/page";
 import ReactMarkdown from "react-markdown";
 import {
   Select,
@@ -57,6 +58,7 @@ type AnalysisState =
   | "sqlGenerated" // SQL + Explanation are shown
   | "fetchingData" // Loading after "Fetch Data" clicked
   | "results" // Final chart is shown
+  | "funnel" // New funnel workflow state
   | "error";
 
 export default function AnalysisPage({
@@ -160,15 +162,21 @@ export default function AnalysisPage({
   const handleQuestionSelect = (question: InsightQuestion) => {
     setCurrentQuestion(question);
     setCurrentPatientId(null); // Reset patient ID on new question
-    // Always generate the plan first, regardless of question type.
-    // For single-patient questions, this will generate a template with @patientId.
-    handleGenerateSqlAndExplanation(question);
+
+    if (question.type === "single-patient") {
+      // For patient-specific questions, show patient selection dialog
+      setIsPatientDialogOpen(true);
+    } else {
+      // For non-patient questions, go directly to funnel workflow
+      setState("funnel");
+    }
   };
 
   const handlePatientSelectedAndExecute = (patientId: string) => {
     setIsPatientDialogOpen(false);
     setCurrentPatientId(patientId); // Store for potential re-runs or display
-    executeQuery(patientId);
+    // Navigate to funnel workflow instead of executing query directly
+    setState("funnel");
   };
 
   // --- NEW HANDLERS FOR MULTI-STEP FLOW ---
@@ -531,6 +539,18 @@ export default function AnalysisPage({
         return null;
     }
   };
+
+  // If we're in funnel state, render the funnel page as full page
+  if (state === "funnel") {
+    return (
+      <FunnelTestPage
+        onBack={() => setState("insights")}
+        originalQuestion={currentQuestion?.text || ""}
+        assessmentFormDefinition={definition}
+        patientId={currentPatientId}
+      />
+    );
+  }
 
   return (
     <>

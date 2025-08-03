@@ -21,8 +21,12 @@ type SelectedForm = {
   name: string;
 } | null;
 
+// Define a type for the current page state
+type PageState = "form-selection" | "analysis";
+
 export default function HomePage() {
   const [selectedForm, setSelectedForm] = useState<SelectedForm>(null);
+  const [pageState, setPageState] = useState<PageState>("form-selection");
   const [forms, setForms] = useState<AssessmentForm[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);

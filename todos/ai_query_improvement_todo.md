@@ -180,15 +180,26 @@
 
 ### 3.1 Basic UI Components (Milestone 5)
 
-- [ ] Create FunnelPanel component:
+- [x] Create FunnelPanel component:
   - Display question
   - Show SQL query
   - Display data results
-- [ ] Create FunnelContainer component:
+- [x] Create FunnelContainer component:
   - Manage multiple panels
   - Handle horizontal scrolling
-- [ ] Add basic styling and layout
-- **Validation**: Components render correctly with mock data
+- [x] Add basic styling and layout
+- [x] Integrate with existing frontend workflow
+- [x] Create funnel test page for testing with mock data
+- [x] Integrate funnel workflow into existing question selection flow
+- [x] Support both patient-specific and non-patient questions
+- [x] Implement full-page funnel workflow (replaces entire page, not just right panel)
+- [x] Improve funnel panel layout with main panel + preview navigation
+- [x] Implement funnel workflow logic (sequential completion required)
+- [x] Add visual feedback for locked/unavailable steps
+- [x] Implement new 3-section layout (Top: Original Question, Middle: Sub-Questions Overview, Bottom: Current Panel)
+- [x] Add scrollable sub-question overview cards with status indicators
+- [x] Add JSON/Table toggle for result display
+- **Validation**: ✅ Components render correctly with mock data and are integrated into the main application flow as full-page experience
 
 ### 3.2 Interactive Features (Milestone 6)
 

@@ -311,3 +311,294 @@ This approach is more efficient and keeps the logic clean. Here is the updated A
   3.  Connects to the database.
   4.  Executes the validated query.
   5.  Returns the `recordset` from the database as the `data` property in the response.
+
+---
+
+### **3. Funnel Query Workflow Endpoints**
+
+These endpoints support the new AI-powered incremental query generation workflow, allowing complex questions to be broken down into simpler sub-questions and executed sequentially.
+
+#### **3.1 Funnel Management**
+
+##### **3.1.1 Create Funnel**
+
+- **Endpoint:** `POST /ai/funnel`
+- **Description:** Creates a new query funnel to store the breakdown of a complex question into sub-questions.
+- **Request:**
+  - **Body (JSON):**
+    ```json
+    {
+      "assessmentFormVersionFk": "wound-assessment-v1",
+      "originalQuestion": "What is the effectiveness of treatments across different wound etiologies over the past year?"
+    }
+    ```
+- **Response (`201 Created`):**
+  - **Body (JSON):**
+    ```json
+    {
+      "id": 1,
+      "assessmentFormVersionFk": "wound-assessment-v1",
+      "originalQuestion": "What is the effectiveness of treatments across different wound etiologies over the past year?",
+      "status": "active",
+      "createdDate": "2024-01-15T10:30:00Z",
+      "lastModifiedDate": "2024-01-15T10:30:00Z"
+    }
+    ```
+
+##### **3.1.2 List Funnels**
+
+- **Endpoint:** `GET /ai/funnel`
+- **Description:** Retrieves all query funnels, optionally filtered by status.
+- **Request:**
+  - **Query Parameters (Optional):**
+    - `status` (string) - Filter by status: `active`, `archived`
+    - `assessmentFormId` (string) - Filter by assessment form
+- **Response (`200 OK`):**
+  - **Body (JSON):**
+    ```json
+    [
+      {
+        "id": 1,
+        "assessmentFormVersionFk": "wound-assessment-v1",
+        "originalQuestion": "What is the effectiveness of treatments across different wound etiologies over the past year?",
+        "status": "active",
+        "createdDate": "2024-01-15T10:30:00Z",
+        "lastModifiedDate": "2024-01-15T10:30:00Z"
+      }
+    ]
+    ```
+
+##### **3.1.3 Get Funnel by ID**
+
+- **Endpoint:** `GET /ai/funnel/[id]`
+- **Description:** Retrieves a specific funnel by its ID.
+- **Request:**
+  - **Path Parameter:** `id` (integer) - The funnel ID
+- **Response (`200 OK`):**
+  - **Body (JSON):** Same structure as Create Funnel response
+- **Response (`404 Not Found`):** If funnel doesn't exist
+
+#### **3.2 Sub-Question Management**
+
+##### **3.2.1 Add Sub-Question**
+
+- **Endpoint:** `POST /ai/funnel/subquestions`
+- **Description:** Adds a sub-question to an existing funnel.
+- **Request:**
+  - **Body (JSON):**
+    ```json
+    {
+      "funnelId": 1,
+      "questionText": "List all distinct wound etiologies recorded in the past year.",
+      "order": 1,
+      "sqlQuery": "SELECT DISTINCT etiology FROM rpt.Note WHERE YEAR(createdDate) = YEAR(GETDATE()) - 1"
+    }
+    ```
+- **Response (`201 Created`):**
+  - **Body (JSON):**
+    ```json
+    {
+      "id": 1,
+      "funnelId": 1,
+      "questionText": "List all distinct wound etiologies recorded in the past year.",
+      "order": 1,
+      "sqlQuery": "SELECT DISTINCT etiology FROM rpt.Note WHERE YEAR(createdDate) = YEAR(GETDATE()) - 1",
+      "status": "pending",
+      "lastExecutionDate": null
+    }
+    ```
+
+##### **3.2.2 List Sub-Questions**
+
+- **Endpoint:** `GET /ai/funnel/subquestions`
+- **Description:** Retrieves all sub-questions for a specific funnel.
+- **Request:**
+  - **Query Parameter:** `funnelId` (integer) - The funnel ID
+- **Response (`200 OK`):**
+  - **Body (JSON):**
+    ```json
+    [
+      {
+        "id": 1,
+        "funnelId": 1,
+        "questionText": "List all distinct wound etiologies recorded in the past year.",
+        "order": 1,
+        "sqlQuery": "SELECT DISTINCT etiology FROM rpt.Note WHERE YEAR(createdDate) = YEAR(GETDATE()) - 1",
+        "status": "completed",
+        "lastExecutionDate": "2024-01-15T10:35:00Z"
+      }
+    ]
+    ```
+
+##### **3.2.3 Update Sub-Question Status**
+
+- **Endpoint:** `PUT /ai/funnel/subquestions/[id]/status`
+- **Description:** Updates the status of a specific sub-question.
+- **Request:**
+  - **Path Parameter:** `id` (integer) - The sub-question ID
+  - **Body (JSON):**
+    ```json
+    {
+      "status": "completed"
+    }
+    ```
+- **Response (`200 OK`):** Success confirmation
+
+##### **3.2.4 Update Sub-Question SQL**
+
+- **Endpoint:** `PUT /ai/funnel/subquestions/[id]/sql`
+- **Description:** Updates the SQL query for a specific sub-question.
+- **Request:**
+  - **Path Parameter:** `id` (integer) - The sub-question ID
+  - **Body (JSON):**
+    ```json
+    {
+      "sqlQuery": "SELECT DISTINCT etiology FROM rpt.Note WHERE YEAR(createdDate) = YEAR(GETDATE()) - 1 AND etiology IS NOT NULL"
+    }
+    ```
+- **Response (`200 OK`):** Success confirmation
+
+#### **3.3 Query Results Management**
+
+##### **3.3.1 Store Query Result**
+
+- **Endpoint:** `POST /ai/funnel/results`
+- **Description:** Stores the execution result for a sub-question.
+- **Request:**
+  - **Body (JSON):**
+    ```json
+    {
+      "subQuestionId": 1,
+      "resultData": [
+        { "etiology": "Diabetic" },
+        { "etiology": "Pressure" },
+        { "etiology": "Surgical" }
+      ]
+    }
+    ```
+- **Response (`201 Created`):** Success confirmation
+
+##### **3.3.2 Get Query Result**
+
+- **Endpoint:** `GET /ai/funnel/results`
+- **Description:** Retrieves the latest result for a specific sub-question.
+- **Request:**
+  - **Query Parameter:** `subQuestionId` (integer) - The sub-question ID
+- **Response (`200 OK`):**
+  - **Body (JSON):**
+    ```json
+    {
+      "id": 1,
+      "subQuestionId": 1,
+      "resultData": [
+        { "etiology": "Diabetic" },
+        { "etiology": "Pressure" },
+        { "etiology": "Surgical" }
+      ],
+      "executionDate": "2024-01-15T10:35:00Z"
+    }
+    ```
+
+#### **3.4 AI Generation Endpoints**
+
+##### **3.4.1 Generate Sub-Questions**
+
+- **Endpoint:** `POST /ai/funnel/generate-subquestions`
+- **Description:** Uses AI to break down a complex question into simpler sub-questions.
+- **Request:**
+  - **Body (JSON):**
+    ```json
+    {
+      "originalQuestion": "What is the effectiveness of treatments across different wound etiologies over the past year?",
+      "assessmentFormDefinition": {
+        "Etiology": {
+          "fieldtype": "SingleSelect",
+          "options": ["Diabetic", "Pressure", "Surgical"]
+        }
+      },
+      "databaseSchemaContext": "Optional database schema information"
+    }
+    ```
+- **Response (`200 OK`):**
+  - **Body (JSON):**
+    ```json
+    {
+      "original_question": "What is the effectiveness of treatments across different wound etiologies over the past year?",
+      "matched_template": "Treatment Effectiveness Overview",
+      "sub_questions": [
+        {
+          "step": 1,
+          "question": "List all distinct wound etiologies recorded in the past year.",
+          "depends_on": null
+        },
+        {
+          "step": 2,
+          "question": "Calculate the average healing time per treatment method for each wound etiology.",
+          "depends_on": 1
+        },
+        {
+          "step": 3,
+          "question": "Rank the treatment methods by average healing time for each wound etiology.",
+          "depends_on": 2
+        }
+      ]
+    }
+    ```
+
+##### **3.4.2 Generate SQL Query**
+
+- **Endpoint:** `POST /ai/funnel/generate-query`
+- **Description:** Uses AI to generate SQL for a specific sub-question, considering previous queries and context.
+- **Request:**
+  - **Body (JSON):**
+    ```json
+    {
+      "subQuestion": "Calculate the average healing time per treatment method for each wound etiology.",
+      "previousQueries": [
+        "SELECT DISTINCT etiology FROM rpt.Note WHERE YEAR(createdDate) = YEAR(GETDATE()) - 1"
+      ],
+      "assessmentFormDefinition": {
+        "Etiology": {
+          "fieldtype": "SingleSelect",
+          "options": ["Diabetic", "Pressure", "Surgical"]
+        }
+      },
+      "databaseSchemaContext": "Optional database schema information"
+    }
+    ```
+- **Response (`200 OK`):**
+  - **Body (JSON):**
+    ```json
+    {
+      "explanation": "This query calculates average healing times by treatment method and etiology, building on the distinct etiologies identified in the previous step.",
+      "generatedSql": "SELECT etiology, treatmentType, AVG(healingTime) as avgHealingTime FROM rpt.Treatment WHERE etiology IN (SELECT DISTINCT etiology FROM rpt.Note WHERE YEAR(createdDate) = YEAR(GETDATE()) - 1) GROUP BY etiology, treatmentType",
+      "validationNotes": "Ensured healingTime is non-null and valid. Used CTE for better performance.",
+      "matchedQueryTemplate": "Aggregation by Category"
+    }
+    ```
+
+#### **3.5 Error Responses**
+
+All funnel endpoints may return the following error responses:
+
+- **400 Bad Request:** Invalid request data or parameters
+- **404 Not Found:** Resource not found
+- **500 Internal Server Error:** Database or AI service errors
+
+**Example Error Response:**
+
+```json
+{
+  "error": "Invalid funnel ID",
+  "message": "The specified funnel does not exist",
+  "statusCode": 404
+}
+```
+
+#### **3.6 Backend Implementation Notes**
+
+- **Database Tables:** Uses `rpt.QueryFunnel`, `rpt.SubQuestions`, and `rpt.QueryResults` tables
+- **AI Integration:** Integrates with Anthropic Claude API for question breakdown and SQL generation
+- **Caching:** Results are cached in the database for performance
+- **Security:** SQL queries are validated for safety (SELECT statements only)
+- **Monitoring:** All AI interactions and query executions are logged for metrics
