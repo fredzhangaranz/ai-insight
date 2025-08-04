@@ -3,6 +3,7 @@ import type { SubQuestion } from "@/lib/types/funnel";
 
 interface FunnelPanelProps {
   subQuestion: SubQuestion;
+  assessmentFormDefinition?: any;
   onEditQuestion?: (questionId: string, newText: string) => void;
   onEditSql?: (questionId: string, newSql: string) => void;
   onExecuteQuery?: (questionId: string) => void;
@@ -10,6 +11,7 @@ interface FunnelPanelProps {
 
 export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   subQuestion,
+  assessmentFormDefinition,
   onEditQuestion,
   onEditSql,
   onExecuteQuery,
@@ -21,19 +23,217 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   const [resultViewMode, setResultViewMode] = useState<"json" | "table">(
     "json"
   );
+  const [isSavingQuestion, setIsSavingQuestion] = useState(false);
+  const [isSavingSql, setIsSavingSql] = useState(false);
+  const [isGeneratingSql, setIsGeneratingSql] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [queryResult, setQueryResult] = useState<any[] | null>(null);
 
-  const handleQuestionSave = () => {
-    if (onEditQuestion) {
-      onEditQuestion(subQuestion.id, editedQuestion);
+  const handleQuestionSave = async () => {
+    if (!editedQuestion.trim()) {
+      alert("Question text cannot be empty");
+      return;
     }
+
+    setIsSavingQuestion(true);
+    try {
+      // Update in database cache
+      const response = await fetch(
+        `/api/ai/funnel/subquestions/${subQuestion.id.replace(
+          "sq-",
+          ""
+        )}/question`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            questionText: editedQuestion.trim(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save question");
+      }
+
+      // Update local state
+      if (onEditQuestion) {
+        onEditQuestion(subQuestion.id, editedQuestion.trim());
+      }
+
+      // Clear SQL query and results when question is edited
+      if (onEditSql) {
+        onEditSql(subQuestion.id, "");
+      }
+
+      // Reset result view mode to JSON
+      setResultViewMode("json");
+      setIsEditingQuestion(false);
+
+      console.log("✅ Question saved successfully");
+    } catch (error: any) {
+      console.error("Error saving question:", error);
+      alert(`Failed to save question: ${error.message}`);
+    } finally {
+      setIsSavingQuestion(false);
+    }
+  };
+
+  const handleQuestionCancel = () => {
+    setEditedQuestion(subQuestion.text); // Reset to original
     setIsEditingQuestion(false);
   };
 
-  const handleSqlSave = () => {
-    if (onEditSql) {
-      onEditSql(subQuestion.id, editedSql);
+  const handleSqlSave = async () => {
+    if (!editedSql.trim()) {
+      alert("SQL query cannot be empty");
+      return;
     }
+
+    setIsSavingSql(true);
+    try {
+      // Update in database cache
+      const response = await fetch(
+        `/api/ai/funnel/subquestions/${subQuestion.id.replace("sq-", "")}/sql`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sqlQuery: editedSql.trim(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save SQL");
+      }
+
+      // Update local state
+      if (onEditSql) {
+        onEditSql(subQuestion.id, editedSql.trim());
+      }
+
+      setIsEditingSql(false);
+
+      console.log("✅ SQL saved successfully");
+    } catch (error: any) {
+      console.error("Error saving SQL:", error);
+      alert(`Failed to save SQL: ${error.message}`);
+    } finally {
+      setIsSavingSql(false);
+    }
+  };
+
+  const handleSqlCancel = () => {
+    setEditedSql(subQuestion.sqlQuery || ""); // Reset to original
     setIsEditingSql(false);
+  };
+
+  const handleGenerateSql = async () => {
+    if (!subQuestion.text.trim()) {
+      alert("Cannot generate SQL for empty question");
+      return;
+    }
+
+    setIsGeneratingSql(true);
+    try {
+      console.log("Generating SQL for question:", subQuestion.text);
+
+      const response = await fetch("/api/ai/funnel/generate-query", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subQuestion: subQuestion.text,
+          previousQueries: [], // TODO: Pass previous queries for context
+          assessmentFormDefinition: assessmentFormDefinition || {},
+          databaseSchemaContext: "", // TODO: Pass actual schema context
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate SQL");
+      }
+
+      const result = await response.json();
+      console.log("SQL generated:", result);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Update the SQL query
+      const newSql = result.generatedSql;
+      setEditedSql(newSql);
+
+      // Save to database cache
+      const saveResponse = await fetch(
+        `/api/ai/funnel/subquestions/${subQuestion.id.replace("sq-", "")}/sql`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sqlQuery: newSql,
+          }),
+        }
+      );
+
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        throw new Error(errorData.error || "Failed to save generated SQL");
+      }
+
+      // Update local state
+      if (onEditSql) {
+        onEditSql(subQuestion.id, newSql);
+      }
+
+      console.log("✅ SQL generated and saved successfully");
+    } catch (error: any) {
+      console.error("Error generating SQL:", error);
+      alert(`Failed to generate SQL: ${error.message}`);
+    } finally {
+      setIsGeneratingSql(false);
+    }
+  };
+
+  const handleExecuteSql = async () => {
+    if (!subQuestion.sqlQuery) {
+      alert("No SQL query to execute.");
+      return;
+    }
+    setIsExecuting(true);
+    setExecutionError(null);
+    setQueryResult(null);
+    try {
+      const response = await fetch("/api/ai/execute-query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: subQuestion.sqlQuery }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to execute query");
+      }
+      const result = await response.json();
+      setQueryResult(result.data || []);
+      setResultViewMode("table");
+    } catch (err: any) {
+      setExecutionError(err.message);
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -47,6 +247,60 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       default:
         return "bg-gray-100 text-gray-800";
     }
+  };
+
+  const formatSql = (sql: string): string => {
+    if (!sql) return "";
+
+    // Basic SQL formatting
+    let formatted = sql
+      // Replace escaped newlines with actual newlines
+      .replace(/\\n/g, "\n")
+      // Add line breaks after common SQL keywords
+      .replace(
+        /\b(SELECT|FROM|WHERE|JOIN|LEFT JOIN|INNER JOIN|RIGHT JOIN|GROUP BY|ORDER BY|HAVING|UNION|WITH|AS)\b/gi,
+        "\n$1"
+      )
+      // Add line breaks after commas in SELECT clauses
+      .replace(/(,)\s*/g, "$1\n  ")
+      // Add line breaks after ON conditions
+      .replace(/\b(ON)\b/gi, "\n  $1")
+      // Add line breaks after AND/OR
+      .replace(/\b(AND|OR)\b/gi, "\n    $1")
+      // Clean up multiple newlines
+      .replace(/\n\s*\n/g, "\n")
+      // Add proper indentation
+      .split("\n")
+      .map((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return "";
+
+        // Determine indentation level
+        let indent = 0;
+        if (
+          trimmed.match(
+            /^(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|UNION|WITH)/i
+          )
+        ) {
+          indent = 0;
+        } else if (
+          trimmed.match(/^(JOIN|LEFT JOIN|INNER JOIN|RIGHT JOIN|ON)/i)
+        ) {
+          indent = 1;
+        } else if (trimmed.match(/^(AND|OR)/i)) {
+          indent = 2;
+        } else if (trimmed.startsWith(",")) {
+          indent = 2;
+        } else {
+          indent = 1;
+        }
+
+        return "  ".repeat(indent) + trimmed;
+      })
+      .filter((line) => line !== "")
+      .join("\n");
+
+    return formatted;
   };
 
   const renderTableData = (data: any[]) => {
@@ -123,7 +377,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           {onEditQuestion && (
             <button
               onClick={() => setIsEditingQuestion(!isEditingQuestion)}
-              className="text-blue-600 hover:text-blue-800 text-xs"
+              disabled={isSavingQuestion}
+              className={`text-xs transition-colors ${
+                isSavingQuestion
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-blue-600 hover:text-blue-800"
+              }`}
             >
               {isEditingQuestion ? "Cancel" : "Edit"}
             </button>
@@ -137,20 +396,35 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
               onChange={(e) => setEditedQuestion(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded text-sm"
               rows={3}
+              disabled={isSavingQuestion}
             />
             <div className="flex space-x-2">
               <button
                 onClick={handleQuestionSave}
-                className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                disabled={isSavingQuestion}
+                className={`px-3 py-1 rounded text-xs transition-colors ${
+                  isSavingQuestion
+                    ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
               >
-                Save
+                {isSavingQuestion ? (
+                  <span className="flex items-center space-x-1">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                    <span>Saving...</span>
+                  </span>
+                ) : (
+                  "Save"
+                )}
               </button>
               <button
-                onClick={() => {
-                  setEditedQuestion(subQuestion.text);
-                  setIsEditingQuestion(false);
-                }}
-                className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-xs hover:bg-gray-400"
+                onClick={handleQuestionCancel}
+                disabled={isSavingQuestion}
+                className={`px-3 py-1 rounded text-xs transition-colors ${
+                  isSavingQuestion
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "bg-gray-300 text-gray-700 hover:bg-gray-400"
+                }`}
               >
                 Cancel
               </button>
@@ -168,20 +442,58 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-700">SQL Query</h3>
           <div className="flex space-x-2">
+            <button
+              onClick={handleGenerateSql}
+              disabled={isGeneratingSql}
+              className={`text-xs transition-colors ${
+                isGeneratingSql
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-green-600 hover:text-green-800"
+              }`}
+              title={
+                subQuestion.sqlQuery
+                  ? "Generate new SQL query based on current question"
+                  : "Generate SQL query for this question"
+              }
+            >
+              {isGeneratingSql ? (
+                <span className="flex items-center space-x-1">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b border-green-600"></div>
+                  <span>Generating...</span>
+                </span>
+              ) : (
+                `🔄 ${subQuestion.sqlQuery ? "Regenerate" : "Generate"}`
+              )}
+            </button>
             {onEditSql && (
               <button
                 onClick={() => setIsEditingSql(!isEditingSql)}
-                className="text-blue-600 hover:text-blue-800 text-xs"
+                disabled={isSavingSql}
+                className={`text-xs transition-colors ${
+                  isSavingSql
+                    ? "text-gray-400 cursor-not-allowed"
+                    : "text-blue-600 hover:text-blue-800"
+                }`}
               >
                 {isEditingSql ? "Cancel" : "Edit"}
               </button>
             )}
             {onExecuteQuery && subQuestion.sqlQuery && (
               <button
-                onClick={() => onExecuteQuery(subQuestion.id)}
-                className="text-green-600 hover:text-green-800 text-xs"
+                onClick={handleExecuteSql}
+                className={`text-green-600 hover:text-green-800 text-xs ${
+                  isExecuting ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+                disabled={isExecuting}
               >
-                Execute
+                {isExecuting ? (
+                  <span className="flex items-center space-x-1">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-green-600"></div>
+                    <span>Executing...</span>
+                  </span>
+                ) : (
+                  "Execute"
+                )}
               </button>
             )}
           </div>
@@ -192,32 +504,64 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
             <textarea
               value={editedSql}
               onChange={(e) => setEditedSql(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded text-sm font-mono"
-              rows={4}
+              className="w-full p-3 border border-gray-300 rounded text-sm font-mono bg-gray-50"
+              rows={8}
               placeholder="Enter SQL query..."
+              disabled={isSavingSql}
             />
             <div className="flex space-x-2">
               <button
                 onClick={handleSqlSave}
-                className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                disabled={isSavingSql}
+                className={`px-3 py-1 rounded text-xs transition-colors ${
+                  isSavingSql
+                    ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
               >
-                Save
+                {isSavingSql ? (
+                  <span className="flex items-center space-x-1">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                    <span>Saving...</span>
+                  </span>
+                ) : (
+                  "Save"
+                )}
               </button>
               <button
-                onClick={() => {
-                  setEditedSql(subQuestion.sqlQuery || "");
-                  setIsEditingSql(false);
-                }}
-                className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-xs hover:bg-gray-400"
+                onClick={handleSqlCancel}
+                disabled={isSavingSql}
+                className={`px-3 py-1 rounded text-xs transition-colors ${
+                  isSavingSql
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "bg-gray-300 text-gray-700 hover:bg-gray-400"
+                }`}
               >
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto">
-            {subQuestion.sqlQuery || "No SQL query generated yet"}
-          </pre>
+          <div className="relative">
+            <pre className="text-xs bg-gray-900 text-green-400 p-4 rounded overflow-x-auto font-mono leading-relaxed max-h-96">
+              {subQuestion.sqlQuery
+                ? formatSql(subQuestion.sqlQuery)
+                : "No SQL query generated yet"}
+            </pre>
+            {subQuestion.sqlQuery && (
+              <div className="absolute top-2 right-2">
+                <button
+                  onClick={() =>
+                    navigator.clipboard.writeText(subQuestion.sqlQuery || "")
+                  }
+                  className="text-xs bg-gray-800 text-gray-300 hover:text-white px-2 py-1 rounded opacity-75 hover:opacity-100 transition-opacity"
+                  title="Copy SQL to clipboard"
+                >
+                  📋 Copy
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -225,7 +569,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-700">Results</h3>
-          {subQuestion.data && subQuestion.data.length > 0 && (
+          {queryResult && queryResult.length > 0 && (
             <div className="flex items-center space-x-2">
               <span className="text-xs text-gray-500">View:</span>
               <div className="flex bg-gray-200 rounded-md p-1">
@@ -253,27 +597,34 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
             </div>
           )}
         </div>
-
-        {subQuestion.data && subQuestion.data.length > 0 ? (
-          <div className="bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
-            <div className="text-xs text-gray-600 mb-2">
-              {subQuestion.data.length} rows returned
-            </div>
-
-            {resultViewMode === "json" ? (
-              <pre className="text-xs text-gray-800 whitespace-pre-wrap">
-                {JSON.stringify(subQuestion.data.slice(0, 5), null, 2)}
-                {subQuestion.data.length > 5 && "\n... (showing first 5 rows)"}
-              </pre>
-            ) : (
-              renderTableData(subQuestion.data)
-            )}
-          </div>
-        ) : (
-          <div className="bg-gray-50 p-3 rounded text-xs text-gray-500">
-            No data available
+        {isExecuting && (
+          <div className="text-xs text-blue-600 mb-2 flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600"></div>
+            <span>Running query...</span>
           </div>
         )}
+        {executionError && (
+          <div className="text-xs text-red-600 mb-2">{executionError}</div>
+        )}
+        {queryResult && queryResult.length > 0 ? (
+          <div className="bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
+            <div className="text-xs text-gray-600 mb-2">
+              {queryResult.length} rows returned
+            </div>
+            {resultViewMode === "json" ? (
+              <pre className="text-xs text-gray-800 whitespace-pre-wrap">
+                {JSON.stringify(queryResult.slice(0, 5), null, 2)}
+                {queryResult.length > 5 && "\n... (showing first 5 rows)"}
+              </pre>
+            ) : (
+              renderTableData(queryResult)
+            )}
+          </div>
+        ) : !isExecuting && !executionError ? (
+          <div className="text-xs text-gray-400 italic">
+            No results yet. Click Execute to run the query.
+          </div>
+        ) : null}
       </div>
     </div>
   );

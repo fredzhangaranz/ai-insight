@@ -547,6 +547,7 @@ export default function AnalysisPage({
         onBack={() => setState("insights")}
         originalQuestion={currentQuestion?.text || ""}
         assessmentFormDefinition={definition}
+        assessmentFormId={assessmentFormId}
         patientId={currentPatientId}
       />
     );

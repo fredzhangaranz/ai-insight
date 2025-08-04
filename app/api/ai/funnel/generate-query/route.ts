@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateQuery } from "@/lib/services/funnel-query-generator.service";
 
-// POST /api/ai/funnel/generate-query - Generate SQL query for a sub-question
+// POST /api/ai/funnel/generate-query - Generate SQL for a sub-question
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
       subQuestion,
-      previousQueries,
-      formDefinition,
+      previousQueries = [],
+      assessmentFormDefinition,
       databaseSchemaContext,
     } = body;
 
@@ -19,20 +19,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("Generating SQL query for sub-question:", subQuestion);
+    console.log("Generating SQL for sub-question:", subQuestion);
 
     const result = await generateQuery({
       subQuestion,
       previousQueries,
-      formDefinition,
+      formDefinition: assessmentFormDefinition,
       databaseSchemaContext,
     });
 
     return NextResponse.json(result);
   } catch (err: any) {
-    console.error("SQL query generation API error:", err);
+    console.error("SQL generation API error:", err);
     return NextResponse.json(
-      { error: err.message || "Failed to generate SQL query" },
+      { error: err.message || "Failed to generate SQL" },
       { status: 500 }
     );
   }

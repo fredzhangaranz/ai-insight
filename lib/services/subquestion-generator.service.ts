@@ -25,7 +25,7 @@ export interface SubQuestionGenerationResponse {
   sub_questions: Array<{
     step: number;
     question: string;
-    depends_on: number | null;
+    depends_on: number | null | number[];
   }>;
 }
 
@@ -94,8 +94,27 @@ export async function generateSubQuestions(
       ) as SubQuestionGenerationResponse;
     } catch (parseError) {
       console.error("Failed to parse AI response as JSON:", parseError);
-      throw new Error("AI returned invalid JSON format");
+      console.error("Raw AI response:", responseText);
+
+      // Try to extract JSON from the response if it contains extra text
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          console.log("Attempting to extract JSON from response...");
+          parsedResponse = JSON.parse(
+            jsonMatch[0]
+          ) as SubQuestionGenerationResponse;
+        } else {
+          throw new Error("No JSON object found in response");
+        }
+      } catch (extractError) {
+        console.error("Failed to extract JSON from response:", extractError);
+        throw new Error("AI returned invalid JSON format");
+      }
     }
+
+    // Log the parsed response for debugging
+    console.log("Parsed AI response:", JSON.stringify(parsedResponse, null, 2));
 
     // Validate the response structure
     if (!validateFunnelSubquestionsResponse(parsedResponse)) {
@@ -145,7 +164,7 @@ function validateSubQuestionRelationships(
   subQuestions: Array<{
     step: number;
     question: string;
-    depends_on: number | null;
+    depends_on: number | null | number[];
   }>
 ): void {
   const steps = new Set<number>();
@@ -159,15 +178,19 @@ function validateSubQuestionRelationships(
 
     // Check dependency validity
     if (sq.depends_on !== null) {
-      if (!steps.has(sq.depends_on)) {
-        throw new Error(
-          `Step ${sq.step} depends on non-existent step ${sq.depends_on}`
-        );
-      }
-      if (sq.depends_on >= sq.step) {
-        throw new Error(
-          `Step ${sq.step} cannot depend on later step ${sq.depends_on}`
-        );
+      const dependencies = Array.isArray(sq.depends_on)
+        ? sq.depends_on
+        : [sq.depends_on];
+
+      for (const dep of dependencies) {
+        if (!steps.has(dep)) {
+          throw new Error(
+            `Step ${sq.step} depends on non-existent step ${dep}`
+          );
+        }
+        if (dep >= sq.step) {
+          throw new Error(`Step ${sq.step} cannot depend on later step ${dep}`);
+        }
       }
     }
   }

@@ -11,6 +11,7 @@ interface FunnelTestPageProps {
   onBack: () => void;
   originalQuestion?: string;
   assessmentFormDefinition?: any;
+  assessmentFormId?: string;
   patientId?: string | null;
 }
 
@@ -18,6 +19,7 @@ export default function FunnelTestPage({
   onBack,
   originalQuestion: propOriginalQuestion,
   assessmentFormDefinition,
+  assessmentFormId,
   patientId,
 }: FunnelTestPageProps) {
   const [showFunnel, setShowFunnel] = useState(false);
@@ -66,7 +68,7 @@ export default function FunnelTestPage({
               AI-Powered Query Funnel
             </h1>
             <p className="text-slate-600">
-              Testing the incremental query generation workflow with mock data
+              AI-powered incremental query generation workflow
             </p>
           </div>
         </div>
@@ -107,6 +109,8 @@ export default function FunnelTestPage({
           {/* Funnel Container */}
           <FunnelContainer
             originalQuestion={originalQuestion}
+            assessmentFormDefinition={assessmentFormDefinition}
+            assessmentFormId={assessmentFormId}
             onEditQuestion={handleEditQuestion}
             onEditSql={handleEditSql}
             onExecuteQuery={handleExecuteQuery}

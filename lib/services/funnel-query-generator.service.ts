@@ -90,7 +90,47 @@ export async function generateQuery(
       parsedResponse = JSON.parse(responseText) as QueryGenerationResponse;
     } catch (parseError) {
       console.error("Failed to parse AI response as JSON:", parseError);
-      throw new Error("AI returned invalid JSON format");
+
+      // Try to extract JSON from the response using regex
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          // Clean up the JSON string to handle control characters
+          let jsonString = jsonMatch[0];
+
+          // Replace problematic control characters in SQL strings
+          jsonString = jsonString.replace(/\n/g, "\\n");
+          jsonString = jsonString.replace(/\r/g, "\\r");
+          jsonString = jsonString.replace(/\t/g, "\\t");
+
+          parsedResponse = JSON.parse(jsonString) as QueryGenerationResponse;
+          console.log("Successfully extracted and cleaned JSON from response");
+        } catch (extractError) {
+          console.error("Failed to extract JSON from response:", extractError);
+
+          // Last resort: try to manually parse the response
+          try {
+            const cleanedResponse = responseText
+              .replace(/\n/g, "\\n")
+              .replace(/\r/g, "\\r")
+              .replace(/\t/g, "\\t");
+            const manualJsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+            if (manualJsonMatch) {
+              parsedResponse = JSON.parse(
+                manualJsonMatch[0]
+              ) as QueryGenerationResponse;
+              console.log("Successfully parsed JSON with manual cleanup");
+            } else {
+              throw new Error("Could not extract valid JSON from response");
+            }
+          } catch (manualError) {
+            console.error("Manual JSON parsing also failed:", manualError);
+            throw new Error("AI returned invalid JSON format");
+          }
+        }
+      } else {
+        throw new Error("AI returned invalid JSON format");
+      }
     }
 
     // Validate the response structure

@@ -6,6 +6,9 @@
 export const FUNNEL_SUBQUESTIONS_PROMPT = [
   "You are a helpful clinical data analyst assistant. Your task is to take a complex analytical question related to clinical wound assessment data and break it down into smaller, incremental sub-questions. Each sub-question must be simple, clear, and individually answerable with a straightforward SQL query.",
   "",
+  "## CRITICAL: JSON Response Format",
+  "You MUST respond with ONLY a valid JSON object. Do not include any explanatory text, markdown formatting, or natural language before or after the JSON. The response must be parseable by JSON.parse().",
+  "",
   "## Response Structure",
   "Return your response as a single JSON object:",
   "",
@@ -45,7 +48,7 @@ export const FUNNEL_SUBQUESTIONS_PROMPT = [
   "Each subsequent step builds upon the data retrieved from the previous step, gradually refining or aggregating the data until the original question is fully addressed.",
   "",
   "## Context Management Guidelines",
-  "* Clearly indicate dependencies between sub-questions using the `depends_on` field (null if none).",
+  "* Clearly indicate dependencies between sub-questions using the `depends_on` field (null if none, single number for one dependency, array of numbers for multiple dependencies).",
   "* Each sub-question should logically flow from the previous one, maintaining clarity and context.",
   "",
   "## Template Matching Logic",
@@ -78,8 +81,13 @@ export const FUNNEL_SUBQUESTIONS_PROMPT = [
   "    },",
   "    {",
   '      "step": 3,',
+  '      "question": "Calculate the total number of wounds for each etiology.",',
+  '      "depends_on": 1',
+  "    },",
+  "    {",
+  '      "step": 4,',
   '      "question": "Rank the treatment methods by average healing time for each wound etiology.",',
-  '      "depends_on": 2',
+  '      "depends_on": [2, 3]',
   "    }",
   "  ]",
   "}",
@@ -93,6 +101,9 @@ export const FUNNEL_SUBQUESTIONS_PROMPT = [
   "* Avoid redundancy between sub-questions.",
   "",
   "Use the provided form definition and database schema context (when available) to ensure sub-questions are realistic and answerable.",
+  "",
+  "## FINAL INSTRUCTION",
+  "Respond with ONLY the JSON object. No other text, explanations, or formatting. The response must be valid JSON that can be parsed directly.",
 ].join("\n");
 
 /**
@@ -126,7 +137,7 @@ export function validateFunnelSubquestionsResponse(
   sub_questions: Array<{
     step: number;
     question: string;
-    depends_on: number | null;
+    depends_on: number | null | number[];
   }>;
 } {
   if (!response || typeof response !== "object") return false;
@@ -138,6 +149,9 @@ export function validateFunnelSubquestionsResponse(
     (sq: { step: any; question: any; depends_on: any }) =>
       typeof sq.step === "number" &&
       typeof sq.question === "string" &&
-      (typeof sq.depends_on === "number" || sq.depends_on === null)
+      (typeof sq.depends_on === "number" ||
+        sq.depends_on === null ||
+        (Array.isArray(sq.depends_on) &&
+          sq.depends_on.every((d: any) => typeof d === "number")))
   );
 }

@@ -458,6 +458,20 @@ These endpoints support the new AI-powered incremental query generation workflow
     ```
 - **Response (`200 OK`):** Success confirmation
 
+##### **3.2.5 Update Sub-Question Text**
+
+- **Endpoint:** `PUT /ai/funnel/subquestions/[id]/question`
+- **Description:** Updates the question text for a specific sub-question.
+- **Request:**
+  - **Path Parameter:** `id` (integer) - The sub-question ID
+  - **Body (JSON):**
+    ```json
+    {
+      "questionText": "What are the distinct wound etiologies for diabetic patients?"
+    }
+    ```
+- **Response (`200 OK`):** Success confirmation
+
 #### **3.3 Query Results Management**
 
 ##### **3.3.1 Store Query Result**
@@ -504,7 +518,7 @@ These endpoints support the new AI-powered incremental query generation workflow
 ##### **3.4.1 Generate Sub-Questions**
 
 - **Endpoint:** `POST /ai/funnel/generate-subquestions`
-- **Description:** Uses AI to break down a complex question into simpler sub-questions.
+- **Description:** Uses AI to break down a complex question into simpler sub-questions. **Includes caching** - identical questions return cached results instantly.
 - **Request:**
   - **Body (JSON):**
     ```json
@@ -516,34 +530,36 @@ These endpoints support the new AI-powered incremental query generation workflow
           "options": ["Diabetic", "Pressure", "Surgical"]
         }
       },
-      "databaseSchemaContext": "Optional database schema information"
+      "databaseSchemaContext": "Optional database schema information",
+      "assessmentFormVersionFk": "E7517D7F-1FC5-A41A-B2BF-22AF0491FFD1"
     }
     ```
 - **Response (`200 OK`):**
   - **Body (JSON):**
     ```json
     {
-      "original_question": "What is the effectiveness of treatments across different wound etiologies over the past year?",
-      "matched_template": "Treatment Effectiveness Overview",
-      "sub_questions": [
+      "funnelId": 1,
+      "subQuestions": [
         {
-          "step": 1,
-          "question": "List all distinct wound etiologies recorded in the past year.",
-          "depends_on": null
-        },
-        {
-          "step": 2,
-          "question": "Calculate the average healing time per treatment method for each wound etiology.",
-          "depends_on": 1
-        },
-        {
-          "step": 3,
-          "question": "Rank the treatment methods by average healing time for each wound etiology.",
-          "depends_on": 2
+          "id": 1,
+          "funnelId": 1,
+          "questionText": "List all distinct wound etiologies recorded in the past year.",
+          "order": 1,
+          "sqlQuery": null,
+          "status": "pending",
+          "lastExecutionDate": null
         }
-      ]
+      ],
+      "wasCached": false
     }
     ```
+
+**Caching Behavior:**
+
+- **First request**: `"wasCached": false` - AI generates new sub-questions (~6 seconds)
+- **Subsequent requests**: `"wasCached": true` - Returns cached results instantly
+- **Cache key**: `assessmentFormVersionFk + originalQuestion`
+- **Storage**: Sub-questions stored in `rpt.QueryFunnel` and `rpt.SubQuestions` tables
 
 ##### **3.4.2 Generate SQL Query**
 

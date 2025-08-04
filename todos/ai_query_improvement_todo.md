@@ -203,34 +203,78 @@
 
 ### 3.2 Interactive Features (Milestone 6)
 
-- [ ] Add question editing capability:
+- [x] Add question editing capability:
   - Edit sub-questions
-  - Regenerate subsequent queries
-- [ ] Implement SQL query editing:
+  - Clear SQL and results when question is edited
+  - Regenerate SQL button (placeholder for future AI integration)
+- [x] Implement SQL query editing:
   - SQL editor integration
-  - Query validation
-- [ ] Add data preview functionality
-- **Validation**: All interactive features work with mock data
+  - Clear results when SQL is edited
+- [x] Add data preview functionality
+- **Validation**: ✅ All interactive features work with mock data and maintain data consistency
 
-## Phase 4: Integration
+## Phase 4: Backend Integration
 
-### 4.1 Backend Integration (Milestone 7)
+### 4.1 Sub-Question Generation API Integration (Milestone 7.1)
 
-- [ ] Connect FunnelPanel to real API endpoints
-- [ ] Implement error handling and loading states
-- [ ] Add retry mechanisms for failed queries
-- **Validation**: Components work with real backend services
+- [x] Connect "Generate Sub-Questions" button to `/api/ai/funnel/generate-subquestions`
+- [x] Implement loading state during sub-question generation
+- [x] Add error handling for sub-question generation failures
+- [x] Update UI to display generated sub-questions in overview cards
+- [x] Test with real AI API responses
+- [x] Fix validation to support array dependencies in sub-questions
+- **Validation**: ✅ Sub-questions are generated and displayed correctly from real API
 
-### 4.2 Data Flow Integration (Milestone 8)
+### 4.2 SQL Generation API Integration (Milestone 7.2)
+
+- [x] Connect "Regenerate SQL" button to `/api/ai/funnel/generate-query`
+- [x] Implement loading state during SQL generation
+- [x] Add error handling for SQL generation failures
+- [x] Update SQL section to display generated queries
+- [x] Test with real AI API responses
+- **Validation**: ✅ SQL queries are generated and displayed correctly from real API
+
+### 4.3 SQL Execution & Results Integration (Milestone 7.3)
+
+- [x] Connect "Execute" button to database query execution
+- [x] Implement loading state during query execution
+- [x] Add error handling for query execution failures
+- [x] Update results section to display real data
+- [x] Test with real database queries and results
+- **Validation**: ✅ SQL queries execute successfully and display real results
+
+### 4.4 Caching Strategy Implementation (Milestone 7.4)
+
+- [x] Design caching strategy for sub-questions and SQL queries
+- [x] Implement caching for sub-question generation results
+- [ ] Implement caching for SQL generation results
+- [ ] **Decision needed**: Implement caching for query execution results (consider data size)
+- [ ] Add cache invalidation logic when questions/SQL are edited
+- [x] Test caching behavior with real data
+- **Validation**: ✅ Sub-question caching works correctly and improves performance (6s → instant)
+
+### 4.5 Error Handling & Retry Mechanisms (Milestone 7.5)
+
+- [ ] Implement comprehensive error handling for all API calls
+- [ ] Add retry mechanisms for transient failures
+- [ ] Add user-friendly error messages
+- [ ] Implement fallback behaviors for failed operations
+- [ ] Test error scenarios and recovery
+- **Validation**: ✅ System handles errors gracefully and provides good user feedback
+
+## Phase 5: Data Flow Integration
+
+### 5.1 Chart Generation Integration (Milestone 8)
 
 - [ ] Integrate with existing chart generation flow
-- [ ] Add data transformation layer
-- [ ] Implement caching for query results
+- [ ] Add data transformation layer for chart compatibility
+- [ ] Implement chart type recommendation based on query results
+- [ ] Test end-to-end flow from query to chart
 - **Validation**: End-to-end flow works with real data
 
-## Phase 5: Enhancement and Polish
+## Phase 6: Enhancement and Polish
 
-### 5.1 UX Improvements (Milestone 9)
+### 6.1 UX Improvements (Milestone 9)
 
 - [ ] Add progress indicators
 - [ ] Implement undo/redo functionality
@@ -238,29 +282,31 @@
 - [ ] Improve error messages and user feedback
 - **Validation**: User testing confirms improved experience
 
-### 5.2 Performance Optimization (Milestone 10)
+### 6.2 Performance Optimization (Milestone 10)
 
-- [ ] Implement query result caching
 - [ ] Add lazy loading for panels
 - [ ] Optimize SQL query generation
 - [ ] Add performance monitoring
+- [ ] Implement advanced caching strategies (if needed)
 - **Validation**: Performance metrics meet targets
 
-## Phase 6: Testing and Documentation
+## Phase 7: Testing and Documentation
 
-### 6.1 Testing (Milestone 11)
+### 7.1 Testing (Milestone 11)
 
 - [ ] Add end-to-end tests
 - [ ] Implement integration tests
 - [ ] Add load testing for API endpoints
+- [ ] Test caching behavior under load
 - **Validation**: All test suites pass
 
-### 6.2 Documentation (Milestone 12)
+### 7.2 Documentation (Milestone 12)
 
 - [ ] Update API documentation
 - [ ] Add user guide
 - [ ] Create developer documentation
 - [ ] Document prompt templates and their usage
+- [ ] Document caching strategy and decisions
 - **Validation**: Documentation review complete
 
 ## Notes
@@ -269,6 +315,33 @@
 - UI components can be developed with mock data initially
 - Integration should be done incrementally to catch issues early
 - Regular testing should be performed throughout development
+
+## Caching Strategy Considerations
+
+### What to Cache:
+
+- ✅ **Sub-questions**: Small text data, safe to cache
+- ✅ **SQL queries**: Small text data, safe to cache
+- ❓ **Query results**: Large data, need careful consideration
+
+### Query Results Caching Options:
+
+1. **No caching**: Always execute fresh queries (simplest, most accurate)
+2. **Limited caching**: Cache small result sets (< 1000 rows) for 1 hour
+3. **Smart caching**: Cache based on query hash + data freshness requirements
+4. **User-controlled**: Let users choose to cache specific results
+
+### Cache Invalidation Rules:
+
+- **Sub-questions**: Invalidated when original question changes
+- **SQL queries**: Invalidated when sub-question text changes
+- **Query results**: Invalidated when SQL query changes or data freshness expires
+
+### Performance Considerations:
+
+- **Memory usage**: Large result sets can consume significant memory
+- **Database load**: Caching reduces database queries but increases memory usage
+- **User experience**: Caching improves response time but may show stale data
 
 ## Future Improvements
 

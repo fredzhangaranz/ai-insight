@@ -32,6 +32,24 @@ export async function getFunnelById(id: number): Promise<QueryFunnel | null> {
   return result.recordset[0] || null;
 }
 
+export async function findFunnelByQuestion(
+  assessmentFormVersionFk: string,
+  originalQuestion: string
+): Promise<QueryFunnel | null> {
+  const pool = await getDbPool();
+  const result = await pool
+    .request()
+    .input("assessmentFormVersionFk", assessmentFormVersionFk)
+    .input("originalQuestion", originalQuestion).query(`
+      SELECT * FROM rpt.QueryFunnel 
+      WHERE assessmentFormVersionFk = @assessmentFormVersionFk 
+      AND originalQuestion = @originalQuestion 
+      AND status = 'active'
+      ORDER BY createdDate DESC
+    `);
+  return result.recordset[0] || null;
+}
+
 export async function listFunnels(): Promise<QueryFunnel[]> {
   const pool = await getDbPool();
   const result = await pool
@@ -73,6 +91,34 @@ export async function addSubQuestion(
   return result.recordset[0];
 }
 
+export async function addSubQuestions(
+  funnelId: number,
+  subQuestions: Array<{
+    questionText: string;
+    order: number;
+    sqlQuery?: string;
+  }>
+): Promise<SubQuestion[]> {
+  const pool = await getDbPool();
+  const results: SubQuestion[] = [];
+
+  for (const sq of subQuestions) {
+    const result = await pool
+      .request()
+      .input("funnelId", funnelId)
+      .input("questionText", sq.questionText)
+      .input("order", sq.order)
+      .input("sqlQuery", sq.sqlQuery ?? null).query(`
+        INSERT INTO rpt.SubQuestions (funnelId, questionText, [order], sqlQuery, status)
+        OUTPUT inserted.*
+        VALUES (@funnelId, @questionText, @order, @sqlQuery, 'pending')
+      `);
+    results.push(result.recordset[0]);
+  }
+
+  return results;
+}
+
 export async function getSubQuestions(
   funnelId: number
 ): Promise<SubQuestion[]> {
@@ -108,6 +154,20 @@ export async function updateSubQuestionSql(
     .input("id", id)
     .input("sqlQuery", sqlQuery)
     .query(`UPDATE rpt.SubQuestions SET sqlQuery = @sqlQuery WHERE id = @id`);
+}
+
+export async function updateSubQuestionText(
+  id: number,
+  questionText: string
+): Promise<void> {
+  const pool = await getDbPool();
+  await pool
+    .request()
+    .input("id", id)
+    .input("questionText", questionText)
+    .query(
+      `UPDATE rpt.SubQuestions SET questionText = @questionText WHERE id = @id`
+    );
 }
 
 // QueryResults

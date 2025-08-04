@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateSubQuestions } from "@/lib/services/subquestion-generator.service";
+import { getOrGenerateSubQuestions } from "@/lib/services/funnel-cache.service";
 
-// POST /api/ai/funnel/generate-subquestions - Generate sub-questions for a complex question
+// POST /api/ai/funnel/generate-subquestions - Generate or retrieve cached sub-questions
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { originalQuestion, formDefinition, databaseSchemaContext } = body;
+    const {
+      originalQuestion,
+      formDefinition,
+      databaseSchemaContext,
+      assessmentFormVersionFk,
+    } = body;
 
     if (!originalQuestion || typeof originalQuestion !== "string") {
       return NextResponse.json(
@@ -14,15 +19,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("Generating sub-questions for:", originalQuestion);
+    if (
+      !assessmentFormVersionFk ||
+      typeof assessmentFormVersionFk !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "assessmentFormVersionFk is required and must be a string." },
+        { status: 400 }
+      );
+    }
 
-    const result = await generateSubQuestions({
+    console.log("Getting or generating sub-questions for:", originalQuestion);
+
+    const result = await getOrGenerateSubQuestions(
+      assessmentFormVersionFk,
       originalQuestion,
       formDefinition,
-      databaseSchemaContext,
-    });
+      databaseSchemaContext
+    );
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      funnelId: result.funnelId,
+      subQuestions: result.subQuestions,
+      wasCached: result.wasCached,
+    });
   } catch (err: any) {
     console.error("Sub-question generation API error:", err);
     return NextResponse.json(
