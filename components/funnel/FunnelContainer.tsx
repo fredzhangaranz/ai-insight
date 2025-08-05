@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { FunnelPanel } from "./FunnelPanel";
 import type { SubQuestion } from "@/lib/types/funnel";
+import { useAIModel } from "@/lib/context/AIModelContext";
+import { ModelSelector } from "./ModelSelector";
 
 interface FunnelContainerProps {
   originalQuestion?: string;
@@ -8,7 +10,15 @@ interface FunnelContainerProps {
   assessmentFormDefinition?: any;
   assessmentFormId?: string;
   onEditQuestion?: (questionId: string, newText: string) => void;
-  onEditSql?: (questionId: string, newSql: string) => void;
+  onEditSql?: (
+    questionId: string,
+    newSql: string,
+    metadata?: {
+      explanation?: string;
+      validationNotes?: string;
+      matchedTemplate?: string;
+    }
+  ) => void;
   onExecuteQuery?: (questionId: string) => void;
 }
 
@@ -58,6 +68,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   onEditSql,
   onExecuteQuery,
 }) => {
+  const { selectedModelId } = useAIModel();
   const [currentSubQuestions, setCurrentSubQuestions] =
     useState<SubQuestion[]>(subQuestions);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -87,6 +98,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
             formDefinition: assessmentFormDefinition || {},
             databaseSchemaContext: "",
             assessmentFormVersionFk: assessmentFormId,
+            modelId: selectedModelId,
           }),
         });
 
@@ -138,7 +150,12 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
     };
 
     loadCachedSubQuestions();
-  }, [originalQuestion, assessmentFormId, assessmentFormDefinition]);
+  }, [
+    originalQuestion,
+    assessmentFormId,
+    assessmentFormDefinition,
+    selectedModelId,
+  ]);
 
   const handleEditQuestion = (questionId: string, newText: string) => {
     setCurrentSubQuestions((prev) =>
@@ -158,13 +175,24 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
     onEditQuestion?.(questionId, newText);
   };
 
-  const handleEditSql = (questionId: string, newSql: string) => {
+  const handleEditSql = (
+    questionId: string,
+    newSql: string,
+    metadata?: {
+      explanation?: string;
+      validationNotes?: string;
+      matchedTemplate?: string;
+    }
+  ) => {
     setCurrentSubQuestions((prev) =>
       prev.map((sq) =>
         sq.id === questionId
           ? {
               ...sq,
               sqlQuery: newSql,
+              sqlExplanation: metadata?.explanation,
+              sqlValidationNotes: metadata?.validationNotes,
+              sqlMatchedTemplate: metadata?.matchedTemplate,
               data: [], // Clear data when SQL is edited
               status: "pending" as const, // Reset status to pending
               lastExecutionDate: undefined, // Clear execution date
@@ -172,7 +200,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
           : sq
       )
     );
-    onEditSql?.(questionId, newSql);
+    onEditSql?.(questionId, newSql, metadata);
   };
 
   const handleGenerateSubQuestions = async () => {
@@ -194,6 +222,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
           databaseSchemaContext: "", // TODO: Pass actual schema context
           assessmentFormVersionFk:
             assessmentFormId || "00000000-0000-0000-0000-000000000000",
+          modelId: selectedModelId,
         }),
       });
 
@@ -220,6 +249,9 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
           order: sq.order,
           status: sq.status || "pending",
           sqlQuery: sq.sqlQuery || "",
+          sqlExplanation: sq.sqlExplanation,
+          sqlValidationNotes: sq.sqlValidationNotes,
+          sqlMatchedTemplate: sq.sqlMatchedTemplate,
           data: [],
           lastExecutionDate: sq.lastExecutionDate
             ? new Date(sq.lastExecutionDate)
@@ -359,9 +391,12 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
       {/* Top Section - Original Question */}
       <div className="p-4 border-b border-gray-200 bg-white">
         <div className="flex flex-col">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
-            Query Funnel
-          </h2>
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Query Funnel
+            </h2>
+            <ModelSelector />
+          </div>
           <p className="text-gray-600 text-sm bg-blue-50 p-3 rounded border-l-4 border-blue-400 mb-4">
             <strong>Original Question:</strong> {originalQuestion}
           </p>
@@ -622,6 +657,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
                 onEditQuestion={handleEditQuestion}
                 onEditSql={handleEditSql}
                 onExecuteQuery={handleExecuteQuery}
+                selectedModelId={selectedModelId}
               />
             ) : (
               <div className="h-full flex items-center justify-center">

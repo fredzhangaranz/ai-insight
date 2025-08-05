@@ -7,6 +7,9 @@ export interface SubQuestion {
   text: string;
   order: number;
   sqlQuery?: string;
+  sqlExplanation?: string;
+  sqlValidationNotes?: string;
+  sqlMatchedTemplate?: string;
   data?: any[];
   status: SubQuestionStatus;
   lastExecutionDate?: Date;

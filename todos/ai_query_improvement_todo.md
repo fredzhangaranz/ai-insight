@@ -309,6 +309,40 @@
 - [ ] Document caching strategy and decisions
 - **Validation**: Documentation review complete
 
+## Phase 8: Multi-Model AI Support (Gemini, Claude, etc.)
+
+### 8.1 Frontend Model Switching UI
+
+- [ ] Add a user-facing dropdown or toggle to select the AI model (e.g., Claude, Gemini, etc.) for question, sub-question, and query generation.
+- [ ] Persist user selection in local state (and optionally in URL or user profile for session persistence).
+- [ ] Pass selected model to backend API calls as a parameter.
+- **Validation**: User can easily switch models and see which model is active for each generation step.
+
+### 8.2 Backend Model Abstraction & Refactor
+
+- [ ] Refactor backend AI service code to use a pluggable provider pattern:
+  - Create a common interface/abstraction for AI model calls (e.g., `IAIModelProvider` with methods for sub-question and SQL generation).
+  - Implement providers for each model (Claude, Gemini, etc.) in separate files.
+  - Use a factory or registry to select the provider based on API input.
+- [ ] Move model-specific prompt logic into each provider, or use a shared prompt with model-specific tweaks.
+- [ ] Add config/env support for available models and API keys.
+- [ ] Update all relevant API endpoints to accept a `model` parameter and route requests accordingly.
+- **Validation**: Backend can easily add new models/providers with minimal changes to business logic.
+
+### 8.3 API & Integration
+
+- [ ] Update API documentation to describe model selection and supported models.
+- [ ] Ensure all endpoints (question, sub-question, query generation) support model selection.
+- [ ] Add validation to reject unsupported models and provide clear error messages.
+- **Validation**: All endpoints work with both Claude and Gemini (and future models) as selected by the user.
+
+### 8.4 Testing & UX
+
+- [ ] Add tests for model switching logic (frontend and backend).
+- [ ] Validate output consistency and error handling for each model.
+- [ ] Gather user feedback on model quality and UX.
+- **Validation**: Model switching is robust, user-friendly, and supports future extensibility.
+
 ## Notes
 
 - Each milestone should be completed and validated before moving to the next

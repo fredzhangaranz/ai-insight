@@ -5,8 +5,17 @@ interface FunnelPanelProps {
   subQuestion: SubQuestion;
   assessmentFormDefinition?: any;
   onEditQuestion?: (questionId: string, newText: string) => void;
-  onEditSql?: (questionId: string, newSql: string) => void;
+  onEditSql?: (
+    questionId: string,
+    newSql: string,
+    metadata?: {
+      explanation?: string;
+      validationNotes?: string;
+      matchedTemplate?: string;
+    }
+  ) => void;
   onExecuteQuery?: (questionId: string) => void;
+  selectedModelId: string;
 }
 
 export const FunnelPanel: React.FC<FunnelPanelProps> = ({
@@ -15,6 +24,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   onEditQuestion,
   onEditSql,
   onExecuteQuery,
+  selectedModelId,
 }) => {
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
   const [isEditingSql, setIsEditingSql] = useState(false);
@@ -29,6 +39,15 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [queryResult, setQueryResult] = useState<any[] | null>(null);
+  const [expandedSections, setExpandedSections] = useState<{
+    explanation: boolean;
+    validationNotes: boolean;
+    template: boolean;
+  }>({
+    explanation: false,
+    validationNotes: false,
+    template: false,
+  });
 
   const handleQuestionSave = async () => {
     if (!editedQuestion.trim()) {
@@ -156,6 +175,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           previousQueries: [], // TODO: Pass previous queries for context
           assessmentFormDefinition: assessmentFormDefinition || {},
           databaseSchemaContext: "", // TODO: Pass actual schema context
+          modelId: selectedModelId,
         }),
       });
 
@@ -171,8 +191,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         throw new Error(result.error);
       }
 
-      // Update the SQL query
+      // Update the SQL query and metadata
       const newSql = result.generatedSql;
+      const explanation = result.explanation;
+      const validationNotes = result.validationNotes;
+      const matchedTemplate = result.matchedQueryTemplate;
+
       setEditedSql(newSql);
 
       // Save to database cache
@@ -185,6 +209,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           },
           body: JSON.stringify({
             sqlQuery: newSql,
+            sqlExplanation: explanation,
+            sqlValidationNotes: validationNotes,
+            sqlMatchedTemplate: matchedTemplate,
           }),
         }
       );
@@ -194,9 +221,13 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         throw new Error(errorData.error || "Failed to save generated SQL");
       }
 
-      // Update local state
+      // Update local state with all metadata
       if (onEditSql) {
-        onEditSql(subQuestion.id, newSql);
+        onEditSql(subQuestion.id, newSql, {
+          explanation,
+          validationNotes,
+          matchedTemplate,
+        });
       }
 
       console.log("✅ SQL generated and saved successfully");
@@ -561,6 +592,83 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* SQL Metadata Section - Only show when SQL exists */}
+        {subQuestion.sqlQuery && !isEditingSql && (
+          <div className="mt-3 space-y-2">
+            {/* Explanation */}
+            <div className="border border-gray-200 rounded-md">
+              <button
+                onClick={() =>
+                  setExpandedSections((prev) => ({
+                    ...prev,
+                    explanation: !prev.explanation,
+                  }))
+                }
+                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+              >
+                <span>📝 Explanation</span>
+                <span className="text-gray-400">
+                  {expandedSections.explanation ? "▼" : "▶"}
+                </span>
+              </button>
+              {expandedSections.explanation && (
+                <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
+                  {subQuestion.sqlExplanation || "No explanation available"}
+                </div>
+              )}
+            </div>
+
+            {/* Validation Notes */}
+            <div className="border border-gray-200 rounded-md">
+              <button
+                onClick={() =>
+                  setExpandedSections((prev) => ({
+                    ...prev,
+                    validationNotes: !prev.validationNotes,
+                  }))
+                }
+                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+              >
+                <span>🔍 Validation Notes</span>
+                <span className="text-gray-400">
+                  {expandedSections.validationNotes ? "▼" : "▶"}
+                </span>
+              </button>
+              {expandedSections.validationNotes && (
+                <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
+                  {subQuestion.sqlValidationNotes ||
+                    "No validation notes available"}
+                </div>
+              )}
+            </div>
+
+            {/* Matched Template */}
+            <div className="border border-gray-200 rounded-md">
+              <button
+                onClick={() =>
+                  setExpandedSections((prev) => ({
+                    ...prev,
+                    template: !prev.template,
+                  }))
+                }
+                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+              >
+                <span>🏷️ Matched Template</span>
+                <span className="text-gray-400">
+                  {expandedSections.template ? "▼" : "▶"}
+                </span>
+              </button>
+              {expandedSections.template && (
+                <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
+                  <span className="font-medium">
+                    {subQuestion.sqlMatchedTemplate || "None"}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

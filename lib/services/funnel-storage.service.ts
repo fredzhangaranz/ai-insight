@@ -146,14 +146,30 @@ export async function updateSubQuestionStatus(
 
 export async function updateSubQuestionSql(
   id: number,
-  sqlQuery: string
+  sqlQuery: string,
+  metadata?: {
+    sqlExplanation?: string;
+    sqlValidationNotes?: string;
+    sqlMatchedTemplate?: string;
+  }
 ): Promise<void> {
   const pool = await getDbPool();
-  await pool
+  const request = pool
     .request()
     .input("id", id)
     .input("sqlQuery", sqlQuery)
-    .query(`UPDATE rpt.SubQuestions SET sqlQuery = @sqlQuery WHERE id = @id`);
+    .input("sqlExplanation", metadata?.sqlExplanation ?? null)
+    .input("sqlValidationNotes", metadata?.sqlValidationNotes ?? null)
+    .input("sqlMatchedTemplate", metadata?.sqlMatchedTemplate ?? null);
+
+  await request.query(`
+    UPDATE rpt.SubQuestions 
+    SET sqlQuery = @sqlQuery,
+        sqlExplanation = @sqlExplanation,
+        sqlValidationNotes = @sqlValidationNotes,
+        sqlMatchedTemplate = @sqlMatchedTemplate
+    WHERE id = @id
+  `);
 }
 
 export async function updateSubQuestionText(

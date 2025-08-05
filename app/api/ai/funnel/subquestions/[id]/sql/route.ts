@@ -8,7 +8,8 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { sqlQuery } = body;
+    const { sqlQuery, sqlExplanation, sqlValidationNotes, sqlMatchedTemplate } =
+      body;
     const id = Number(params.id);
 
     if (!id || isNaN(id)) {
@@ -25,7 +26,11 @@ export async function PUT(
       );
     }
 
-    await FunnelStorage.updateSubQuestionSql(id, sqlQuery);
+    await FunnelStorage.updateSubQuestionSql(id, sqlQuery, {
+      sqlExplanation,
+      sqlValidationNotes,
+      sqlMatchedTemplate,
+    });
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateQuery } from "@/lib/services/funnel-query-generator.service";
+import { getAIProvider } from "@/lib/ai/providers/provider-factory";
+import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
 
 // POST /api/ai/funnel/generate-query - Generate SQL for a sub-question
 export async function POST(request: NextRequest) {
@@ -10,6 +11,7 @@ export async function POST(request: NextRequest) {
       previousQueries = [],
       assessmentFormDefinition,
       databaseSchemaContext,
+      modelId = DEFAULT_AI_MODEL_ID,
     } = body;
 
     if (!subQuestion || typeof subQuestion !== "string") {
@@ -19,13 +21,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("Generating SQL for sub-question:", subQuestion);
+    console.log(
+      `Generating SQL for sub-question: "${subQuestion}" using model ${modelId}`
+    );
 
-    const result = await generateQuery({
+    const provider = getAIProvider(modelId);
+    const result = await provider.generateQuery({
       subQuestion,
       previousQueries,
-      formDefinition: assessmentFormDefinition,
-      databaseSchemaContext,
+      assessmentFormDefinition,
+      databaseSchemaContext: databaseSchemaContext || "",
     });
 
     return NextResponse.json(result);

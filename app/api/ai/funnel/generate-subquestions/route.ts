@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
       formDefinition,
       databaseSchemaContext,
       assessmentFormVersionFk,
+      modelId,
     } = body;
 
     if (!originalQuestion || typeof originalQuestion !== "string") {
@@ -29,13 +30,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("Getting or generating sub-questions for:", originalQuestion);
+    console.log(
+      `Getting or generating sub-questions for: "${originalQuestion}" using model ${
+        modelId || "default"
+      }`
+    );
 
     const result = await getOrGenerateSubQuestions(
       assessmentFormVersionFk,
       originalQuestion,
       formDefinition,
-      databaseSchemaContext
+      databaseSchemaContext,
+      modelId
     );
 
     return NextResponse.json({
