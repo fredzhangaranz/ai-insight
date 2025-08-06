@@ -20,6 +20,7 @@ interface FunnelContainerProps {
     }
   ) => void;
   onExecuteQuery?: (questionId: string) => void;
+  onMarkComplete?: (questionId: string) => void;
 }
 
 // Mock data for testing
@@ -67,6 +68,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   onEditQuestion,
   onEditSql,
   onExecuteQuery,
+  onMarkComplete,
 }) => {
   const { selectedModelId } = useAIModel();
   const [currentSubQuestions, setCurrentSubQuestions] =
@@ -77,10 +79,33 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   const [subQuestionError, setSubQuestionError] = useState<string | null>(null);
   const [isLoadingCache, setIsLoadingCache] = useState(false);
 
+  // Store results per sub-question ID for persistent results across navigation
+  const [subQuestionResults, setSubQuestionResults] = useState<
+    Record<string, any[]>
+  >({});
+
   // Load cached sub-questions on component mount
   useEffect(() => {
     const loadCachedSubQuestions = async () => {
-      if (!originalQuestion || !assessmentFormId) return;
+      console.log("loadCachedSubQuestions called with:", {
+        originalQuestion,
+        assessmentFormId,
+        assessmentFormDefinition: !!assessmentFormDefinition,
+        selectedModelId,
+      });
+
+      if (!originalQuestion || !assessmentFormId) {
+        console.log("Missing required parameters:", {
+          originalQuestion,
+          assessmentFormId,
+        });
+        if (!assessmentFormId) {
+          setSubQuestionError(
+            "Assessment form ID is missing. Please go back and select a form."
+          );
+        }
+        return;
+      }
 
       setIsLoadingCache(true);
       setSubQuestionError(null);
@@ -205,25 +230,36 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
 
   const handleGenerateSubQuestions = async () => {
     console.log("Button clicked! Starting sub-question generation...");
+    console.log("assessmentFormId:", assessmentFormId);
+    console.log("originalQuestion:", originalQuestion);
     setIsGeneratingSubQuestions(true);
     setSubQuestionError(null);
 
     try {
       console.log("Generating sub-questions for:", originalQuestion);
 
+      if (!assessmentFormId) {
+        throw new Error(
+          "Assessment form ID is required but not provided. Please go back and select a form."
+        );
+      }
+
+      const requestBody = {
+        originalQuestion,
+        formDefinition: assessmentFormDefinition || {},
+        databaseSchemaContext: "", // TODO: Pass actual schema context
+        assessmentFormVersionFk: assessmentFormId,
+        modelId: selectedModelId,
+      };
+
+      console.log("Request body:", requestBody);
+
       const response = await fetch("/api/ai/funnel/generate-subquestions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          originalQuestion,
-          formDefinition: assessmentFormDefinition || {},
-          databaseSchemaContext: "", // TODO: Pass actual schema context
-          assessmentFormVersionFk:
-            assessmentFormId || "00000000-0000-0000-0000-000000000000",
-          modelId: selectedModelId,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -326,6 +362,28 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
     onExecuteQuery?.(questionId);
   };
 
+  const handleMarkComplete = (questionId: string) => {
+    setCurrentSubQuestions((prev) =>
+      prev.map((sq) =>
+        sq.id === questionId
+          ? {
+              ...sq,
+              status: "completed" as const,
+              lastExecutionDate: new Date(),
+            }
+          : sq
+      )
+    );
+    onMarkComplete?.(questionId);
+  };
+
+  const handleQueryResult = (questionId: string, results: any[]) => {
+    setSubQuestionResults((prev) => ({
+      ...prev,
+      [questionId]: results,
+    }));
+  };
+
   const goToNext = () => {
     // Only allow navigation to next if current question is completed
     if (
@@ -359,6 +417,12 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
 
   const currentQuestion =
     currentSubQuestions.length > 0 ? currentSubQuestions[currentIndex] : null;
+
+  // Collect the SQL from all previous completed steps to provide context for the current step.
+  const previousSqlQueries = currentSubQuestions
+    .slice(0, currentIndex)
+    .map((sq) => sq.sqlQuery || "")
+    .filter((sql) => sql.trim() !== "");
 
   const getStatusColor = (status: SubQuestion["status"]) => {
     switch (status) {
@@ -657,6 +721,10 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
                 onEditQuestion={handleEditQuestion}
                 onEditSql={handleEditSql}
                 onExecuteQuery={handleExecuteQuery}
+                onMarkComplete={handleMarkComplete}
+                onQueryResult={handleQueryResult}
+                initialResults={subQuestionResults[currentQuestion.id] || null}
+                previousSqlQueries={previousSqlQueries}
                 selectedModelId={selectedModelId}
               />
             ) : (

@@ -47,11 +47,21 @@ export default function FunnelTestPage({
   };
 
   const handleExecuteQuery = (questionId: string) => {
-    console.log("Execute query:", questionId);
-    // In real implementation, this would call the API to execute the query
+    console.log("Executing query for question:", questionId);
+  };
+
+  const handleMarkComplete = (questionId: string) => {
+    console.log("Marking question as complete:", questionId);
   };
 
   if (showFunnel) {
+    console.log("FunnelTestPage - showFunnel props:", {
+      originalQuestion,
+      assessmentFormDefinition: !!assessmentFormDefinition,
+      assessmentFormId,
+      patientId,
+    });
+
     return (
       <div className="min-h-screen bg-slate-50">
         {/* Header */}
@@ -114,6 +124,7 @@ export default function FunnelTestPage({
             onEditQuestion={handleEditQuestion}
             onEditSql={handleEditSql}
             onExecuteQuery={handleExecuteQuery}
+            onMarkComplete={handleMarkComplete}
           />
         </div>
       </div>

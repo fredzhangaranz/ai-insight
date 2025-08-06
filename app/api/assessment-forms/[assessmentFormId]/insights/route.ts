@@ -26,6 +26,55 @@ const AI_MODEL_NAME = process.env.AI_MODEL_NAME || "claude-3-sonnet-20240229";
 const AI_GENERATED_BY = `Claude-3-5-Sonnet`;
 
 // --- HELPER FUNCTIONS ---
+function mergeCustomQuestionsWithInsights(
+  insights: AIInsightsResponse,
+  customQuestions: any[]
+): AIInsightsResponse {
+  const mergedInsights = { ...insights };
+
+  // Group custom questions by category
+  const customQuestionsByCategory = customQuestions.reduce((acc, question) => {
+    if (!acc[question.category]) {
+      acc[question.category] = [];
+    }
+    acc[question.category].push({
+      text: question.questionText,
+      type: question.questionType as "single-patient" | "all-patient",
+      isCustom: true, // Mark custom questions
+      originalQuestionId: question.originalQuestionId, // Track if this is a modified AI question
+      id: question.id, // Database ID for editing
+    });
+    return acc;
+  }, {} as Record<string, Array<{ text: string; type: "single-patient" | "all-patient"; isCustom: boolean }>>);
+
+  // Merge custom questions into existing categories or create new ones
+  Object.entries(customQuestionsByCategory).forEach(([category, questions]) => {
+    const existingCategory = mergedInsights.insights.find(
+      (cat) => cat.category === category
+    );
+    const typedQuestions = questions as Array<{
+      text: string;
+      type: "single-patient" | "all-patient";
+      isCustom: boolean;
+      originalQuestionId?: string | null;
+      id?: number;
+    }>;
+
+    if (existingCategory) {
+      // Add custom questions to existing category
+      existingCategory.questions.push(...typedQuestions);
+    } else {
+      // Create new category for custom questions
+      mergedInsights.insights.push({
+        category,
+        questions: typedQuestions,
+      });
+    }
+  });
+
+  return mergedInsights;
+}
+
 function mapDataType(dataType: number): string {
   const typeMap: { [key: number]: string } = {
     1: "File",
@@ -178,6 +227,20 @@ export async function GET(
           console.log("Cached insights are invalid, regenerating...");
           cacheHit = false;
         } else {
+          // Get custom questions and merge them with AI insights
+          const customQuestionsResult = await pool
+            .request()
+            .input("id", sql.UniqueIdentifier, assessmentFormId)
+            .query(
+              "SELECT category, questionText, questionType FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
+            );
+
+          // Merge custom questions with AI insights
+          const mergedInsights = mergeCustomQuestionsWithInsights(
+            insights,
+            customQuestionsResult.recordset
+          );
+
           // Log cache metrics
           await metrics.logCacheMetrics({
             cacheHits: 1,
@@ -187,7 +250,7 @@ export async function GET(
             timestamp: new Date(),
           });
 
-          return NextResponse.json(insights);
+          return NextResponse.json(mergedInsights);
         }
       } else {
         console.log("No cached insights found. Returning 204 No Content.");
@@ -262,6 +325,20 @@ export async function GET(
       throw new Error("AI returned invalid insights format");
     }
 
+    // Get custom questions and merge them with new insights
+    const customQuestionsResult = await pool
+      .request()
+      .input("id", sql.UniqueIdentifier, assessmentFormId)
+      .query(
+        "SELECT category, questionText, questionType FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
+      );
+
+    // Merge custom questions with new insights
+    const mergedInsights = mergeCustomQuestionsWithInsights(
+      newInsights,
+      customQuestionsResult.recordset
+    );
+
     // Save to cache
     const cacheUpdateStartTime = Date.now();
     const upsertQuery = `
@@ -278,7 +355,11 @@ export async function GET(
     await pool
       .request()
       .input("id", sql.UniqueIdentifier, assessmentFormId)
-      .input("insightsJson", sql.NVarChar(sql.MAX), JSON.stringify(newInsights))
+      .input(
+        "insightsJson",
+        sql.NVarChar(sql.MAX),
+        JSON.stringify(mergedInsights)
+      )
       .input("generatedBy", sql.NVarChar, AI_GENERATED_BY)
       .query(upsertQuery);
 
@@ -304,7 +385,7 @@ export async function GET(
       });
     }
 
-    return NextResponse.json(newInsights);
+    return NextResponse.json(mergedInsights);
   } catch (error: any) {
     console.error("API Error:", error);
 

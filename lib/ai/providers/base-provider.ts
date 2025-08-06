@@ -191,6 +191,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         request.formDefinition,
         schemaContext
       );
+      console.log("AI Prompt for sub-questions generation:", prompt);
       const aiResponse = await this._executeModel(
         prompt,
         "Please break down this complex question into incremental sub-questions."
@@ -257,6 +258,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         request.assessmentFormDefinition,
         schemaContext
       );
+      console.log("AI Prompt for SQL generation:", prompt);
       const aiResponse = await this._executeModel(
         prompt,
         "Please generate a SQL query for this sub-question."

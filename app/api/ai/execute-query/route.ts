@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
   try {
     // 1. Read and validate the request body
     const body = await request.json();
-    // Now accepts the query template and an optional parameters object
-    const { query, params } = body;
+    // Now accepts the query template, an optional parameters object, and optional subQuestionId
+    const { query, params, subQuestionId } = body;
 
     if (!query || typeof query !== "string") {
       return NextResponse.json(
@@ -59,6 +59,8 @@ export async function POST(request: NextRequest) {
     }
     console.log("Query params:", params);
     console.log("Executing query:", query);
+    console.log("Sub-question ID:", subQuestionId);
+
     // 2. Security Check: Ensure it's a read-only SELECT statement.
     // A simple but crucial check to prevent modifications.
     const upperQuery = query.trim().toUpperCase();
@@ -98,7 +100,26 @@ export async function POST(request: NextRequest) {
 
     console.log("Query execution result:", result);
 
-    // 4. Return the data
+    // 4. If subQuestionId is provided and query returned results, update status to completed
+    if (subQuestionId && result.recordset && result.recordset.length > 0) {
+      try {
+        const { updateSubQuestionStatus } = await import(
+          "@/lib/services/funnel-storage.service"
+        );
+        await updateSubQuestionStatus(Number(subQuestionId), "completed");
+        console.log(
+          `Updated sub-question ${subQuestionId} status to completed`
+        );
+      } catch (statusUpdateError) {
+        console.error(
+          "Failed to update sub-question status:",
+          statusUpdateError
+        );
+        // Don't fail the entire request if status update fails
+      }
+    }
+
+    // 5. Return the data
     return NextResponse.json({
       data: result.recordset,
     });

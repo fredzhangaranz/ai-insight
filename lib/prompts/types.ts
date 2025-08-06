@@ -38,6 +38,9 @@ export type QuestionType = "single-patient" | "all-patient";
 export interface InsightQuestion {
   text: string;
   type: QuestionType;
+  isCustom?: boolean; // Optional flag to indicate if this is a user-added custom question
+  originalQuestionId?: string | null; // If present, this is a modified AI question
+  id?: number; // Database ID for custom questions
 }
 
 export interface InsightCategory {

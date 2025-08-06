@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { SubQuestion } from "@/lib/types/funnel";
 
 interface FunnelPanelProps {
@@ -15,6 +15,10 @@ interface FunnelPanelProps {
     }
   ) => void;
   onExecuteQuery?: (questionId: string) => void;
+  onMarkComplete?: (questionId: string) => void;
+  onQueryResult?: (questionId: string, results: any[]) => void;
+  initialResults?: any[] | null;
+  previousSqlQueries?: string[];
   selectedModelId: string;
 }
 
@@ -24,6 +28,10 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   onEditQuestion,
   onEditSql,
   onExecuteQuery,
+  onMarkComplete,
+  onQueryResult,
+  initialResults,
+  previousSqlQueries = [],
   selectedModelId,
 }) => {
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
@@ -48,6 +56,69 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     validationNotes: false,
     template: false,
   });
+  const [resultsCleared, setResultsCleared] = useState(false);
+
+  useEffect(() => {
+    // Reset all result-related states when navigating to a different sub-question
+    setResultsCleared(false);
+    setQueryResult(null);
+    setExecutionError(null);
+    setResultViewMode("json");
+  }, [subQuestion.id]);
+
+  // Load initial results when they are provided
+  useEffect(() => {
+    if (initialResults !== undefined) {
+      setQueryResult(initialResults);
+    }
+  }, [initialResults]);
+
+  const handleMarkComplete = async () => {
+    if (!onMarkComplete) return;
+
+    // Check if SQL query exists before allowing completion
+    if (!subQuestion.sqlQuery || subQuestion.sqlQuery.trim() === "") {
+      const shouldProceed = window.confirm(
+        "This sub-question has no SQL query generated yet. Are you sure you want to mark it as complete?\n\n" +
+          "Consider generating and executing a SQL query first to ensure the analysis is thorough."
+      );
+
+      if (!shouldProceed) {
+        return;
+      }
+    }
+
+    try {
+      // Update status in database
+      const response = await fetch(
+        `/api/ai/funnel/subquestions/${subQuestion.id.replace(
+          "sq-",
+          ""
+        )}/status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: "completed",
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to mark as complete");
+      }
+
+      // Call the parent callback
+      onMarkComplete(subQuestion.id);
+      console.log("✅ Sub-question marked as complete");
+    } catch (error: any) {
+      console.error("Error marking as complete:", error);
+      alert(`Failed to mark as complete: ${error.message}`);
+    }
+  };
 
   const handleQuestionSave = async () => {
     if (!editedQuestion.trim()) {
@@ -114,6 +185,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     }
 
     setIsSavingSql(true);
+
+    // Clear results when SQL is manually edited and saved
+    setQueryResult(null);
+    setExecutionError(null);
+    setResultsCleared(true);
+
     try {
       // Update in database cache
       const response = await fetch(
@@ -162,6 +239,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     }
 
     setIsGeneratingSql(true);
+
+    // Clear results when SQL is regenerated
+    setQueryResult(null);
+    setExecutionError(null);
+    setResultsCleared(true);
+
     try {
       console.log("Generating SQL for question:", subQuestion.text);
 
@@ -172,7 +255,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         },
         body: JSON.stringify({
           subQuestion: subQuestion.text,
-          previousQueries: [], // TODO: Pass previous queries for context
+          previousQueries: previousSqlQueries,
           assessmentFormDefinition: assessmentFormDefinition || {},
           databaseSchemaContext: "", // TODO: Pass actual schema context
           modelId: selectedModelId,
@@ -247,11 +330,15 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     setIsExecuting(true);
     setExecutionError(null);
     setQueryResult(null);
+    setResultsCleared(false); // Reset cleared flag when executing new query
     try {
       const response = await fetch("/api/ai/execute-query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: subQuestion.sqlQuery }),
+        body: JSON.stringify({
+          query: subQuestion.sqlQuery,
+          subQuestionId: subQuestion.id.replace("sq-", ""),
+        }),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -260,6 +347,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       const result = await response.json();
       setQueryResult(result.data || []);
       setResultViewMode("table");
+      if (onQueryResult) {
+        onQueryResult(subQuestion.id, result.data || []);
+      }
     } catch (err: any) {
       setExecutionError(err.message);
     } finally {
@@ -393,6 +483,26 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           >
             {subQuestion.status}
           </span>
+          {onMarkComplete && subQuestion.status !== "completed" && (
+            <button
+              onClick={handleMarkComplete}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                  ? "bg-green-500 text-white hover:bg-green-600"
+                  : "bg-yellow-500 text-white hover:bg-yellow-600"
+              }`}
+              title={
+                subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                  ? "Mark this sub-question as complete"
+                  : "Mark as complete (no SQL query generated yet)"
+              }
+            >
+              ✓{" "}
+              {subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                ? "Mark Sub-Question Complete"
+                : "Mark Complete (No SQL)"}
+            </button>
+          )}
         </div>
         {subQuestion.lastExecutionDate && (
           <span className="text-xs text-gray-500">
@@ -730,9 +840,39 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           </div>
         ) : !isExecuting && !executionError ? (
           <div className="text-xs text-gray-400 italic">
-            No results yet. Click Execute to run the query.
+            {resultsCleared
+              ? "Results cleared due to SQL changes. Click Execute to run the updated query."
+              : subQuestion.sqlQuery
+              ? "No results yet. Click Execute to run the query."
+              : "No SQL query generated yet. Generate SQL first, then execute to see results."}
           </div>
         ) : null}
+
+        {/* Mark as Complete button below Results */}
+        {onMarkComplete && subQuestion.status !== "completed" && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <button
+              onClick={handleMarkComplete}
+              className={`w-full px-4 py-2 text-sm rounded transition-colors flex items-center justify-center space-x-2 ${
+                subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                  ? "bg-green-500 text-white hover:bg-green-600"
+                  : "bg-yellow-500 text-white hover:bg-yellow-600"
+              }`}
+              title={
+                subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                  ? "Mark this sub-question as complete"
+                  : "Mark as complete (no SQL query generated yet)"
+              }
+            >
+              <span>✓</span>
+              <span>
+                {subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                  ? "Mark as Complete"
+                  : "Mark Complete (No SQL)"}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

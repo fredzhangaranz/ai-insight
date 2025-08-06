@@ -39,7 +39,13 @@ import { shapeDataForChart } from "@/lib/data-shaper";
 // --- TYPE DEFINITIONS ---
 type FormField = { fieldtype: string; options: string[] };
 type AssessmentFormDefinition = { [key: string]: FormField };
-type InsightQuestion = { text: string; type: "single-patient" | "all-patient" };
+type InsightQuestion = {
+  text: string;
+  type: "single-patient" | "all-patient";
+  isCustom?: boolean;
+  originalQuestionId?: string | null;
+  id?: number;
+};
 type InsightCategory = { category: string; questions: InsightQuestion[] };
 type InsightsResponse = { insights: InsightCategory[] };
 
@@ -93,6 +99,32 @@ export default function AnalysisPage({
   const [availableMappings, setAvailableMappings] = useState<
     Record<string, any>
   >({});
+
+  // State for custom questions
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [showAddQuestionForm, setShowAddQuestionForm] = useState<string | null>(
+    null
+  );
+  const [newQuestionText, setNewQuestionText] = useState("");
+  const [newQuestionType, setNewQuestionType] = useState<
+    "single-patient" | "all-patient"
+  >("all-patient");
+  const [isAddingQuestion, setIsAddingQuestion] = useState(false);
+
+  // State for editing questions
+  const [editingQuestion, setEditingQuestion] = useState<{
+    id: number;
+    text: string;
+    type: "single-patient" | "all-patient";
+    originalQuestionId?: string | null;
+    isAIQuestion?: boolean;
+    category?: string;
+  } | null>(null);
+  const [editQuestionText, setEditQuestionText] = useState("");
+  const [editQuestionType, setEditQuestionType] = useState<
+    "single-patient" | "all-patient"
+  >("all-patient");
+  const [isEditingQuestion, setIsEditingQuestion] = useState(false);
 
   // Handle chart type changes
   const handleChartTypeChange = (value: ChartType) => {
@@ -160,6 +192,8 @@ export default function AnalysisPage({
   }, [assessmentFormId]);
 
   const handleQuestionSelect = (question: InsightQuestion) => {
+    console.log("Question selected:", question);
+    console.log("assessmentFormId:", assessmentFormId);
     setCurrentQuestion(question);
     setCurrentPatientId(null); // Reset patient ID on new question
 
@@ -330,6 +364,154 @@ export default function AnalysisPage({
     setTableData(null);
     setRecommendedChartType(null);
   };
+
+  // Handle custom question functionality
+  const handleAddQuestionClick = (category: string) => {
+    setShowAddQuestionForm(category);
+    setNewQuestionText("");
+    setNewQuestionType("all-patient");
+  };
+
+  const handleCancelAddQuestion = () => {
+    setShowAddQuestionForm(null);
+    setNewQuestionText("");
+    setNewQuestionType("all-patient");
+  };
+
+  const handleSaveCustomQuestion = async (category: string) => {
+    if (!newQuestionText.trim()) {
+      return;
+    }
+
+    setIsAddingQuestion(true);
+    try {
+      const response = await fetch(
+        `/api/assessment-forms/${assessmentFormId}/custom-questions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            category,
+            questionText: newQuestionText.trim(),
+            questionType: newQuestionType,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to add custom question.");
+      }
+
+      // Refresh insights to include the new custom question (without regenerating AI insights)
+      await fetchData(false);
+
+      // Reset form
+      setShowAddQuestionForm(null);
+      setNewQuestionText("");
+      setNewQuestionType("all-patient");
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setState("error");
+    } finally {
+      setIsAddingQuestion(false);
+    }
+  };
+
+  // Handle editing questions
+  const handleEditQuestionClick = (
+    question: InsightQuestion,
+    questionIndex: number,
+    category: string
+  ) => {
+    // For AI questions, we'll create a new custom question entry
+    // For custom questions, we'll update the existing entry
+    const isAIQuestion = !question.isCustom;
+
+    setEditingQuestion({
+      id: question.id || 0, // 0 for AI questions that don't have DB ID yet
+      text: question.text,
+      type: question.type,
+      originalQuestionId: isAIQuestion
+        ? `ai-question-${questionIndex}`
+        : question.originalQuestionId,
+      isAIQuestion, // Track if this is an AI question being edited
+      category, // Store the category for AI questions
+    });
+    setEditQuestionText(question.text);
+    setEditQuestionType(question.type);
+  };
+
+  const handleCancelEditQuestion = () => {
+    setEditingQuestion(null);
+    setEditQuestionText("");
+    setEditQuestionType("all-patient");
+  };
+
+  const handleSaveEditQuestion = async () => {
+    if (!editingQuestion || !editQuestionText.trim()) {
+      return;
+    }
+
+    setIsEditingQuestion(true);
+    try {
+      let response;
+
+      if (editingQuestion.isAIQuestion) {
+        // For AI questions, create a new custom question entry
+        response = await fetch(
+          `/api/assessment-forms/${assessmentFormId}/custom-questions`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              category: editingQuestion.category || "",
+              questionText: editQuestionText.trim(),
+              questionType: editQuestionType,
+              originalQuestionId: editingQuestion.originalQuestionId,
+            }),
+          }
+        );
+      } else {
+        // For custom questions, update the existing entry
+        response = await fetch(
+          `/api/assessment-forms/${assessmentFormId}/custom-questions/${editingQuestion.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              questionText: editQuestionText.trim(),
+              questionType: editQuestionType,
+            }),
+          }
+        );
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to save edited question.");
+      }
+
+      // Refresh insights to include the edited question
+      await fetchData(false);
+
+      // Reset edit state
+      setEditingQuestion(null);
+      setEditQuestionText("");
+      setEditQuestionType("all-patient");
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setState("error");
+    } finally {
+      setIsEditingQuestion(false);
+    }
+  };
   const renderLoadingState = (title: string, subtitle: string) => (
     <Card className="border-slate-200 bg-white shadow-sm">
       <CardContent className="p-8 text-center">
@@ -408,11 +590,17 @@ export default function AnalysisPage({
                 </div>
               </CardHeader>
               <CardContent>
-                <Accordion type="single" collapsible className="space-y-2">
+                <Accordion
+                  type="single"
+                  collapsible
+                  className="space-y-2"
+                  value={expandedCategory || undefined}
+                  onValueChange={setExpandedCategory}
+                >
                   {insights.insights.map((cat, index) => (
                     <AccordionItem
                       key={index}
-                      value={`item-${index}`}
+                      value={cat.category}
                       className="border border-slate-200 rounded-lg px-4"
                     >
                       <AccordionTrigger className="text-left font-semibold text-slate-900 hover:no-underline">
@@ -422,21 +610,217 @@ export default function AnalysisPage({
                         {cat.questions.map((question, qIndex) => (
                           <div
                             key={qIndex}
-                            onClick={() => handleQuestionSelect(question)}
-                            className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
+                            className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 flex items-center justify-between"
                           >
-                            <p className="text-slate-700 hover:text-blue-700 font-medium flex-1">
-                              {question.text}
-                            </p>
-                            {question.type === "single-patient" && (
-                              <UserIcon className="w-5 h-5 text-slate-400 ml-4" />
-                            )}
+                            <div
+                              className="flex-1 cursor-pointer"
+                              onClick={() => handleQuestionSelect(question)}
+                            >
+                              <p className="text-slate-700 hover:text-blue-700 font-medium">
+                                {question.text}
+                              </p>
+                            </div>
+                            <div className="flex items-center space-x-2 ml-4">
+                              {question.type === "single-patient" && (
+                                <UserIcon className="w-5 h-5 text-slate-400" />
+                              )}
+                              {/* Custom/Modified question indicator */}
+                              {question.isCustom && (
+                                <div className="flex items-center space-x-1 bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
+                                  <SparklesIcon className="w-3 h-3" />
+                                  <span>
+                                    {question.originalQuestionId
+                                      ? "Modified"
+                                      : "Custom"}
+                                  </span>
+                                </div>
+                              )}
+                              {/* Edit button - for all questions */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditQuestionClick(
+                                    question,
+                                    qIndex,
+                                    cat.category
+                                  );
+                                }}
+                                className="text-slate-400 hover:text-slate-600"
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                  />
+                                </svg>
+                              </Button>
+                            </div>
                           </div>
                         ))}
+
+                        {/* Add your own question button */}
+                        <div className="pt-2 border-t border-slate-200">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddQuestionClick(cat.category)}
+                            className="w-full text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100"
+                          >
+                            <SparklesIcon className="w-4 h-4 mr-2" />
+                            Add your own question
+                          </Button>
+                        </div>
+
+                        {/* Add question form */}
+                        {showAddQuestionForm === cat.category && (
+                          <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Your Question
+                                </label>
+                                <textarea
+                                  value={newQuestionText}
+                                  onChange={(e) =>
+                                    setNewQuestionText(e.target.value)
+                                  }
+                                  placeholder="Enter your custom question..."
+                                  className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  rows={3}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Question Type
+                                </label>
+                                <select
+                                  value={newQuestionType}
+                                  onChange={(e) =>
+                                    setNewQuestionType(
+                                      e.target.value as
+                                        | "single-patient"
+                                        | "all-patient"
+                                    )
+                                  }
+                                  className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="all-patient">
+                                    All Patients
+                                  </option>
+                                  <option value="single-patient">
+                                    Single Patient
+                                  </option>
+                                </select>
+                              </div>
+
+                              <div className="flex space-x-2">
+                                <Button
+                                  onClick={() =>
+                                    handleSaveCustomQuestion(cat.category)
+                                  }
+                                  disabled={
+                                    !newQuestionText.trim() || isAddingQuestion
+                                  }
+                                  size="sm"
+                                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                                >
+                                  {isAddingQuestion
+                                    ? "Saving..."
+                                    : "Save Question"}
+                                </Button>
+                                <Button
+                                  onClick={handleCancelAddQuestion}
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={isAddingQuestion}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </AccordionContent>
                     </AccordionItem>
                   ))}
                 </Accordion>
+
+                {/* Edit question form */}
+                {editingQuestion && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                      <h3 className="text-lg font-semibold mb-4">
+                        Edit Question
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Question Text
+                          </label>
+                          <textarea
+                            value={editQuestionText}
+                            onChange={(e) =>
+                              setEditQuestionText(e.target.value)
+                            }
+                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            rows={3}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Question Type
+                          </label>
+                          <select
+                            value={editQuestionType}
+                            onChange={(e) =>
+                              setEditQuestionType(
+                                e.target.value as
+                                  | "single-patient"
+                                  | "all-patient"
+                              )
+                            }
+                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="all-patient">All Patients</option>
+                            <option value="single-patient">
+                              Single Patient
+                            </option>
+                          </select>
+                        </div>
+
+                        <div className="flex space-x-2 pt-4">
+                          <Button
+                            onClick={handleSaveEditQuestion}
+                            disabled={
+                              !editQuestionText.trim() || isEditingQuestion
+                            }
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            {isEditingQuestion ? "Saving..." : "Save Changes"}
+                          </Button>
+                          <Button
+                            onClick={handleCancelEditQuestion}
+                            variant="outline"
+                            disabled={isEditingQuestion}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )
