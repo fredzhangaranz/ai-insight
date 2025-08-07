@@ -6,6 +6,8 @@ import {
   SubQuestionGenerationResponse,
   GenerateQueryRequest,
   GenerateQueryResponse,
+  GenerateChartRecommendationsRequest,
+  GenerateChartRecommendationsResponse,
 } from "./i-query-funnel-provider";
 import {
   constructFunnelSubquestionsPrompt,
@@ -15,6 +17,10 @@ import {
   constructFunnelSqlPrompt,
   validateFunnelSqlResponse,
 } from "@/lib/prompts/funnel-sql.prompt";
+import {
+  constructChartRecommendationsPrompt,
+  validateChartRecommendationsResponse,
+} from "@/lib/prompts/chart-recommendations.prompt";
 import { MetricsMonitor } from "@/lib/monitoring";
 
 /**
@@ -271,6 +277,61 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         throw new Error("AI returned invalid SQL generation format");
       }
       this.validateSqlQuery(parsedResponse.generatedSql);
+
+      await metrics.logAIMetrics({
+        promptTokens: aiResponse.usage.input_tokens,
+        completionTokens: aiResponse.usage.output_tokens,
+        totalTokens:
+          aiResponse.usage.input_tokens + aiResponse.usage.output_tokens,
+        latency: Date.now() - aiStartTime,
+        success: true,
+        model: this.modelId,
+        timestamp: new Date(),
+      });
+
+      return parsedResponse;
+    } catch (error: any) {
+      await metrics.logAIMetrics({
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        latency: Date.now() - aiStartTime,
+        success: false,
+        errorType: error.name || "UnknownError",
+        model: this.modelId,
+        timestamp: new Date(),
+      });
+      throw error;
+    }
+  }
+
+  public async generateChartRecommendations(
+    request: GenerateChartRecommendationsRequest
+  ): Promise<GenerateChartRecommendationsResponse> {
+    const metrics = MetricsMonitor.getInstance();
+    const aiStartTime = Date.now();
+
+    try {
+      const schemaContext = this.getDatabaseSchemaContext();
+      const prompt = constructChartRecommendationsPrompt(
+        request.subQuestion,
+        request.sqlQuery,
+        request.queryResults,
+        request.assessmentFormDefinition,
+        schemaContext
+      );
+      console.log("AI Prompt for chart recommendations:", prompt);
+      const aiResponse = await this._executeModel(
+        prompt,
+        "Please generate chart recommendations for this SQL query and its results."
+      );
+
+      const parsedResponse = await this.parseJsonResponse<any>(
+        aiResponse.responseText
+      );
+      if (!validateChartRecommendationsResponse(parsedResponse)) {
+        throw new Error("AI returned invalid chart recommendations format");
+      }
 
       await metrics.logAIMetrics({
         promptTokens: aiResponse.usage.input_tokens,

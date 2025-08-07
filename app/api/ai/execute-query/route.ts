@@ -7,6 +7,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDbPool } from "@/lib/db";
+import {
+  withErrorHandling,
+  createErrorResponse,
+} from "@/app/api/error-handler";
 
 /**
  * Validates and fixes common SQL Server issues in generated queries
@@ -44,90 +48,75 @@ function validateAndFixQuery(sql: string): string {
   return sql;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    // 1. Read and validate the request body
-    const body = await request.json();
-    // Now accepts the query template, an optional parameters object, and optional subQuestionId
-    const { query, params, subQuestionId } = body;
+async function executeQueryHandler(
+  request: NextRequest
+): Promise<NextResponse> {
+  // 1. Read and validate the request body
+  const body = await request.json();
+  // Now accepts the query template, an optional parameters object, and optional subQuestionId
+  const { query, params, subQuestionId } = body;
 
-    if (!query || typeof query !== "string") {
-      return NextResponse.json(
-        { message: "A 'query' string is required in the request body." },
-        { status: 400 }
-      );
-    }
-    console.log("Query params:", params);
-    console.log("Executing query:", query);
-    console.log("Sub-question ID:", subQuestionId);
-
-    // 2. Security Check: Ensure it's a read-only SELECT statement.
-    // A simple but crucial check to prevent modifications.
-    const upperQuery = query.trim().toUpperCase();
-    if (!upperQuery.startsWith("SELECT") && !upperQuery.startsWith("WITH")) {
-      return NextResponse.json(
-        {
-          message: "Invalid query. Only SELECT or WITH statements are allowed.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // 3. Execute the query
-    const pool = await getDbPool();
-    const dbRequest = pool.request();
-
-    // 3a. Validate and fix the query
-    const fixedQuery = validateAndFixQuery(query);
-    if (fixedQuery !== query) {
-      console.log(
-        "Query was modified for SQL Server compatibility:",
-        fixedQuery
-      );
-    }
-
-    // 3b. Safely add parameters to the request if they exist
-    if (params && typeof params === "object") {
-      for (const key in params) {
-        // The mssql library will determine the SQL type based on the JS type.
-        // For a production app, we might add explicit type mapping here.
-        dbRequest.input(key, params[key]);
-      }
-    }
-
-    // 3c. Execute the fixed query with the bound parameters
-    const result = await dbRequest.query(fixedQuery);
-
-    console.log("Query execution result:", result);
-
-    // 4. If subQuestionId is provided and query returned results, update status to completed
-    if (subQuestionId && result.recordset && result.recordset.length > 0) {
-      try {
-        const { updateSubQuestionStatus } = await import(
-          "@/lib/services/funnel-storage.service"
-        );
-        await updateSubQuestionStatus(Number(subQuestionId), "completed");
-        console.log(
-          `Updated sub-question ${subQuestionId} status to completed`
-        );
-      } catch (statusUpdateError) {
-        console.error(
-          "Failed to update sub-question status:",
-          statusUpdateError
-        );
-        // Don't fail the entire request if status update fails
-      }
-    }
-
-    // 5. Return the data
-    return NextResponse.json({
-      data: result.recordset,
-    });
-  } catch (error: any) {
-    console.error("API Error in /ai/execute-query:", error);
-    return NextResponse.json(
-      { message: "Failed to execute query.", error: error.message },
-      { status: 500 }
+  if (!query || typeof query !== "string") {
+    return createErrorResponse.badRequest(
+      "A 'query' string is required in the request body."
     );
   }
+
+  console.log("Query params:", params);
+  console.log("Executing query:", query);
+  console.log("Sub-question ID:", subQuestionId);
+
+  // 2. Security Check: Ensure it's a read-only SELECT statement.
+  // A simple but crucial check to prevent modifications.
+  const upperQuery = query.trim().toUpperCase();
+  if (!upperQuery.startsWith("SELECT") && !upperQuery.startsWith("WITH")) {
+    return createErrorResponse.badRequest(
+      "Invalid query. Only SELECT or WITH statements are allowed."
+    );
+  }
+
+  // 3. Execute the query
+  const pool = await getDbPool();
+  const dbRequest = pool.request();
+
+  // 3a. Validate and fix the query
+  const fixedQuery = validateAndFixQuery(query);
+  if (fixedQuery !== query) {
+    console.log("Query was modified for SQL Server compatibility:", fixedQuery);
+  }
+
+  // 3b. Safely add parameters to the request if they exist
+  if (params && typeof params === "object") {
+    for (const key in params) {
+      // The mssql library will determine the SQL type based on the JS type.
+      // For a production app, we might add explicit type mapping here.
+      dbRequest.input(key, params[key]);
+    }
+  }
+
+  // 3c. Execute the fixed query with the bound parameters
+  const result = await dbRequest.query(fixedQuery);
+
+  console.log("Query execution result:", result);
+
+  // 4. If subQuestionId is provided and query returned results, update status to completed
+  if (subQuestionId && result.recordset && result.recordset.length > 0) {
+    try {
+      const { updateSubQuestionStatus } = await import(
+        "@/lib/services/funnel-storage.service"
+      );
+      await updateSubQuestionStatus(Number(subQuestionId), "completed");
+      console.log(`Updated sub-question ${subQuestionId} status to completed`);
+    } catch (statusUpdateError) {
+      console.error("Failed to update sub-question status:", statusUpdateError);
+      // Don't fail the entire request if status update fails
+    }
+  }
+
+  // 5. Return the data
+  return NextResponse.json({
+    data: result.recordset,
+  });
 }
+
+export const POST = withErrorHandling(executeQueryHandler);

@@ -1,43 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as FunnelStorage from "@/lib/services/funnel-storage.service";
 import type { SubQuestionStatus } from "@/lib/types/funnel";
+import {
+  withErrorHandling,
+  createErrorResponse,
+} from "@/app/api/error-handler";
 
 // PUT /api/ai/funnel/subquestions/[id]/status - Update sub-question status
-export async function PUT(
+async function updateStatusHandler(
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
+): Promise<NextResponse> {
+  const body = await request.json();
+  const { status } = body;
+  const id = Number(params.id);
+
+  if (!id || isNaN(id)) {
+    return createErrorResponse.badRequest("Invalid sub-question ID.");
+  }
+
+  if (
+    !status ||
+    !["pending", "running", "completed", "failed"].includes(status)
+  ) {
+    return createErrorResponse.validationError(
+      "Valid status is required (pending, running, completed, failed)."
+    );
+  }
+
   try {
-    const body = await request.json();
-    const { status } = body;
-    const id = Number(params.id);
-
-    if (!id || isNaN(id)) {
-      return NextResponse.json(
-        { error: "Invalid sub-question ID." },
-        { status: 400 }
-      );
-    }
-
-    if (
-      !status ||
-      !["pending", "running", "completed", "failed"].includes(status)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Valid status is required (pending, running, completed, failed).",
-        },
-        { status: 400 }
-      );
-    }
-
     await FunnelStorage.updateSubQuestionStatus(
       id,
       status as SubQuestionStatus
     );
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (error: any) {
+    console.error("Error updating sub-question status:", error);
+
+    // Check if it's a database error
+    if (error.message?.includes("database") || error.code === "ECONNREFUSED") {
+      return createErrorResponse.databaseError(
+        "Failed to update sub-question status. Database connection error.",
+        error
+      );
+    }
+
+    // Re-throw to be handled by the wrapper
+    throw error;
   }
 }
+
+export const PUT = withErrorHandling(updateStatusHandler);

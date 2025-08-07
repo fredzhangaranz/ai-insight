@@ -108,6 +108,32 @@
 
 ---
 
+## CRITICAL: How to Query Wound State
+
+The 'Wound State' (e.g., 'Open', 'Healed', 'Closed') is a special attribute and **MUST NOT** be queried from the `rpt.Note` table. It has its own dedicated tables: `rpt.WoundState` and `rpt.WoundStateType`.
+
+To find wounds in a specific state, you must join `rpt.Wound` with `rpt.WoundState` and `rpt.WoundStateType`.
+
+### Correct Query Pattern for Wound State
+
+To get all wounds that are currently in an 'Open' state:
+
+**✅ CORRECT:**
+
+```sql
+SELECT w.*
+FROM rpt.Wound w
+JOIN rpt.WoundState ws ON w.id = ws.woundFk AND ws.isCurrentState = 1
+JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id AND wst.name = 'Open';
+```
+
+**❌ INCORRECT (Do NOT do this):**
+
+```sql
+-- This is wrong because 'Wound State' is not in the Note table.
+SELECT * FROM rpt.Note N JOIN rpt.AttributeType AT ON N.attributeTypeFk = AT.id WHERE AT.name = 'Wound State' AND N.value = 'Open';
+```
+
 ## Query Guidelines and Best Practices
 
 ### 1. Form Field Data Access (rpt.Note)

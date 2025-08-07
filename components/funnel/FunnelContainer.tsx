@@ -143,24 +143,11 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
         ) {
           console.log("✅ Found cached sub-questions, loading them...");
 
-          // Transform API response to our SubQuestion format
-          const transformedSubQuestions: SubQuestion[] =
-            result.subQuestions.map((sq: any) => ({
-              id: `sq-${sq.id || sq.order}`,
-              text: sq.questionText,
-              order: sq.order,
-              status: sq.status || "pending",
-              sqlQuery: sq.sqlQuery || "",
-              data: [],
-              lastExecutionDate: sq.lastExecutionDate
-                ? new Date(sq.lastExecutionDate)
-                : undefined,
-            }));
-
-          setCurrentSubQuestions(transformedSubQuestions);
+          // The caching service now returns the correct SubQuestion format
+          setCurrentSubQuestions(result.subQuestions);
           setCurrentIndex(0);
           console.log(
-            `✅ Loaded ${transformedSubQuestions.length} cached sub-questions`
+            `✅ Loaded ${result.subQuestions.length} cached sub-questions`
           );
         } else {
           console.log("ℹ️ No cached sub-questions found, showing empty state");
@@ -277,31 +264,11 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
         throw new Error(result.error);
       }
 
-      // Transform API response to our SubQuestion format
-      const transformedSubQuestions: SubQuestion[] = result.subQuestions.map(
-        (sq: any) => ({
-          id: `sq-${sq.id || sq.order}`,
-          text: sq.questionText,
-          order: sq.order,
-          status: sq.status || "pending",
-          sqlQuery: sq.sqlQuery || "",
-          sqlExplanation: sq.sqlExplanation,
-          sqlValidationNotes: sq.sqlValidationNotes,
-          sqlMatchedTemplate: sq.sqlMatchedTemplate,
-          data: [],
-          lastExecutionDate: sq.lastExecutionDate
-            ? new Date(sq.lastExecutionDate)
-            : undefined,
-        })
-      );
-
-      setCurrentSubQuestions(transformedSubQuestions);
+      // The caching service now returns the correct SubQuestion format
+      setCurrentSubQuestions(result.subQuestions);
       setCurrentIndex(0); // Reset to first question
 
-      console.log(
-        "Sub-questions transformed and set:",
-        transformedSubQuestions
-      );
+      console.log("Sub-questions set:", result.subQuestions);
     } catch (error: any) {
       console.error("Failed to generate sub-questions:", error);
       let errorMessage = "Failed to generate sub-questions";

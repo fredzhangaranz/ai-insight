@@ -5,19 +5,31 @@ import {
   createErrorResponse,
 } from "@/app/api/error-handler";
 
-async function generateQueryHandler(
+async function generateChartHandler(
   request: NextRequest
 ): Promise<NextResponse> {
   const body = await request.json();
   const {
+    sqlQuery,
+    queryResults,
     subQuestion,
-    previousQueries,
     assessmentFormDefinition,
-    databaseSchemaContext,
     modelId,
   } = body;
 
   // Validate required fields
+  if (!sqlQuery || typeof sqlQuery !== "string") {
+    return createErrorResponse.badRequest(
+      "sqlQuery is required and must be a string"
+    );
+  }
+
+  if (!queryResults || !Array.isArray(queryResults)) {
+    return createErrorResponse.badRequest(
+      "queryResults is required and must be an array"
+    );
+  }
+
   if (!subQuestion || typeof subQuestion !== "string") {
     return createErrorResponse.badRequest(
       "subQuestion is required and must be a string"
@@ -31,35 +43,36 @@ async function generateQueryHandler(
   }
 
   try {
-    console.log("Generating SQL for sub-question:", subQuestion);
+    console.log("Generating chart recommendations for:", subQuestion);
     console.log("Using model:", modelId);
+    console.log("Query results count:", queryResults.length);
 
     // Create AI provider instance
     const provider = getAIProvider(modelId);
 
-    // Generate SQL query
-    const result = await provider.generateQuery({
+    // Generate chart recommendations based on SQL results
+    const result = await provider.generateChartRecommendations({
+      sqlQuery,
+      queryResults,
       subQuestion,
-      previousQueries: previousQueries || [],
       assessmentFormDefinition: assessmentFormDefinition || {},
-      databaseSchemaContext: databaseSchemaContext || "",
     });
 
-    console.log("✅ SQL generated successfully");
+    console.log("✅ Chart recommendations generated successfully");
 
     return NextResponse.json({
-      generatedSql: result.generatedSql,
+      recommendedChartType: result.recommendedChartType,
+      availableMappings: result.availableMappings,
       explanation: result.explanation,
-      validationNotes: result.validationNotes,
-      matchedQueryTemplate: result.matchedQueryTemplate,
+      chartTitle: result.chartTitle,
     });
   } catch (error: any) {
-    console.error("Error generating SQL:", error);
+    console.error("Error generating chart recommendations:", error);
 
     // Check if it's an AI service error
     if (error.message?.includes("AI") || error.message?.includes("model")) {
       return createErrorResponse.aiServiceError(
-        "Failed to generate SQL query. The AI service is currently unavailable.",
+        "Failed to generate chart recommendations. The AI service is currently unavailable.",
         error
       );
     }
@@ -69,4 +82,4 @@ async function generateQueryHandler(
   }
 }
 
-export const POST = withErrorHandling(generateQueryHandler);
+export const POST = withErrorHandling(generateChartHandler);

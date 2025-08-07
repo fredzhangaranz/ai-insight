@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from "react";
 import type { SubQuestion } from "@/lib/types/funnel";
+import { useErrorHandler } from "@/lib/error-handler";
+import {
+  ChartComponent,
+  type ChartDataType,
+} from "@/app/components/charts/chart-component";
+import { shapeDataForChart } from "@/lib/data-shaper";
+import type { ChartType } from "@/lib/chart-contracts";
+import { ChartGenerationModal } from "./ChartGenerationModal";
 
 interface FunnelPanelProps {
   subQuestion: SubQuestion;
@@ -34,6 +42,8 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   previousSqlQueries = [],
   selectedModelId,
 }) => {
+  const { handleError, handleSuccess } = useErrorHandler();
+
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
   const [isEditingSql, setIsEditingSql] = useState(false);
   const [editedQuestion, setEditedQuestion] = useState(subQuestion.text);
@@ -57,6 +67,23 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     template: false,
   });
   const [resultsCleared, setResultsCleared] = useState(false);
+
+  // Chart generation state
+  const [isGeneratingChart, setIsGeneratingChart] = useState(false);
+  const [chartRecommendations, setChartRecommendations] = useState<{
+    recommendedChartType: ChartType;
+    availableMappings: Record<string, any>;
+    explanation: string;
+    chartTitle: string;
+  } | null>(null);
+  const [selectedChartType, setSelectedChartType] = useState<ChartType | null>(
+    null
+  );
+  const [chartData, setChartData] = useState<ChartDataType | null>(null);
+  const [chartViewMode, setChartViewMode] = useState<"chart" | "data">("data");
+
+  // Manual chart generation modal state
+  const [isChartModalOpen, setIsChartModalOpen] = useState(false);
 
   useEffect(() => {
     // Reset all result-related states when navigating to a different sub-question
@@ -108,21 +135,21 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to mark as complete");
+        throw new Error(errorData.message || "Failed to mark as complete");
       }
 
       // Call the parent callback
       onMarkComplete(subQuestion.id);
+      handleSuccess("Sub-question marked as complete", "Mark Complete");
       console.log("✅ Sub-question marked as complete");
     } catch (error: any) {
-      console.error("Error marking as complete:", error);
-      alert(`Failed to mark as complete: ${error.message}`);
+      handleError(error, "Mark Complete");
     }
   };
 
   const handleQuestionSave = async () => {
     if (!editedQuestion.trim()) {
-      alert("Question text cannot be empty");
+      handleError(new Error("Question text cannot be empty"), "Save Question");
       return;
     }
 
@@ -147,7 +174,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save question");
+        throw new Error(errorData.message || "Failed to save question");
       }
 
       // Update local state
@@ -164,10 +191,10 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       setResultViewMode("json");
       setIsEditingQuestion(false);
 
+      handleSuccess("Question saved successfully", "Save Question");
       console.log("✅ Question saved successfully");
     } catch (error: any) {
-      console.error("Error saving question:", error);
-      alert(`Failed to save question: ${error.message}`);
+      handleError(error, "Save Question");
     } finally {
       setIsSavingQuestion(false);
     }
@@ -180,7 +207,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
   const handleSqlSave = async () => {
     if (!editedSql.trim()) {
-      alert("SQL query cannot be empty");
+      handleError(new Error("SQL query cannot be empty"), "Save SQL");
       return;
     }
 
@@ -208,7 +235,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save SQL");
+        throw new Error(errorData.message || "Failed to save SQL");
       }
 
       // Update local state
@@ -218,10 +245,10 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
       setIsEditingSql(false);
 
+      handleSuccess("SQL saved successfully", "Save SQL");
       console.log("✅ SQL saved successfully");
     } catch (error: any) {
-      console.error("Error saving SQL:", error);
-      alert(`Failed to save SQL: ${error.message}`);
+      handleError(error, "Save SQL");
     } finally {
       setIsSavingSql(false);
     }
@@ -234,7 +261,10 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
   const handleGenerateSql = async () => {
     if (!subQuestion.text.trim()) {
-      alert("Cannot generate SQL for empty question");
+      handleError(
+        new Error("Cannot generate SQL for empty question"),
+        "Generate SQL"
+      );
       return;
     }
 
@@ -264,7 +294,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate SQL");
+        throw new Error(errorData.message || "Failed to generate SQL");
       }
 
       const result = await response.json();
@@ -301,7 +331,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
       if (!saveResponse.ok) {
         const errorData = await saveResponse.json();
-        throw new Error(errorData.error || "Failed to save generated SQL");
+        throw new Error(errorData.message || "Failed to save generated SQL");
       }
 
       // Update local state with all metadata
@@ -313,10 +343,10 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         });
       }
 
+      handleSuccess("SQL generated and saved successfully", "Generate SQL");
       console.log("✅ SQL generated and saved successfully");
     } catch (error: any) {
-      console.error("Error generating SQL:", error);
-      alert(`Failed to generate SQL: ${error.message}`);
+      handleError(error, "Generate SQL");
     } finally {
       setIsGeneratingSql(false);
     }
@@ -324,7 +354,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
   const handleExecuteSql = async () => {
     if (!subQuestion.sqlQuery) {
-      alert("No SQL query to execute.");
+      handleError(new Error("No SQL query to execute."), "Execute Query");
       return;
     }
     setIsExecuting(true);
@@ -350,11 +380,121 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       if (onQueryResult) {
         onQueryResult(subQuestion.id, result.data || []);
       }
+      handleSuccess("Query executed successfully", "Execute Query");
     } catch (err: any) {
       setExecutionError(err.message);
+      handleError(err, "Execute Query");
     } finally {
       setIsExecuting(false);
     }
+  };
+
+  const handleGenerateChart = async () => {
+    if (!queryResult || queryResult.length === 0) {
+      handleError(
+        new Error("No query results available. Execute the query first."),
+        "Generate Chart"
+      );
+      return;
+    }
+
+    if (!subQuestion.sqlQuery) {
+      handleError(new Error("No SQL query available."), "Generate Chart");
+      return;
+    }
+
+    setIsGeneratingChart(true);
+    try {
+      console.log("Generating chart recommendations for:", subQuestion.text);
+
+      const response = await fetch("/api/ai/funnel/generate-chart", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sqlQuery: subQuestion.sqlQuery,
+          queryResults: queryResult,
+          subQuestion: subQuestion.text,
+          assessmentFormDefinition: assessmentFormDefinition || {},
+          modelId: selectedModelId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.message || "Failed to generate chart recommendations"
+        );
+      }
+
+      const result = await response.json();
+      console.log("Chart recommendations generated:", result);
+
+      setChartRecommendations(result);
+      setSelectedChartType(result.recommendedChartType);
+
+      // Generate the chart data using the recommended chart type
+      await generateChartData(
+        result.recommendedChartType,
+        result.availableMappings[result.recommendedChartType]
+      );
+
+      setChartViewMode("chart");
+      handleSuccess("Chart generated successfully", "Generate Chart");
+    } catch (error: any) {
+      handleError(error, "Generate Chart");
+    } finally {
+      setIsGeneratingChart(false);
+    }
+  };
+
+  const generateChartData = async (chartType: ChartType, mapping: any) => {
+    if (!queryResult || !mapping) {
+      setChartData(null);
+      return;
+    }
+
+    try {
+      if (chartType === "table") {
+        // For table type, use raw data directly
+        setChartData(queryResult);
+      } else {
+        // For other chart types, use the data shaper
+        const shapedData = shapeDataForChart(
+          queryResult,
+          {
+            chartType,
+            mapping,
+          },
+          chartType
+        );
+        setChartData(shapedData);
+      }
+    } catch (error: any) {
+      console.error("Error shaping chart data:", error);
+      handleError(error, "Chart Data Generation");
+      setChartData(null);
+    }
+  };
+
+  const handleChartTypeChange = async (newChartType: ChartType) => {
+    if (
+      !chartRecommendations ||
+      !chartRecommendations.availableMappings[newChartType]
+    ) {
+      handleError(
+        new Error(`No mapping available for chart type: ${newChartType}`),
+        "Change Chart Type"
+      );
+      return;
+    }
+
+    setSelectedChartType(newChartType);
+    await generateChartData(
+      newChartType,
+      chartRecommendations.availableMappings[newChartType]
+    );
   };
 
   const getStatusColor = (status: string) => {
@@ -847,6 +987,169 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
               : "No SQL query generated yet. Generate SQL first, then execute to see results."}
           </div>
         ) : null}
+
+        {/* Chart Generation Section */}
+        {queryResult && queryResult.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700">
+                Chart Visualization
+              </h3>
+              <div className="flex items-center space-x-2">
+                {/* Manual Chart Generation */}
+                <button
+                  onClick={() => setIsChartModalOpen(true)}
+                  className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center space-x-1"
+                  title="Manually create a chart by selecting type and mapping fields"
+                >
+                  <span>📊</span>
+                  <span>Manual Chart</span>
+                </button>
+
+                {/* AI Chart Generation */}
+                {!chartRecommendations && (
+                  <button
+                    onClick={handleGenerateChart}
+                    disabled={isGeneratingChart}
+                    className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+                    title="Let AI recommend the best chart type and mapping"
+                  >
+                    {isGeneratingChart ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                        <span>AI Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🤖</span>
+                        <span>AI Chart</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* AI Chart Display */}
+            {chartRecommendations && (
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-500">AI Recommended:</span>
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    {chartRecommendations.recommendedChartType} Chart
+                  </span>
+                </div>
+
+                {/* Chart Type Selection */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-600">Chart Type:</span>
+                  <select
+                    value={selectedChartType || ""}
+                    onChange={(e) =>
+                      handleChartTypeChange(e.target.value as ChartType)
+                    }
+                    className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                  >
+                    {Object.keys(chartRecommendations.availableMappings).map(
+                      (chartType) => (
+                        <option key={chartType} value={chartType}>
+                          {chartType ===
+                          chartRecommendations.recommendedChartType
+                            ? `${chartType} (Recommended)`
+                            : chartType}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  {/* View Toggle */}
+                  <div className="flex bg-gray-200 rounded-md p-1 ml-2">
+                    <button
+                      onClick={() => setChartViewMode("data")}
+                      className={`px-2 py-1 text-xs rounded transition-colors ${
+                        chartViewMode === "data"
+                          ? "bg-white text-gray-900 shadow-sm"
+                          : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      Data
+                    </button>
+                    <button
+                      onClick={() => setChartViewMode("chart")}
+                      className={`px-2 py-1 text-xs rounded transition-colors ${
+                        chartViewMode === "chart"
+                          ? "bg-white text-gray-900 shadow-sm"
+                          : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      Chart
+                    </button>
+                  </div>
+                </div>
+
+                {/* Chart Explanation */}
+                <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                  <strong>AI Recommendation:</strong>{" "}
+                  {chartRecommendations.explanation}
+                </div>
+
+                {/* Chart Display */}
+                {chartViewMode === "chart" &&
+                  chartData &&
+                  selectedChartType && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">
+                        {chartRecommendations.chartTitle}
+                      </h4>
+                      <div className="h-64">
+                        <ChartComponent
+                          chartType={selectedChartType}
+                          data={chartData}
+                          title={chartRecommendations.chartTitle}
+                          className="w-full h-full"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                {/* Raw Data Display */}
+                {chartViewMode === "data" && (
+                  <div className="bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
+                    <div className="text-xs text-gray-600 mb-2">
+                      Raw data for chart generation ({queryResult.length} rows)
+                    </div>
+                    {renderTableData(queryResult)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Manual Chart Instructions */}
+            {!chartRecommendations && (
+              <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded">
+                <strong>Chart Options:</strong>
+                <ul className="mt-1 space-y-1">
+                  <li>
+                    • <strong>Manual Chart:</strong> Select chart type and map
+                    fields yourself
+                  </li>
+                  <li>
+                    • <strong>AI Chart:</strong> Let AI recommend the best chart
+                    type and mapping
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Manual Chart Generation Modal */}
+        <ChartGenerationModal
+          isOpen={isChartModalOpen}
+          onClose={() => setIsChartModalOpen(false)}
+          queryResults={queryResult || []}
+          subQuestion={subQuestion.text}
+        />
 
         {/* Mark as Complete button below Results */}
         {onMarkComplete && subQuestion.status !== "completed" && (

@@ -41,9 +41,27 @@ export async function getOrGenerateSubQuestions(
     // Get the cached sub-questions
     const cachedSubQuestions = await getSubQuestions(Number(existingFunnel.id));
 
+    // Transform database records to frontend SubQuestion format
+    const transformedSubQuestions: SubQuestion[] = cachedSubQuestions.map(
+      (sq: any) => ({
+        id: `sq-${sq.id}`,
+        text: sq.questionText,
+        order: sq.order,
+        status: sq.status || "pending",
+        sqlQuery: sq.sqlQuery || "",
+        sqlExplanation: sq.sqlExplanation,
+        sqlValidationNotes: sq.sqlValidationNotes,
+        sqlMatchedTemplate: sq.sqlMatchedTemplate,
+        data: [],
+        lastExecutionDate: sq.lastExecutionDate
+          ? new Date(sq.lastExecutionDate)
+          : undefined,
+      })
+    );
+
     return {
       funnelId: Number(existingFunnel.id),
-      subQuestions: cachedSubQuestions,
+      subQuestions: transformedSubQuestions,
       wasCached: true,
     };
   }
@@ -84,9 +102,27 @@ export async function getOrGenerateSubQuestions(
     `Created new funnel ${newFunnel.id} with ${storedSubQuestions.length} sub-questions`
   );
 
+  // Transform stored sub-questions to frontend format
+  const transformedSubQuestions: SubQuestion[] = storedSubQuestions.map(
+    (sq: any) => ({
+      id: `sq-${sq.id}`,
+      text: sq.questionText,
+      order: sq.order,
+      status: sq.status || "pending",
+      sqlQuery: sq.sqlQuery || "",
+      sqlExplanation: sq.sqlExplanation,
+      sqlValidationNotes: sq.sqlValidationNotes,
+      sqlMatchedTemplate: sq.sqlMatchedTemplate,
+      data: [],
+      lastExecutionDate: sq.lastExecutionDate
+        ? new Date(sq.lastExecutionDate)
+        : undefined,
+    })
+  );
+
   return {
     funnelId: Number(newFunnel.id),
-    subQuestions: storedSubQuestions,
+    subQuestions: transformedSubQuestions,
     wasCached: false,
   };
 }

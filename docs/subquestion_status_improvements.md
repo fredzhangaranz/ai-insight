@@ -140,7 +140,128 @@ This document outlines the improvements made to the sub-question status workflow
 - Users are guided to generate SQL queries before marking complete
 - Maintains flexibility while encouraging best practices
 
-### 8. Visual Status Indicators 📊 **MEDIUM PRIORITY**
+### 8. Comprehensive Error Handling ✅ **COMPLETED**
+
+**Files Modified:**
+
+- `app/api/error-handler.ts` (enhanced)
+- `lib/error-handler.ts` (new)
+- `app/api/ai/execute-query/route.ts`
+- `app/api/ai/funnel/generate-subquestions/route.ts`
+- `app/api/ai/funnel/generate-query/route.ts`
+- `app/api/ai/funnel/subquestions/[id]/status/route.ts`
+- `components/funnel/FunnelPanel.tsx`
+
+**Backend Changes:**
+
+- Enhanced `error-handler.ts` with `ErrorType` enum and `withErrorHandling` wrapper
+- Added standardized error response format with request ID tracking
+- Created `createErrorResponse` helpers for common error types
+- Updated all funnel API endpoints to use consistent error handling
+- Added comprehensive error type classification (validation, database, AI service, network, etc.)
+
+**Frontend Changes:**
+
+- Created `lib/error-handler.ts` with `ErrorHandler` class and `useErrorHandler` hook
+- Updated `FunnelPanel` component to use new error handling utilities
+- Replaced generic `alert()` calls with user-friendly error messages
+- Added success notifications for completed operations
+- Implemented proper error state management
+
+**Error Types Handled:**
+
+- **BAD_REQUEST**: Invalid input data
+- **VALIDATION_ERROR**: Data validation failures
+- **DATABASE_ERROR**: Database connection issues
+- **AI_SERVICE_ERROR**: AI model service failures
+- **NETWORK_ERROR**: Network connectivity issues
+- **TIMEOUT_ERROR**: Request timeout issues
+- **INTERNAL_SERVER_ERROR**: Unexpected server errors
+
+**Benefits:**
+
+- Consistent error handling across all API endpoints
+- User-friendly error messages with context
+- Request ID tracking for error correlation and debugging
+- Graceful error recovery without application crashes
+- Proper loading state management on errors
+- Success feedback for completed operations
+
+### 9. Chart Integration with Funnel Workflow ✅ **COMPLETED**
+
+**Files Modified:**
+
+- `app/api/ai/funnel/generate-chart/route.ts` (new)
+- `lib/ai/providers/i-query-funnel-provider.ts`
+- `lib/ai/providers/base-provider.ts`
+- `lib/prompts/chart-recommendations.prompt.ts` (new)
+- `components/funnel/FunnelPanel.tsx`
+- `components/funnel/ChartGenerationModal.tsx` (new)
+
+**Backend Changes:**
+
+- Created new API endpoint `/api/ai/funnel/generate-chart` for chart recommendations
+- Added `generateChartRecommendations` method to AI provider interface
+- Implemented chart recommendation logic in BaseProvider
+- Created comprehensive prompt system for AI chart recommendations
+- Added proper error handling and validation for chart generation
+
+**Frontend Changes:**
+
+- Updated FunnelPanel component with dual chart generation options
+- Created ChartGenerationModal component for manual chart creation
+- Added chart recommendation generation after query execution
+- Integrated existing ChartComponent for visualization
+- Added chart type selection dropdown with AI recommendations
+- Implemented Data/Chart view toggle functionality
+- Added chart display container with titles and explanations
+
+**Chart Generation Options:**
+
+1. **Manual Chart Generation:**
+
+   - User selects chart type from available options
+   - Manual field mapping with dropdown selection
+   - Step-by-step workflow with validation
+   - Chart preview before saving
+   - Full user control over visualization
+
+2. **AI Chart Generation:**
+   - AI analyzes SQL results to recommend best chart type
+   - Automatic field mapping based on data structure
+   - AI explanations for recommendations
+   - Quick chart generation with minimal user input
+
+**Chart Types Supported:**
+
+- **Bar Charts**: Category comparisons and distributions
+- **Line Charts**: Time series and trends over time
+- **Pie Charts**: Part-to-whole relationships
+- **KPI Cards**: Single important metrics
+- **Tables**: Detailed raw data display
+
+**Integration Features:**
+
+- AI analyzes SQL results to recommend best chart type
+- Automatic data transformation using existing data-shaper
+- Chart type switching with real-time updates
+- AI explanations for chart recommendations
+- Seamless integration with existing funnel workflow
+- Error handling prevents workflow disruption
+- Manual field mapping for educational purposes
+
+**Benefits:**
+
+- Users can visualize query results immediately after execution
+- Manual option provides learning opportunity for data visualization
+- AI provides intelligent chart type recommendations
+- Multiple chart types available for different data patterns
+- Consistent UI/UX with existing funnel workflow
+- Leverages existing chart components and data transformation
+- Maintains data accessibility alongside visualizations
+- Dual approach caters to different user preferences and skill levels
+
+### 10. Visual Status Indicators 📊 **MEDIUM PRIORITY**
 
 **Problem:** Users can't quickly see which sub-questions have results vs. which are empty.
 
@@ -155,7 +276,7 @@ This document outlines the improvements made to the sub-question status workflow
 - Modify step indicators in `FunnelContainer.tsx`
 - Add result status to sub-question data structure
 
-### 9. Smart Navigation Logic 🧠 **MEDIUM PRIORITY**
+### 11. Smart Navigation Logic 🧠 **MEDIUM PRIORITY**
 
 **Problem:** Navigation doesn't guide users through the workflow naturally.
 
@@ -171,7 +292,7 @@ This document outlines the improvements made to the sub-question status workflow
 - Add conditional action buttons in `FunnelPanel.tsx`
 - Update navigation logic in `FunnelContainer.tsx`
 
-### 10. Query Execution History 📅 **MEDIUM PRIORITY**
+### 12. Query Execution History 📅 **MEDIUM PRIORITY**
 
 **Problem:** Users don't know when results were last generated.
 
@@ -186,7 +307,7 @@ This document outlines the improvements made to the sub-question status workflow
 - Store execution timestamps in sub-question data
 - Display in UI with relative time formatting
 
-### 11. Query Validation ✅ **MEDIUM PRIORITY**
+### 13. Query Validation ✅ **MEDIUM PRIORITY**
 
 **Problem:** Users may execute problematic queries without warnings.
 
@@ -201,7 +322,7 @@ This document outlines the improvements made to the sub-question status workflow
 - Add SQL validation logic in `FunnelPanel.tsx`
 - Show warning badges before execution
 
-### 12. Bulk Operations ⚡ **LOW PRIORITY**
+### 14. Bulk Operations ⚡ **LOW PRIORITY**
 
 **Problem:** No efficient way to handle multiple sub-questions at once.
 
@@ -211,7 +332,7 @@ This document outlines the improvements made to the sub-question status workflow
 - Add "Mark All Complete" for quick completion
 - Useful for power users and batch processing
 
-### 13. Results Export 📤 **LOW PRIORITY**
+### 15. Results Export 📤 **LOW PRIORITY**
 
 **Problem:** Users can't easily export results for external analysis.
 

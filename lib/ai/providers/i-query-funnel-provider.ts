@@ -46,6 +46,26 @@ export interface GenerateQueryResponse {
 }
 
 /**
+ * Request to generate chart recommendations based on SQL results.
+ */
+export interface GenerateChartRecommendationsRequest {
+  sqlQuery: string;
+  queryResults: any[];
+  subQuestion: string;
+  assessmentFormDefinition: any;
+}
+
+/**
+ * The response from the AI provider for chart recommendations.
+ */
+export interface GenerateChartRecommendationsResponse {
+  recommendedChartType: string;
+  availableMappings: Record<string, any>;
+  explanation: string;
+  chartTitle: string;
+}
+
+/**
  * Defines the contract for an AI provider that can handle the query funnel workflow.
  * This allows for a pluggable architecture to support different AI models (e.g., Claude, Gemini).
  */
@@ -61,4 +81,11 @@ export interface IQueryFunnelProvider {
    * Generates a SQL query for a given sub-question, considering the context of previous queries.
    */
   generateQuery(request: GenerateQueryRequest): Promise<GenerateQueryResponse>;
+
+  /**
+   * Generates chart recommendations based on SQL query results.
+   */
+  generateChartRecommendations(
+    request: GenerateChartRecommendationsRequest
+  ): Promise<GenerateChartRecommendationsResponse>;
 }
