@@ -85,12 +85,27 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   // Manual chart generation modal state
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
 
+  // --- Enrichment (Lean MVP: AI-first Field Inclusion) ---
+  const ALLOWED_FIELDS = [
+    "patient.firstName",
+    "patient.lastName",
+    "patient.dateOfBirth",
+    "wound.etiology",
+  ] as const;
+  type AllowedField = (typeof ALLOWED_FIELDS)[number];
+  const [desiredFields, setDesiredFields] = useState<AllowedField[]>([]);
+  const [fieldInput, setFieldInput] = useState<string>("");
+  const MAX_FIELDS = 3;
+
   useEffect(() => {
     // Reset all result-related states when navigating to a different sub-question
     setResultsCleared(false);
     setQueryResult(null);
     setExecutionError(null);
     setResultViewMode("json");
+    // Reset enrichment per sub-question
+    setDesiredFields([]);
+    setFieldInput("");
   }, [subQuestion.id]);
 
   // Load initial results when they are provided
@@ -289,6 +304,8 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           assessmentFormDefinition: assessmentFormDefinition || {},
           databaseSchemaContext: "", // TODO: Pass actual schema context
           modelId: selectedModelId,
+          // Lean MVP: pass desiredFields (server may ignore until wired)
+          desiredFields,
         }),
       });
 
@@ -341,6 +358,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           validationNotes,
           matchedTemplate,
         });
+      }
+
+      // Clear results when SQL is regenerated to ensure fresh data
+      if (queryResult) {
+        setQueryResult(null);
+        setResultsCleared(true);
       }
 
       handleSuccess("SQL generated and saved successfully", "Generate SQL");
@@ -718,7 +741,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         )}
       </div>
 
-      {/* SQL Query Section */}
+      {/* SQL Query Section - Improved Layout */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-700">SQL Query</h3>
@@ -729,10 +752,14 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
               className={`text-xs transition-colors ${
                 isGeneratingSql
                   ? "text-gray-400 cursor-not-allowed"
+                  : desiredFields.length > 0
+                  ? "text-orange-600 hover:text-orange-800 font-medium"
                   : "text-green-600 hover:text-green-800"
               }`}
               title={
-                subQuestion.sqlQuery
+                desiredFields.length > 0
+                  ? `Generate new SQL query with ${desiredFields.length} additional field(s)`
+                  : subQuestion.sqlQuery
                   ? "Generate new SQL query based on current question"
                   : "Generate SQL query for this question"
               }
@@ -743,7 +770,16 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                   <span>Generating...</span>
                 </span>
               ) : (
-                `🔄 ${subQuestion.sqlQuery ? "Regenerate" : "Generate"}`
+                <span className="flex items-center space-x-1">
+                  <span>🔄</span>
+                  <span>
+                    {desiredFields.length > 0
+                      ? `Regenerate (${desiredFields.length} fields)`
+                      : subQuestion.sqlQuery
+                      ? "Regenerate"
+                      : "Generate"}
+                  </span>
+                </span>
               )}
             </button>
             {onEditSql && (
@@ -823,359 +859,550 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
             </div>
           </div>
         ) : (
-          <div className="relative">
-            <pre className="text-xs bg-gray-900 text-green-400 p-4 rounded overflow-x-auto font-mono leading-relaxed max-h-96">
-              {subQuestion.sqlQuery
-                ? formatSql(subQuestion.sqlQuery)
-                : "No SQL query generated yet"}
-            </pre>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            {/* SQL Query - Takes up 60% of the space (3/5 columns) */}
+            <div className="lg:col-span-3">
+              <div className="relative">
+                <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto font-mono leading-relaxed max-h-48">
+                  {subQuestion.sqlQuery
+                    ? formatSql(subQuestion.sqlQuery)
+                    : "No SQL query generated yet"}
+                </pre>
+                {subQuestion.sqlQuery && (
+                  <div className="absolute top-2 right-2">
+                    <button
+                      onClick={() =>
+                        navigator.clipboard.writeText(
+                          subQuestion.sqlQuery || ""
+                        )
+                      }
+                      className="text-xs bg-gray-800 text-gray-300 hover:text-white px-2 py-1 rounded opacity-75 hover:opacity-100 transition-opacity"
+                      title="Copy SQL to clipboard"
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SQL Metadata - Takes up 40% of the space (2/5 columns), side by side */}
             {subQuestion.sqlQuery && (
-              <div className="absolute top-2 right-2">
-                <button
-                  onClick={() =>
-                    navigator.clipboard.writeText(subQuestion.sqlQuery || "")
-                  }
-                  className="text-xs bg-gray-800 text-gray-300 hover:text-white px-2 py-1 rounded opacity-75 hover:opacity-100 transition-opacity"
-                  title="Copy SQL to clipboard"
-                >
-                  📋 Copy
-                </button>
+              <div className="lg:col-span-2 space-y-2">
+                {/* Explanation */}
+                <div className="border border-gray-200 rounded-md">
+                  <button
+                    onClick={() =>
+                      setExpandedSections((prev) => ({
+                        ...prev,
+                        explanation: !prev.explanation,
+                      }))
+                    }
+                    className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+                  >
+                    <span>📝 Explanation</span>
+                    <span className="text-gray-400">
+                      {expandedSections.explanation ? "▼" : "▶"}
+                    </span>
+                  </button>
+                  {expandedSections.explanation && (
+                    <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
+                      {subQuestion.sqlExplanation || "No explanation available"}
+                    </div>
+                  )}
+                </div>
+
+                {/* Validation Notes */}
+                <div className="border border-gray-200 rounded-md">
+                  <button
+                    onClick={() =>
+                      setExpandedSections((prev) => ({
+                        ...prev,
+                        validationNotes: !prev.validationNotes,
+                      }))
+                    }
+                    className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+                  >
+                    <span>🔍 Validation Notes</span>
+                    <span className="text-gray-400">
+                      {expandedSections.validationNotes ? "▼" : "▶"}
+                    </span>
+                  </button>
+                  {expandedSections.validationNotes && (
+                    <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
+                      {subQuestion.sqlValidationNotes ||
+                        "No validation notes available"}
+                    </div>
+                  )}
+                </div>
+
+                {/* Matched Template */}
+                <div className="border border-gray-200 rounded-md">
+                  <button
+                    onClick={() =>
+                      setExpandedSections((prev) => ({
+                        ...prev,
+                        template: !prev.template,
+                      }))
+                    }
+                    className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+                  >
+                    <span>🏷️ Matched Template</span>
+                    <span className="text-gray-400">
+                      {expandedSections.template ? "▼" : "▶"}
+                    </span>
+                  </button>
+                  {expandedSections.template && (
+                    <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
+                      <span className="font-medium">
+                        {subQuestion.sqlMatchedTemplate || "None"}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
         )}
-
-        {/* SQL Metadata Section - Only show when SQL exists */}
-        {subQuestion.sqlQuery && !isEditingSql && (
-          <div className="mt-3 space-y-2">
-            {/* Explanation */}
-            <div className="border border-gray-200 rounded-md">
-              <button
-                onClick={() =>
-                  setExpandedSections((prev) => ({
-                    ...prev,
-                    explanation: !prev.explanation,
-                  }))
-                }
-                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
-              >
-                <span>📝 Explanation</span>
-                <span className="text-gray-400">
-                  {expandedSections.explanation ? "▼" : "▶"}
-                </span>
-              </button>
-              {expandedSections.explanation && (
-                <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
-                  {subQuestion.sqlExplanation || "No explanation available"}
-                </div>
-              )}
-            </div>
-
-            {/* Validation Notes */}
-            <div className="border border-gray-200 rounded-md">
-              <button
-                onClick={() =>
-                  setExpandedSections((prev) => ({
-                    ...prev,
-                    validationNotes: !prev.validationNotes,
-                  }))
-                }
-                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
-              >
-                <span>🔍 Validation Notes</span>
-                <span className="text-gray-400">
-                  {expandedSections.validationNotes ? "▼" : "▶"}
-                </span>
-              </button>
-              {expandedSections.validationNotes && (
-                <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
-                  {subQuestion.sqlValidationNotes ||
-                    "No validation notes available"}
-                </div>
-              )}
-            </div>
-
-            {/* Matched Template */}
-            <div className="border border-gray-200 rounded-md">
-              <button
-                onClick={() =>
-                  setExpandedSections((prev) => ({
-                    ...prev,
-                    template: !prev.template,
-                  }))
-                }
-                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
-              >
-                <span>🏷️ Matched Template</span>
-                <span className="text-gray-400">
-                  {expandedSections.template ? "▼" : "▶"}
-                </span>
-              </button>
-              {expandedSections.template && (
-                <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
-                  <span className="font-medium">
-                    {subQuestion.sqlMatchedTemplate || "None"}
-                  </span>
-                </div>
-              )}
-            </div>
+        {/* Enrichment: AI-first Field Inclusion (Lean MVP) */}
+        <div className="mt-3 border-t border-gray-200 pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-semibold text-gray-700">
+              Include Fields (AI)
+            </h4>
+            <span className="text-[10px] text-gray-500">
+              Single-hop only • Max {MAX_FIELDS}
+            </span>
           </div>
-        )}
-      </div>
 
-      {/* Data Results Section */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-gray-700">Results</h3>
-          {queryResult && queryResult.length > 0 && (
-            <div className="flex items-center space-x-2">
-              <span className="text-xs text-gray-500">View:</span>
-              <div className="flex bg-gray-200 rounded-md p-1">
-                <button
-                  onClick={() => setResultViewMode("json")}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    resultViewMode === "json"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  JSON
-                </button>
-                <button
-                  onClick={() => setResultViewMode("table")}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    resultViewMode === "table"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  Table
-                </button>
+          {/* Workflow Status Indicator */}
+          {desiredFields.length > 0 && (
+            <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+              <div className="flex items-center space-x-2">
+                <div className="text-yellow-600">⚠️</div>
+                <div className="text-xs text-yellow-800">
+                  <strong>Next Steps:</strong> After adding fields, you need to:
+                  <ol className="list-decimal ml-4 mt-1 space-y-1">
+                    <li>
+                      Click "🔄 Regenerate" to create new SQL with these fields
+                    </li>
+                    <li>Click "Execute" to run the updated query</li>
+                    <li>View results with the new fields</li>
+                  </ol>
+                </div>
               </div>
             </div>
           )}
-        </div>
-        {isExecuting && (
-          <div className="text-xs text-blue-600 mb-2 flex items-center space-x-2">
-            <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600"></div>
-            <span>Running query...</span>
-          </div>
-        )}
-        {executionError && (
-          <div className="text-xs text-red-600 mb-2">{executionError}</div>
-        )}
-        {queryResult && queryResult.length > 0 ? (
-          <div className="bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
-            <div className="text-xs text-gray-600 mb-2">
-              {queryResult.length} rows returned
-            </div>
-            {resultViewMode === "json" ? (
-              <pre className="text-xs text-gray-800 whitespace-pre-wrap">
-                {JSON.stringify(queryResult.slice(0, 5), null, 2)}
-                {queryResult.length > 5 && "\n... (showing first 5 rows)"}
-              </pre>
-            ) : (
-              renderTableData(queryResult)
-            )}
-          </div>
-        ) : !isExecuting && !executionError ? (
-          <div className="text-xs text-gray-400 italic">
-            {resultsCleared
-              ? "Results cleared due to SQL changes. Click Execute to run the updated query."
-              : subQuestion.sqlQuery
-              ? "No results yet. Click Execute to run the query."
-              : "No SQL query generated yet. Generate SQL first, then execute to see results."}
-          </div>
-        ) : null}
 
-        {/* Chart Generation Section */}
-        {queryResult && queryResult.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700">
-                Chart Visualization
-              </h3>
-              <div className="flex items-center space-x-2">
-                {/* Manual Chart Generation */}
+          {/* Chips */}
+          <div className="flex flex-wrap gap-2 mb-2">
+            {desiredFields.map((f) => (
+              <span
+                key={f}
+                className="text-[11px] bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1"
+              >
+                {f}
                 <button
-                  onClick={() => setIsChartModalOpen(true)}
-                  className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center space-x-1"
-                  title="Manually create a chart by selecting type and mapping fields"
-                >
-                  <span>📊</span>
-                  <span>Manual Chart</span>
-                </button>
-
-                {/* AI Chart Generation */}
-                {!chartRecommendations && (
-                  <button
-                    onClick={handleGenerateChart}
-                    disabled={isGeneratingChart}
-                    className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                    title="Let AI recommend the best chart type and mapping"
-                  >
-                    {isGeneratingChart ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-                        <span>AI Generating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>🤖</span>
-                        <span>AI Chart</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* AI Chart Display */}
-            {chartRecommendations && (
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs text-gray-500">AI Recommended:</span>
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                    {chartRecommendations.recommendedChartType} Chart
-                  </span>
-                </div>
-
-                {/* Chart Type Selection */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs text-gray-600">Chart Type:</span>
-                  <select
-                    value={selectedChartType || ""}
-                    onChange={(e) =>
-                      handleChartTypeChange(e.target.value as ChartType)
+                  className="text-blue-700 hover:text-blue-900"
+                  onClick={() => {
+                    setDesiredFields((prev) => prev.filter((x) => x !== f));
+                    // Clear results when fields are removed to indicate they need regeneration
+                    if (queryResult) {
+                      setQueryResult(null);
+                      setResultsCleared(true);
                     }
-                    className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
-                  >
-                    {Object.keys(chartRecommendations.availableMappings).map(
-                      (chartType) => (
-                        <option key={chartType} value={chartType}>
-                          {chartType ===
-                          chartRecommendations.recommendedChartType
-                            ? `${chartType} (Recommended)`
-                            : chartType}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                  {/* View Toggle */}
-                  <div className="flex bg-gray-200 rounded-md p-1 ml-2">
-                    <button
-                      onClick={() => setChartViewMode("data")}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${
-                        chartViewMode === "data"
-                          ? "bg-white text-gray-900 shadow-sm"
-                          : "text-gray-600 hover:text-gray-900"
-                      }`}
-                    >
-                      Data
-                    </button>
-                    <button
-                      onClick={() => setChartViewMode("chart")}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${
-                        chartViewMode === "chart"
-                          ? "bg-white text-gray-900 shadow-sm"
-                          : "text-gray-600 hover:text-gray-900"
-                      }`}
-                    >
-                      Chart
-                    </button>
-                  </div>
-                </div>
-
-                {/* Chart Explanation */}
-                <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
-                  <strong>AI Recommendation:</strong>{" "}
-                  {chartRecommendations.explanation}
-                </div>
-
-                {/* Chart Display */}
-                {chartViewMode === "chart" &&
-                  chartData &&
-                  selectedChartType && (
-                    <div className="bg-white border border-gray-200 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">
-                        {chartRecommendations.chartTitle}
-                      </h4>
-                      <div className="h-64">
-                        <ChartComponent
-                          chartType={selectedChartType}
-                          data={chartData}
-                          title={chartRecommendations.chartTitle}
-                          className="w-full h-full"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                {/* Raw Data Display */}
-                {chartViewMode === "data" && (
-                  <div className="bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
-                    <div className="text-xs text-gray-600 mb-2">
-                      Raw data for chart generation ({queryResult.length} rows)
-                    </div>
-                    {renderTableData(queryResult)}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Manual Chart Instructions */}
-            {!chartRecommendations && (
-              <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded">
-                <strong>Chart Options:</strong>
-                <ul className="mt-1 space-y-1">
-                  <li>
-                    • <strong>Manual Chart:</strong> Select chart type and map
-                    fields yourself
-                  </li>
-                  <li>
-                    • <strong>AI Chart:</strong> Let AI recommend the best chart
-                    type and mapping
-                  </li>
-                </ul>
-              </div>
+                  }}
+                  title="Remove"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {desiredFields.length === 0 && (
+              <span className="text-[11px] text-gray-400">
+                No extra fields selected
+              </span>
             )}
           </div>
-        )}
 
-        {/* Manual Chart Generation Modal */}
-        <ChartGenerationModal
-          isOpen={isChartModalOpen}
-          onClose={() => setIsChartModalOpen(false)}
-          queryResults={queryResult || []}
-          subQuestion={subQuestion.text}
-        />
-
-        {/* Mark as Complete button below Results */}
-        {onMarkComplete && subQuestion.status !== "completed" && (
-          <div className="mt-3 pt-3 border-t border-gray-200">
+          {/* Input + Add */}
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              value={fieldInput}
+              onChange={(e) => setFieldInput(e.target.value)}
+              placeholder="e.g., patient.firstName"
+              className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs"
+            />
             <button
-              onClick={handleMarkComplete}
-              className={`w-full px-4 py-2 text-sm rounded transition-colors flex items-center justify-center space-x-2 ${
-                subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
-                  ? "bg-green-500 text-white hover:bg-green-600"
-                  : "bg-yellow-500 text-white hover:bg-yellow-600"
-              }`}
-              title={
-                subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
-                  ? "Mark this sub-question as complete"
-                  : "Mark as complete (no SQL query generated yet)"
-              }
+              className="text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
+              disabled={desiredFields.length >= MAX_FIELDS}
+              onClick={() => {
+                const candidate = fieldInput.trim();
+                if (!candidate) return;
+                if (!ALLOWED_FIELDS.includes(candidate as AllowedField)) {
+                  handleError(
+                    new Error(
+                      `Field not allowed. Try: ${ALLOWED_FIELDS.join(", ")}`
+                    ),
+                    "Add Field"
+                  );
+                  return;
+                }
+                if (desiredFields.includes(candidate as AllowedField)) {
+                  handleError(new Error("Field already added"), "Add Field");
+                  return;
+                }
+                if (desiredFields.length >= MAX_FIELDS) {
+                  handleError(
+                    new Error(`You can add up to ${MAX_FIELDS} fields`),
+                    "Add Field"
+                  );
+                  return;
+                }
+                setDesiredFields((prev) => [
+                  ...prev,
+                  candidate as AllowedField,
+                ]);
+                setFieldInput("");
+                // Clear results when fields are added to indicate they need regeneration
+                if (queryResult) {
+                  setQueryResult(null);
+                  setResultsCleared(true);
+                }
+              }}
             >
-              <span>✓</span>
-              <span>
-                {subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
-                  ? "Mark as Complete"
-                  : "Mark Complete (No SQL)"}
-              </span>
+              Add
             </button>
           </div>
-        )}
+
+          {/* Quick picks */}
+          <div className="flex flex-wrap gap-2 mb-2">
+            {ALLOWED_FIELDS.map((f) => (
+              <button
+                key={f}
+                className={`text-[11px] px-2 py-1 rounded border transition-colors ${
+                  desiredFields.includes(f)
+                    ? "bg-blue-100 text-blue-800 border-blue-300"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                }`}
+                onClick={() => {
+                  if (desiredFields.includes(f)) return;
+                  if (desiredFields.length >= MAX_FIELDS) {
+                    handleError(
+                      new Error(`You can add up to ${MAX_FIELDS} fields`),
+                      "Add Field"
+                    );
+                    return;
+                  }
+                  setDesiredFields((prev) => [...prev, f]);
+                  // Clear results when fields are added to indicate they need regeneration
+                  if (queryResult) {
+                    setQueryResult(null);
+                    setResultsCleared(true);
+                  }
+                }}
+                title="Quick add"
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+
+          {/* Join path preview (read-only) */}
+          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-[11px] text-gray-700">
+            <div className="font-semibold mb-1">Join Path (Preview)</div>
+            {desiredFields.length === 0 ? (
+              <div className="text-gray-400">No joins required</div>
+            ) : (
+              <ul className="list-disc ml-4 space-y-1">
+                {desiredFields.some((f) => f.startsWith("patient.")) && (
+                  <li>
+                    Assessment INNER JOIN rpt.Patient P ON Assessment.patientFk
+                    = P.id
+                  </li>
+                )}
+                {desiredFields.some((f) => f.startsWith("wound.")) && (
+                  <li>
+                    Assessment INNER JOIN rpt.Wound W ON Assessment.woundFk =
+                    W.id
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        {/* Data Results Section */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium text-gray-700">Results</h3>
+            {queryResult && queryResult.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500">View:</span>
+                <div className="flex bg-gray-200 rounded-md p-1">
+                  <button
+                    onClick={() => setResultViewMode("json")}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      resultViewMode === "json"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    JSON
+                  </button>
+                  <button
+                    onClick={() => setResultViewMode("table")}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      resultViewMode === "table"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    Table
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          {isExecuting && (
+            <div className="text-xs text-blue-600 mb-2 flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600"></div>
+              <span>Running query...</span>
+            </div>
+          )}
+          {executionError && (
+            <div className="text-xs text-red-600 mb-2">{executionError}</div>
+          )}
+          {queryResult && queryResult.length > 0 ? (
+            <div className="bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
+              {/* Results Status Indicator */}
+              {desiredFields.length > 0 && (
+                <div className="mb-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-800">
+                  <div className="flex items-center space-x-1">
+                    <span>🔄</span>
+                    <span>
+                      <strong>Results may be outdated.</strong> You've added
+                      fields but haven't regenerated SQL yet. Click "🔄
+                      Regenerate" to include the new fields in your results.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-gray-600 mb-2">
+                {queryResult.length} rows returned
+              </div>
+              {resultViewMode === "json" ? (
+                <pre className="text-xs text-gray-800 whitespace-pre-wrap">
+                  {JSON.stringify(queryResult.slice(0, 5), null, 2)}
+                  {queryResult.length > 5 && "\n... (showing first 5 rows)"}
+                </pre>
+              ) : (
+                renderTableData(queryResult)
+              )}
+            </div>
+          ) : !isExecuting && !executionError ? (
+            <div className="text-xs text-gray-400 italic">
+              {resultsCleared
+                ? "Results cleared due to SQL changes. Click Execute to run the updated query."
+                : subQuestion.sqlQuery
+                ? "No results yet. Click Execute to run the query."
+                : "No SQL query generated yet. Generate SQL first, then execute to see results."}
+            </div>
+          ) : null}
+
+          {/* Chart Generation Section */}
+          {queryResult && queryResult.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-700">
+                  Chart Visualization
+                </h3>
+                <div className="flex items-center space-x-2">
+                  {/* Manual Chart Generation */}
+                  <button
+                    onClick={() => setIsChartModalOpen(true)}
+                    className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center space-x-1"
+                    title="Manually create a chart by selecting type and mapping fields"
+                  >
+                    <span>📊</span>
+                    <span>Manual Chart</span>
+                  </button>
+
+                  {/* AI Chart Generation */}
+                  {!chartRecommendations && (
+                    <button
+                      onClick={handleGenerateChart}
+                      disabled={isGeneratingChart}
+                      className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+                      title="Let AI recommend the best chart type and mapping"
+                    >
+                      {isGeneratingChart ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                          <span>AI Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🤖</span>
+                          <span>AI Chart</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Chart Display */}
+              {chartRecommendations && (
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-gray-500">
+                      AI Recommended:
+                    </span>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      {chartRecommendations.recommendedChartType} Chart
+                    </span>
+                  </div>
+
+                  {/* Chart Type Selection */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-gray-600">Chart Type:</span>
+                    <select
+                      value={selectedChartType || ""}
+                      onChange={(e) =>
+                        handleChartTypeChange(e.target.value as ChartType)
+                      }
+                      className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                    >
+                      {Object.keys(chartRecommendations.availableMappings).map(
+                        (chartType) => (
+                          <option key={chartType} value={chartType}>
+                            {chartType ===
+                            chartRecommendations.recommendedChartType
+                              ? `${chartType} (Recommended)`
+                              : chartType}
+                          </option>
+                        )
+                      )}
+                    </select>
+
+                    {/* View Toggle */}
+                    <div className="flex bg-gray-200 rounded-md p-1 ml-2">
+                      <button
+                        onClick={() => setChartViewMode("data")}
+                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                          chartViewMode === "data"
+                            ? "bg-white text-gray-900 shadow-sm"
+                            : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        Data
+                      </button>
+                      <button
+                        onClick={() => setChartViewMode("chart")}
+                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                          chartViewMode === "chart"
+                            ? "bg-white text-gray-900 shadow-sm"
+                            : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        Chart
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Chart Explanation */}
+                  <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                    <strong>AI Recommendation:</strong>{" "}
+                    {chartRecommendations.explanation}
+                  </div>
+
+                  {/* Chart Display */}
+                  {chartViewMode === "chart" &&
+                    chartData &&
+                    selectedChartType && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">
+                          {chartRecommendations.chartTitle}
+                        </h4>
+                        <div className="h-64">
+                          <ChartComponent
+                            chartType={selectedChartType}
+                            data={chartData}
+                            title={chartRecommendations.chartTitle}
+                            className="w-full h-full"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Raw Data Display */}
+                  {chartViewMode === "data" && (
+                    <div className="bg-gray-50 p-3 rounded max-h-60 overflow-y-auto">
+                      <div className="text-xs text-gray-600 mb-2">
+                        Raw data for chart generation ({queryResult.length}{" "}
+                        rows)
+                      </div>
+                      {renderTableData(queryResult)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Manual Chart Instructions */}
+              {!chartRecommendations && (
+                <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded">
+                  <strong>Chart Options:</strong>
+                  <ul className="mt-1 space-y-1">
+                    <li>
+                      • <strong>Manual Chart:</strong> Select chart type and map
+                      fields yourself
+                    </li>
+                    <li>
+                      • <strong>AI Chart:</strong> Let AI recommend the best
+                      chart type and mapping
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual Chart Generation Modal */}
+          <ChartGenerationModal
+            isOpen={isChartModalOpen}
+            onClose={() => setIsChartModalOpen(false)}
+            queryResults={queryResult || []}
+            subQuestion={subQuestion.text}
+          />
+
+          {/* Mark as Complete button below Results */}
+          {onMarkComplete && subQuestion.status !== "completed" && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <button
+                onClick={handleMarkComplete}
+                className={`w-full px-4 py-2 text-sm rounded transition-colors flex items-center justify-center space-x-2 ${
+                  subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                    ? "bg-green-500 text-white hover:bg-green-600"
+                    : "bg-yellow-500 text-white hover:bg-yellow-600"
+                }`}
+                title={
+                  subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                    ? "Mark this sub-question as complete"
+                    : "Mark as complete (no SQL query generated yet)"
+                }
+              >
+                <span>✓</span>
+                <span>
+                  {subQuestion.sqlQuery && subQuestion.sqlQuery.trim() !== ""
+                    ? "Mark as Complete"
+                    : "Mark Complete (No SQL)"}
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
