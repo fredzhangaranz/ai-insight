@@ -1,0 +1,103 @@
+{
+  "templates": [
+    {
+      "name": "Current Wound State As Of Date",
+      "description": "Retrieve current wound state as-of a given date using start/end validity.",
+      "questionExamples": [
+        "As of {date}, which wounds are currently in each state?",
+        "How many wounds are Open as of {date}?"
+      ],
+      "keywords": ["current", "state", "as-of", "wound state", "validity"],
+      "tags": ["state", "temporal"],
+      "placeholders": ["asOfDate"],
+      "sqlPattern": "SELECT ws.id, ws.woundFk, ws.startDate, ws.endDate, wst.name AS woundState FROM rpt.WoundState ws JOIN rpt.WoundStateType wst ON wst.id = ws.woundStateTypeFk WHERE ws.startDate <= {asOfDate} AND (ws.endDate IS NULL OR ws.endDate > {asOfDate})",
+      "version": 1
+    },
+    {
+      "name": "Earliest and Latest Assessment Per Wound (As Of Date)",
+      "description": "Compute earliest and latest assessment IDs/dates per wound, filtered by an as-of date.",
+      "questionExamples": [
+        "What is the earliest and latest assessment date per wound as of {date}?"
+      ],
+      "keywords": ["earliest", "latest", "assessment", "as-of", "window"],
+      "tags": ["ranking", "window", "temporal"],
+      "placeholders": ["asOfDate"],
+      "sqlPattern": "WITH AssessmentRanking AS ( SELECT a.id, a.woundFk, a.date, ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS rn_asc, ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS rn_desc FROM rpt.Assessment a WHERE a.date <= {asOfDate} ) SELECT woundFk AS woundId, MAX(CASE WHEN rn_asc = 1 THEN id END) AS earliestAssessmentId, MAX(CASE WHEN rn_asc = 1 THEN date END) AS earliestDate, MAX(CASE WHEN rn_desc = 1 THEN id END) AS latestAssessmentId, MAX(CASE WHEN rn_desc = 1 THEN date END) AS latestDate FROM AssessmentRanking WHERE rn_asc = 1 OR rn_desc = 1 GROUP BY woundFk",
+      "version": 1
+    },
+    {
+      "name": "Latest Measurement Per Wound (As Of Date)",
+      "description": "Get the latest measurement per wound using DimDate filtering by as-of date.",
+      "questionExamples": [
+        "What is the latest area reduction per wound as of {date}?"
+      ],
+      "keywords": ["latest", "measurement", "dimdate", "as-of"],
+      "tags": ["latest", "measurement", "temporal"],
+      "placeholders": ["asOfDate"],
+      "sqlPattern": "SELECT t.woundFk, t.areaReduction FROM ( SELECT m.woundFk, m.areaReduction, d.date, ROW_NUMBER() OVER (PARTITION BY m.woundFk ORDER BY d.date DESC) AS rn FROM rpt.Measurement m JOIN rpt.DimDate d ON m.dimDateFk = d.id WHERE d.date <= {asOfDate} ) t WHERE t.rn = 1",
+      "version": 1
+    },
+    {
+      "name": "Collect Relevant Notes By variableName",
+      "description": "Filter Note records to only those AttributeType.variableName values relevant for wound categorization or other analytics.",
+      "questionExamples": [
+        "Get wound-related attributes for assessments matching specific variable names"
+      ],
+      "keywords": ["note", "attribute", "variableName", "filter"],
+      "tags": ["attributes", "note"],
+      "placeholders": ["variableNames[]"],
+      "sqlPattern": "SELECT n.assessmentFk, at.variableName, n.value FROM rpt.Note n JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id WHERE at.variableName IN ({variableNames})",
+      "version": 1
+    },
+    {
+      "name": "Pivot Attributes By variableName (CASE MAX)",
+      "description": "Pivot a set of variableName values into columns using MAX(CASE ...) against a grouping (e.g., latest assessment per wound).",
+      "questionExamples": [
+        "Create columns for each wound type attribute from relevant notes"
+      ],
+      "keywords": ["pivot", "case", "max", "attributes"],
+      "tags": ["pivot", "attributes"],
+      "placeholders": ["groupKey", "pivotCases", "groupByCols"],
+      "sqlPattern": "SELECT {groupKey}, {pivotCases} FROM Source LEFT JOIN RelevantNotes rn ON Source.latestAssessmentId = rn.assessmentFk GROUP BY {groupByCols}",
+      "version": 1
+    },
+    {
+      "name": "Unpivot Columns To Rows (UNION ALL)",
+      "description": "Turn multiple typed columns into long-form rows via UNION ALL, emitting typeName/typeValue pairs.",
+      "questionExamples": [
+        "Build long-form wound type rows from pivoted columns"
+      ],
+      "keywords": ["unpivot", "union all", "long form"],
+      "tags": ["unpivot"],
+      "placeholders": ["unions"],
+      "sqlPattern": "{unions}",
+      "version": 1
+    },
+    {
+      "name": "Aggregation by Category",
+      "description": "Aggregate a numeric measure grouped by a categorical column.",
+      "questionExamples": [
+        "Average wound area by etiology",
+        "Count of wounds by wound state"
+      ],
+      "keywords": ["aggregate", "group by", "average", "count"],
+      "tags": ["aggregation", "category"],
+      "placeholders": ["categoryColumn", "numericColumn", "table", "filters?"],
+      "sqlPattern": "SELECT {categoryColumn}, AVG({numericColumn}) AS avgValue FROM {table} WHERE {filters?} GROUP BY {categoryColumn}",
+      "version": 1
+    },
+    {
+      "name": "Trend Analysis Over Time",
+      "description": "Compute counts or metrics grouped by year/month using DimDate for time-series trends.",
+      "questionExamples": [
+        "Monthly count of assessments",
+        "Trend of average area over time"
+      ],
+      "keywords": ["trend", "time series", "month", "year"],
+      "tags": ["trend", "time"],
+      "placeholders": ["metricExpression", "startDate?", "endDate?"],
+      "sqlPattern": "SELECT D.year, D.month, {metricExpression} AS metric FROM rpt.Assessment A JOIN rpt.DimDate D ON A.dimDateFk = D.id WHERE (D.date >= {startDate?}) AND (D.date <= {endDate?}) GROUP BY D.year, D.month ORDER BY D.year, D.month",
+      "version": 1
+    }
+  ]
+}

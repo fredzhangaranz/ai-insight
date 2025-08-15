@@ -61,7 +61,17 @@ function mergeCustomQuestionsWithInsights(
     }>;
 
     if (existingCategory) {
-      // Add custom questions to existing category
+      // Remove existing custom questions from this category to avoid duplicates
+      const beforeCount = existingCategory.questions.length;
+      existingCategory.questions = existingCategory.questions.filter(
+        (q) => !q.isCustom
+      );
+      const afterCount = existingCategory.questions.length;
+      const removedCount = beforeCount - afterCount;
+      console.log(
+        `Category "${category}": Removed ${removedCount} existing custom questions, adding ${typedQuestions.length} new ones`
+      );
+      // Add the current custom questions
       existingCategory.questions.push(...typedQuestions);
     } else {
       // Create new category for custom questions
@@ -232,14 +242,38 @@ export async function GET(
             .request()
             .input("id", sql.UniqueIdentifier, assessmentFormId)
             .query(
-              "SELECT category, questionText, questionType FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
+              "SELECT id, category, questionText, questionType, originalQuestionId FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
             );
+
+          console.log(
+            `Found ${customQuestionsResult.recordset.length} custom questions for assessment form ${assessmentFormId}`
+          );
+          customQuestionsResult.recordset.forEach((q, i) => {
+            console.log(
+              `  Custom question ${i + 1}: ID=${q.id}, Text="${
+                q.questionText
+              }", Type=${q.questionType}, Category=${q.category}`
+            );
+          });
 
           // Merge custom questions with AI insights
           const mergedInsights = mergeCustomQuestionsWithInsights(
             insights,
             customQuestionsResult.recordset
           );
+
+          // Log the merged insights structure
+          console.log("Merged insights structure:");
+          mergedInsights.insights.forEach((cat, catIndex) => {
+            console.log(`  Category ${catIndex + 1}: ${cat.category}`);
+            cat.questions.forEach((q, qIndex) => {
+              console.log(
+                `    Question ${qIndex + 1}: ID=${q.id}, isCustom=${
+                  q.isCustom
+                }, Text="${q.text}"`
+              );
+            });
+          });
 
           // Log cache metrics
           await metrics.logCacheMetrics({
@@ -307,7 +341,47 @@ export async function GET(
     // Get the response text and parse it
     const responseText =
       aiResponse.content[0].type === "text" ? aiResponse.content[0].text : "";
-    const newInsights = JSON.parse(responseText) as AIInsightsResponse;
+
+    console.log("Raw AI response:", responseText.substring(0, 200) + "...");
+
+    // Try to extract JSON from the response
+    let newInsights: AIInsightsResponse;
+    try {
+      // First, try to parse the response directly as JSON
+      newInsights = JSON.parse(responseText) as AIInsightsResponse;
+    } catch (parseError) {
+      console.log(
+        "Direct JSON parsing failed, attempting to extract JSON from response..."
+      );
+
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        try {
+          newInsights = JSON.parse(jsonMatch[1]) as AIInsightsResponse;
+        } catch (blockError) {
+          console.error("Failed to parse JSON from code block:", blockError);
+          throw new Error("AI returned invalid JSON format in code block");
+        }
+      } else {
+        // Try to extract JSON from the response by finding the first { and last }
+        const firstBrace = responseText.indexOf("{");
+        const lastBrace = responseText.lastIndexOf("}");
+
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          try {
+            const jsonText = responseText.substring(firstBrace, lastBrace + 1);
+            newInsights = JSON.parse(jsonText) as AIInsightsResponse;
+          } catch (extractError) {
+            console.error("Failed to extract and parse JSON:", extractError);
+            throw new Error("AI returned invalid JSON format");
+          }
+        } else {
+          console.error("No JSON found in AI response");
+          throw new Error("AI did not return valid JSON format");
+        }
+      }
+    }
 
     // Log AI metrics
     await metrics.logAIMetrics({
@@ -322,7 +396,13 @@ export async function GET(
 
     // Validate the AI response
     if (!validateInsightsResponse(newInsights)) {
-      throw new Error("AI returned invalid insights format");
+      console.error(
+        "AI response validation failed:",
+        JSON.stringify(newInsights, null, 2)
+      );
+      throw new Error(
+        "AI returned invalid insights format - validation failed"
+      );
     }
 
     // Get custom questions and merge them with new insights
@@ -330,8 +410,19 @@ export async function GET(
       .request()
       .input("id", sql.UniqueIdentifier, assessmentFormId)
       .query(
-        "SELECT category, questionText, questionType FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
+        "SELECT id, category, questionText, questionType, originalQuestionId FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
       );
+
+    console.log(
+      `Found ${customQuestionsResult.recordset.length} custom questions for assessment form ${assessmentFormId} (regeneration)`
+    );
+    customQuestionsResult.recordset.forEach((q, i) => {
+      console.log(
+        `  Custom question ${i + 1}: ID=${q.id}, Text="${
+          q.questionText
+        }", Type=${q.questionType}`
+      );
+    });
 
     // Merge custom questions with new insights
     const mergedInsights = mergeCustomQuestionsWithInsights(

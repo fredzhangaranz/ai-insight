@@ -428,7 +428,17 @@ export default function AnalysisPage({
   ) => {
     // For AI questions, we'll create a new custom question entry
     // For custom questions, we'll update the existing entry
-    const isAIQuestion = !question.isCustom;
+    // isCustom is optional, so we need to check if it's explicitly true
+    const isAIQuestion = question.isCustom !== true;
+
+    console.log("Editing question:", {
+      text: question.text,
+      isCustom: question.isCustom,
+      id: question.id,
+      type: question.type,
+      originalQuestionId: question.originalQuestionId,
+      isAIQuestion: isAIQuestion,
+    });
 
     setEditingQuestion({
       id: question.id || 0, // 0 for AI questions that don't have DB ID yet
@@ -455,11 +465,26 @@ export default function AnalysisPage({
       return;
     }
 
+    console.log("Saving edited question:", {
+      id: editingQuestion.id,
+      isAIQuestion: editingQuestion.isAIQuestion,
+      text: editQuestionText.trim(),
+      type: editQuestionType,
+    });
+
     setIsEditingQuestion(true);
     try {
       let response;
 
-      if (editingQuestion.isAIQuestion) {
+      // Double-check the logic: if we have a valid ID and it's not an AI question, update existing
+      if (
+        editingQuestion.isAIQuestion ||
+        !editingQuestion.id ||
+        editingQuestion.id === 0
+      ) {
+        console.log(
+          "Creating new custom question (AI question or no valid ID)"
+        );
         // For AI questions, create a new custom question entry
         response = await fetch(
           `/api/assessment-forms/${assessmentFormId}/custom-questions`,
@@ -477,6 +502,10 @@ export default function AnalysisPage({
           }
         );
       } else {
+        console.log(
+          "Updating existing custom question with ID:",
+          editingQuestion.id
+        );
         // For custom questions, update the existing entry
         response = await fetch(
           `/api/assessment-forms/${assessmentFormId}/custom-questions/${editingQuestion.id}`,
@@ -499,6 +528,7 @@ export default function AnalysisPage({
       }
 
       // Refresh insights to include the edited question
+      // The cache was updated with the new custom question, so we can load from cache
       await fetchData(false);
 
       // Reset edit state
