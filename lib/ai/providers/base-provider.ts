@@ -22,6 +22,7 @@ import {
   validateChartRecommendationsResponse,
 } from "@/lib/prompts/chart-recommendations.prompt";
 import { MetricsMonitor } from "@/lib/monitoring";
+import { matchTemplates } from "@/lib/services/query-template.service";
 
 /**
  * Abstract base class for AI providers, containing shared logic for the query funnel.
@@ -515,11 +516,35 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       const schemaContext = this.getDatabaseSchemaContext(
         request.databaseSchemaContext
       );
+
+      // 1. Match templates (heuristics) and prepare compact injection
+      let matchedTemplates: Array<{ name: string; sqlPattern: string }> = [];
+      try {
+        // Fetch top 5 for logging; inject top 2
+        const matches = await matchTemplates(request.subQuestion, 5);
+        console.log(
+          "Template matches (top 5):",
+          matches.map((m) => ({
+            name: m.template.name,
+            score: m.score,
+            matchedKeywords: m.matchedKeywords,
+            matchedExample: m.matchedExample,
+          }))
+        );
+        matchedTemplates = matches.slice(0, 2).map((m) => ({
+          name: m.template.name,
+          sqlPattern: m.template.sqlPattern,
+        }));
+      } catch (e) {
+        console.warn("Template matching unavailable or failed:", e);
+      }
+
       const prompt = constructFunnelSqlPrompt(
         request.subQuestion,
         request.previousQueries,
         request.assessmentFormDefinition,
         schemaContext,
+        matchedTemplates
         fieldValidation.fieldsApplied
       );
       console.log("AI Prompt for SQL generation:", prompt);
@@ -578,6 +603,18 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
           )}. ` + `Join path: ${fieldValidation.joinSummary}`;
       }
 
+      // Prefer model's matched template if provided; else surface our top match
+      const matchedQueryTemplate =
+        parsedResponse.matchedQueryTemplate &&
+        typeof parsedResponse.matchedQueryTemplate === "string" &&
+        parsedResponse.matchedQueryTemplate.trim() !== ""
+          ? parsedResponse.matchedQueryTemplate
+          : matchedTemplates.length > 0
+          ? matchedTemplates[0].name
+          : "None";
+
+      console.log("Chosen matchedQueryTemplate:", matchedQueryTemplate);
+
       await metrics.logAIMetrics({
         promptTokens: aiResponse.usage.input_tokens,
         completionTokens: aiResponse.usage.output_tokens,
@@ -591,6 +628,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
       return {
         ...parsedResponse,
+        matchedQueryTemplate,
         fieldsApplied: fieldValidation.fieldsApplied,
         joinSummary: fieldValidation.joinSummary,
         sqlWarnings: safetyValidation.warnings,

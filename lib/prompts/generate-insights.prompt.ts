@@ -13,7 +13,7 @@ The questions should be categorized logically into these categories:
 4. "Operational Insights" - Questions about resource utilization, workflow efficiency
 
 RESPONSE FORMAT:
-You MUST return a single JSON object with this exact structure:
+You MUST return ONLY a single JSON object with this exact structure. Do not include any explanatory text, markdown formatting, or other content outside the JSON object:
 {
   "insights": [
     {
@@ -85,6 +85,8 @@ QUALITY REQUIREMENTS:
 3. Mix of single-patient and all-patient questions in each category
 4. Questions should provide actionable insights
 5. Avoid redundant or overlapping questions
+
+IMPORTANT: Return ONLY the JSON object. Do not include any text before or after the JSON. The response must be parseable by JSON.parse().
 `;
 
 /**

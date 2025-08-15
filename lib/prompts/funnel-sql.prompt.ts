@@ -53,7 +53,12 @@ export const FUNNEL_SQL_PROMPT = [
   "   * Do not generate dynamic SQL or data-modifying queries.",
   "",
   "5. **Template Selection Logic:**",
-  "   Identify if the sub-question matches any common analytical query templates:",
+  "   If a 'MATCHED TEMPLATES' section is present below, choose ONLY from those.",
+  "   - Pick the single best template from that list and adapt its sqlPattern to the current context (tables/columns/joins).",
+  "   - Set 'matchedQueryTemplate' to exactly that template's name.",
+  "   - If none apply, set 'matchedQueryTemplate' to 'None' and use the fallback categories below.",
+  "",
+  "   Fallback categories (use ONLY if no matched templates are provided or applicable):",
   "",
   "   | Template Name             | Pattern Description/Examples                             |",
   "   | ------------------------- | -------------------------------------------------------- |",
@@ -100,7 +105,8 @@ export function constructFunnelSqlPrompt(
   previousQueries?: string[],
   formDefinition?: any,
   databaseSchemaContext?: string,
-  desiredFields?: string[]
+  desiredFields?: string[],
+  matchedTemplates?: Array<{ name: string; sqlPattern: string }>
 ): string {
   let prompt = FUNNEL_SQL_PROMPT;
   prompt += `\n\nSUB-QUESTION:\n${subQuestion}`;
@@ -108,6 +114,19 @@ export function constructFunnelSqlPrompt(
     prompt +=
       `\n\nPREVIOUS QUERIES:\n` +
       previousQueries.map((q, i) => `Step ${i + 1}:\n${q}`).join("\n\n");
+  }
+  if (matchedTemplates && matchedTemplates.length > 0) {
+    const topK = matchedTemplates.slice(0, 2);
+    const mt = topK
+      .map(
+        (t, i) =>
+          `${i + 1}) ${t.name} — sqlPattern: ${t.sqlPattern.replace(
+            /\n/g,
+            " "
+          )}`
+      )
+      .join("\n");
+    prompt += `\n\nMATCHED TEMPLATES (TOP ${topK.length}):\n${mt}`;
   }
   if (formDefinition) {
     prompt +=
