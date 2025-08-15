@@ -15,6 +15,7 @@ async function generateQueryHandler(
     assessmentFormDefinition,
     databaseSchemaContext,
     modelId,
+    desiredFields,
   } = body;
 
   // Validate required fields
@@ -43,6 +44,7 @@ async function generateQueryHandler(
       previousQueries: previousQueries || [],
       assessmentFormDefinition: assessmentFormDefinition || {},
       databaseSchemaContext: databaseSchemaContext || "",
+      desiredFields: Array.isArray(desiredFields) ? desiredFields : undefined,
     });
 
     console.log("✅ SQL generated successfully");
@@ -52,6 +54,9 @@ async function generateQueryHandler(
       explanation: result.explanation,
       validationNotes: result.validationNotes,
       matchedQueryTemplate: result.matchedQueryTemplate,
+      fieldsApplied: result.fieldsApplied,
+      joinSummary: result.joinSummary,
+      sqlWarnings: result.sqlWarnings,
     });
   } catch (error: any) {
     console.error("Error generating SQL:", error);

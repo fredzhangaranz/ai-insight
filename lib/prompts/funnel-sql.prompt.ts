@@ -136,7 +136,40 @@ export function constructFunnelSqlPrompt(
     prompt += `\n\nDATABASE SCHEMA CONTEXT:\n` + databaseSchemaContext;
   }
   if (desiredFields && desiredFields.length > 0) {
-    prompt += `\n\nDESIRED FIELDS:\n${desiredFields.join(", ")}`;
+    // Inject lean-MVP enrichment constraints
+    prompt +=
+      `\n\nDESIRED FIELDS ENRICHMENT:\n` +
+      `The following fields should be added to the query result: ${desiredFields.join(
+        ", "
+      )}\n\n` +
+      `ENRICHMENT RULES:\n` +
+      `1. Wrap the base query in a CTE named 'base'\n` +
+      `2. Add INNER JOINs to include the requested fields:\n` +
+      `   - For patient fields: INNER JOIN rpt.Patient AS P ON base.patientFk = P.id\n` +
+      `   - For wound fields: INNER JOIN rpt.Wound AS W ON base.woundFk = W.id\n` +
+      `3. Alias enriched columns as 'entity_field' (e.g., P.firstName AS patient_firstName)\n` +
+      `4. Do NOT modify WHERE, GROUP BY, or ORDER BY clauses from the base query\n` +
+      `5. Move ORDER BY to the outer query if present in base query\n` +
+      `6. Apply TOP 1000 for safety if not already present\n` +
+      `7. Use schema prefixing (rpt.) for all tables\n` +
+      `8. ONLY include the base query columns plus the specifically requested enrichment fields\n` +
+      `9. Do NOT add any additional columns beyond what was requested\n\n` +
+      `EXAMPLE ENRICHMENT PATTERN:\n` +
+      `WITH base AS (\n` +
+      `  SELECT A.id, A.patientFk, A.date\n` +
+      `  FROM rpt.Assessment AS A\n` +
+      `  WHERE A.date >= DATEADD(day, -30, GETUTCDATE())\n` +
+      `)\n` +
+      `SELECT TOP 1000\n` +
+      `  base.id,\n` +
+      `  base.patientFk,\n` +
+      `  base.date,\n` +
+      `  P.firstName AS patient_firstName,\n` +
+      `  P.lastName AS patient_lastName\n` +
+      `FROM base\n` +
+      `INNER JOIN rpt.Patient AS P ON base.patientFk = P.id\n` +
+      `ORDER BY base.date DESC;\n\n` +
+      `CRITICAL: Only include the base query columns plus the requested enrichment fields. Do not add any other columns.`;
   }
   return prompt;
 }

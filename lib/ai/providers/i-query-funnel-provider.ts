@@ -33,6 +33,7 @@ export interface GenerateQueryRequest {
   previousQueries: string[];
   assessmentFormDefinition: any;
   databaseSchemaContext: string;
+  desiredFields?: string[]; // Optional enrichment fields (entity.field)
 }
 
 /**
@@ -43,6 +44,10 @@ export interface GenerateQueryResponse {
   generatedSql: string;
   validationNotes: string;
   matchedQueryTemplate: string;
+  // Enrichment fields (optional)
+  fieldsApplied?: string[];
+  joinSummary?: string;
+  sqlWarnings?: string[];
 }
 
 /**
