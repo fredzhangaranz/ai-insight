@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import * as fs from "fs";
+import * as path from "path";
 import {
   IQueryFunnelProvider,
   SubQuestionGenerationRequest,
@@ -12,17 +12,17 @@ import {
 import {
   constructFunnelSubquestionsPrompt,
   validateFunnelSubquestionsResponse,
-} from "@/lib/prompts/funnel-subquestions.prompt";
+} from "../../prompts/funnel-subquestions.prompt";
 import {
   constructFunnelSqlPrompt,
   validateFunnelSqlResponse,
-} from "@/lib/prompts/funnel-sql.prompt";
+} from "../../prompts/funnel-sql.prompt";
 import {
   constructChartRecommendationsPrompt,
   validateChartRecommendationsResponse,
-} from "@/lib/prompts/chart-recommendations.prompt";
-import { MetricsMonitor } from "@/lib/monitoring";
-import { matchTemplates } from "@/lib/services/query-template.service";
+} from "../../prompts/chart-recommendations.prompt";
+import { MetricsMonitor } from "../../monitoring";
+import { matchTemplates } from "../../services/query-template.service";
 
 /**
  * Abstract base class for AI providers, containing shared logic for the query funnel.
@@ -544,8 +544,8 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         request.previousQueries,
         request.assessmentFormDefinition,
         schemaContext,
+        fieldValidation.fieldsApplied,
         matchedTemplates
-        fieldValidation.fieldsApplied
       );
       console.log("AI Prompt for SQL generation:", prompt);
       const aiResponse = await this._executeModel(

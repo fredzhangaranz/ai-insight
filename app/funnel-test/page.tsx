@@ -23,12 +23,14 @@ export default function FunnelTestPage({
   patientId,
 }: FunnelTestPageProps) {
   const [showFunnel, setShowFunnel] = useState(false);
+  const [funnelKey, setFunnelKey] = useState(0);
   const [originalQuestion, setOriginalQuestion] = useState(
     propOriginalQuestion ||
       "What is the effectiveness of treatments across different wound etiologies over the past year?"
   );
 
   const handleStartFunnel = () => {
+    setFunnelKey((prev) => prev + 1);
     setShowFunnel(true);
   };
 
@@ -118,6 +120,7 @@ export default function FunnelTestPage({
 
           {/* Funnel Container */}
           <FunnelContainer
+            key={`funnel-${funnelKey}`}
             originalQuestion={originalQuestion}
             assessmentFormDefinition={assessmentFormDefinition}
             assessmentFormId={assessmentFormId}

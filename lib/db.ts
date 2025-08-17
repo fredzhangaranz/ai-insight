@@ -31,7 +31,7 @@
  *    only created once.
  */
 
-import sql from "mssql";
+import * as sql from "mssql";
 
 // Store the connection promise, not the pool object itself, to prevent race conditions.
 let poolPromise: Promise<sql.ConnectionPool> | null = null;

@@ -10,12 +10,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  SparklesIcon,
-  DocumentDuplicateIcon,
   ArrowPathIcon,
-  UserIcon,
   BeakerIcon,
   CpuChipIcon,
+  DocumentDuplicateIcon,
+  SparklesIcon,
+  TrashIcon,
+  UserIcon,
 } from "@/components/heroicons";
 import { ChartComponent, type ChartDataType } from "./charts/chart-component";
 import { LoadingDots } from "./loading-dots";
@@ -125,6 +126,14 @@ export default function AnalysisPage({
     "single-patient" | "all-patient"
   >("all-patient");
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
+
+  // State for deleting questions
+  const [deletingQuestion, setDeletingQuestion] = useState<{
+    id: number;
+    text: string;
+    isAIQuestion: boolean;
+  } | null>(null);
+  const [isDeletingQuestion, setIsDeletingQuestion] = useState(false);
 
   // Handle chart type changes
   const handleChartTypeChange = (value: ChartType) => {
@@ -542,6 +551,71 @@ export default function AnalysisPage({
       setIsEditingQuestion(false);
     }
   };
+
+  // Handle deleting questions
+  const handleDeleteQuestionClick = (
+    question: InsightQuestion,
+    questionIndex: number,
+    category: string
+  ) => {
+    // For AI questions, we can't delete them from the database, but we can hide them from the UI
+    // For custom questions, we can delete them from the database
+    const isAIQuestion = question.isCustom !== true;
+
+    setDeletingQuestion({
+      id: question.id || 0,
+      text: question.text,
+      isAIQuestion,
+    });
+  };
+
+  const handleCancelDeleteQuestion = () => {
+    setDeletingQuestion(null);
+  };
+
+  const handleConfirmDeleteQuestion = async () => {
+    if (!deletingQuestion) {
+      return;
+    }
+
+    setIsDeletingQuestion(true);
+    try {
+      if (deletingQuestion.isAIQuestion) {
+        // For AI questions, we can't delete them from the database
+        // Instead, we'll create a custom question that marks this AI question as "deleted"
+        // This is a workaround since we can't modify the AI-generated insights directly
+        console.log("AI questions cannot be deleted from the database");
+        // For now, we'll just show a message that AI questions can't be deleted
+        setErrorMessage(
+          "AI-generated questions cannot be deleted. You can edit them to create custom versions."
+        );
+        setState("error");
+      } else {
+        // For custom questions, delete from database
+        const response = await fetch(
+          `/api/assessment-forms/${assessmentFormId}/custom-questions/${deletingQuestion.id}`,
+          {
+            method: "DELETE",
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to delete question.");
+        }
+
+        // Refresh insights to reflect the deleted question
+        await fetchData(false);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setState("error");
+    } finally {
+      setIsDeletingQuestion(false);
+      setDeletingQuestion(null);
+    }
+  };
+
   const renderLoadingState = (title: string, subtitle: string) => (
     <Card className="border-slate-200 bg-white shadow-sm">
       <CardContent className="p-8 text-center">
@@ -692,6 +766,27 @@ export default function AnalysisPage({
                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                                   />
                                 </svg>
+                              </Button>
+                              {/* Delete button - for all questions */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteQuestionClick(
+                                    question,
+                                    qIndex,
+                                    cat.category
+                                  );
+                                }}
+                                className="text-red-400 hover:text-red-600"
+                                title={
+                                  question.isCustom
+                                    ? "Delete custom question"
+                                    : "AI questions cannot be deleted"
+                                }
+                              >
+                                <TrashIcon className="w-4 h-4" />
                               </Button>
                             </div>
                           </div>
@@ -845,6 +940,72 @@ export default function AnalysisPage({
                             disabled={isEditingQuestion}
                           >
                             Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Delete question confirmation modal */}
+                {deletingQuestion && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                      <h3 className="text-lg font-semibold mb-4">
+                        {deletingQuestion.isAIQuestion
+                          ? "Cannot Delete AI Question"
+                          : "Delete Question"}
+                      </h3>
+                      <div className="space-y-4">
+                        {deletingQuestion.isAIQuestion ? (
+                          <div>
+                            <p className="text-slate-600 mb-4">
+                              AI-generated questions cannot be deleted from the
+                              database. However, you can:
+                            </p>
+                            <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
+                              <li>
+                                Edit the question to create a custom version
+                              </li>
+                              <li>
+                                Regenerate all insights to get different AI
+                                questions
+                              </li>
+                            </ul>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-slate-600 mb-4">
+                              Are you sure you want to delete this custom
+                              question?
+                            </p>
+                            <p className="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded">
+                              "{deletingQuestion.text}"
+                            </p>
+                            <p className="text-xs text-slate-500 mt-2">
+                              This action cannot be undone.
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="flex space-x-2 pt-4">
+                          {!deletingQuestion.isAIQuestion && (
+                            <Button
+                              onClick={handleConfirmDeleteQuestion}
+                              disabled={isDeletingQuestion}
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                            >
+                              {isDeletingQuestion
+                                ? "Deleting..."
+                                : "Delete Question"}
+                            </Button>
+                          )}
+                          <Button
+                            onClick={handleCancelDeleteQuestion}
+                            variant="outline"
+                            disabled={isDeletingQuestion}
+                          >
+                            {deletingQuestion.isAIQuestion ? "Close" : "Cancel"}
                           </Button>
                         </div>
                       </div>
