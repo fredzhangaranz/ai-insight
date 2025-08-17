@@ -1,4 +1,4 @@
-import type { ChartType } from "@/lib/chart-contracts";
+import type { ChartType } from "../chart-contracts";
 
 /**
  * Constructs the system prompt for chart recommendations based on SQL results.

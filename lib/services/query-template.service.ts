@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface QueryTemplate {
   name: string;
@@ -126,7 +126,7 @@ export function validateTemplateCatalog(
           );
         }
       }
-      for (const ph of declared) {
+      for (const ph of Array.from(declared)) {
         if (!bracePlaceholders.includes(ph)) {
           warnings.push(
             `${prefix} placeholders[] contains '${ph}' which does not appear in sqlPattern`
@@ -244,7 +244,7 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 || b.size === 0) return 0;
   let intersection = 0;
   const [small, large] = a.size < b.size ? [a, b] : [b, a];
-  for (const t of small) {
+  for (const t of Array.from(small)) {
     if (large.has(t)) intersection += 1;
   }
   return intersection / (a.size + b.size - intersection);

@@ -1,4 +1,4 @@
-import type { ChartType } from "@/lib/chart-contracts";
+import type { ChartType } from "../chart-contracts";
 
 // Analysis Plan Types
 export interface AIAnalysisPlan {

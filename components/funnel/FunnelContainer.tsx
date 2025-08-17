@@ -74,15 +74,36 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   const [currentSubQuestions, setCurrentSubQuestions] =
     useState<SubQuestion[]>(subQuestions);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isGeneratingSubQuestions, setIsGeneratingSubQuestions] =
-    useState(false);
   const [subQuestionError, setSubQuestionError] = useState<string | null>(null);
   const [isLoadingCache, setIsLoadingCache] = useState(false);
+
+  // Update currentSubQuestions when subQuestions prop changes
+  useEffect(() => {
+    if (subQuestions && subQuestions.length > 0) {
+      console.log("Updating currentSubQuestions from props:", subQuestions);
+      setCurrentSubQuestions(subQuestions);
+      setCurrentIndex(0);
+    }
+  }, [subQuestions]);
+
+  // Reset state when component is remounted (key changes)
+  useEffect(() => {
+    console.log("FunnelContainer mounted/reset");
+    setCurrentSubQuestions(subQuestions || []);
+    setCurrentIndex(0);
+    setSubQuestionError(null);
+    setIsLoadingCache(false);
+  }, []);
 
   // Store results per sub-question ID for persistent results across navigation
   const [subQuestionResults, setSubQuestionResults] = useState<
     Record<string, any[]>
   >({});
+
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log("currentSubQuestions state changed:", currentSubQuestions);
+  }, [currentSubQuestions]);
 
   // Load cached sub-questions on component mount
   useEffect(() => {
@@ -136,26 +157,35 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
 
         const result = await response.json();
 
-        if (
-          result.wasCached &&
-          result.subQuestions &&
-          result.subQuestions.length > 0
-        ) {
-          console.log("✅ Found cached sub-questions, loading them...");
+        if (result.subQuestions && result.subQuestions.length > 0) {
+          if (result.wasCached) {
+            console.log("✅ Found cached sub-questions, loading them...");
+            console.log(
+              `✅ Loaded ${result.subQuestions.length} cached sub-questions`
+            );
+          } else {
+            console.log("✅ Generated new sub-questions, loading them...");
+            console.log(
+              `✅ Generated ${result.subQuestions.length} new sub-questions`
+            );
+          }
 
           // The caching service now returns the correct SubQuestion format
           setCurrentSubQuestions(result.subQuestions);
           setCurrentIndex(0);
-          console.log(
-            `✅ Loaded ${result.subQuestions.length} cached sub-questions`
-          );
         } else {
-          console.log("ℹ️ No cached sub-questions found, showing empty state");
+          console.log(
+            "ℹ️ No sub-questions found or generated, showing empty state"
+          );
+          // Clear any existing subquestions when no cache is found
+          setCurrentSubQuestions([]);
         }
       } catch (error: any) {
         console.error("Error loading cached sub-questions:", error);
         // Don't show error for cache loading - just log it
         // The user can still click "Generate" to create new ones
+        // Clear any existing subquestions on error
+        setCurrentSubQuestions([]);
       } finally {
         setIsLoadingCache(false);
       }
@@ -216,14 +246,13 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   };
 
   const handleGenerateSubQuestions = async () => {
-    console.log("Button clicked! Starting sub-question generation...");
+    console.log("Button clicked! Starting sub-question regeneration...");
     console.log("assessmentFormId:", assessmentFormId);
     console.log("originalQuestion:", originalQuestion);
-    setIsGeneratingSubQuestions(true);
     setSubQuestionError(null);
 
     try {
-      console.log("Generating sub-questions for:", originalQuestion);
+      console.log("Regenerating sub-questions for:", originalQuestion);
 
       if (!assessmentFormId) {
         throw new Error(
@@ -257,7 +286,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
       }
 
       const result = await response.json();
-      console.log("Sub-questions generated:", result);
+      console.log("Sub-questions regenerated:", result);
 
       // Check if we got an error response
       if (result.error) {
@@ -265,13 +294,13 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
       }
 
       // The caching service now returns the correct SubQuestion format
+      console.log("Setting regenerated sub-questions:", result.subQuestions);
       setCurrentSubQuestions(result.subQuestions);
       setCurrentIndex(0); // Reset to first question
-
-      console.log("Sub-questions set:", result.subQuestions);
+      console.log("Sub-questions regenerated and set:", result.subQuestions);
     } catch (error: any) {
-      console.error("Failed to generate sub-questions:", error);
-      let errorMessage = "Failed to generate sub-questions";
+      console.error("Failed to regenerate sub-questions:", error);
+      let errorMessage = "Failed to regenerate sub-questions";
 
       if (error.message) {
         if (error.message.includes("AI returned invalid JSON format")) {
@@ -288,8 +317,6 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
       }
 
       setSubQuestionError(errorMessage);
-    } finally {
-      setIsGeneratingSubQuestions(false);
     }
   };
 
@@ -417,6 +444,11 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
     }
   };
 
+  console.log(
+    "FunnelContainer rendering with currentSubQuestions:",
+    currentSubQuestions.length
+  );
+
   return (
     <div className="h-screen flex flex-col">
       {/* Top Section - Original Question */}
@@ -432,29 +464,29 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
             <strong>Original Question:</strong> {originalQuestion}
           </p>
           <div className="flex flex-col items-center space-y-2">
-            <button
-              onClick={handleGenerateSubQuestions}
-              disabled={isGeneratingSubQuestions}
-              className={`px-6 py-3 rounded-lg transition-colors text-sm font-medium shadow-sm ${
-                isGeneratingSubQuestions
-                  ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                  : "bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700"
-              }`}
-              title="Generate sub-questions to break down the original question"
-            >
-              {isGeneratingSubQuestions ? (
+            {isLoadingCache ? (
+              <div className="px-6 py-3 rounded-lg bg-blue-100 text-blue-700 text-sm font-medium">
                 <span className="flex items-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Generating...</span>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span>Loading sub-questions...</span>
                 </span>
-              ) : (
-                <span>
-                  {currentSubQuestions.length > 0
-                    ? "🔄 Regenerate Sub-Questions"
-                    : "🔍 Generate Sub-Questions"}
+              </div>
+            ) : currentSubQuestions.length > 0 ? (
+              <button
+                onClick={handleGenerateSubQuestions}
+                className="px-6 py-3 rounded-lg transition-colors text-sm font-medium shadow-sm bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700"
+                title="Regenerate sub-questions to break down the original question"
+              >
+                <span>🔄 Regenerate Sub-Questions</span>
+              </button>
+            ) : (
+              <div className="px-6 py-3 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium">
+                <span className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                  <span>Generating sub-questions...</span>
                 </span>
-              )}
-            </button>
+              </div>
+            )}
 
             {subQuestionError && (
               <div className="text-red-600 text-xs bg-red-50 px-3 py-2 rounded border border-red-200 max-w-md text-center">
@@ -492,7 +524,16 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
 
           {/* Scrollable sub-questions container */}
           <div className="overflow-x-auto">
-            {currentSubQuestions.length > 0 ? (
+            {isLoadingCache ? (
+              <div className="flex items-center justify-center min-h-[120px]">
+                <div className="text-center text-gray-500">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                  <p className="text-sm font-medium">
+                    Loading sub-questions...
+                  </p>
+                </div>
+              </div>
+            ) : currentSubQuestions.length > 0 ? (
               <div className="flex space-x-4 pb-2 min-h-[120px]">
                 {currentSubQuestions.map((question, index) => (
                   <div
@@ -565,24 +606,13 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
             ) : (
               <div className="flex items-center justify-center min-h-[120px]">
                 <div className="text-center text-gray-500">
-                  {isLoadingCache ? (
-                    <>
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                      <p className="text-sm font-medium">
-                        Loading cached sub-questions...
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-4xl mb-2">🔍</div>
-                      <p className="text-sm font-medium">
-                        No sub-questions generated yet
-                      </p>
-                      <p className="text-xs">
-                        Click "Generate Sub-Questions" above to get started
-                      </p>
-                    </>
-                  )}
+                  <div className="text-4xl mb-2">🔍</div>
+                  <p className="text-sm font-medium">
+                    No sub-questions available
+                  </p>
+                  <p className="text-xs">
+                    Sub-questions will be generated automatically
+                  </p>
                 </div>
               </div>
             )}
@@ -681,7 +711,19 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
 
           {/* Current Sub-Question Panel */}
           <div className="flex-1">
-            {currentSubQuestions.length > 0 && currentQuestion ? (
+            {isLoadingCache ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center text-gray-500">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-lg font-medium mb-2">
+                    Loading Sub-Questions
+                  </p>
+                  <p className="text-sm">
+                    Please wait while we load or generate your sub-questions...
+                  </p>
+                </div>
+              </div>
+            ) : currentSubQuestions.length > 0 && currentQuestion ? (
               <FunnelPanel
                 subQuestion={currentQuestion}
                 assessmentFormDefinition={assessmentFormDefinition}
@@ -700,10 +742,10 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
                   <div className="text-4xl mb-4">📋</div>
                   <p className="text-lg font-medium mb-2">Ready to Start</p>
                   <p className="text-sm mb-4">
-                    Generate sub-questions to begin your analysis
+                    Sub-questions will be generated automatically
                   </p>
                   <div className="text-xs text-gray-400">
-                    <p>1. Click "Generate Sub-Questions" in the top section</p>
+                    <p>1. Sub-questions are being generated automatically</p>
                     <p>2. Review and edit the generated sub-questions</p>
                     <p>3. Generate SQL queries for each step</p>
                     <p>4. Execute queries and view results</p>
