@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
-import { getDbPool } from "@/lib/db";
+import { getSilhouetteDbPool } from "@/lib/db";
 
 export async function GET(
   request: NextRequest,
@@ -24,7 +24,7 @@ export async function GET(
   }
 
   try {
-    const pool = await getDbPool();
+    const pool = await getSilhouetteDbPool();
 
     // Query based on database-schema-context.md
     const query = `

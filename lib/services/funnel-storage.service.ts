@@ -1,4 +1,4 @@
-import { getDbPool } from "@/lib/db";
+import { getToolDbPool } from "@/lib/db";
 import type {
   QueryFunnel,
   SubQuestion,
@@ -11,65 +11,62 @@ export async function createFunnel(data: {
   assessmentFormVersionFk: string;
   originalQuestion: string;
 }): Promise<QueryFunnel> {
-  const pool = await getDbPool();
-  const result = await pool
-    .request()
-    .input("assessmentFormVersionFk", data.assessmentFormVersionFk)
-    .input("originalQuestion", data.originalQuestion).query(`
-      INSERT INTO rpt.QueryFunnel (assessmentFormVersionFk, originalQuestion, status, createdDate, lastModifiedDate)
-      OUTPUT inserted.*
-      VALUES (@assessmentFormVersionFk, @originalQuestion, 'active', GETUTCDATE(), GETUTCDATE())
-    `);
-  return result.recordset[0];
+  const pool = await getToolDbPool();
+  const result = await pool.query(
+    `
+      INSERT INTO rpt."QueryFunnel" ("assessmentFormVersionFk", "originalQuestion", status, "createdDate", "lastModifiedDate")
+      VALUES ($1, $2, 'active', NOW(), NOW())
+      RETURNING *
+    `,
+    [data.assessmentFormVersionFk, data.originalQuestion]
+  );
+  return result.rows[0];
 }
 
 export async function getFunnelById(id: number): Promise<QueryFunnel | null> {
-  const pool = await getDbPool();
-  const result = await pool
-    .request()
-    .input("id", id)
-    .query("SELECT * FROM rpt.QueryFunnel WHERE id = @id");
-  return result.recordset[0] || null;
+  const pool = await getToolDbPool();
+  const result = await pool.query(
+    'SELECT * FROM rpt."QueryFunnel" WHERE id = $1',
+    [id]
+  );
+  return result.rows[0] || null;
 }
 
 export async function findFunnelByQuestion(
   assessmentFormVersionFk: string,
   originalQuestion: string
 ): Promise<QueryFunnel | null> {
-  const pool = await getDbPool();
-  const result = await pool
-    .request()
-    .input("assessmentFormVersionFk", assessmentFormVersionFk)
-    .input("originalQuestion", originalQuestion).query(`
-      SELECT * FROM rpt.QueryFunnel 
-      WHERE assessmentFormVersionFk = @assessmentFormVersionFk 
-      AND originalQuestion = @originalQuestion 
+  const pool = await getToolDbPool();
+  const result = await pool.query(
+    `
+      SELECT * FROM rpt."QueryFunnel"
+      WHERE "assessmentFormVersionFk" = $1
+      AND "originalQuestion" = $2
       AND status = 'active'
-      ORDER BY createdDate DESC
-    `);
-  return result.recordset[0] || null;
+      ORDER BY "createdDate" DESC
+    `,
+    [assessmentFormVersionFk, originalQuestion]
+  );
+  return result.rows[0] || null;
 }
 
 export async function listFunnels(): Promise<QueryFunnel[]> {
-  const pool = await getDbPool();
-  const result = await pool
-    .request()
-    .query("SELECT * FROM rpt.QueryFunnel ORDER BY createdDate DESC");
-  return result.recordset;
+  const pool = await getToolDbPool();
+  const result = await pool.query(
+    'SELECT * FROM rpt."QueryFunnel" ORDER BY "createdDate" DESC'
+  );
+  return result.rows;
 }
 
 export async function updateFunnelStatus(
   id: number,
   status: QueryFunnelStatus
 ): Promise<void> {
-  const pool = await getDbPool();
-  await pool
-    .request()
-    .input("id", id)
-    .input("status", status)
-    .query(
-      `UPDATE rpt.QueryFunnel SET status = @status, lastModifiedDate = GETUTCDATE() WHERE id = @id`
-    );
+  const pool = await getToolDbPool();
+  await pool.query(
+    `UPDATE rpt."QueryFunnel" SET status = $1, "lastModifiedDate" = NOW() WHERE id = $2`,
+    [status, id]
+  );
 }
 
 // SubQuestions
@@ -77,18 +74,16 @@ export async function addSubQuestion(
   funnelId: number,
   data: { questionText: string; order: number; sqlQuery?: string }
 ): Promise<SubQuestion> {
-  const pool = await getDbPool();
-  const result = await pool
-    .request()
-    .input("funnelId", funnelId)
-    .input("questionText", data.questionText)
-    .input("order", data.order)
-    .input("sqlQuery", data.sqlQuery ?? null).query(`
-      INSERT INTO rpt.SubQuestions (funnelId, questionText, [order], sqlQuery, status)
-      OUTPUT inserted.*
-      VALUES (@funnelId, @questionText, @order, @sqlQuery, 'pending')
-    `);
-  return result.recordset[0];
+  const pool = await getToolDbPool();
+  const result = await pool.query(
+    `
+      INSERT INTO rpt."SubQuestions" ("funnelId", "questionText", "order", "sqlQuery", status)
+      VALUES ($1, $2, $3, $4, 'pending')
+      RETURNING *
+    `,
+    [funnelId, data.questionText, data.order, data.sqlQuery ?? null]
+  );
+  return result.rows[0];
 }
 
 export async function addSubQuestions(
@@ -99,21 +94,29 @@ export async function addSubQuestions(
     sqlQuery?: string;
   }>
 ): Promise<SubQuestion[]> {
-  const pool = await getDbPool();
+  const pool = await getToolDbPool();
+  const client = await pool.connect();
   const results: SubQuestion[] = [];
 
-  for (const sq of subQuestions) {
-    const result = await pool
-      .request()
-      .input("funnelId", funnelId)
-      .input("questionText", sq.questionText)
-      .input("order", sq.order)
-      .input("sqlQuery", sq.sqlQuery ?? null).query(`
-        INSERT INTO rpt.SubQuestions (funnelId, questionText, [order], sqlQuery, status)
-        OUTPUT inserted.*
-        VALUES (@funnelId, @questionText, @order, @sqlQuery, 'pending')
-      `);
-    results.push(result.recordset[0]);
+  try {
+    await client.query("BEGIN");
+    for (const sq of subQuestions) {
+      const result = await client.query(
+        `
+          INSERT INTO rpt."SubQuestions" ("funnelId", "questionText", "order", "sqlQuery", status)
+          VALUES ($1, $2, $3, $4, 'pending')
+          RETURNING *
+        `,
+        [funnelId, sq.questionText, sq.order, sq.sqlQuery ?? null]
+      );
+      results.push(result.rows[0]);
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
   }
 
   return results;
@@ -122,26 +125,23 @@ export async function addSubQuestions(
 export async function getSubQuestions(
   funnelId: number
 ): Promise<SubQuestion[]> {
-  const pool = await getDbPool();
-  const result = await pool
-    .request()
-    .input("funnelId", funnelId)
-    .query(
-      "SELECT * FROM rpt.SubQuestions WHERE funnelId = @funnelId ORDER BY [order]"
-    );
-  return result.recordset;
+  const pool = await getToolDbPool();
+  const result = await pool.query(
+    'SELECT * FROM rpt."SubQuestions" WHERE "funnelId" = $1 ORDER BY "order"',
+    [funnelId]
+  );
+  return result.rows;
 }
 
 export async function updateSubQuestionStatus(
   id: number,
   status: SubQuestionStatus
 ): Promise<void> {
-  const pool = await getDbPool();
-  await pool
-    .request()
-    .input("id", id)
-    .input("status", status)
-    .query(`UPDATE rpt.SubQuestions SET status = @status WHERE id = @id`);
+  const pool = await getToolDbPool();
+  await pool.query('UPDATE rpt."SubQuestions" SET status = $1 WHERE id = $2', [
+    status,
+    id,
+  ]);
 }
 
 export async function updateSubQuestionSql(
@@ -153,37 +153,35 @@ export async function updateSubQuestionSql(
     sqlMatchedTemplate?: string;
   }
 ): Promise<void> {
-  const pool = await getDbPool();
-  const request = pool
-    .request()
-    .input("id", id)
-    .input("sqlQuery", sqlQuery)
-    .input("sqlExplanation", metadata?.sqlExplanation ?? null)
-    .input("sqlValidationNotes", metadata?.sqlValidationNotes ?? null)
-    .input("sqlMatchedTemplate", metadata?.sqlMatchedTemplate ?? null);
-
-  await request.query(`
-    UPDATE rpt.SubQuestions 
-    SET sqlQuery = @sqlQuery,
-        sqlExplanation = @sqlExplanation,
-        sqlValidationNotes = @sqlValidationNotes,
-        sqlMatchedTemplate = @sqlMatchedTemplate
-    WHERE id = @id
-  `);
+  const pool = await getToolDbPool();
+  await pool.query(
+    `
+    UPDATE rpt."SubQuestions"
+    SET "sqlQuery" = $1,
+        "sqlExplanation" = $2,
+        "sqlValidationNotes" = $3,
+        "sqlMatchedTemplate" = $4
+    WHERE id = $5
+  `,
+    [
+      sqlQuery,
+      metadata?.sqlExplanation ?? null,
+      metadata?.sqlValidationNotes ?? null,
+      metadata?.sqlMatchedTemplate ?? null,
+      id,
+    ]
+  );
 }
 
 export async function updateSubQuestionText(
   id: number,
   questionText: string
 ): Promise<void> {
-  const pool = await getDbPool();
-  await pool
-    .request()
-    .input("id", id)
-    .input("questionText", questionText)
-    .query(
-      `UPDATE rpt.SubQuestions SET questionText = @questionText WHERE id = @id`
-    );
+  const pool = await getToolDbPool();
+  await pool.query(
+    'UPDATE rpt."SubQuestions" SET "questionText" = $1 WHERE id = $2',
+    [questionText, id]
+  );
 }
 
 // QueryResults
@@ -191,40 +189,40 @@ export async function storeQueryResult(
   subQuestionId: number,
   resultData: any
 ): Promise<void> {
-  const pool = await getDbPool();
-  await pool
-    .request()
-    .input("subQuestionId", subQuestionId)
-    .input("resultData", JSON.stringify(resultData)).query(`
-      INSERT INTO rpt.QueryResults (subQuestionId, resultData)
-      VALUES (@subQuestionId, @resultData)
-    `);
+  const pool = await getToolDbPool();
+  await pool.query(
+    `
+      INSERT INTO rpt."QueryResults" ("subQuestionId", "resultData")
+      VALUES ($1, $2)
+    `,
+    [subQuestionId, JSON.stringify(resultData)]
+  );
 }
 
 export async function getQueryResult(
   subQuestionId: number
 ): Promise<any | null> {
-  const pool = await getDbPool();
-  const result = await pool
-    .request()
-    .input("subQuestionId", subQuestionId)
-    .query(
-      "SELECT TOP 1 resultData FROM rpt.QueryResults WHERE subQuestionId = @subQuestionId ORDER BY executionDate DESC"
-    );
-  if (result.recordset.length === 0) return null;
+  const pool = await getToolDbPool();
+  const result = await pool.query(
+    'SELECT "resultData" FROM rpt."QueryResults" WHERE "subQuestionId" = $1 ORDER BY "executionDate" DESC LIMIT 1',
+    [subQuestionId]
+  );
+  if (result.rows.length === 0) return null;
   try {
-    return JSON.parse(result.recordset[0].resultData);
+    return JSON.parse(result.rows[0].resultData);
   } catch {
-    return result.recordset[0].resultData;
+    return result.rows[0].resultData;
   }
 }
 
 export async function cleanupOldResults(
   olderThanHours: number = 24
 ): Promise<void> {
-  const pool = await getDbPool();
-  await pool.request().query(`
-    DELETE FROM rpt.QueryResults
-    WHERE executionDate < DATEADD(hour, -${olderThanHours}, GETUTCDATE())
-  `);
+  const pool = await getToolDbPool();
+  await pool.query(
+    `
+    DELETE FROM rpt."QueryResults"
+    WHERE "executionDate" < NOW() - INTERVAL '${olderThanHours} hours'
+  `
+  );
 }

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build artifacts
+.next
+next-env.d.ts
+build
+dist
+
+# Local environment
+.env.local
+*.log
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml

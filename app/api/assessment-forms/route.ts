@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getDbPool } from "@/lib/db";
+import { getSilhouetteDbPool } from "@/lib/db";
 
 /**
  * Handles GET requests to /api/assessment-forms
@@ -18,7 +18,7 @@ export async function GET() {
   console.log("API call to /api/assessment-forms received.");
 
   try {
-    const pool = await getDbPool();
+    const pool = await getSilhouetteDbPool();
 
     // Get latest version of each assessment type
     const query = `

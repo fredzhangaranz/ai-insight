@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sql from "mssql";
-import { getDbPool } from "@/lib/db";
+import { getInsightGenDbPool } from "@/lib/db";
 
 export async function POST(
   request: NextRequest,
@@ -33,127 +32,112 @@ export async function POST(
       );
     }
 
-    const pool = await getDbPool();
+    const pool = await getInsightGenDbPool();
+    const client = await pool.connect();
 
-    // Insert the custom question
-    const insertQuery = `
-      INSERT INTO SilhouetteAIDashboard.rpt.CustomQuestions 
-      (assessmentFormVersionFk, category, questionText, questionType, originalQuestionId, createdBy)
-      VALUES (@assessmentFormId, @category, @questionText, @questionType, @originalQuestionId, @createdBy);
-      
-      SELECT SCOPE_IDENTITY() as id;
-    `;
-
-    const result = await pool
-      .request()
-      .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
-      .input("category", sql.NVarChar, category)
-      .input("questionText", sql.NVarChar, questionText)
-      .input("questionType", sql.NVarChar, questionType)
-      .input("originalQuestionId", sql.NVarChar, originalQuestionId)
-      .input("createdBy", sql.NVarChar, "user") // TODO: Get actual user from auth
-      .query(insertQuery);
-
-    const questionId = result.recordset[0].id;
-
-    // Update the cached insights to include the new custom question
     try {
-      const cachedResult = await pool
-        .request()
-        .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
-        .query(
-          "SELECT insightsJson FROM SilhouetteAIDashboard.rpt.AIInsights WHERE assessmentFormVersionFk = @assessmentFormId"
+      // Insert the custom question
+      const insertQuery = `
+        INSERT INTO rpt."CustomQuestions"
+        ("assessmentFormVersionFk", category, "questionText", "questionType", "originalQuestionId", "createdBy")
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id;
+      `;
+
+      const result = await client.query(insertQuery, [
+        assessmentFormId,
+        category,
+        questionText,
+        questionType,
+        originalQuestionId,
+        "user", // TODO: Get actual user from auth
+      ]);
+
+      const questionId = result.rows[0].id;
+
+      // Update the cached insights to include the new custom question
+      try {
+        const cachedResult = await client.query(
+          'SELECT "insightsJson" FROM rpt."AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          [assessmentFormId]
         );
 
-      if (cachedResult.recordset.length > 0) {
-        // Get all custom questions including the new one
-        const customQuestionsResult = await pool
-          .request()
-          .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
-          .query(
-            "SELECT id, category, questionText, questionType, originalQuestionId FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @assessmentFormId AND isActive = 1"
+        if (cachedResult.rows.length > 0) {
+          const customQuestionsResult = await client.query(
+            'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM rpt."CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+            [assessmentFormId]
           );
 
-        // Parse cached insights and merge with all custom questions
-        const cachedInsights = JSON.parse(
-          cachedResult.recordset[0].insightsJson
-        );
+          const cachedInsights = JSON.parse(cachedResult.rows[0].insightsJson);
 
-        // Remove existing custom questions to avoid duplicates
-        cachedInsights.insights.forEach((category: any) => {
-          category.questions = category.questions.filter(
-            (q: any) => !q.isCustom
-          );
-        });
-
-        // Add the current custom questions
-        const customQuestionsByCategory =
-          customQuestionsResult.recordset.reduce((acc: any, question: any) => {
-            if (!acc[question.category]) {
-              acc[question.category] = [];
-            }
-            acc[question.category].push({
-              text: question.questionText,
-              type: question.questionType as "single-patient" | "all-patient",
-              isCustom: true,
-              originalQuestionId: question.originalQuestionId,
-              id: question.id,
-            });
-            return acc;
-          }, {});
-
-        // Merge custom questions into existing categories or create new ones
-        Object.entries(customQuestionsByCategory).forEach(
-          ([category, questions]: [string, any]) => {
-            const existingCategory = cachedInsights.insights.find(
-              (cat: any) => cat.category === category
+          cachedInsights.insights.forEach((category: any) => {
+            category.questions = category.questions.filter(
+              (q: any) => !q.isCustom
             );
+          });
 
-            if (existingCategory) {
-              existingCategory.questions.push(...questions);
-            } else {
-              cachedInsights.insights.push({
-                category,
-                questions,
+          const customQuestionsByCategory = customQuestionsResult.rows.reduce(
+            (acc: any, question: any) => {
+              if (!acc[question.category]) {
+                acc[question.category] = [];
+              }
+              acc[question.category].push({
+                text: question.questionText,
+                type: question.questionType as "single-patient" | "all-patient",
+                isCustom: true,
+                originalQuestionId: question.originalQuestionId,
+                id: question.id,
               });
-            }
-          }
-        );
-
-        // Update the cache with merged insights
-        await pool
-          .request()
-          .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
-          .input(
-            "insightsJson",
-            sql.NVarChar(sql.MAX),
-            JSON.stringify(cachedInsights)
-          )
-          .query(
-            "UPDATE SilhouetteAIDashboard.rpt.AIInsights SET insightsJson = @insightsJson WHERE assessmentFormVersionFk = @assessmentFormId"
+              return acc;
+            },
+            {}
           );
 
-        console.log(
-          `Cache updated for assessment form ${assessmentFormId} after custom question creation`
-        );
-      } else {
-        console.log(
-          `No cache to update for assessment form ${assessmentFormId}`
-        );
-      }
-    } catch (cacheError) {
-      console.warn("Failed to update cache:", cacheError);
-      // Don't fail the entire operation if cache update fails
-    }
+          Object.entries(customQuestionsByCategory).forEach(
+            ([category, questions]: [string, any]) => {
+              const existingCategory = cachedInsights.insights.find(
+                (cat: any) => cat.category === category
+              );
 
-    return NextResponse.json({
-      id: questionId,
-      category,
-      questionText,
-      questionType,
-      originalQuestionId,
-      message: "Custom question added successfully.",
-    });
+              if (existingCategory) {
+                existingCategory.questions.push(...questions);
+              } else {
+                cachedInsights.insights.push({
+                  category,
+                  questions,
+                });
+              }
+            }
+          );
+
+          await client.query(
+            'UPDATE rpt."AIInsights" SET "insightsJson" = $1 WHERE "assessmentFormVersionFk" = $2',
+            [JSON.stringify(cachedInsights), assessmentFormId]
+          );
+
+          console.log(
+            `Cache updated for assessment form ${assessmentFormId} after custom question creation`
+          );
+        } else {
+          console.log(
+            `No cache to update for assessment form ${assessmentFormId}`
+          );
+        }
+      } catch (cacheError) {
+        console.warn("Failed to update cache:", cacheError);
+      }
+
+      return NextResponse.json({
+        id: questionId,
+        category,
+        questionText,
+        questionType,
+        originalQuestionId,
+        message: "Custom question added successfully.",
+      });
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error("Error adding custom question:", error);
     return NextResponse.json(
@@ -170,25 +154,26 @@ export async function GET(
   const { assessmentFormId } = params;
 
   try {
-    const pool = await getDbPool();
+    const pool = await getInsightGenDbPool();
+    const client = await pool.connect();
+    try {
+      // Get all custom questions for this assessment form
+      const query = `
+        SELECT id, category, "questionText", "questionType", "originalQuestionId", "createdBy", "createdDate"
+        FROM rpt."CustomQuestions"
+        WHERE "assessmentFormVersionFk" = $1
+        AND "isActive" = true
+        ORDER BY category, "createdDate" DESC;
+      `;
 
-    // Get all custom questions for this assessment form
-    const query = `
-      SELECT id, category, questionText, questionType, originalQuestionId, createdBy, createdDate
-      FROM SilhouetteAIDashboard.rpt.CustomQuestions
-      WHERE assessmentFormVersionFk = @assessmentFormId 
-      AND isActive = 1
-      ORDER BY category, createdDate DESC;
-    `;
+      const result = await client.query(query, [assessmentFormId]);
 
-    const result = await pool
-      .request()
-      .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
-      .query(query);
-
-    return NextResponse.json({
-      customQuestions: result.recordset,
-    });
+      return NextResponse.json({
+        customQuestions: result.rows,
+      });
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error("Error fetching custom questions:", error);
     return NextResponse.json(

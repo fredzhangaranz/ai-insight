@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDbPool } from "@/lib/db";
+import { getSilhouetteDbPool } from "@/lib/db";
 import {
   withErrorHandling,
   createErrorResponse,
@@ -76,7 +76,7 @@ async function executeQueryHandler(
   }
 
   // 3. Execute the query
-  const pool = await getDbPool();
+  const pool = await getSilhouetteDbPool();
   const dbRequest = pool.request();
 
   // 3a. Validate and fix the query

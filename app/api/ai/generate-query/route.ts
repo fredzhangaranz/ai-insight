@@ -6,12 +6,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDbPool } from "@/lib/db";
+import { getInsightGenDbPool, getSilhouetteDbPool } from "@/lib/db";
 import type { AnalysisPlan } from "@/lib/types/analysis-plan";
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
-import sql from "mssql";
+import * as sql from "mssql";
 import { MetricsMonitor } from "@/lib/monitoring";
 
 // --- CONFIGURATION ---
@@ -235,127 +235,133 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const pool = await getDbPool();
+    const toolDbPool = await getInsightGenDbPool();
+    const client = await toolDbPool.connect();
 
-    // Cache Check (if not regenerating)
-    if (!regenerate) {
-      const cacheStartTime = Date.now();
-      const cacheQuery = `
-        SELECT analysisPlanJson FROM rpt.AIAnalysisPlan
-        WHERE assessmentFormVersionFk = @assessmentFormId AND question = @question;
-      `;
-      console.log("Checking cache for analysis plan...", cacheQuery);
-      const cachedResult = await pool
-        .request()
-        .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
-        .input("question", sql.NVarChar(1000), question)
-        .query(cacheQuery);
+    try {
+      // Cache Check (if not regenerating)
+      if (!regenerate) {
+        const cacheStartTime = Date.now();
+        const cacheQuery = `
+          SELECT "analysisPlanJson" FROM rpt."AIAnalysisPlan"
+          WHERE "assessmentFormVersionFk" = $1 AND question = $2;
+        `;
+        console.log("Checking cache for analysis plan...", cacheQuery);
+        const cachedResult = await client.query(cacheQuery, [
+          assessmentFormId,
+          question,
+        ]);
 
-      // Log cache check query metrics
-      await metrics.logQueryMetrics({
-        queryId: "check_analysis_plan_cache",
-        executionTime: Date.now() - cacheStartTime,
-        resultSize: cachedResult.recordset.length,
-        timestamp: new Date(),
-        cached: false,
-        sql: cacheQuery,
-        parameters: { assessmentFormId, question },
-      });
+        // Log cache check query metrics
+        await metrics.logQueryMetrics({
+          queryId: "check_analysis_plan_cache",
+          executionTime: Date.now() - cacheStartTime,
+          resultSize: cachedResult.rows.length,
+          timestamp: new Date(),
+          cached: false,
+          sql: cacheQuery,
+          parameters: { assessmentFormId, question },
+        });
 
-      console.log("Cached result:", cachedResult);
-      if (cachedResult.recordset.length > 0) {
-        console.log("Cached analysis plan found. Returning from database.");
-        const plan = JSON.parse(cachedResult.recordset[0].analysisPlanJson);
-        cacheHit = true;
+        console.log("Cached result:", cachedResult);
+        if (cachedResult.rows.length > 0) {
+          console.log("Cached analysis plan found. Returning from database.");
+          const plan = JSON.parse(cachedResult.rows[0].analysisPlanJson);
+          cacheHit = true;
 
-        // Validate the cached plan
-        if (!isValidAnalysisPlan(plan)) {
-          console.error("Cached analysis plan is invalid, regenerating...");
-          cacheHit = false;
-        } else {
-          // Log cache hit metrics
+          // Validate the cached plan
+          if (!isValidAnalysisPlan(plan)) {
+            console.error("Cached analysis plan is invalid, regenerating...");
+            cacheHit = false;
+          } else {
+            // Log cache hit metrics
+            await metrics.logCacheMetrics({
+              cacheHits: 1,
+              cacheMisses: 0,
+              cacheInvalidations: 0,
+              averageHitLatency: Date.now() - startTime,
+              timestamp: new Date(),
+            });
+
+            return NextResponse.json(plan);
+          }
+        }
+
+        // Log cache miss metrics
+        if (!cacheHit) {
           await metrics.logCacheMetrics({
-            cacheHits: 1,
-            cacheMisses: 0,
+            cacheHits: 0,
+            cacheMisses: 1,
             cacheInvalidations: 0,
-            averageHitLatency: Date.now() - startTime,
+            averageHitLatency: 0,
             timestamp: new Date(),
           });
-
-          return NextResponse.json(plan);
         }
+
+        console.log("No cached analysis plan found for this question.");
       }
 
-      // Log cache miss metrics
-      if (!cacheHit) {
+      // AI Generation (if regenerate=true or cache miss)
+      console.log("Generating new analysis plan via AI.");
+      const plan = await generateAIPlan(
+        assessmentFormDefinition,
+        question,
+        patientId
+      );
+
+      // Save to Cache
+      const cacheUpdateStartTime = Date.now();
+      const analysisPlanJsonString = JSON.stringify(plan);
+      const upsertQuery = `
+        INSERT INTO rpt."AIAnalysisPlan" ("assessmentFormVersionFk", question, "analysisPlanJson", "generatedBy")
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT ("assessmentFormVersionFk", question)
+        DO UPDATE SET
+          "analysisPlanJson" = EXCLUDED."analysisPlanJson",
+          "generatedDate" = NOW(),
+          "generatedBy" = EXCLUDED."generatedBy";
+      `;
+
+      await client.query(upsertQuery, [
+        assessmentFormId,
+        question,
+        analysisPlanJsonString,
+        AI_GENERATED_BY,
+      ]);
+
+      // Log cache update metrics
+      await metrics.logQueryMetrics({
+        queryId: "update_analysis_plan_cache",
+        executionTime: Date.now() - cacheUpdateStartTime,
+        resultSize: 1,
+        timestamp: new Date(),
+        cached: false,
+        sql: upsertQuery,
+        parameters: {
+          assessmentFormId,
+          question,
+          generatedBy: AI_GENERATED_BY,
+        },
+      });
+
+      // Log cache invalidation if this was a regenerate
+      if (cacheHit) {
         await metrics.logCacheMetrics({
           cacheHits: 0,
-          cacheMisses: 1,
-          cacheInvalidations: 0,
+          cacheMisses: 0,
+          cacheInvalidations: 1,
           averageHitLatency: 0,
           timestamp: new Date(),
         });
       }
 
-      console.log("No cached analysis plan found for this question.");
+      console.log("Successfully saved new analysis plan to cache.");
+
+      // Return the final payload
+      return NextResponse.json(plan);
+    } finally {
+      client.release();
     }
-
-    // AI Generation (if regenerate=true or cache miss)
-    console.log("Generating new analysis plan via AI.");
-    const plan = await generateAIPlan(
-      assessmentFormDefinition,
-      question,
-      patientId
-    );
-
-    // Save to Cache
-    const cacheUpdateStartTime = Date.now();
-    const analysisPlanJsonString = JSON.stringify(plan);
-    const upsertQuery = `
-      MERGE rpt.AIAnalysisPlan AS target
-      USING (SELECT @assessmentFormId AS assessmentFormVersionFk, @question AS question) AS source
-      ON (target.assessmentFormVersionFk = source.assessmentFormVersionFk AND target.question = source.question)
-      WHEN MATCHED THEN
-        UPDATE SET analysisPlanJson = @analysisPlanJson, generatedDate = GETUTCDATE(), generatedBy = @generatedBy
-      WHEN NOT MATCHED THEN
-        INSERT (assessmentFormVersionFk, question, analysisPlanJson, generatedBy)
-        VALUES (@assessmentFormId, @question, @analysisPlanJson, @generatedBy);
-    `;
-
-    await pool
-      .request()
-      .input("assessmentFormId", sql.UniqueIdentifier, assessmentFormId)
-      .input("question", sql.NVarChar(1000), question)
-      .input("analysisPlanJson", sql.NVarChar(sql.MAX), analysisPlanJsonString)
-      .input("generatedBy", sql.NVarChar, AI_GENERATED_BY)
-      .query(upsertQuery);
-
-    // Log cache update metrics
-    await metrics.logQueryMetrics({
-      queryId: "update_analysis_plan_cache",
-      executionTime: Date.now() - cacheUpdateStartTime,
-      resultSize: 1,
-      timestamp: new Date(),
-      cached: false,
-      sql: upsertQuery,
-      parameters: { assessmentFormId, question, generatedBy: AI_GENERATED_BY },
-    });
-
-    // Log cache invalidation if this was a regenerate
-    if (cacheHit) {
-      await metrics.logCacheMetrics({
-        cacheHits: 0,
-        cacheMisses: 0,
-        cacheInvalidations: 1,
-        averageHitLatency: 0,
-        timestamp: new Date(),
-      });
-    }
-
-    console.log("Successfully saved new analysis plan to cache.");
-
-    // Return the final payload
-    return NextResponse.json(plan);
   } catch (error: any) {
     console.error("API Error in /ai/generate-query:", error.message);
     return NextResponse.json(
