@@ -33,7 +33,7 @@ export async function PUT(
     try {
       // Update the custom question
       const updateQuery = `
-        UPDATE rpt."CustomQuestions"
+        UPDATE "CustomQuestions"
         SET "questionText" = $1, "questionType" = $2
         WHERE id = $3 AND "assessmentFormVersionFk" = $4;
       `;
@@ -57,7 +57,7 @@ export async function PUT(
         // Check if the question exists at all
         const checkQuery = `
           SELECT id, "questionText", "questionType"
-          FROM rpt."CustomQuestions"
+          FROM "CustomQuestions"
           WHERE id = $1 AND "assessmentFormVersionFk" = $2;
         `;
 
@@ -87,13 +87,13 @@ export async function PUT(
       // Update the cached insights to include the updated custom question
       try {
         const cachedResult = await client.query(
-          'SELECT "insightsJson" FROM rpt."AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          'SELECT "insightsJson" FROM "AIInsights" WHERE "assessmentFormVersionFk" = $1',
           [assessmentFormId]
         );
 
         if (cachedResult.rows.length > 0) {
           const customQuestionsResult = await client.query(
-            'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM rpt."CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+            'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM "CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
             [assessmentFormId]
           );
 
@@ -140,7 +140,7 @@ export async function PUT(
           );
 
           await client.query(
-            'UPDATE rpt."AIInsights" SET "insightsJson" = $1 WHERE "assessmentFormVersionFk" = $2',
+            'UPDATE "AIInsights" SET "insightsJson" = $1 WHERE "assessmentFormVersionFk" = $2',
             [JSON.stringify(cachedInsights), assessmentFormId]
           );
 
@@ -184,7 +184,7 @@ export async function DELETE(
     try {
       // Soft delete the custom question
       const deleteQuery = `
-        UPDATE rpt."CustomQuestions"
+        UPDATE "CustomQuestions"
         SET "isActive" = false
         WHERE id = $1 AND "assessmentFormVersionFk" = $2;
       `;
@@ -204,13 +204,13 @@ export async function DELETE(
       // Update the cached insights to reflect the deleted custom question
       try {
         const cachedResult = await client.query(
-          'SELECT "insightsJson" FROM rpt."AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          'SELECT "insightsJson" FROM "AIInsights" WHERE "assessmentFormVersionFk" = $1',
           [assessmentFormId]
         );
 
         if (cachedResult.rows.length > 0) {
           const customQuestionsResult = await client.query(
-            'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM rpt."CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+            'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM "CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
             [assessmentFormId]
           );
 
@@ -257,7 +257,7 @@ export async function DELETE(
           );
 
           await client.query(
-            'UPDATE rpt."AIInsights" SET "insightsJson" = $1 WHERE "assessmentFormVersionFk" = $2',
+            'UPDATE "AIInsights" SET "insightsJson" = $1 WHERE "assessmentFormVersionFk" = $2',
             [JSON.stringify(cachedInsights), assessmentFormId]
           );
 

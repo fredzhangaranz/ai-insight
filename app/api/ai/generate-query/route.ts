@@ -125,7 +125,7 @@ async function generateAIPlan(
       Based on the schema, please generate an analysis plan for the following question:
       Question: "${question}"
 
-      Here is the definition of the form fields the user is looking at, which may provide context for values in the 'rpt.Note' table:
+      Here is the definition of the form fields the user is looking at, which may provide context for values in the 'Note' table:
       ${JSON.stringify(assessmentFormDefinition, null, 2)}
     `;
 
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
       if (!regenerate) {
         const cacheStartTime = Date.now();
         const cacheQuery = `
-          SELECT "analysisPlanJson" FROM rpt."AIAnalysisPlan"
+          SELECT "analysisPlanJson" FROM "AIAnalysisPlan"
           WHERE "assessmentFormVersionFk" = $1 AND question = $2;
         `;
         console.log("Checking cache for analysis plan...", cacheQuery);
@@ -313,7 +313,7 @@ export async function POST(request: NextRequest) {
       const cacheUpdateStartTime = Date.now();
       const analysisPlanJsonString = JSON.stringify(plan);
       const upsertQuery = `
-        INSERT INTO rpt."AIAnalysisPlan" ("assessmentFormVersionFk", question, "analysisPlanJson", "generatedBy")
+        INSERT INTO "AIAnalysisPlan" ("assessmentFormVersionFk", question, "analysisPlanJson", "generatedBy")
         VALUES ($1, $2, $3, $4)
         ON CONFLICT ("assessmentFormVersionFk", question)
         DO UPDATE SET

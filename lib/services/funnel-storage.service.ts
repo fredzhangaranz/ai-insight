@@ -1,4 +1,4 @@
-import { getToolDbPool } from "@/lib/db";
+import { getInsightGenDbPool } from "@/lib/db";
 import type {
   QueryFunnel,
   SubQuestion,
@@ -11,10 +11,10 @@ export async function createFunnel(data: {
   assessmentFormVersionFk: string;
   originalQuestion: string;
 }): Promise<QueryFunnel> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   const result = await pool.query(
     `
-      INSERT INTO rpt."QueryFunnel" ("assessmentFormVersionFk", "originalQuestion", status, "createdDate", "lastModifiedDate")
+      INSERT INTO "QueryFunnel" ("assessmentFormVersionFk", "originalQuestion", status, "createdDate", "lastModifiedDate")
       VALUES ($1, $2, 'active', NOW(), NOW())
       RETURNING *
     `,
@@ -24,11 +24,10 @@ export async function createFunnel(data: {
 }
 
 export async function getFunnelById(id: number): Promise<QueryFunnel | null> {
-  const pool = await getToolDbPool();
-  const result = await pool.query(
-    'SELECT * FROM rpt."QueryFunnel" WHERE id = $1',
-    [id]
-  );
+  const pool = await getInsightGenDbPool();
+  const result = await pool.query('SELECT * FROM "QueryFunnel" WHERE id = $1', [
+    id,
+  ]);
   return result.rows[0] || null;
 }
 
@@ -36,10 +35,10 @@ export async function findFunnelByQuestion(
   assessmentFormVersionFk: string,
   originalQuestion: string
 ): Promise<QueryFunnel | null> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   const result = await pool.query(
     `
-      SELECT * FROM rpt."QueryFunnel"
+      SELECT * FROM "QueryFunnel"
       WHERE "assessmentFormVersionFk" = $1
       AND "originalQuestion" = $2
       AND status = 'active'
@@ -51,9 +50,9 @@ export async function findFunnelByQuestion(
 }
 
 export async function listFunnels(): Promise<QueryFunnel[]> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   const result = await pool.query(
-    'SELECT * FROM rpt."QueryFunnel" ORDER BY "createdDate" DESC'
+    'SELECT * FROM "QueryFunnel" ORDER BY "createdDate" DESC'
   );
   return result.rows;
 }
@@ -62,9 +61,9 @@ export async function updateFunnelStatus(
   id: number,
   status: QueryFunnelStatus
 ): Promise<void> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   await pool.query(
-    `UPDATE rpt."QueryFunnel" SET status = $1, "lastModifiedDate" = NOW() WHERE id = $2`,
+    `UPDATE "QueryFunnel" SET status = $1, "lastModifiedDate" = NOW() WHERE id = $2`,
     [status, id]
   );
 }
@@ -74,10 +73,10 @@ export async function addSubQuestion(
   funnelId: number,
   data: { questionText: string; order: number; sqlQuery?: string }
 ): Promise<SubQuestion> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   const result = await pool.query(
     `
-      INSERT INTO rpt."SubQuestions" ("funnelId", "questionText", "order", "sqlQuery", status)
+      INSERT INTO "SubQuestions" ("funnelId", "questionText", "order", "sqlQuery", status)
       VALUES ($1, $2, $3, $4, 'pending')
       RETURNING *
     `,
@@ -94,7 +93,7 @@ export async function addSubQuestions(
     sqlQuery?: string;
   }>
 ): Promise<SubQuestion[]> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   const client = await pool.connect();
   const results: SubQuestion[] = [];
 
@@ -103,7 +102,7 @@ export async function addSubQuestions(
     for (const sq of subQuestions) {
       const result = await client.query(
         `
-          INSERT INTO rpt."SubQuestions" ("funnelId", "questionText", "order", "sqlQuery", status)
+          INSERT INTO "SubQuestions" ("funnelId", "questionText", "order", "sqlQuery", status)
           VALUES ($1, $2, $3, $4, 'pending')
           RETURNING *
         `,
@@ -125,9 +124,9 @@ export async function addSubQuestions(
 export async function getSubQuestions(
   funnelId: number
 ): Promise<SubQuestion[]> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   const result = await pool.query(
-    'SELECT * FROM rpt."SubQuestions" WHERE "funnelId" = $1 ORDER BY "order"',
+    'SELECT * FROM "SubQuestions" WHERE "funnelId" = $1 ORDER BY "order"',
     [funnelId]
   );
   return result.rows;
@@ -137,8 +136,8 @@ export async function updateSubQuestionStatus(
   id: number,
   status: SubQuestionStatus
 ): Promise<void> {
-  const pool = await getToolDbPool();
-  await pool.query('UPDATE rpt."SubQuestions" SET status = $1 WHERE id = $2', [
+  const pool = await getInsightGenDbPool();
+  await pool.query('UPDATE "SubQuestions" SET status = $1 WHERE id = $2', [
     status,
     id,
   ]);
@@ -153,10 +152,10 @@ export async function updateSubQuestionSql(
     sqlMatchedTemplate?: string;
   }
 ): Promise<void> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   await pool.query(
     `
-    UPDATE rpt."SubQuestions"
+    UPDATE "SubQuestions"
     SET "sqlQuery" = $1,
         "sqlExplanation" = $2,
         "sqlValidationNotes" = $3,
@@ -177,9 +176,9 @@ export async function updateSubQuestionText(
   id: number,
   questionText: string
 ): Promise<void> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   await pool.query(
-    'UPDATE rpt."SubQuestions" SET "questionText" = $1 WHERE id = $2',
+    'UPDATE "SubQuestions" SET "questionText" = $1 WHERE id = $2',
     [questionText, id]
   );
 }
@@ -189,10 +188,10 @@ export async function storeQueryResult(
   subQuestionId: number,
   resultData: any
 ): Promise<void> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   await pool.query(
     `
-      INSERT INTO rpt."QueryResults" ("subQuestionId", "resultData")
+      INSERT INTO "QueryResults" ("subQuestionId", "resultData")
       VALUES ($1, $2)
     `,
     [subQuestionId, JSON.stringify(resultData)]
@@ -202,9 +201,9 @@ export async function storeQueryResult(
 export async function getQueryResult(
   subQuestionId: number
 ): Promise<any | null> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   const result = await pool.query(
-    'SELECT "resultData" FROM rpt."QueryResults" WHERE "subQuestionId" = $1 ORDER BY "executionDate" DESC LIMIT 1',
+    'SELECT "resultData" FROM "QueryResults" WHERE "subQuestionId" = $1 ORDER BY "executionDate" DESC LIMIT 1',
     [subQuestionId]
   );
   if (result.rows.length === 0) return null;
@@ -218,10 +217,10 @@ export async function getQueryResult(
 export async function cleanupOldResults(
   olderThanHours: number = 24
 ): Promise<void> {
-  const pool = await getToolDbPool();
+  const pool = await getInsightGenDbPool();
   await pool.query(
     `
-    DELETE FROM rpt."QueryResults"
+    DELETE FROM "QueryResults"
     WHERE "executionDate" < NOW() - INTERVAL '${olderThanHours} hours'
   `
   );

@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDbPool } from "@/lib/db";
+import { getSilhouetteDbPool } from "@/lib/db";
 import sql from "mssql";
 /**
  * Maps the integer dataType from the database to a human-readable string.
@@ -51,7 +51,7 @@ export async function GET(
   }
 
   try {
-    const pool = await getDbPool();
+    const pool = await getSilhouetteDbPool();
 
     const fieldsQuery = `
       SELECT att.name, att.dataType, att.id as AttributeTypeID

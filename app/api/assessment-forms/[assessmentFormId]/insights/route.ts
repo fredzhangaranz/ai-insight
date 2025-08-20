@@ -214,7 +214,7 @@ export async function GET(
       if (!regenerate) {
         const cacheStartTime = Date.now();
         const cachedResult = await client.query(
-          'SELECT "insightsJson" FROM rpt."AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          'SELECT "insightsJson" FROM "AIInsights" WHERE "assessmentFormVersionFk" = $1',
           [assessmentFormId]
         );
 
@@ -225,7 +225,7 @@ export async function GET(
           resultSize: cachedResult.rows.length,
           timestamp: new Date(),
           cached: false,
-          sql: 'SELECT "insightsJson" FROM rpt."AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          sql: 'SELECT "insightsJson" FROM "AIInsights" WHERE "assessmentFormVersionFk" = $1',
           parameters: { assessmentFormId },
         });
 
@@ -241,7 +241,7 @@ export async function GET(
           } else {
             // Get custom questions and merge them with AI insights
             const customQuestionsResult = await client.query(
-              'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM rpt."CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+              'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM "CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
               [assessmentFormId]
             );
 
@@ -411,7 +411,7 @@ export async function GET(
 
       // Get custom questions and merge them with new insights
       const customQuestionsResult = await client.query(
-        'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM rpt."CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+        'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM "CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
         [assessmentFormId]
       );
 
@@ -435,7 +435,7 @@ export async function GET(
       // Save to cache
       const cacheUpdateStartTime = Date.now();
       const upsertQuery = `
-        INSERT INTO rpt."AIInsights" ("assessmentFormVersionFk", "insightsJson", "generatedBy")
+        INSERT INTO "AIInsights" ("assessmentFormVersionFk", "insightsJson", "generatedBy")
         VALUES ($1, $2, $3)
         ON CONFLICT ("assessmentFormVersionFk")
         DO UPDATE SET

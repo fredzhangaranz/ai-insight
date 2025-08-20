@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import sql from "mssql";
+import * as sql from "mssql";
 import { getSilhouetteDbPool } from "@/lib/db";
 
 export async function GET(

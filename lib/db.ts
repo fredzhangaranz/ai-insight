@@ -38,7 +38,7 @@ import { Pool, PoolConfig } from "pg";
 let insightGenDbPoolPromise: Promise<Pool> | null = null;
 
 // Store the connection promise for the customer database (MS SQL)
-let customerDbPoolPromise: Promise<sql.ConnectionPool> | null = null;
+let silhouetteDbPoolPromise: Promise<sql.ConnectionPool> | null = null;
 
 /**
  * Returns a shared instance of the PostgreSQL connection pool for the Insight Gen database.
@@ -94,8 +94,8 @@ export function getInsightGenDbPool(): Promise<Pool> {
  * @returns {Promise<sql.ConnectionPool>} The active connection pool.
  */
 export function getSilhouetteDbPool(): Promise<sql.ConnectionPool> {
-  if (customerDbPoolPromise) {
-    return customerDbPoolPromise;
+  if (silhouetteDbPoolPromise) {
+    return silhouetteDbPoolPromise;
   }
 
   if (!process.env.SILHOUETTE_DB_URL) {
@@ -105,9 +105,9 @@ export function getSilhouetteDbPool(): Promise<sql.ConnectionPool> {
     return Promise.reject(err);
   }
 
-  customerDbPoolPromise = (async () => {
+  silhouetteDbPoolPromise = (async () => {
     try {
-      const connectionString = process.env.CUSTOMER_DB_URL!;
+      const connectionString = process.env.SILHOUETTE_DB_URL!;
       const params = connectionString.split(";").reduce((acc, part) => {
         const eqIndex = part.indexOf("=");
         if (eqIndex > -1) {
@@ -154,20 +154,20 @@ export function getSilhouetteDbPool(): Promise<sql.ConnectionPool> {
       const pool = new sql.ConnectionPool(dbConfig);
 
       pool.on("error", (err) => {
-        console.error("Customer database connection pool error:", err);
+        console.error("Silhouette database connection pool error:", err);
         pool.close();
-        customerDbPoolPromise = null;
+        silhouetteDbPoolPromise = null;
       });
 
       await pool.connect();
-      console.log("Customer database connection pool created and connected.");
+      console.log("Silhouette database connection pool created and connected.");
       return pool;
     } catch (err) {
-      customerDbPoolPromise = null;
-      console.error("Customer Database Connection Failed:", err);
+      silhouetteDbPoolPromise = null;
+      console.error("Silhouette Database Connection Failed:", err);
       throw err;
     }
   })();
 
-  return customerDbPoolPromise;
+  return silhouetteDbPoolPromise;
 }

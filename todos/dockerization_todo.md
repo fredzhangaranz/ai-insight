@@ -73,7 +73,7 @@ This document outlines the steps to containerize the application using Docker an
 - **Steps:**
   1.  Identify all database queries in the application.
   2.  Update queries related to AI insights and other tool-specific data to use the `insightGenDb` connection.
-  3.  Ensure all queries to the customer's data use the `customerDb` connection and are read-only.
+  3.  Ensure all queries to the customer's data use the `silhouetteDb` connection and are read-only.
 
 ## Phase 3: Validation and Documentation [Pending]
 

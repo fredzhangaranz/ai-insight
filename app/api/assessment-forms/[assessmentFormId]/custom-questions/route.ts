@@ -38,9 +38,9 @@ export async function POST(
     try {
       // Insert the custom question
       const insertQuery = `
-        INSERT INTO rpt."CustomQuestions"
-        ("assessmentFormVersionFk", category, "questionText", "questionType", "originalQuestionId", "createdBy")
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO "CustomQuestions"
+        ("assessmentFormVersionFk", category, "questionText", "questionType", "originalQuestionId", "isActive")
+        VALUES ($1, $2, $3, $4, $5, true)
         RETURNING id;
       `;
 
@@ -50,7 +50,6 @@ export async function POST(
         questionText,
         questionType,
         originalQuestionId,
-        "user", // TODO: Get actual user from auth
       ]);
 
       const questionId = result.rows[0].id;
@@ -58,13 +57,13 @@ export async function POST(
       // Update the cached insights to include the new custom question
       try {
         const cachedResult = await client.query(
-          'SELECT "insightsJson" FROM rpt."AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          'SELECT "insightsJson" FROM "AIInsights" WHERE "assessmentFormVersionFk" = $1',
           [assessmentFormId]
         );
 
         if (cachedResult.rows.length > 0) {
           const customQuestionsResult = await client.query(
-            'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM rpt."CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+            'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM "CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
             [assessmentFormId]
           );
 
@@ -111,7 +110,7 @@ export async function POST(
           );
 
           await client.query(
-            'UPDATE rpt."AIInsights" SET "insightsJson" = $1 WHERE "assessmentFormVersionFk" = $2',
+            'UPDATE "AIInsights" SET "insightsJson" = $1 WHERE "assessmentFormVersionFk" = $2',
             [JSON.stringify(cachedInsights), assessmentFormId]
           );
 
@@ -159,8 +158,8 @@ export async function GET(
     try {
       // Get all custom questions for this assessment form
       const query = `
-        SELECT id, category, "questionText", "questionType", "originalQuestionId", "createdBy", "createdDate"
-        FROM rpt."CustomQuestions"
+        SELECT id, category, "questionText", "questionType", "originalQuestionId", "isActive"
+        FROM "CustomQuestions"
         WHERE "assessmentFormVersionFk" = $1
         AND "isActive" = true
         ORDER BY category, "createdDate" DESC;

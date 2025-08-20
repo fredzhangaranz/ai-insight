@@ -151,7 +151,7 @@ export function constructFunnelSqlPrompt(
       `4. Do NOT modify WHERE, GROUP BY, or ORDER BY clauses from the base query\n` +
       `5. Move ORDER BY to the outer query if present in base query\n` +
       `6. Apply TOP 1000 for safety if not already present\n` +
-      `7. Use schema prefixing (rpt.) for all tables\n` +
+      `7. Use schema prefixing for all tables (e.g., rpt.Patient)\n` +
       `8. ONLY include the base query columns plus the specifically requested enrichment fields\n` +
       `9. Do NOT add any additional columns beyond what was requested\n\n` +
       `EXAMPLE ENRICHMENT PATTERN:\n` +
@@ -168,27 +168,29 @@ export function constructFunnelSqlPrompt(
       `  P.lastName AS patient_lastName\n` +
       `FROM base\n` +
       `INNER JOIN rpt.Patient AS P ON base.patientFk = P.id\n` +
-      `ORDER BY base.date DESC;\n\n` +
-      `CRITICAL: Only include the base query columns plus the requested enrichment fields. Do not add any other columns.`;
+      `ORDER BY base.date DESC;\n\n`;
   }
   return prompt;
 }
 
 /**
- * Validator for the funnel SQL response
+ * Validator for the funnel SQL generation response
  */
 export function validateFunnelSqlResponse(response: unknown): response is {
   explanation: string;
   generatedSql: string;
   validationNotes: string;
-  matchedQueryTemplate: string;
+  matchedQueryTemplate?: string;
 } {
   if (!response || typeof response !== "object") return false;
   const obj = response as any;
-  return (
-    typeof obj.explanation === "string" &&
-    typeof obj.generatedSql === "string" &&
-    typeof obj.validationNotes === "string" &&
-    typeof obj.matchedQueryTemplate === "string"
-  );
+  if (typeof obj.explanation !== "string") return false;
+  if (typeof obj.generatedSql !== "string") return false;
+  if (typeof obj.validationNotes !== "string") return false;
+  if (
+    typeof obj.matchedQueryTemplate !== "undefined" &&
+    typeof obj.matchedQueryTemplate !== "string"
+  )
+    return false;
+  return true;
 }

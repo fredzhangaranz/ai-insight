@@ -1,27 +1,20 @@
-version: "3.8"
-
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
-    environment:
-      - INSIGHT_GEN_DB_URL=postgresql://user:password@db:5432/insight_gen_db
-      # Add the CUSTOMER_DB_URL here. For local development, you can point it to a test database.
-      # For example:
-      # - CUSTOMER_DB_URL=postgresql://user:password@host.docker.internal:5432/customerdb
-      - CUSTOMER_DB_URL=
+      - "3005:3005"
+    env_file:
+      - .env.local
     depends_on:
       - db
     volumes:
-      # Optional: Mount the source code for local development to enable hot-reloading.
-      # Note: You might need to adjust your Dockerfile for this to work well with Next.js.
       - .:/app
       - /app/node_modules
       - /app/.next
-
+    networks:
+      - insightgen_net
   db:
     image: postgres:15-alpine
     environment:
@@ -32,6 +25,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - insightgen_net
 
 volumes:
   postgres_data:
+
+networks:
+  insightgen_net:
+    driver: bridge

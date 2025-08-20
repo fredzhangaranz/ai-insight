@@ -4,7 +4,7 @@ import type {
   AIResponseMetrics,
   CacheMetrics,
 } from "./prompts/types";
-import { getDbPool } from "./db";
+import { getSilhouetteDbPool } from "./db";
 
 /**
  * Utility class for monitoring and logging system metrics
@@ -24,7 +24,7 @@ export class MetricsMonitor {
 
   private async ensurePool(): Promise<sql.ConnectionPool> {
     if (!this.pool) {
-      this.pool = await getDbPool();
+      this.pool = await getSilhouetteDbPool();
     }
     return this.pool;
   }
@@ -48,7 +48,7 @@ export class MetricsMonitor {
           sql.NVarChar(sql.MAX),
           JSON.stringify(metrics.parameters)
         ).query(`
-          INSERT INTO SilhouetteAIDashboard.rpt.QueryMetrics 
+          INSERT INTO SilhouetteAIDashboard.QueryMetrics 
           (queryId, executionTime, resultSize, timestamp, cached, sql, parameters)
           VALUES (@queryId, @executionTime, @resultSize, @timestamp, @cached, @sql, @parameters)
         `);
@@ -73,7 +73,7 @@ export class MetricsMonitor {
         .input("errorType", sql.NVarChar, metrics.errorType || null)
         .input("model", sql.NVarChar, metrics.model)
         .input("timestamp", sql.DateTime, metrics.timestamp).query(`
-          INSERT INTO SilhouetteAIDashboard.rpt.AIMetrics 
+          INSERT INTO SilhouetteAIDashboard.AIMetrics 
           (promptTokens, completionTokens, totalTokens, latency, success, errorType, model, timestamp)
           VALUES (@promptTokens, @completionTokens, @totalTokens, @latency, @success, @errorType, @model, @timestamp)
         `);
@@ -95,7 +95,7 @@ export class MetricsMonitor {
         .input("cacheInvalidations", sql.Int, metrics.cacheInvalidations)
         .input("averageHitLatency", sql.Float, metrics.averageHitLatency)
         .input("timestamp", sql.DateTime, metrics.timestamp).query(`
-          INSERT INTO SilhouetteAIDashboard.rpt.CacheMetrics 
+          INSERT INTO SilhouetteAIDashboard.CacheMetrics 
           (cacheHits, cacheMisses, cacheInvalidations, averageHitLatency, timestamp)
           VALUES (@cacheHits, @cacheMisses, @cacheInvalidations, @averageHitLatency, @timestamp)
         `);
@@ -123,7 +123,7 @@ export class MetricsMonitor {
             AVG(resultSize) as avgResultSize,
             COUNT(*) as totalQueries,
             SUM(CASE WHEN cached = 1 THEN 1 ELSE 0 END) as cachedQueries
-          FROM SilhouetteAIDashboard.rpt.QueryMetrics
+          FROM SilhouetteAIDashboard.QueryMetrics
           WHERE timestamp BETWEEN @startDate AND @endDate
         `);
       return result.recordset[0];
@@ -153,7 +153,7 @@ export class MetricsMonitor {
             SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as successRate,
             model,
             COUNT(DISTINCT errorType) as uniqueErrors
-          FROM SilhouetteAIDashboard.rpt.AIMetrics
+          FROM SilhouetteAIDashboard.AIMetrics
           WHERE timestamp BETWEEN @startDate AND @endDate
           GROUP BY model
         `);

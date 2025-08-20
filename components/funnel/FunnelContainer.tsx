@@ -23,43 +23,6 @@ interface FunnelContainerProps {
   onMarkComplete?: (questionId: string) => void;
 }
 
-// Mock data for testing
-const mockSubQuestions: SubQuestion[] = [
-  {
-    id: "1",
-    text: "List all distinct wound etiologies recorded in the past year.",
-    order: 1,
-    status: "completed",
-    sqlQuery:
-      "SELECT DISTINCT etiology FROM rpt.Note WHERE YEAR(createdDate) = YEAR(GETDATE()) - 1",
-    data: [
-      { etiology: "Diabetic" },
-      { etiology: "Pressure" },
-      { etiology: "Surgical" },
-    ],
-    lastExecutionDate: new Date(),
-  },
-  {
-    id: "2",
-    text: "Calculate the average healing time per treatment method for each wound etiology.",
-    order: 2,
-    status: "running",
-    sqlQuery:
-      "SELECT etiology, treatmentType, AVG(healingTime) as avgHealingTime FROM rpt.Treatment GROUP BY etiology, treatmentType",
-    data: [],
-    lastExecutionDate: new Date(),
-  },
-  {
-    id: "3",
-    text: "Rank the treatment methods by average healing time for each wound etiology.",
-    order: 3,
-    status: "pending",
-    sqlQuery: "",
-    data: [],
-    lastExecutionDate: undefined,
-  },
-];
-
 export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   originalQuestion = "What is the effectiveness of treatments across different wound etiologies over the past year?",
   subQuestions = [],

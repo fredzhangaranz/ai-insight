@@ -7,14 +7,15 @@
  * - Type ID used for patient listing across versions
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import * as sql from "mssql";
 import { getSilhouetteDbPool } from "@/lib/db";
 
 /**
  * Handles GET requests to /api/assessment-forms
  * @returns {Promise<NextResponse>} A JSON response containing the list of assessment forms or an error message.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   console.log("API call to /api/assessment-forms received.");
 
   try {

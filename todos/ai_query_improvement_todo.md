@@ -57,7 +57,7 @@
 
   ```sql
   -- Core table for storing question breakdowns
-  CREATE TABLE [rpt].[QueryFunnel] (
+  CREATE TABLE [QueryFunnel] (
     [id] [int] IDENTITY(1,1) NOT NULL,
     [assessmentFormVersionFk] [uniqueidentifier] NOT NULL,
     [originalQuestion] [nvarchar](1000) NOT NULL,
@@ -68,7 +68,7 @@
   );
 
   -- Store sub-questions and their queries
-  CREATE TABLE [rpt].[SubQuestions] (
+  CREATE TABLE [SubQuestions] (
     [id] [int] IDENTITY(1,1) NOT NULL,
     [funnelId] [int] NOT NULL,
     [questionText] [nvarchar](1000) NOT NULL,
@@ -78,26 +78,26 @@
     [lastExecutionDate] [datetime] NULL,
     CONSTRAINT [PK_SubQuestions] PRIMARY KEY CLUSTERED ([id] ASC),
     CONSTRAINT [FK_SubQuestions_QueryFunnel] FOREIGN KEY ([funnelId])
-      REFERENCES [rpt].[QueryFunnel] ([id])
+      REFERENCES [QueryFunnel] ([id])
   );
 
   -- Simple result caching
-  CREATE TABLE [rpt].[QueryResults] (
+  CREATE TABLE [QueryResults] (
     [id] [int] IDENTITY(1,1) NOT NULL,
     [subQuestionId] [int] NOT NULL,
     [resultData] [nvarchar](max) NOT NULL, -- JSON field for storing query results
     [executionDate] [datetime] NOT NULL DEFAULT (GETUTCDATE()),
     CONSTRAINT [PK_QueryResults] PRIMARY KEY CLUSTERED ([id] ASC),
     CONSTRAINT [FK_QueryResults_SubQuestions] FOREIGN KEY ([subQuestionId])
-      REFERENCES [rpt].[SubQuestions] ([id])
+      REFERENCES [SubQuestions] ([id])
   );
   ```
 
 - [x] Create basic indexes:
   ```sql
-  CREATE INDEX [IX_SubQuestions_FunnelId] ON [rpt].[SubQuestions] ([funnelId]);
-  CREATE INDEX [IX_SubQuestions_Order] ON [rpt].[SubQuestions] ([funnelId], [order]);
-  CREATE INDEX [IX_QueryResults_SubQuestion] ON [rpt].[QueryResults] ([subQuestionId], [executionDate]);
+  CREATE INDEX [IX_SubQuestions_FunnelId] ON [SubQuestions] ([funnelId]);
+  CREATE INDEX [IX_SubQuestions_Order] ON [SubQuestions] ([funnelId], [order]);
+  CREATE INDEX [IX_QueryResults_SubQuestion] ON [QueryResults] ([subQuestionId], [executionDate]);
   ```
 
 ### 1.5.2 Basic Storage Service (Milestone 2.6)
