@@ -1,5 +1,4 @@
 -- Create metrics tables for monitoring
-USE SilhouetteAIDashboard;
 
 -- Query Metrics Table
 CREATE TABLE IF NOT EXISTS "QueryMetrics" (

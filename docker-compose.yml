@@ -15,6 +15,31 @@ services:
       - /app/.next
     networks:
       - insightgen_net
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+          ignore:
+            - node_modules/
+            - .next/
+            - .git/
+        - action: sync
+          path: ./components
+          target: /app/components
+          ignore:
+            - node_modules/
+            - .git/
+        - action: sync
+          path: ./lib
+          target: /app/lib
+          ignore:
+            - node_modules/
+            - .git/
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./Dockerfile
   db:
     image: postgres:15-alpine
     environment:

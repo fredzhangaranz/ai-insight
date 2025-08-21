@@ -1,17 +1,17 @@
-import * as sql from "mssql";
+import type { Pool } from "pg";
 import type {
   QueryMetrics,
   AIResponseMetrics,
   CacheMetrics,
 } from "./prompts/types";
-import { getSilhouetteDbPool } from "./db";
+import { getInsightGenDbPool } from "./db";
 
 /**
  * Utility class for monitoring and logging system metrics
  */
 export class MetricsMonitor {
-  private static instance: MetricsMonitor;
-  private pool: sql.ConnectionPool | null = null;
+  private static instance: MetricsMonitor | null = null;
+  private pool: Pool | null = null;
 
   private constructor() {}
 
@@ -22,9 +22,21 @@ export class MetricsMonitor {
     return MetricsMonitor.instance;
   }
 
-  private async ensurePool(): Promise<sql.ConnectionPool> {
+  /**
+   * Reset the singleton instance and clear the database pool
+   * This is useful when switching database connections
+   */
+  public static resetInstance(): void {
+    if (MetricsMonitor.instance && MetricsMonitor.instance.pool) {
+      MetricsMonitor.instance.pool.end();
+      MetricsMonitor.instance.pool = null;
+    }
+    MetricsMonitor.instance = null;
+  }
+
+  private async ensurePool(): Promise<Pool> {
     if (!this.pool) {
-      this.pool = await getSilhouetteDbPool();
+      this.pool = await getInsightGenDbPool();
     }
     return this.pool;
   }
@@ -35,23 +47,21 @@ export class MetricsMonitor {
   public async logQueryMetrics(metrics: QueryMetrics): Promise<void> {
     try {
       const pool = await this.ensurePool();
-      await pool
-        .request()
-        .input("queryId", sql.NVarChar, metrics.queryId)
-        .input("executionTime", sql.Int, metrics.executionTime)
-        .input("resultSize", sql.Int, metrics.resultSize)
-        .input("timestamp", sql.DateTime, metrics.timestamp)
-        .input("cached", sql.Bit, metrics.cached ? 1 : 0)
-        .input("sql", sql.NVarChar(sql.MAX), metrics.sql)
-        .input(
-          "parameters",
-          sql.NVarChar(sql.MAX),
-          JSON.stringify(metrics.parameters)
-        ).query(`
-          INSERT INTO SilhouetteAIDashboard.QueryMetrics 
-          (queryId, executionTime, resultSize, timestamp, cached, sql, parameters)
-          VALUES (@queryId, @executionTime, @resultSize, @timestamp, @cached, @sql, @parameters)
-        `);
+      const query = `
+        INSERT INTO "QueryMetrics" 
+        ("queryId", "executionTime", "resultSize", "timestamp", "cached", "sql", "parameters")
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `;
+      const values = [
+        metrics.queryId,
+        metrics.executionTime,
+        metrics.resultSize,
+        metrics.timestamp,
+        metrics.cached,
+        metrics.sql,
+        JSON.stringify(metrics.parameters),
+      ];
+      await pool.query(query, values);
     } catch (error) {
       console.error("Failed to log query metrics:", error);
     }
@@ -63,20 +73,22 @@ export class MetricsMonitor {
   public async logAIMetrics(metrics: AIResponseMetrics): Promise<void> {
     try {
       const pool = await this.ensurePool();
-      await pool
-        .request()
-        .input("promptTokens", sql.Int, metrics.promptTokens)
-        .input("completionTokens", sql.Int, metrics.completionTokens)
-        .input("totalTokens", sql.Int, metrics.totalTokens)
-        .input("latency", sql.Int, metrics.latency)
-        .input("success", sql.Bit, metrics.success ? 1 : 0)
-        .input("errorType", sql.NVarChar, metrics.errorType || null)
-        .input("model", sql.NVarChar, metrics.model)
-        .input("timestamp", sql.DateTime, metrics.timestamp).query(`
-          INSERT INTO SilhouetteAIDashboard.AIMetrics 
-          (promptTokens, completionTokens, totalTokens, latency, success, errorType, model, timestamp)
-          VALUES (@promptTokens, @completionTokens, @totalTokens, @latency, @success, @errorType, @model, @timestamp)
-        `);
+      const query = `
+        INSERT INTO "AIMetrics" 
+        ("promptTokens", "completionTokens", "totalTokens", "latency", "success", "errorType", "model", "timestamp")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `;
+      const values = [
+        metrics.promptTokens,
+        metrics.completionTokens,
+        metrics.totalTokens,
+        metrics.latency,
+        metrics.success,
+        metrics.errorType || null,
+        metrics.model,
+        metrics.timestamp,
+      ];
+      await pool.query(query, values);
     } catch (error) {
       console.error("Failed to log AI metrics:", error);
     }
@@ -88,17 +100,19 @@ export class MetricsMonitor {
   public async logCacheMetrics(metrics: CacheMetrics): Promise<void> {
     try {
       const pool = await this.ensurePool();
-      await pool
-        .request()
-        .input("cacheHits", sql.Int, metrics.cacheHits)
-        .input("cacheMisses", sql.Int, metrics.cacheMisses)
-        .input("cacheInvalidations", sql.Int, metrics.cacheInvalidations)
-        .input("averageHitLatency", sql.Float, metrics.averageHitLatency)
-        .input("timestamp", sql.DateTime, metrics.timestamp).query(`
-          INSERT INTO SilhouetteAIDashboard.CacheMetrics 
-          (cacheHits, cacheMisses, cacheInvalidations, averageHitLatency, timestamp)
-          VALUES (@cacheHits, @cacheMisses, @cacheInvalidations, @averageHitLatency, @timestamp)
-        `);
+      const query = `
+        INSERT INTO "CacheMetrics" 
+        ("cacheHits", "cacheMisses", "cacheInvalidations", "averageHitLatency", "timestamp")
+        VALUES ($1, $2, $3, $4, $5)
+      `;
+      const values = [
+        metrics.cacheHits,
+        metrics.cacheMisses,
+        metrics.cacheInvalidations,
+        metrics.averageHitLatency,
+        metrics.timestamp,
+      ];
+      await pool.query(query, values);
     } catch (error) {
       console.error("Failed to log cache metrics:", error);
     }
@@ -113,20 +127,18 @@ export class MetricsMonitor {
   ): Promise<any> {
     try {
       const pool = await this.ensurePool();
-      const result = await pool
-        .request()
-        .input("startDate", sql.DateTime, startDate)
-        .input("endDate", sql.DateTime, endDate).query(`
-          SELECT 
-            AVG(executionTime) as avgExecutionTime,
-            MAX(executionTime) as maxExecutionTime,
-            AVG(resultSize) as avgResultSize,
-            COUNT(*) as totalQueries,
-            SUM(CASE WHEN cached = 1 THEN 1 ELSE 0 END) as cachedQueries
-          FROM SilhouetteAIDashboard.QueryMetrics
-          WHERE timestamp BETWEEN @startDate AND @endDate
-        `);
-      return result.recordset[0];
+      const query = `
+        SELECT 
+          AVG("executionTime") as avgExecutionTime,
+          MAX("executionTime") as maxExecutionTime,
+          AVG("resultSize") as avgResultSize,
+          COUNT(*) as totalQueries,
+          SUM(CASE WHEN "cached" = true THEN 1 ELSE 0 END) as cachedQueries
+        FROM "QueryMetrics"
+        WHERE "timestamp" BETWEEN $1 AND $2
+      `;
+      const result = await pool.query(query, [startDate, endDate]);
+      return result.rows[0];
     } catch (error) {
       console.error("Failed to get query performance report:", error);
       return null;
@@ -142,22 +154,20 @@ export class MetricsMonitor {
   ): Promise<any> {
     try {
       const pool = await this.ensurePool();
-      const result = await pool
-        .request()
-        .input("startDate", sql.DateTime, startDate)
-        .input("endDate", sql.DateTime, endDate).query(`
-          SELECT 
-            AVG(latency) as avgLatency,
-            AVG(totalTokens) as avgTokens,
-            COUNT(*) as totalRequests,
-            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as successRate,
-            model,
-            COUNT(DISTINCT errorType) as uniqueErrors
-          FROM SilhouetteAIDashboard.AIMetrics
-          WHERE timestamp BETWEEN @startDate AND @endDate
-          GROUP BY model
-        `);
-      return result.recordset;
+      const query = `
+        SELECT 
+          AVG("latency") as avgLatency,
+          AVG("totalTokens") as avgTokens,
+          COUNT(*) as totalRequests,
+          SUM(CASE WHEN "success" = true THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as successRate,
+          "model",
+          COUNT(DISTINCT "errorType") as uniqueErrors
+        FROM "AIMetrics"
+        WHERE "timestamp" BETWEEN $1 AND $2
+        GROUP BY "model"
+      `;
+      const result = await pool.query(query, [startDate, endDate]);
+      return result.rows;
     } catch (error) {
       console.error("Failed to get AI performance report:", error);
       return null;

@@ -9,7 +9,9 @@
     "lint": "next lint",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "migrate": "node scripts/run-migrations.js",
+    "check-tables": "node scripts/check-tables.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.66",
