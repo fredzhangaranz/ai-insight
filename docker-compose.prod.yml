@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      # AI API Keys - customers provide these at runtime
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/app/credentials/google-credentials.json}
+      - AI_MODEL_NAME=${AI_MODEL_NAME:-claude-3-5-sonnet-latest}
+    env_file:
+      - .env.production
+    volumes:
+      # Mount customer credentials directory
+      - ./credentials:/app/credentials:ro
+    restart: unless-stopped
+    networks:
+      - insightgen_net
+
+  # Optional: Include database if customer doesn't have one
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-insight_gen_db}
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - insightgen_net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  insightgen_net:
+    driver: bridge

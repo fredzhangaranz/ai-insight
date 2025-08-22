@@ -11,6 +11,9 @@ RUN npm install -g pnpm
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
+# Copy the Google Cloud credentials file first
+COPY sonorous-seat-467723-d5-979c5538b345.json ./
+
 # Copy the rest of the application code
 COPY . .
 
@@ -18,7 +21,7 @@ COPY . .
 RUN pnpm build
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE 3005
 
 # Start the application
 CMD ["pnpm", "start"]

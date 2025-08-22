@@ -1,22 +1,37 @@
 import { BaseProvider } from "@/lib/ai/providers/base-provider";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { VertexAI } from "@google-cloud/vertexai";
 
 /**
- * An AI provider that uses Google's Gemini models to power the query funnel.
+ * An AI provider that uses Google's Vertex AI Gemini models to power the query funnel.
  */
 export class GeminiProvider extends BaseProvider {
-  private genAI: GoogleGenerativeAI;
+  private genAI: VertexAI;
 
   constructor(modelId: string) {
     super(modelId);
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    // Check for required environment variables
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+    const location = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
+    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+    if (!projectId) {
       throw new Error(
-        "Gemini API key (GEMINI_API_KEY) is not configured in .env.local"
+        "Google Cloud Project ID (GOOGLE_CLOUD_PROJECT) is not configured in .env.local"
       );
     }
-    this.genAI = new GoogleGenerativeAI(apiKey);
+
+    if (!credentialsPath) {
+      throw new Error(
+        "Google Application Credentials (GOOGLE_APPLICATION_CREDENTIALS) is not configured in .env.local"
+      );
+    }
+
+    // Initialize Vertex AI with proper configuration
+    this.genAI = new VertexAI({
+      project: projectId,
+      location: location,
+    });
   }
 
   /**
@@ -33,30 +48,48 @@ export class GeminiProvider extends BaseProvider {
     responseText: string;
     usage: { input_tokens: number; output_tokens: number };
   }> {
-    // Combine system prompt and user message for Gemini
-    // const prompt = `${systemPrompt}\n\n${userMessage}`;
-
-    // // Generate content directly using the models API
-    // const model = await this.genAI.getGenerativeModel({ model: this.modelId });
-    // const response = await model.generateContent(prompt);
-
-    // const text = response.response?.text() || "";
-    const model = this.genAI.getGenerativeModel({
-      model: this.modelId,
+    const generativeModel = this.genAI.getGenerativeModel({
+      model: this.modelId, // Use the modelId passed to constructor
       systemInstruction: systemPrompt,
       generationConfig: {
-        responseMimeType: "application/json", // We always expect JSON back from our prompts
-        maxOutputTokens: 4096, // Consistent with other providers
+        responseMimeType: "application/json",
+        maxOutputTokens: 4096,
       },
     });
 
-    const result = await model.generateContent(userMessage);
+    const result = await generativeModel.generateContent(userMessage);
     const response = result.response;
+
+    if (!response.candidates || response.candidates.length === 0) {
+      throw new Error(
+        "No response candidates received from Vertex AI Gemini API"
+      );
+    }
+
+    const candidate = response.candidates[0];
+    if (
+      !candidate.content ||
+      !candidate.content.parts ||
+      candidate.content.parts.length === 0
+    ) {
+      throw new Error("Invalid response structure from Vertex AI Gemini API");
+    }
+
+    const responseText = candidate.content.parts[0].text;
+    if (!responseText) {
+      throw new Error("Empty response text from Vertex AI Gemini API");
+    }
+
+    // Get token usage from the response if available
+    const usageMetadata = response.usageMetadata;
+    const inputTokens = usageMetadata?.promptTokenCount || 0;
+    const outputTokens = usageMetadata?.candidatesTokenCount || 0;
+
     return {
-      responseText: response.text(),
+      responseText,
       usage: {
-        input_tokens: 0, // Gemini API doesn't provide token counts in this format
-        output_tokens: 0,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
       },
     };
   }
