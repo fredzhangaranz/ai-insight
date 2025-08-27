@@ -231,7 +231,13 @@ export async function GET(
 
         if (cachedResult.rows.length > 0) {
           console.log("Cached insights found. Returning from database.");
-          const insights = JSON.parse(cachedResult.rows[0].insightsJson);
+
+          const cachedData = cachedResult.rows[0].insightsJson;
+          const insights =
+            typeof cachedData === "string"
+              ? JSON.parse(cachedData)
+              : cachedData;
+
           cacheHit = true;
 
           // Validate cached insights
@@ -446,7 +452,7 @@ export async function GET(
 
       await client.query(upsertQuery, [
         assessmentFormId,
-        JSON.stringify(mergedInsights),
+        JSON.stringify(newInsights), // Save raw AI insights
         AI_GENERATED_BY,
       ]);
 

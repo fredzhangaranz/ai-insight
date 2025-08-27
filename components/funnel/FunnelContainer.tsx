@@ -9,6 +9,7 @@ interface FunnelContainerProps {
   subQuestions?: SubQuestion[];
   assessmentFormDefinition?: any;
   assessmentFormId?: string;
+  patientId?: string | null;
   onEditQuestion?: (questionId: string, newText: string) => void;
   onEditSql?: (
     questionId: string,
@@ -28,6 +29,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   subQuestions = [],
   assessmentFormDefinition,
   assessmentFormId,
+  patientId,
   onEditQuestion,
   onEditSql,
   onExecuteQuery,
@@ -690,6 +692,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
               <FunnelPanel
                 subQuestion={currentQuestion}
                 assessmentFormDefinition={assessmentFormDefinition}
+                patientId={patientId}
                 onEditQuestion={handleEditQuestion}
                 onEditSql={handleEditSql}
                 onExecuteQuery={handleExecuteQuery}
