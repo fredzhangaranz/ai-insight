@@ -32,42 +32,87 @@
  */
 
 import * as sql from "mssql";
+import { Pool, PoolConfig } from "pg";
 
-// Store the connection promise, not the pool object itself, to prevent race conditions.
-let poolPromise: Promise<sql.ConnectionPool> | null = null;
+// Store the connection promise for the Insight Gen database (PostgreSQL)
+let insightGenDbPoolPromise: Promise<Pool> | null = null;
+
+// Store the connection promise for the customer database (MS SQL)
+let silhouetteDbPoolPromise: Promise<sql.ConnectionPool> | null = null;
 
 /**
- * Returns a shared instance of the MS SQL connection pool.
+ * Returns a shared instance of the PostgreSQL connection pool for the Insight Gen database.
  * If the pool doesn't exist, it creates one.
- * @returns {Promise<sql.ConnectionPool>} The active connection pool.
+ * @returns {Promise<Pool>} The active connection pool.
  */
-export function getDbPool(): Promise<sql.ConnectionPool> {
-  if (poolPromise) {
-    // If the pool promise already exists, return it.
-    return poolPromise;
+export function getInsightGenDbPool(): Promise<Pool> {
+  if (insightGenDbPoolPromise) {
+    return insightGenDbPoolPromise;
   }
 
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.INSIGHT_GEN_DB_URL) {
     const err = new Error(
-      "Database connection string is not configured in environment variables."
+      "Insight Gen database connection string is not configured in environment variables."
     );
     return Promise.reject(err);
   }
 
-  // If the pool promise doesn't exist, create it.
-  // Store the promise in the shared variable immediately to handle concurrent requests.
-  poolPromise = (async () => {
+  insightGenDbPoolPromise = (async () => {
     try {
-      // The user's connection string is not a URL, but a series of key-value pairs.
-      // We need to parse it to build the config object that `mssql` expects,
-      // as it cannot handle mixed configuration (e.g. connectionString + other properties).
-      const connectionString = process.env.DATABASE_URL!;
+      const dbConfig: PoolConfig = {
+        connectionString: process.env.INSIGHT_GEN_DB_URL,
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      };
+      const pool = new Pool(dbConfig);
+
+      pool.on("error", (err) => {
+        console.error("Insight Gen database connection pool error:", err);
+        pool.end();
+        insightGenDbPoolPromise = null;
+      });
+
+      await pool.connect();
+      console.log(
+        "Insight Gen database connection pool created and connected."
+      );
+      return pool;
+    } catch (err) {
+      insightGenDbPoolPromise = null;
+      console.error("Insight Gen Database Connection Failed:", err);
+      throw err;
+    }
+  })();
+
+  return insightGenDbPoolPromise;
+}
+
+/**
+ * Returns a shared instance of the MS SQL connection pool for the customer database.
+ * If the pool doesn't exist, it creates one.
+ * @returns {Promise<sql.ConnectionPool>} The active connection pool.
+ */
+export function getSilhouetteDbPool(): Promise<sql.ConnectionPool> {
+  if (silhouetteDbPoolPromise) {
+    return silhouetteDbPoolPromise;
+  }
+
+  if (!process.env.SILHOUETTE_DB_URL) {
+    const err = new Error(
+      "Silhouette database connection string is not configured in environment variables."
+    );
+    return Promise.reject(err);
+  }
+
+  silhouetteDbPoolPromise = (async () => {
+    try {
+      const connectionString = process.env.SILHOUETTE_DB_URL!;
       const params = connectionString.split(";").reduce((acc, part) => {
         const eqIndex = part.indexOf("=");
         if (eqIndex > -1) {
           const key = part.substring(0, eqIndex).trim().toLowerCase();
           let value = part.substring(eqIndex + 1).trim();
-          // Remove surrounding quotes from value, which can be present in passwords
           if (value.startsWith("'") && value.endsWith("'")) {
             value = value.substring(1, value.length - 1);
           }
@@ -81,16 +126,16 @@ export function getDbPool(): Promise<sql.ConnectionPool> {
         password: params.password,
         server: params.server,
         port: params.port ? Number(params.port) : 1433,
-        database: "SilhouetteAIDashboard", // Always use the correct database for this app
+        database: "SilhouetteAIDashboard",
         pool: {
           max: 10,
           min: 0,
           idleTimeoutMillis: 30000,
-          acquireTimeoutMillis: 30000, // Timeout for acquiring a connection
-          createTimeoutMillis: 30000, // Timeout for creating a new connection
-          destroyTimeoutMillis: 5000, // Timeout for destroying a connection
-          reapIntervalMillis: 1000, // How often to check for idle connections
-          createRetryIntervalMillis: 200, // Time between connection creation retries
+          acquireTimeoutMillis: 30000,
+          createTimeoutMillis: 30000,
+          destroyTimeoutMillis: 5000,
+          reapIntervalMillis: 1000,
+          createRetryIntervalMillis: 200,
         },
         options: {
           encrypt: params.encrypt
@@ -99,33 +144,30 @@ export function getDbPool(): Promise<sql.ConnectionPool> {
           trustServerCertificate: params.trustservercertificate
             ? params.trustservercertificate.toLowerCase() === "true"
             : true,
-          requestTimeout: 30000, // Query timeout
-          connectTimeout: 30000, // Connection timeout
-          cancelTimeout: 30000, // Cancel timeout
-          enableArithAbort: true, // Required for SQL Server 2019+
-          maxRetriesOnTransientErrors: 3, // Retry on transient errors
+          requestTimeout: 30000,
+          connectTimeout: 30000,
+          cancelTimeout: 30000,
+          enableArithAbort: true,
+          maxRetriesOnTransientErrors: 3,
         },
       };
       const pool = new sql.ConnectionPool(dbConfig);
 
-      // Attach an error handler to the pool to clean up on unexpected errors.
       pool.on("error", (err) => {
-        console.error("Database connection pool error:", err);
-        // Close the pool and reset the promise to allow for a new connection attempt.
+        console.error("Silhouette database connection pool error:", err);
         pool.close();
-        poolPromise = null;
+        silhouetteDbPoolPromise = null;
       });
 
       await pool.connect();
-      console.log("Database connection pool created and connected.");
+      console.log("Silhouette database connection pool created and connected.");
       return pool;
     } catch (err) {
-      // If connection fails, reset the promise to null so the next request can try again.
-      poolPromise = null;
-      console.error("Database Connection Failed:", err);
+      silhouetteDbPoolPromise = null;
+      console.error("Silhouette Database Connection Failed:", err);
       throw err;
     }
   })();
 
-  return poolPromise;
+  return silhouetteDbPoolPromise;
 }

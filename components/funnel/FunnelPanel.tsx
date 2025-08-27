@@ -12,6 +12,7 @@ import { ChartGenerationModal } from "./ChartGenerationModal";
 interface FunnelPanelProps {
   subQuestion: SubQuestion;
   assessmentFormDefinition?: any;
+  patientId?: string | null;
   onEditQuestion?: (questionId: string, newText: string) => void;
   onEditSql?: (
     questionId: string,
@@ -33,6 +34,7 @@ interface FunnelPanelProps {
 export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   subQuestion,
   assessmentFormDefinition,
+  patientId,
   onEditQuestion,
   onEditSql,
   onExecuteQuery,
@@ -61,10 +63,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     explanation: boolean;
     validationNotes: boolean;
     template: boolean;
+    includeFields: boolean;
   }>({
     explanation: false,
     validationNotes: false,
     template: false,
+    includeFields: false,
   });
   const [resultsCleared, setResultsCleared] = useState(false);
 
@@ -385,11 +389,18 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     setQueryResult(null);
     setResultsCleared(false); // Reset cleared flag when executing new query
     try {
+      // Prepare parameters object
+      const params: Record<string, any> = {};
+      if (patientId) {
+        params.patientId = patientId;
+      }
+
       const response = await fetch("/api/ai/execute-query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: subQuestion.sqlQuery,
+          params: Object.keys(params).length > 0 ? params : undefined,
           subQuestionId: subQuestion.id.replace("sq-", ""),
         }),
       });
@@ -966,168 +977,193 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         )}
         {/* Enrichment: AI-first Field Inclusion (Lean MVP) */}
         <div className="mt-3 border-t border-gray-200 pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-xs font-semibold text-gray-700">
-              Include Fields (AI)
-            </h4>
-            <span className="text-[10px] text-gray-500">
-              Single-hop only • Max {MAX_FIELDS}
-            </span>
-          </div>
-
-          {/* Workflow Status Indicator */}
-          {desiredFields.length > 0 && (
-            <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+          <div className="border border-gray-200 rounded-md">
+            <button
+              onClick={() =>
+                setExpandedSections((prev) => ({
+                  ...prev,
+                  includeFields: !prev.includeFields,
+                }))
+              }
+              className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+            >
+              <span>Include Fields (AI)</span>
               <div className="flex items-center space-x-2">
-                <div className="text-yellow-600">⚠️</div>
-                <div className="text-xs text-yellow-800">
-                  <strong>Next Steps:</strong> After adding fields, you need to:
-                  <ol className="list-decimal ml-4 mt-1 space-y-1">
-                    <li>
-                      Click "🔄 Regenerate" to create new SQL with these fields
-                    </li>
-                    <li>Click "Execute" to run the updated query</li>
-                    <li>View results with the new fields</li>
-                  </ol>
+                <span className="text-[10px] text-gray-500">
+                  Single-hop only • Max {MAX_FIELDS}
+                </span>
+                <span className="text-gray-400">
+                  {expandedSections.includeFields ? "▼" : "▶"}
+                </span>
+              </div>
+            </button>
+            {expandedSections.includeFields && (
+              <div className="px-3 pb-3 space-y-3">
+                {/* Workflow Status Indicator */}
+                {desiredFields.length > 0 && (
+                  <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <div className="flex items-center space-x-2">
+                      <div className="text-yellow-600">⚠️</div>
+                      <div className="text-xs text-yellow-800">
+                        <strong>Next Steps:</strong> After adding fields, you
+                        need to:
+                        <ol className="list-decimal ml-4 mt-1 space-y-1">
+                          <li>
+                            Click "🔄 Regenerate" to create new SQL with these
+                            fields
+                          </li>
+                          <li>Click "Execute" to run the updated query</li>
+                          <li>View results with the new fields</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Chips */}
+                <div className="flex flex-wrap gap-2">
+                  {desiredFields.map((f) => (
+                    <span
+                      key={f}
+                      className="text-[11px] bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1"
+                    >
+                      {f}
+                      <button
+                        className="text-blue-700 hover:text-blue-900"
+                        onClick={() => {
+                          setDesiredFields((prev) =>
+                            prev.filter((x) => x !== f)
+                          );
+                          // Clear results when fields are removed to indicate they need regeneration
+                          if (queryResult) {
+                            setQueryResult(null);
+                            setResultsCleared(true);
+                          }
+                        }}
+                        title="Remove"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                  {desiredFields.length === 0 && (
+                    <span className="text-[11px] text-gray-400">
+                      No extra fields selected
+                    </span>
+                  )}
+                </div>
+
+                {/* Input + Add */}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={fieldInput}
+                    onChange={(e) => setFieldInput(e.target.value)}
+                    placeholder="e.g., patient.firstName"
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs"
+                  />
+                  <button
+                    className="text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
+                    disabled={desiredFields.length >= MAX_FIELDS}
+                    onClick={() => {
+                      const candidate = fieldInput.trim();
+                      if (!candidate) return;
+                      if (!ALLOWED_FIELDS.includes(candidate as AllowedField)) {
+                        handleError(
+                          new Error(
+                            `Field not allowed. Try: ${ALLOWED_FIELDS.join(
+                              ", "
+                            )}`
+                          ),
+                          "Add Field"
+                        );
+                        return;
+                      }
+                      if (desiredFields.includes(candidate as AllowedField)) {
+                        handleError(
+                          new Error("Field already added"),
+                          "Add Field"
+                        );
+                        return;
+                      }
+                      if (desiredFields.length >= MAX_FIELDS) {
+                        handleError(
+                          new Error(`You can add up to ${MAX_FIELDS} fields`),
+                          "Add Field"
+                        );
+                        return;
+                      }
+                      setDesiredFields((prev) => [
+                        ...prev,
+                        candidate as AllowedField,
+                      ]);
+                      setFieldInput("");
+                      // Clear results when fields are added to indicate they need regeneration
+                      if (queryResult) {
+                        setQueryResult(null);
+                        setResultsCleared(true);
+                      }
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {/* Quick picks */}
+                <div className="flex flex-wrap gap-2">
+                  {ALLOWED_FIELDS.map((f) => (
+                    <button
+                      key={f}
+                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
+                        desiredFields.includes(f)
+                          ? "bg-blue-100 text-blue-800 border-blue-300"
+                          : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                      }`}
+                      onClick={() => {
+                        if (desiredFields.includes(f)) return;
+                        if (desiredFields.length >= MAX_FIELDS) {
+                          handleError(
+                            new Error(`You can add up to ${MAX_FIELDS} fields`),
+                            "Add Field"
+                          );
+                          return;
+                        }
+                        setDesiredFields((prev) => [...prev, f]);
+                        // Clear results when fields are added to indicate they need regeneration
+                        if (queryResult) {
+                          setQueryResult(null);
+                          setResultsCleared(true);
+                        }
+                      }}
+                      title="Quick add"
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Join path preview (read-only) */}
+                <div className="bg-gray-50 border border-gray-200 rounded p-2 text-[11px] text-gray-700">
+                  <div className="font-semibold mb-1">Join Path (Preview)</div>
+                  {desiredFields.length === 0 ? (
+                    <div className="text-gray-400">No joins required</div>
+                  ) : (
+                    <ul className="list-disc ml-4 space-y-1">
+                      {desiredFields.some((f) => f.startsWith("patient.")) && (
+                        <li>
+                          Assessment INNER JOIN rpt.Patient P ON
+                          Assessment.patientFk = P.id
+                        </li>
+                      )}
+                      {desiredFields.some((f) => f.startsWith("wound.")) && (
+                        <li>
+                          Assessment INNER JOIN rpt.Wound W ON
+                          Assessment.woundFk = W.id
+                        </li>
+                      )}
+                    </ul>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Chips */}
-          <div className="flex flex-wrap gap-2 mb-2">
-            {desiredFields.map((f) => (
-              <span
-                key={f}
-                className="text-[11px] bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center gap-1"
-              >
-                {f}
-                <button
-                  className="text-blue-700 hover:text-blue-900"
-                  onClick={() => {
-                    setDesiredFields((prev) => prev.filter((x) => x !== f));
-                    // Clear results when fields are removed to indicate they need regeneration
-                    if (queryResult) {
-                      setQueryResult(null);
-                      setResultsCleared(true);
-                    }
-                  }}
-                  title="Remove"
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-            {desiredFields.length === 0 && (
-              <span className="text-[11px] text-gray-400">
-                No extra fields selected
-              </span>
-            )}
-          </div>
-
-          {/* Input + Add */}
-          <div className="flex items-center gap-2 mb-2">
-            <input
-              value={fieldInput}
-              onChange={(e) => setFieldInput(e.target.value)}
-              placeholder="e.g., patient.firstName"
-              className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs"
-            />
-            <button
-              className="text-xs px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
-              disabled={desiredFields.length >= MAX_FIELDS}
-              onClick={() => {
-                const candidate = fieldInput.trim();
-                if (!candidate) return;
-                if (!ALLOWED_FIELDS.includes(candidate as AllowedField)) {
-                  handleError(
-                    new Error(
-                      `Field not allowed. Try: ${ALLOWED_FIELDS.join(", ")}`
-                    ),
-                    "Add Field"
-                  );
-                  return;
-                }
-                if (desiredFields.includes(candidate as AllowedField)) {
-                  handleError(new Error("Field already added"), "Add Field");
-                  return;
-                }
-                if (desiredFields.length >= MAX_FIELDS) {
-                  handleError(
-                    new Error(`You can add up to ${MAX_FIELDS} fields`),
-                    "Add Field"
-                  );
-                  return;
-                }
-                setDesiredFields((prev) => [
-                  ...prev,
-                  candidate as AllowedField,
-                ]);
-                setFieldInput("");
-                // Clear results when fields are added to indicate they need regeneration
-                if (queryResult) {
-                  setQueryResult(null);
-                  setResultsCleared(true);
-                }
-              }}
-            >
-              Add
-            </button>
-          </div>
-
-          {/* Quick picks */}
-          <div className="flex flex-wrap gap-2 mb-2">
-            {ALLOWED_FIELDS.map((f) => (
-              <button
-                key={f}
-                className={`text-[11px] px-2 py-1 rounded border transition-colors ${
-                  desiredFields.includes(f)
-                    ? "bg-blue-100 text-blue-800 border-blue-300"
-                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                }`}
-                onClick={() => {
-                  if (desiredFields.includes(f)) return;
-                  if (desiredFields.length >= MAX_FIELDS) {
-                    handleError(
-                      new Error(`You can add up to ${MAX_FIELDS} fields`),
-                      "Add Field"
-                    );
-                    return;
-                  }
-                  setDesiredFields((prev) => [...prev, f]);
-                  // Clear results when fields are added to indicate they need regeneration
-                  if (queryResult) {
-                    setQueryResult(null);
-                    setResultsCleared(true);
-                  }
-                }}
-                title="Quick add"
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-
-          {/* Join path preview (read-only) */}
-          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-[11px] text-gray-700">
-            <div className="font-semibold mb-1">Join Path (Preview)</div>
-            {desiredFields.length === 0 ? (
-              <div className="text-gray-400">No joins required</div>
-            ) : (
-              <ul className="list-disc ml-4 space-y-1">
-                {desiredFields.some((f) => f.startsWith("patient.")) && (
-                  <li>
-                    Assessment INNER JOIN rpt.Patient P ON Assessment.patientFk
-                    = P.id
-                  </li>
-                )}
-                {desiredFields.some((f) => f.startsWith("wound.")) && (
-                  <li>
-                    Assessment INNER JOIN rpt.Wound W ON Assessment.woundFk =
-                    W.id
-                  </li>
-                )}
-              </ul>
             )}
           </div>
         </div>

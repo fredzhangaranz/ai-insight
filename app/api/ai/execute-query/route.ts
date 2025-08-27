@@ -6,7 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDbPool } from "@/lib/db";
+import * as sql from "mssql";
+import { getSilhouetteDbPool } from "@/lib/db";
+import { FunnelCacheService } from "@/lib/services/funnel-cache.service";
 import {
   withErrorHandling,
   createErrorResponse,
@@ -36,6 +38,7 @@ function validateAndFixQuery(sql: string): string {
   }
 
   // 2. Fix: Ensure consistent schema prefixing
+  // Apply table name prefixing for common tables
   const tableRegex =
     /(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
   sql = sql.replace(tableRegex, "rpt.$1");
@@ -76,7 +79,7 @@ async function executeQueryHandler(
   }
 
   // 3. Execute the query
-  const pool = await getDbPool();
+  const pool = await getSilhouetteDbPool();
   const dbRequest = pool.request();
 
   // 3a. Validate and fix the query

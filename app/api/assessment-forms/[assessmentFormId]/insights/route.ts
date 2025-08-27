@@ -7,9 +7,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import sql from "mssql";
+import { Pool } from "pg";
+import * as sql from "mssql";
 import Anthropic from "@anthropic-ai/sdk";
-import { getDbPool } from "@/lib/db";
+import { getInsightGenDbPool, getSilhouetteDbPool } from "@/lib/db";
 import {
   validateInsightsResponse,
   constructInsightsPrompt,
@@ -204,279 +205,283 @@ export async function GET(
   }
 
   try {
-    const pool = await getDbPool();
+    const toolDbPool = await getInsightGenDbPool();
+    const customerDbPool = await getSilhouetteDbPool();
+    const client = await toolDbPool.connect();
 
-    // If regenerate flag is NOT present, we only check the cache.
-    if (!regenerate) {
-      const cacheStartTime = Date.now();
-      const cachedResult = await pool
-        .request()
-        .input("id", sql.UniqueIdentifier, assessmentFormId)
-        .query(
-          "SELECT insightsJson FROM SilhouetteAIDashboard.rpt.AIInsights WHERE assessmentFormVersionFk = @id"
+    try {
+      // If regenerate flag is NOT present, we only check the cache.
+      if (!regenerate) {
+        const cacheStartTime = Date.now();
+        const cachedResult = await client.query(
+          'SELECT "insightsJson" FROM "AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          [assessmentFormId]
         );
 
-      // Log cache check query metrics
-      await metrics.logQueryMetrics({
-        queryId: "check_insights_cache",
-        executionTime: Date.now() - cacheStartTime,
-        resultSize: cachedResult.recordset.length,
-        timestamp: new Date(),
-        cached: false,
-        sql: "SELECT insightsJson FROM rpt.AIInsights WHERE assessmentFormVersionFk = @id",
-        parameters: { assessmentFormId },
-      });
+        // Log cache check query metrics
+        await metrics.logQueryMetrics({
+          queryId: "check_insights_cache",
+          executionTime: Date.now() - cacheStartTime,
+          resultSize: cachedResult.rows.length,
+          timestamp: new Date(),
+          cached: false,
+          sql: 'SELECT "insightsJson" FROM "AIInsights" WHERE "assessmentFormVersionFk" = $1',
+          parameters: { assessmentFormId },
+        });
 
-      if (cachedResult.recordset.length > 0) {
-        console.log("Cached insights found. Returning from database.");
-        const insights = JSON.parse(cachedResult.recordset[0].insightsJson);
-        cacheHit = true;
+        if (cachedResult.rows.length > 0) {
+          console.log("Cached insights found. Returning from database.");
 
-        // Validate cached insights
-        if (!validateInsightsResponse(insights)) {
-          console.log("Cached insights are invalid, regenerating...");
-          cacheHit = false;
-        } else {
-          // Get custom questions and merge them with AI insights
-          const customQuestionsResult = await pool
-            .request()
-            .input("id", sql.UniqueIdentifier, assessmentFormId)
-            .query(
-              "SELECT id, category, questionText, questionType, originalQuestionId FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
+          const cachedData = cachedResult.rows[0].insightsJson;
+          const insights =
+            typeof cachedData === "string"
+              ? JSON.parse(cachedData)
+              : cachedData;
+
+          cacheHit = true;
+
+          // Validate cached insights
+          if (!validateInsightsResponse(insights)) {
+            console.log("Cached insights are invalid, regenerating...");
+            cacheHit = false;
+          } else {
+            // Get custom questions and merge them with AI insights
+            const customQuestionsResult = await client.query(
+              'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM "CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+              [assessmentFormId]
             );
 
-          console.log(
-            `Found ${customQuestionsResult.recordset.length} custom questions for assessment form ${assessmentFormId}`
-          );
-          customQuestionsResult.recordset.forEach((q, i) => {
             console.log(
-              `  Custom question ${i + 1}: ID=${q.id}, Text="${
-                q.questionText
-              }", Type=${q.questionType}, Category=${q.category}`
+              `Found ${customQuestionsResult.rows.length} custom questions for assessment form ${assessmentFormId}`
             );
-          });
-
-          // Merge custom questions with AI insights
-          const mergedInsights = mergeCustomQuestionsWithInsights(
-            insights,
-            customQuestionsResult.recordset
-          );
-
-          // Log the merged insights structure
-          console.log("Merged insights structure:");
-          mergedInsights.insights.forEach((cat, catIndex) => {
-            console.log(`  Category ${catIndex + 1}: ${cat.category}`);
-            cat.questions.forEach((q, qIndex) => {
+            customQuestionsResult.rows.forEach((q, i) => {
               console.log(
-                `    Question ${qIndex + 1}: ID=${q.id}, isCustom=${
-                  q.isCustom
-                }, Text="${q.text}"`
+                `  Custom question ${i + 1}: ID=${q.id}, Text="${
+                  q.questionText
+                }", Type=${q.questionType}, Category=${q.category}`
               );
             });
-          });
 
-          // Log cache metrics
+            // Merge custom questions with AI insights
+            const mergedInsights = mergeCustomQuestionsWithInsights(
+              insights,
+              customQuestionsResult.rows
+            );
+
+            // Log the merged insights structure
+            console.log("Merged insights structure:");
+            mergedInsights.insights.forEach((cat, catIndex) => {
+              console.log(`  Category ${catIndex + 1}: ${cat.category}`);
+              cat.questions.forEach((q, qIndex) => {
+                console.log(
+                  `    Question ${qIndex + 1}: ID=${q.id}, isCustom=${
+                    q.isCustom
+                  }, Text="${q.text}"`
+                );
+              });
+            });
+
+            // Log cache metrics
+            await metrics.logCacheMetrics({
+              cacheHits: 1,
+              cacheMisses: 0,
+              cacheInvalidations: 0,
+              averageHitLatency: Date.now() - startTime,
+              timestamp: new Date(),
+            });
+
+            return NextResponse.json(mergedInsights);
+          }
+        } else {
+          console.log("No cached insights found. Returning 204 No Content.");
+
+          // Log cache miss
           await metrics.logCacheMetrics({
-            cacheHits: 1,
-            cacheMisses: 0,
+            cacheHits: 0,
+            cacheMisses: 1,
             cacheInvalidations: 0,
-            averageHitLatency: Date.now() - startTime,
+            averageHitLatency: 0,
             timestamp: new Date(),
           });
 
-          return NextResponse.json(mergedInsights);
+          return new NextResponse(null, { status: 204 });
         }
-      } else {
-        console.log("No cached insights found. Returning 204 No Content.");
+      }
 
-        // Log cache miss
+      // --- This code only runs if regenerate=true or cache is invalid ---
+      console.log("Generating new insights...");
+
+      const definition = await getAssessmentFormDefinition(
+        customerDbPool,
+        assessmentFormId
+      );
+      if (!definition) {
+        return NextResponse.json(
+          { message: `AssessmentForm with ID ${assessmentFormId} not found.` },
+          { status: 404 }
+        );
+      }
+
+      // Analyze form fields to enhance context
+      const fieldAnalysis = analyzeFormFields(definition);
+      console.log("Field analysis:", fieldAnalysis);
+
+      // Generate the prompt with form context
+      const prompt = constructInsightsPrompt(definition);
+
+      // Start AI timing
+      aiStartTime = Date.now();
+
+      const aiResponse = await anthropic.messages.create({
+        model: AI_MODEL_NAME,
+        max_tokens: 2048,
+        system: prompt,
+        messages: [
+          {
+            role: "user",
+            content:
+              "Please analyze this form definition and generate insights.",
+          },
+        ],
+      });
+
+      // Get the response text and parse it
+      const responseText =
+        aiResponse.content[0].type === "text" ? aiResponse.content[0].text : "";
+
+      console.log("Raw AI response:", responseText.substring(0, 200) + "...");
+
+      // Try to extract JSON from the response
+      let newInsights: AIInsightsResponse;
+      try {
+        // First, try to parse the response directly as JSON
+        newInsights = JSON.parse(responseText) as AIInsightsResponse;
+      } catch (parseError) {
+        console.log(
+          "Direct JSON parsing failed, attempting to extract JSON from response..."
+        );
+
+        // Try to extract JSON from markdown code blocks
+        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          try {
+            newInsights = JSON.parse(jsonMatch[1]) as AIInsightsResponse;
+          } catch (blockError) {
+            console.error("Failed to parse JSON from code block:", blockError);
+            throw new Error("AI returned invalid JSON format in code block");
+          }
+        } else {
+          // Try to extract JSON from the response by finding the first { and last }
+          const firstBrace = responseText.indexOf("{");
+          const lastBrace = responseText.lastIndexOf("}");
+
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            try {
+              const jsonText = responseText.substring(
+                firstBrace,
+                lastBrace + 1
+              );
+              newInsights = JSON.parse(jsonText) as AIInsightsResponse;
+            } catch (extractError) {
+              console.error("Failed to extract and parse JSON:", extractError);
+              throw new Error("AI returned invalid JSON format");
+            }
+          } else {
+            console.error("No JSON found in AI response");
+            throw new Error("AI did not return valid JSON format");
+          }
+        }
+      }
+
+      // Log AI metrics
+      await metrics.logAIMetrics({
+        promptTokens: 0, // Claude 3 doesn't expose token counts yet
+        completionTokens: 0,
+        totalTokens: 0,
+        latency: Date.now() - aiStartTime,
+        success: true,
+        model: AI_MODEL_NAME,
+        timestamp: new Date(),
+      });
+
+      // Validate the AI response
+      if (!validateInsightsResponse(newInsights)) {
+        console.error(
+          "AI response validation failed:",
+          JSON.stringify(newInsights, null, 2)
+        );
+        throw new Error(
+          "AI returned invalid insights format - validation failed"
+        );
+      }
+
+      // Get custom questions and merge them with new insights
+      const customQuestionsResult = await client.query(
+        'SELECT id, category, "questionText", "questionType", "originalQuestionId" FROM "CustomQuestions" WHERE "assessmentFormVersionFk" = $1 AND "isActive" = true',
+        [assessmentFormId]
+      );
+
+      console.log(
+        `Found ${customQuestionsResult.rows.length} custom questions for assessment form ${assessmentFormId} (regeneration)`
+      );
+      customQuestionsResult.rows.forEach((q, i) => {
+        console.log(
+          `  Custom question ${i + 1}: ID=${q.id}, Text="${
+            q.questionText
+          }", Type=${q.questionType}`
+        );
+      });
+
+      // Merge custom questions with new insights
+      const mergedInsights = mergeCustomQuestionsWithInsights(
+        newInsights,
+        customQuestionsResult.rows
+      );
+
+      // Save to cache
+      const cacheUpdateStartTime = Date.now();
+      const upsertQuery = `
+        INSERT INTO "AIInsights" ("assessmentFormVersionFk", "insightsJson", "generatedBy")
+        VALUES ($1, $2, $3)
+        ON CONFLICT ("assessmentFormVersionFk")
+        DO UPDATE SET
+          "insightsJson" = EXCLUDED."insightsJson",
+          "generatedDate" = NOW(),
+          "generatedBy" = EXCLUDED."generatedBy";
+      `;
+
+      await client.query(upsertQuery, [
+        assessmentFormId,
+        JSON.stringify(newInsights), // Save raw AI insights
+        AI_GENERATED_BY,
+      ]);
+
+      // Log cache update metrics
+      await metrics.logQueryMetrics({
+        queryId: "update_insights_cache",
+        executionTime: Date.now() - cacheUpdateStartTime,
+        resultSize: 1,
+        timestamp: new Date(),
+        cached: false,
+        sql: upsertQuery,
+        parameters: { assessmentFormId, generatedBy: AI_GENERATED_BY },
+      });
+
+      // Log cache invalidation if this was a regenerate
+      if (cacheHit) {
         await metrics.logCacheMetrics({
           cacheHits: 0,
-          cacheMisses: 1,
-          cacheInvalidations: 0,
+          cacheMisses: 0,
+          cacheInvalidations: 1,
           averageHitLatency: 0,
           timestamp: new Date(),
         });
-
-        return new NextResponse(null, { status: 204 });
       }
+
+      return NextResponse.json(mergedInsights);
+    } finally {
+      client.release();
     }
-
-    // --- This code only runs if regenerate=true or cache is invalid ---
-    console.log("Generating new insights...");
-
-    const definition = await getAssessmentFormDefinition(
-      pool,
-      assessmentFormId
-    );
-    if (!definition) {
-      return NextResponse.json(
-        { message: `AssessmentForm with ID ${assessmentFormId} not found.` },
-        { status: 404 }
-      );
-    }
-
-    // Analyze form fields to enhance context
-    const fieldAnalysis = analyzeFormFields(definition);
-    console.log("Field analysis:", fieldAnalysis);
-
-    // Generate the prompt with form context
-    const prompt = constructInsightsPrompt(definition);
-
-    // Start AI timing
-    aiStartTime = Date.now();
-
-    const aiResponse = await anthropic.messages.create({
-      model: AI_MODEL_NAME,
-      max_tokens: 2048,
-      system: prompt,
-      messages: [
-        {
-          role: "user",
-          content: "Please analyze this form definition and generate insights.",
-        },
-      ],
-    });
-
-    // Get the response text and parse it
-    const responseText =
-      aiResponse.content[0].type === "text" ? aiResponse.content[0].text : "";
-
-    console.log("Raw AI response:", responseText.substring(0, 200) + "...");
-
-    // Try to extract JSON from the response
-    let newInsights: AIInsightsResponse;
-    try {
-      // First, try to parse the response directly as JSON
-      newInsights = JSON.parse(responseText) as AIInsightsResponse;
-    } catch (parseError) {
-      console.log(
-        "Direct JSON parsing failed, attempting to extract JSON from response..."
-      );
-
-      // Try to extract JSON from markdown code blocks
-      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        try {
-          newInsights = JSON.parse(jsonMatch[1]) as AIInsightsResponse;
-        } catch (blockError) {
-          console.error("Failed to parse JSON from code block:", blockError);
-          throw new Error("AI returned invalid JSON format in code block");
-        }
-      } else {
-        // Try to extract JSON from the response by finding the first { and last }
-        const firstBrace = responseText.indexOf("{");
-        const lastBrace = responseText.lastIndexOf("}");
-
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          try {
-            const jsonText = responseText.substring(firstBrace, lastBrace + 1);
-            newInsights = JSON.parse(jsonText) as AIInsightsResponse;
-          } catch (extractError) {
-            console.error("Failed to extract and parse JSON:", extractError);
-            throw new Error("AI returned invalid JSON format");
-          }
-        } else {
-          console.error("No JSON found in AI response");
-          throw new Error("AI did not return valid JSON format");
-        }
-      }
-    }
-
-    // Log AI metrics
-    await metrics.logAIMetrics({
-      promptTokens: 0, // Claude 3 doesn't expose token counts yet
-      completionTokens: 0,
-      totalTokens: 0,
-      latency: Date.now() - aiStartTime,
-      success: true,
-      model: AI_MODEL_NAME,
-      timestamp: new Date(),
-    });
-
-    // Validate the AI response
-    if (!validateInsightsResponse(newInsights)) {
-      console.error(
-        "AI response validation failed:",
-        JSON.stringify(newInsights, null, 2)
-      );
-      throw new Error(
-        "AI returned invalid insights format - validation failed"
-      );
-    }
-
-    // Get custom questions and merge them with new insights
-    const customQuestionsResult = await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, assessmentFormId)
-      .query(
-        "SELECT id, category, questionText, questionType, originalQuestionId FROM SilhouetteAIDashboard.rpt.CustomQuestions WHERE assessmentFormVersionFk = @id AND isActive = 1"
-      );
-
-    console.log(
-      `Found ${customQuestionsResult.recordset.length} custom questions for assessment form ${assessmentFormId} (regeneration)`
-    );
-    customQuestionsResult.recordset.forEach((q, i) => {
-      console.log(
-        `  Custom question ${i + 1}: ID=${q.id}, Text="${
-          q.questionText
-        }", Type=${q.questionType}`
-      );
-    });
-
-    // Merge custom questions with new insights
-    const mergedInsights = mergeCustomQuestionsWithInsights(
-      newInsights,
-      customQuestionsResult.recordset
-    );
-
-    // Save to cache
-    const cacheUpdateStartTime = Date.now();
-    const upsertQuery = `
-      MERGE SilhouetteAIDashboard.rpt.AIInsights AS target
-      USING (SELECT @id AS assessmentFormVersionFk) AS source
-      ON (target.assessmentFormVersionFk = source.assessmentFormVersionFk)
-      WHEN MATCHED THEN
-        UPDATE SET insightsJson = @insightsJson, generatedDate = GETUTCDATE(), generatedBy = @generatedBy
-      WHEN NOT MATCHED THEN
-        INSERT (assessmentFormVersionFk, insightsJson, generatedBy)
-        VALUES (@id, @insightsJson, @generatedBy);
-    `;
-
-    await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, assessmentFormId)
-      .input(
-        "insightsJson",
-        sql.NVarChar(sql.MAX),
-        JSON.stringify(mergedInsights)
-      )
-      .input("generatedBy", sql.NVarChar, AI_GENERATED_BY)
-      .query(upsertQuery);
-
-    // Log cache update metrics
-    await metrics.logQueryMetrics({
-      queryId: "update_insights_cache",
-      executionTime: Date.now() - cacheUpdateStartTime,
-      resultSize: 1,
-      timestamp: new Date(),
-      cached: false,
-      sql: upsertQuery,
-      parameters: { assessmentFormId, generatedBy: AI_GENERATED_BY },
-    });
-
-    // Log cache invalidation if this was a regenerate
-    if (cacheHit) {
-      await metrics.logCacheMetrics({
-        cacheHits: 0,
-        cacheMisses: 0,
-        cacheInvalidations: 1,
-        averageHitLatency: 0,
-        timestamp: new Date(),
-      });
-    }
-
-    return NextResponse.json(mergedInsights);
   } catch (error: any) {
     console.error("API Error:", error);
 

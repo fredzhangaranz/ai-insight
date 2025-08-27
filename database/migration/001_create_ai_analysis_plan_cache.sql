@@ -1,37 +1,21 @@
--- File: /database/migrations/001_create_ai_analysis_plan_cache.sql
+-- File: /database/tool-migration/001_create_ai_analysis_plan_cache.sql
 
--- Check if the schema exists, create if it doesn't
-IF NOT EXISTS (SELECT \* FROM sys.schemas WHERE name = 'rpt')
-BEGIN
-EXEC('CREATE SCHEMA rpt');
-END
-GO
-
--- Check if the table already exists to make this script idempotent
-IF NOT EXISTS (SELECT \* FROM sys.objects WHERE object_id = OBJECT_ID(N'[rpt].[AIAnalysisPlan]') AND type in (N'U'))
-BEGIN
-CREATE TABLE [rpt].[AIAnalysisPlan](
-[id] [int] IDENTITY(1,1) NOT NULL,
-[assessmentFormVersionFk] [uniqueidentifier] NOT NULL,
-[question] [nvarchar](1000) NOT NULL,
-[analysisPlanJson] [nvarchar](max) NOT NULL,
-[generatedDate] [datetime] NOT NULL DEFAULT (GETUTCDATE()),
-[generatedBy] [nvarchar](255) NULL,
-CONSTRAINT [PK_AIAnalysisPlan] PRIMARY KEY CLUSTERED ([id] ASC)
+-- Create the table with a sequence for the primary key
+CREATE TABLE IF NOT EXISTS "AIAnalysisPlan" (
+  id SERIAL PRIMARY KEY,
+  "assessmentFormVersionFk" UUID NOT NULL,
+  question TEXT NOT NULL,
+  "analysisPlanJson" JSONB NOT NULL,
+  "generatedDate" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (NOW()),
+  "generatedBy" VARCHAR(255),
+  CONSTRAINT "UC_AIAnalysisPlan_FormQuestion" UNIQUE ("assessmentFormVersionFk", question)
 );
 
-    -- Add a unique constraint to ensure one plan per form/question combination, which is crucial for our MERGE logic.
-    ALTER TABLE [rpt].[AIAnalysisPlan] ADD CONSTRAINT [UC_AIAnalysisPlan_FormQuestion] UNIQUE NONCLUSTERED
-    (
-        [assessmentFormVersionFk],
-        [question]
-    );
-
-    PRINT 'Table [rpt].[AIAnalysisPlan] created successfully.';
-
-END
-ELSE
-BEGIN
-PRINT 'Table [rpt].[AIAnalysisPlan] already exists.';
-END
-GO
+-- Add comments to the table and columns
+COMMENT ON TABLE "AIAnalysisPlan" IS 'Caches the AI-generated analysis plans for user questions.';
+COMMENT ON COLUMN "AIAnalysisPlan".id IS 'The unique identifier for the analysis plan.';
+COMMENT ON COLUMN "AIAnalysisPlan"."assessmentFormVersionFk" IS 'Foreign key to the assessment form version.';
+COMMENT ON COLUMN "AIAnalysisPlan".question IS 'The user''s question.';
+COMMENT ON COLUMN "AIAnalysisPlan"."analysisPlanJson" IS 'The JSON object containing the analysis plan.';
+COMMENT ON COLUMN "AIAnalysisPlan"."generatedDate" IS 'The UTC timestamp when the plan was generated.';
+COMMENT ON COLUMN "AIAnalysisPlan"."generatedBy" IS 'The AI model or user that generated the plan.';

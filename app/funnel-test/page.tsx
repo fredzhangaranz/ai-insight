@@ -124,6 +124,7 @@ export default function FunnelTestPage({
             originalQuestion={originalQuestion}
             assessmentFormDefinition={assessmentFormDefinition}
             assessmentFormId={assessmentFormId}
+            patientId={patientId}
             onEditQuestion={handleEditQuestion}
             onEditSql={handleEditSql}
             onExecuteQuery={handleExecuteQuery}

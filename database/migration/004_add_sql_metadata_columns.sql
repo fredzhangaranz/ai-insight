@@ -1,10 +1,10 @@
--- Migration: Add SQL metadata columns to SubQuestions table
+-- File: /database/tool-migration/004_add_sql_metadata_columns.sql
 
 -- Add new columns for SQL metadata
-ALTER TABLE [rpt].[SubQuestions] 
-ADD [sqlExplanation] [nvarchar](max) NULL,
-    [sqlValidationNotes] [nvarchar](max) NULL,
-    [sqlMatchedTemplate] [nvarchar](100) NULL;
+ALTER TABLE "SubQuestions"
+ADD COLUMN IF NOT EXISTS "sqlExplanation" TEXT,
+ADD COLUMN IF NOT EXISTS "sqlValidationNotes" TEXT,
+ADD COLUMN IF NOT EXISTS "sqlMatchedTemplate" VARCHAR(100);
 
 -- Add index for template matching queries
-CREATE INDEX [IX_SubQuestions_MatchedTemplate] ON [rpt].[SubQuestions] ([sqlMatchedTemplate]); 
+CREATE INDEX IF NOT EXISTS "IX_SubQuestions_MatchedTemplate" ON "SubQuestions" ("sqlMatchedTemplate");

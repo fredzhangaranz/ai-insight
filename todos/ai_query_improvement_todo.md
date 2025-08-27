@@ -34,7 +34,7 @@
   ```
 - [x] Add new prompt types for sub-question generation
 - [x] Add validation types for SQL query generation
-- **Validation**: All new types compile without errors and integrate with existing types.ts
+- **Validation**: ✅ All new types compile without errors and integrate with existing types.ts
 
 ### 1.2 New Prompt Templates (Milestone 2)
 
@@ -47,7 +47,7 @@
   - Include validation rules and safety checks
   - Add query template selection logic
 - [x] Update prompt index to export new prompts
-- **Validation**: New prompts can be loaded and compiled successfully
+- **Validation**: ✅ New prompts can be loaded and compiled successfully
 
 ## Phase 1.5: Basic Storage Infrastructure
 
@@ -57,7 +57,7 @@
 
   ```sql
   -- Core table for storing question breakdowns
-  CREATE TABLE [rpt].[QueryFunnel] (
+  CREATE TABLE [QueryFunnel] (
     [id] [int] IDENTITY(1,1) NOT NULL,
     [assessmentFormVersionFk] [uniqueidentifier] NOT NULL,
     [originalQuestion] [nvarchar](1000) NOT NULL,
@@ -68,7 +68,7 @@
   );
 
   -- Store sub-questions and their queries
-  CREATE TABLE [rpt].[SubQuestions] (
+  CREATE TABLE [SubQuestions] (
     [id] [int] IDENTITY(1,1) NOT NULL,
     [funnelId] [int] NOT NULL,
     [questionText] [nvarchar](1000) NOT NULL,
@@ -78,26 +78,26 @@
     [lastExecutionDate] [datetime] NULL,
     CONSTRAINT [PK_SubQuestions] PRIMARY KEY CLUSTERED ([id] ASC),
     CONSTRAINT [FK_SubQuestions_QueryFunnel] FOREIGN KEY ([funnelId])
-      REFERENCES [rpt].[QueryFunnel] ([id])
+      REFERENCES [QueryFunnel] ([id])
   );
 
   -- Simple result caching
-  CREATE TABLE [rpt].[QueryResults] (
+  CREATE TABLE [QueryResults] (
     [id] [int] IDENTITY(1,1) NOT NULL,
     [subQuestionId] [int] NOT NULL,
     [resultData] [nvarchar](max) NOT NULL, -- JSON field for storing query results
     [executionDate] [datetime] NOT NULL DEFAULT (GETUTCDATE()),
     CONSTRAINT [PK_QueryResults] PRIMARY KEY CLUSTERED ([id] ASC),
     CONSTRAINT [FK_QueryResults_SubQuestions] FOREIGN KEY ([subQuestionId])
-      REFERENCES [rpt].[SubQuestions] ([id])
+      REFERENCES [SubQuestions] ([id])
   );
   ```
 
 - [x] Create basic indexes:
   ```sql
-  CREATE INDEX [IX_SubQuestions_FunnelId] ON [rpt].[SubQuestions] ([funnelId]);
-  CREATE INDEX [IX_SubQuestions_Order] ON [rpt].[SubQuestions] ([funnelId], [order]);
-  CREATE INDEX [IX_QueryResults_SubQuestion] ON [rpt].[QueryResults] ([subQuestionId], [executionDate]);
+  CREATE INDEX [IX_SubQuestions_FunnelId] ON [SubQuestions] ([funnelId]);
+  CREATE INDEX [IX_SubQuestions_Order] ON [SubQuestions] ([funnelId], [order]);
+  CREATE INDEX [IX_QueryResults_SubQuestion] ON [QueryResults] ([subQuestionId], [executionDate]);
   ```
 
 ### 1.5.2 Basic Storage Service (Milestone 2.6)
@@ -119,7 +119,7 @@
 
 ### 1.6.1 Centralize Template Storage
 
-- [ ] Create a JSON file for query templates (e.g., `lib/prompts/templates/query-templates.json`)
+- [x] Create a JSON file for query templates (e.g., `lib/prompts/templates/query-templates.json`)
   - Each template should have: `name`, `description`, `examples` (sample questions), and `sqlPattern` (parameterized SQL snippet)
   - Example:
     ```json
@@ -248,19 +248,19 @@
 - [x] Design caching strategy for sub-questions and SQL queries
 - [x] Implement caching for sub-question generation results
 - [ ] Implement caching for SQL generation results
-- [ ] **Decision needed**: Implement caching for query execution results (consider data size)
+- [x] **Decision made**: No caching for query execution results (data may contain sensitive information)
 - [ ] Add cache invalidation logic when questions/SQL are edited
 - [x] Test caching behavior with real data
 - **Validation**: ✅ Sub-question caching works correctly and improves performance (6s → instant)
 
 ### 4.5 Error Handling & Retry Mechanisms (Milestone 7.5)
 
-- [ ] **HIGH PRIORITY** Implement comprehensive error handling for all API calls
+- [x] **HIGH PRIORITY** Implement comprehensive error handling for all API calls
   - Add try-catch blocks around all fetch calls
   - Implement proper error state management in components
   - Add error boundaries for React components
   - Ensure errors don't crash the entire application
-- [ ] **HIGH PRIORITY** Add user-friendly error messages
+- [x] **HIGH PRIORITY** Add user-friendly error messages
   - Replace generic error messages with specific, actionable ones
   - Add context about what went wrong and how to fix it
   - Implement error message localization
@@ -332,28 +332,28 @@
 
 ### 8.1 Frontend Model Switching UI
 
-- [ ] Add a user-facing dropdown or toggle to select the AI model (e.g., Claude, Gemini, etc.) for question, sub-question, and query generation.
-- [ ] Persist user selection in local state (and optionally in URL or user profile for session persistence).
-- [ ] Pass selected model to backend API calls as a parameter.
-- **Validation**: User can easily switch models and see which model is active for each generation step.
+- [x] Add a user-facing dropdown or toggle to select the AI model (e.g., Claude, Gemini, etc.) for question, sub-question, and query generation.
+- [x] Persist user selection in local state (and optionally in URL or user profile for session persistence).
+- [x] Pass selected model to backend API calls as a parameter.
+- **Validation**: ✅ User can easily switch models and see which model is active for each generation step.
 
 ### 8.2 Backend Model Abstraction & Refactor
 
-- [ ] Refactor backend AI service code to use a pluggable provider pattern:
+- [x] Refactor backend AI service code to use a pluggable provider pattern:
   - Create a common interface/abstraction for AI model calls (e.g., `IAIModelProvider` with methods for sub-question and SQL generation).
   - Implement providers for each model (Claude, Gemini, etc.) in separate files.
   - Use a factory or registry to select the provider based on API input.
-- [ ] Move model-specific prompt logic into each provider, or use a shared prompt with model-specific tweaks.
-- [ ] Add config/env support for available models and API keys.
-- [ ] Update all relevant API endpoints to accept a `model` parameter and route requests accordingly.
-- **Validation**: Backend can easily add new models/providers with minimal changes to business logic.
+- [x] Move model-specific prompt logic into each provider, or use a shared prompt with model-specific tweaks.
+- [x] Add config/env support for available models and API keys.
+- [x] Update all relevant API endpoints to accept a `model` parameter and route requests accordingly.
+- **Validation**: ✅ Backend can easily add new models/providers with minimal changes to business logic.
 
 ### 8.3 API & Integration
 
 - [ ] Update API documentation to describe model selection and supported models.
-- [ ] Ensure all endpoints (question, sub-question, query generation) support model selection.
-- [ ] Add validation to reject unsupported models and provide clear error messages.
-- **Validation**: All endpoints work with both Claude and Gemini (and future models) as selected by the user.
+- [x] Ensure all endpoints (question, sub-question, query generation) support model selection.
+- [x] Add validation to reject unsupported models and provide clear error messages.
+- **Validation**: ✅ All endpoints work with both Claude and Gemini (and future models) as selected by the user.
 
 ### 8.4 Testing & UX
 
@@ -375,26 +375,25 @@
 
 - ✅ **Sub-questions**: Small text data, safe to cache
 - ✅ **SQL queries**: Small text data, safe to cache
-- ❓ **Query results**: Large data, need careful consideration
+- ❌ **Query results**: Not cached due to sensitive data concerns
 
-### Query Results Caching Options:
+### Cache Strategy:
 
-1. **No caching**: Always execute fresh queries (simplest, most accurate)
-2. **Limited caching**: Cache small result sets (< 1000 rows) for 1 hour
-3. **Smart caching**: Cache based on query hash + data freshness requirements
-4. **User-controlled**: Let users choose to cache specific results
+- **Sub-questions**: Cached to improve performance
+- **SQL queries**: Cached to avoid regeneration costs
+- **Query results**: Always executed fresh for data security
 
 ### Cache Invalidation Rules:
 
 - **Sub-questions**: Invalidated when original question changes
 - **SQL queries**: Invalidated when sub-question text changes
-- **Query results**: Invalidated when SQL query changes or data freshness expires
+- **Query results**: Not applicable (no caching)
 
 ### Performance Considerations:
 
-- **Memory usage**: Large result sets can consume significant memory
-- **Database load**: Caching reduces database queries but increases memory usage
-- **User experience**: Caching improves response time but may show stale data
+- **Memory usage**: Minimal since only small metadata is cached
+- **Database load**: Each query execution hits the database fresh
+- **User experience**: Slightly slower but ensures data freshness and security
 
 ## Future Improvements
 
@@ -414,10 +413,10 @@
 
 ### 3. Advanced Caching Strategies
 
-- Implement predictive cache warming
-- Add partial cache updates
-- Build cache dependency graph
-- Implement distributed caching
+- Implement predictive cache warming for sub-questions and SQL queries
+- Add partial cache updates for metadata
+- Build cache dependency graph for invalidation
+- Implement distributed caching for metadata only
 
 ### 4. AI-Powered Query Optimization
 
@@ -449,7 +448,7 @@
 
 ### 8. Enhanced Caching and Storage
 
-- Add sophisticated caching with invalidation rules:
+- Add sophisticated caching with invalidation rules (metadata only):
   ```typescript
   interface CacheStrategy {
     invalidationRules: {
@@ -461,15 +460,15 @@
       preloadPopularQueries: boolean;
       predictiveWarming: boolean;
     };
+    // Note: No result caching due to sensitive data concerns
   }
   ```
 - Implement query template storage and matching
 - Add execution metrics and performance tracking
-- Implement distributed caching
-- Add partial result updates
-- Build cache dependency management
-- Implement advanced cleanup strategies
-- Add data versioning support
+- Implement distributed caching for metadata only
+- Build cache dependency management for invalidation
+- Implement advanced cleanup strategies for metadata
+- Add data versioning support for templates and prompts
 
 ### 9. Query Template System
 

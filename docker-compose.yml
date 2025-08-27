@@ -1,0 +1,61 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    env_file:
+      - .env.local
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - insightgen_net
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+          ignore:
+            - node_modules/
+            - .next/
+            - .git/
+        - action: sync
+          path: ./components
+          target: /app/components
+          ignore:
+            - node_modules/
+            - .git/
+        - action: sync
+          path: ./lib
+          target: /app/lib
+          ignore:
+            - node_modules/
+            - .git/
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./Dockerfile
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=insight_gen_db
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - insightgen_net
+
+volumes:
+  postgres_data:
+
+networks:
+  insightgen_net:
+    driver: bridge

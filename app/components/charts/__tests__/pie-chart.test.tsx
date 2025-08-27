@@ -3,14 +3,28 @@ import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { PieChart } from "../pie-chart";
 import type { PieChartDataPoint } from "@/lib/chart-contracts";
+import { vi } from "vitest";
 
 // Mock the ResponsiveContainer since it doesn't work well in tests
-jest.mock("recharts", () => {
-  const OriginalModule = jest.requireActual("recharts");
+vi.mock("recharts", () => {
+  const OriginalModule = vi.importActual("recharts");
   return {
     ...OriginalModule,
     ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
       <div>{children}</div>
+    ),
+    PieChart: ({ children, ...props }: any) => (
+      <div data-testid="recharts-pie-chart" {...props}>
+        {children}
+      </div>
+    ),
+    Pie: ({ ...props }: any) => <div data-testid="recharts-pie" {...props} />,
+    Cell: ({ ...props }: any) => <div data-testid="recharts-cell" {...props} />,
+    Tooltip: ({ ...props }: any) => (
+      <div data-testid="recharts-tooltip" {...props} />
+    ),
+    Legend: ({ ...props }: any) => (
+      <div data-testid="recharts-legend" {...props} />
     ),
   };
 });

@@ -1,87 +1,54 @@
 -- Create metrics tables for monitoring
-USE SilhouetteAIDashboard;
 
 -- Query Metrics Table
-IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'QueryMetrics' AND schema_id = SCHEMA_ID('rpt'))
-BEGIN
-    CREATE TABLE rpt.QueryMetrics (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        queryId NVARCHAR(100) NOT NULL,
-        executionTime INT NOT NULL,
-        resultSize INT NOT NULL,
-        timestamp DATETIME NOT NULL,
-        cached BIT NOT NULL,
-        sql NVARCHAR(MAX) NOT NULL,
-        parameters NVARCHAR(MAX) NULL,
-        CONSTRAINT CK_QueryMetrics_ExecutionTime CHECK (executionTime >= 0),
-        CONSTRAINT CK_QueryMetrics_ResultSize CHECK (resultSize >= 0)
-    );
+CREATE TABLE IF NOT EXISTS "QueryMetrics" (
+    id SERIAL PRIMARY KEY,
+    queryId VARCHAR(100) NOT NULL,
+    executionTime INTEGER NOT NULL CHECK (executionTime >= 0),
+    resultSize INTEGER NOT NULL CHECK (resultSize >= 0),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    cached BOOLEAN NOT NULL,
+    sql TEXT NOT NULL,
+    parameters JSONB
+);
 
-    CREATE INDEX IX_QueryMetrics_Timestamp ON rpt.QueryMetrics(timestamp);
-    CREATE INDEX IX_QueryMetrics_QueryId ON rpt.QueryMetrics(queryId);
-END
+CREATE INDEX IF NOT EXISTS "IX_QueryMetrics_Timestamp" ON "QueryMetrics" ("timestamp");
+CREATE INDEX IF NOT EXISTS "IX_QueryMetrics_QueryId" ON "QueryMetrics" ("queryId");
 
 -- AI Metrics Table
-IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AIMetrics' AND schema_id = SCHEMA_ID('rpt'))
-BEGIN
-    CREATE TABLE rpt.AIMetrics (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        promptTokens INT NOT NULL,
-        completionTokens INT NOT NULL,
-        totalTokens INT NOT NULL,
-        latency INT NOT NULL,
-        success BIT NOT NULL,
-        errorType NVARCHAR(100) NULL,
-        model NVARCHAR(100) NOT NULL,
-        timestamp DATETIME NOT NULL,
-        CONSTRAINT CK_AIMetrics_Tokens CHECK (
-            promptTokens >= 0 AND 
-            completionTokens >= 0 AND 
-            totalTokens >= 0
-        ),
-        CONSTRAINT CK_AIMetrics_Latency CHECK (latency >= 0)
-    );
+CREATE TABLE IF NOT EXISTS "AIMetrics" (
+    id SERIAL PRIMARY KEY,
+    promptTokens INTEGER NOT NULL CHECK (promptTokens >= 0),
+    completionTokens INTEGER NOT NULL CHECK (completionTokens >= 0),
+    totalTokens INTEGER NOT NULL CHECK (totalTokens >= 0),
+    latency INTEGER NOT NULL CHECK (latency >= 0),
+    success BOOLEAN NOT NULL,
+    errorType VARCHAR(100),
+    model VARCHAR(100) NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL
+);
 
-    CREATE INDEX IX_AIMetrics_Timestamp ON rpt.AIMetrics(timestamp);
-    CREATE INDEX IX_AIMetrics_Model ON rpt.AIMetrics(model);
-END
+CREATE INDEX IF NOT EXISTS "IX_AIMetrics_Timestamp" ON "AIMetrics" ("timestamp");
+CREATE INDEX IF NOT EXISTS "IX_AIMetrics_Model" ON "AIMetrics" (model);
 
 -- Cache Metrics Table
-IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'CacheMetrics' AND schema_id = SCHEMA_ID('rpt'))
-BEGIN
-    CREATE TABLE rpt.CacheMetrics (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        cacheHits INT NOT NULL,
-        cacheMisses INT NOT NULL,
-        cacheInvalidations INT NOT NULL,
-        averageHitLatency FLOAT NOT NULL,
-        timestamp DATETIME NOT NULL,
-        CONSTRAINT CK_CacheMetrics_Counts CHECK (
-            cacheHits >= 0 AND 
-            cacheMisses >= 0 AND 
-            cacheInvalidations >= 0
-        ),
-        CONSTRAINT CK_CacheMetrics_Latency CHECK (averageHitLatency >= 0)
-    );
+CREATE TABLE IF NOT EXISTS "CacheMetrics" (
+    id SERIAL PRIMARY KEY,
+    cacheHits INTEGER NOT NULL CHECK (cacheHits >= 0),
+    cacheMisses INTEGER NOT NULL CHECK (cacheMisses >= 0),
+    cacheInvalidations INTEGER NOT NULL CHECK (cacheInvalidations >= 0),
+    averageHitLatency REAL NOT NULL CHECK (averageHitLatency >= 0),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL
+);
 
-    CREATE INDEX IX_CacheMetrics_Timestamp ON rpt.CacheMetrics(timestamp);
-END
+CREATE INDEX IF NOT EXISTS "IX_CacheMetrics_Timestamp" ON "CacheMetrics" ("timestamp");
 
--- Add cleanup procedure
-IF NOT EXISTS (SELECT * FROM sys.procedures WHERE name = 'CleanupMetrics' AND schema_id = SCHEMA_ID('rpt'))
+-- Add cleanup function
+CREATE OR REPLACE FUNCTION cleanup_metrics(days_to_keep INTEGER DEFAULT 30)
+RETURNS VOID AS $$
 BEGIN
-    EXEC('
-    CREATE PROCEDURE rpt.CleanupMetrics
-        @daysToKeep INT = 30
-    AS
-    BEGIN
-        SET NOCOUNT ON;
-        
-        DECLARE @cutoffDate DATETIME = DATEADD(DAY, -@daysToKeep, GETUTCDATE());
-        
-        DELETE FROM rpt.QueryMetrics WHERE timestamp < @cutoffDate;
-        DELETE FROM rpt.AIMetrics WHERE timestamp < @cutoffDate;
-        DELETE FROM rpt.CacheMetrics WHERE timestamp < @cutoffDate;
-    END
-    ');
-END 
+  DELETE FROM "QueryMetrics" WHERE "timestamp" < NOW() - (days_to_keep || ' days')::INTERVAL;
+  DELETE FROM "AIMetrics" WHERE "timestamp" < NOW() - (days_to_keep || ' days')::INTERVAL;
+  DELETE FROM "CacheMetrics" WHERE "timestamp" < NOW() - (days_to_keep || ' days')::INTERVAL;
+END;
+$$ LANGUAGE plpgsql; 

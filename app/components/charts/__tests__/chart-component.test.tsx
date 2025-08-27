@@ -8,9 +8,10 @@ import type {
   PieChartDataPoint,
   KpiData,
 } from "@/lib/chart-contracts";
+import { vi } from "vitest";
 
 // Mock the child components
-jest.mock("../bar-chart", () => ({
+vi.mock("../bar-chart", () => ({
   BarChart: ({ title, data }: any) => (
     <div data-testid="bar-chart">
       {title}
@@ -19,7 +20,7 @@ jest.mock("../bar-chart", () => ({
   ),
 }));
 
-jest.mock("../line-chart", () => ({
+vi.mock("../line-chart", () => ({
   LineChart: ({ title, data }: any) => (
     <div data-testid="line-chart">
       {title}
@@ -28,7 +29,7 @@ jest.mock("../line-chart", () => ({
   ),
 }));
 
-jest.mock("../pie-chart", () => ({
+vi.mock("../pie-chart", () => ({
   PieChart: ({ title, data }: any) => (
     <div data-testid="pie-chart">
       {title}
@@ -37,7 +38,7 @@ jest.mock("../pie-chart", () => ({
   ),
 }));
 
-jest.mock("../kpi-card", () => ({
+vi.mock("../kpi-card", () => ({
   KpiCard: ({ title, data }: any) => (
     <div data-testid="kpi-card">
       {title}
@@ -141,7 +142,7 @@ describe("ChartComponent", () => {
 
   it("throws error for invalid data format", () => {
     // Suppress console.error for this test
-    const consoleSpy = jest.spyOn(console, "error");
+    const consoleSpy = vi.spyOn(console, "error");
     consoleSpy.mockImplementation(() => {});
 
     expect(() => {
@@ -159,7 +160,7 @@ describe("ChartComponent", () => {
 
   it("throws error for unsupported chart type", () => {
     // Suppress console.error for this test
-    const consoleSpy = jest.spyOn(console, "error");
+    const consoleSpy = vi.spyOn(console, "error");
     consoleSpy.mockImplementation(() => {});
 
     expect(() => {
@@ -177,7 +178,7 @@ describe("ChartComponent", () => {
 
   it("throws error for table type", () => {
     // Suppress console.error for this test
-    const consoleSpy = jest.spyOn(console, "error");
+    const consoleSpy = vi.spyOn(console, "error");
     consoleSpy.mockImplementation(() => {});
 
     expect(() => {

@@ -19,6 +19,9 @@ yarn-error.log*
 # env files
 .env*
 
+# Google Cloud credentials
+sonorous-seat-467723-d5-979c5538b345.json
+
 # vercel
 .vercel
 

@@ -3,14 +3,33 @@ import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { BarChart } from "../bar-chart";
 import type { BarChartDataPoint } from "@/lib/chart-contracts";
+import { vi } from "vitest";
 
 // Mock the ResponsiveContainer since it doesn't work well in tests
-jest.mock("recharts", () => {
-  const OriginalModule = jest.requireActual("recharts");
+vi.mock("recharts", () => {
+  const OriginalModule = vi.importActual("recharts");
   return {
     ...OriginalModule,
     ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
       <div>{children}</div>
+    ),
+    BarChart: ({ children, ...props }: any) => (
+      <div data-testid="recharts-bar-chart" {...props}>
+        {children}
+      </div>
+    ),
+    Bar: ({ ...props }: any) => <div data-testid="recharts-bar" {...props} />,
+    XAxis: ({ ...props }: any) => (
+      <div data-testid="recharts-x-axis" {...props} />
+    ),
+    YAxis: ({ ...props }: any) => (
+      <div data-testid="recharts-y-axis" {...props} />
+    ),
+    CartesianGrid: ({ ...props }: any) => (
+      <div data-testid="recharts-cartesian-grid" {...props} />
+    ),
+    Tooltip: ({ ...props }: any) => (
+      <div data-testid="recharts-tooltip" {...props} />
     ),
   };
 });
