@@ -18,7 +18,7 @@ export interface AIModel {
    * The provider of the AI model.
    * e.g., 'Anthropic', 'Google'
    */
-  provider: "Anthropic" | "Google" | "Other";
+  provider: "Anthropic" | "Google" | "OpenWebUI" | "Other";
 
   /**
    * A brief, user-friendly description of the model's strengths.
@@ -56,6 +56,24 @@ export const SUPPORTED_AI_MODELS: AIModel[] = [
     name: "Gemini 1.5 Flash",
     provider: "Google",
     description: "Google's fastest and most cost-effective multimodal model.",
+  },
+  {
+    id: "llama3.2:3b",
+    name: "Llama 3.2 3B (Local)",
+    provider: "OpenWebUI",
+    description: "Meta's Llama 3.2 3B model running locally via Open WebUI.",
+  },
+  {
+    id: "llama3.1:8b",
+    name: "Llama 3.1 8B (Local)",
+    provider: "OpenWebUI",
+    description: "Meta's Llama 3.1 8B model running locally via Open WebUI.",
+  },
+  {
+    id: "mistral:7b",
+    name: "Mistral 7B (Local)",
+    provider: "OpenWebUI",
+    description: "Mistral 7B model running locally via Open WebUI.",
   },
 ];
 

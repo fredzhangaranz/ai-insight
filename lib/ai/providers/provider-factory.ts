@@ -2,6 +2,7 @@ import { SUPPORTED_AI_MODELS } from "@/lib/config/ai-models";
 import { IQueryFunnelProvider } from "./i-query-funnel-provider";
 import { ClaudeProvider } from "./claude-provider";
 import { GeminiProvider } from "./gemini-provider";
+import { OpenWebUIProvider } from "./openwebui-provider";
 
 /**
  * A factory function that returns an instance of an AI provider based on the model ID.
@@ -25,6 +26,9 @@ export function getAIProvider(modelId: string): IQueryFunnelProvider {
     case "Google":
       // The GeminiProvider constructor already checks for the API key.
       return new GeminiProvider(model.id);
+    case "OpenWebUI":
+      // The OpenWebUIProvider constructor already checks for the base URL.
+      return new OpenWebUIProvider(model.id);
     case "Other":
     default:
       throw new Error(
