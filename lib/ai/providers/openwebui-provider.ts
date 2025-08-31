@@ -1,4 +1,5 @@
 import { BaseProvider } from "./base-provider";
+import { aiConfigService } from "../../services/ai-config.service";
 
 /**
  * An AI provider that uses Open WebUI to power the query funnel with local LLMs.
@@ -8,19 +9,65 @@ export class OpenWebUIProvider extends BaseProvider {
   private baseUrl: string;
   private apiKey?: string;
   private timeout: number;
+  private configLoaded: boolean = false;
 
   constructor(modelId: string) {
     super(modelId);
 
-    // Get configuration from environment variables (for backward compatibility)
-    // These will later be replaced with database-stored configuration
-    this.baseUrl = process.env.OPENWEBUI_BASE_URL || "http://localhost:8080";
-    this.apiKey = process.env.OPENWEBUI_API_KEY;
-    this.timeout = parseInt(process.env.OPENWEBUI_TIMEOUT || "30000");
+    // Load configuration with fallback to environment variables
+    this.loadConfiguration();
+  }
 
+  /**
+   * Load configuration from database, with environment variables as fallback
+   */
+  private async loadConfiguration(): Promise<void> {
+    try {
+      // Try to get configuration from database first
+      const dbConfig = await aiConfigService.getConfigurationByType(
+        "openwebui"
+      );
+
+      if (dbConfig && dbConfig.isEnabled) {
+        this.baseUrl =
+          dbConfig.configData.baseUrl ||
+          process.env.OPENWEBUI_BASE_URL ||
+          "http://localhost:8080";
+        this.apiKey =
+          dbConfig.configData.apiKey || process.env.OPENWEBUI_API_KEY;
+        this.timeout =
+          dbConfig.configData.timeout ||
+          parseInt(process.env.OPENWEBUI_TIMEOUT || "30000");
+      } else {
+        // Fallback to environment variables
+        this.baseUrl =
+          process.env.OPENWEBUI_BASE_URL || "http://localhost:8080";
+        this.apiKey = process.env.OPENWEBUI_API_KEY;
+        this.timeout = parseInt(process.env.OPENWEBUI_TIMEOUT || "30000");
+      }
+    } catch (error) {
+      console.warn(
+        "Failed to load OpenWebUI configuration from database, using environment variables:",
+        error
+      );
+      // Fallback to environment variables
+      this.baseUrl = process.env.OPENWEBUI_BASE_URL || "http://localhost:8080";
+      this.apiKey = process.env.OPENWEBUI_API_KEY;
+      this.timeout = parseInt(process.env.OPENWEBUI_TIMEOUT || "30000");
+    }
+
+    // Validate configuration
+    this.validateConfiguration();
+    this.configLoaded = true;
+  }
+
+  /**
+   * Validate the current configuration
+   */
+  private validateConfiguration(): void {
     if (!this.baseUrl) {
       throw new Error(
-        "Open WebUI base URL (OPENWEBUI_BASE_URL) is not configured"
+        "Open WebUI base URL is not configured. Set OPENWEBUI_BASE_URL environment variable or configure via admin panel."
       );
     }
 
@@ -29,8 +76,25 @@ export class OpenWebUIProvider extends BaseProvider {
       new URL(this.baseUrl);
     } catch {
       throw new Error(
-        `Open WebUI base URL (OPENWEBUI_BASE_URL) is not a valid URL: ${this.baseUrl}`
+        `Open WebUI base URL is not a valid URL: ${this.baseUrl}`
       );
+    }
+
+    // Validate timeout
+    if (this.timeout <= 0 || this.timeout > 300000) {
+      // Max 5 minutes
+      throw new Error(
+        `Open WebUI timeout must be between 1 and 300000 milliseconds, got: ${this.timeout}`
+      );
+    }
+  }
+
+  /**
+   * Ensure configuration is loaded before use
+   */
+  private async ensureConfigLoaded(): Promise<void> {
+    if (!this.configLoaded) {
+      await this.loadConfiguration();
     }
   }
 
@@ -48,6 +112,9 @@ export class OpenWebUIProvider extends BaseProvider {
     responseText: string;
     usage: { input_tokens: number; output_tokens: number };
   }> {
+    // Ensure configuration is loaded
+    await this.ensureConfigLoaded();
+
     const endpoint = `${this.baseUrl}/v1/chat/completions`;
 
     const requestBody = {
@@ -135,6 +202,9 @@ export class OpenWebUIProvider extends BaseProvider {
    */
   async testConnection(): Promise<boolean> {
     try {
+      // Ensure configuration is loaded
+      await this.ensureConfigLoaded();
+
       const endpoint = `${this.baseUrl}/v1/models`;
 
       const headers: Record<string, string> = {};
@@ -165,6 +235,9 @@ export class OpenWebUIProvider extends BaseProvider {
    */
   async getAvailableModels(): Promise<string[]> {
     try {
+      // Ensure configuration is loaded
+      await this.ensureConfigLoaded();
+
       const endpoint = `${this.baseUrl}/v1/models`;
 
       const headers: Record<string, string> = {};

@@ -47,8 +47,8 @@ async function generateChartHandler(
     console.log("Using model:", modelId);
     console.log("Query results count:", queryResults.length);
 
-    // Create AI provider instance
-    const provider = getAIProvider(modelId);
+    // Create AI provider instance (async with fallback support)
+    const provider = await getAIProvider(modelId);
 
     // Generate chart recommendations based on SQL results
     const result = await provider.generateChartRecommendations({

@@ -35,8 +35,8 @@ async function generateQueryHandler(
     console.log("Generating SQL for sub-question:", subQuestion);
     console.log("Using model:", modelId);
 
-    // Create AI provider instance
-    const provider = getAIProvider(modelId);
+    // Create AI provider instance (async with fallback support)
+    const provider = await getAIProvider(modelId);
 
     // Generate SQL query
     const result = await provider.generateQuery({

@@ -31,15 +31,15 @@ describe("OpenWebUIProvider Integration", () => {
   });
 
   describe("Provider Factory Integration", () => {
-    it("should create OpenWebUI provider through factory", () => {
-      const provider = getAIProvider("llama3.2:3b");
+    it("should create OpenWebUI provider through factory", async () => {
+      const provider = await getAIProvider("llama3.2:3b");
       expect(provider).toBeInstanceOf(OpenWebUIProvider);
     });
 
-    it("should throw error for unsupported model", () => {
-      expect(() => {
-        getAIProvider("unsupported-model");
-      }).toThrow("Unsupported AI model ID: unsupported-model");
+    it("should throw error for unsupported model", async () => {
+      await expect(getAIProvider("unsupported-model")).rejects.toThrow(
+        "Unsupported AI model ID: unsupported-model"
+      );
     });
   });
 
