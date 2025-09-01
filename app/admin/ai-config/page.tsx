@@ -369,16 +369,35 @@ export default function AIConfigPage() {
                 </p>
               </div>
             </div>
+
+            {/* Development Mode Banner */}
+            {process.env.NODE_ENV !== "production" && (
+              <Alert className="mb-6 border-yellow-200 bg-yellow-50">
+                <ExclamationTriangleIcon className="w-4 h-4 text-yellow-600" />
+                <AlertDescription className="text-yellow-800">
+                  <strong>Development Mode:</strong> Configuration management is
+                  disabled. Add your AI provider keys to <code>.env.local</code>{" "}
+                  to configure providers.
+                </AlertDescription>
+              </Alert>
+            )}
+
             <Dialog
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
             >
               <DialogTrigger asChild>
                 <Button
+                  disabled={process.env.NODE_ENV !== "production"}
                   onClick={() => {
                     resetForm();
                     setIsCreateDialogOpen(true);
                   }}
+                  title={
+                    process.env.NODE_ENV !== "production"
+                      ? "Configuration management is disabled in development mode"
+                      : "Add a new AI provider"
+                  }
                 >
                   <PlusIcon className="w-4 h-4 mr-2" />
                   Add Provider
@@ -609,6 +628,7 @@ export default function AIConfigPage() {
 
                       <div className="flex items-center space-x-2">
                         <Switch
+                          disabled={process.env.NODE_ENV !== "production"}
                           checked={provider.config.isEnabled}
                           onCheckedChange={(checked) =>
                             handleToggleEnabled(
@@ -629,11 +649,17 @@ export default function AIConfigPage() {
                             <Button
                               variant="outline"
                               size="sm"
+                              disabled={process.env.NODE_ENV !== "production"}
                               onClick={() =>
                                 handleSetDefault(
                                   provider.config.providerType,
                                   provider.config.providerName
                                 )
+                              }
+                              title={
+                                process.env.NODE_ENV !== "production"
+                                  ? "Configuration management is disabled in development mode"
+                                  : "Set as default provider"
                               }
                             >
                               Set Default
@@ -643,7 +669,13 @@ export default function AIConfigPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={process.env.NODE_ENV !== "production"}
                           onClick={() => handleEdit(provider.config)}
+                          title={
+                            process.env.NODE_ENV !== "production"
+                              ? "Configuration management is disabled in development mode"
+                              : "Edit provider configuration"
+                          }
                         >
                           <PencilIcon className="w-4 h-4" />
                         </Button>
@@ -651,6 +683,7 @@ export default function AIConfigPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={process.env.NODE_ENV !== "production"}
                           onClick={() =>
                             handleDelete(
                               provider.config.providerType,
@@ -658,6 +691,11 @@ export default function AIConfigPage() {
                             )
                           }
                           className="text-red-600 hover:text-red-700"
+                          title={
+                            process.env.NODE_ENV !== "production"
+                              ? "Configuration management is disabled in development mode"
+                              : "Delete provider configuration"
+                          }
                         >
                           <TrashIcon className="w-4 h-4" />
                         </Button>

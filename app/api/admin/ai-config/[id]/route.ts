@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { aiConfigService } from "@/lib/services/ai-config.service";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // In development mode, configuration updates are disabled
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json(
+        {
+          error:
+            "Configuration updates are disabled in development mode. Please update your .env.local file instead.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // In production mode, use the database service
+    const { aiConfigService } = await import(
+      "@/lib/services/ai-config.service"
+    );
+
     const id = parseInt(params.id);
     if (isNaN(id)) {
       return NextResponse.json(
@@ -49,6 +64,22 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    // In development mode, configuration deletions are disabled
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json(
+        {
+          error:
+            "Configuration deletions are disabled in development mode. Please update your .env.local file instead.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // In production mode, use the database service
+    const { aiConfigService } = await import(
+      "@/lib/services/ai-config.service"
+    );
+
     const id = parseInt(params.id);
     if (isNaN(id)) {
       return NextResponse.json(

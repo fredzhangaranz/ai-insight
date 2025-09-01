@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { aiConfigService } from "@/lib/services/ai-config.service";
+import { AIConfigLoader } from "@/lib/config/ai-config-loader";
 
 export async function GET() {
   try {
-    const configurations = await aiConfigService.getAllConfigurations();
-    return NextResponse.json(configurations);
+    const configLoader = AIConfigLoader.getInstance();
+    const { providers } = await configLoader.getConfiguration();
+
+    // In development mode, the providers are already in the right format
+    // In production mode, they're loaded from database and already formatted
+    return NextResponse.json(providers);
   } catch (error) {
     console.error("Error fetching AI configurations:", error);
     return NextResponse.json(
@@ -29,6 +33,22 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // In development mode, configurations are managed via environment variables
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json(
+        {
+          error:
+            "Configuration changes are disabled in development mode. Please update your .env.local file instead.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // In production mode, use the database service
+    const { aiConfigService } = await import(
+      "@/lib/services/ai-config.service"
+    );
 
     const configuration = await aiConfigService.saveConfiguration(
       providerType,

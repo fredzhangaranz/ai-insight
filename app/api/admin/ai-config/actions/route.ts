@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { aiConfigService } from "@/lib/services/ai-config.service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +14,22 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // In development mode, configuration actions are disabled
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json(
+        {
+          error:
+            "Configuration actions are disabled in development mode. Please update your .env.local file instead.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // In production mode, use the database service
+    const { aiConfigService } = await import(
+      "@/lib/services/ai-config.service"
+    );
 
     let success = false;
 

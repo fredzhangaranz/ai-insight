@@ -1,5 +1,5 @@
 import { BaseProvider } from "./base-provider";
-import { aiConfigService } from "../../services/ai-config.service";
+import { AIConfigLoader } from "../../config/ai-config-loader";
 
 /**
  * An AI provider that uses Open WebUI to power the query funnel with local LLMs.
@@ -19,41 +19,26 @@ export class OpenWebUIProvider extends BaseProvider {
   }
 
   /**
-   * Load configuration from database, with environment variables as fallback
+   * Load configuration using environment-aware loader
    */
   private async loadConfiguration(): Promise<void> {
-    try {
-      // Try to get configuration from database first
-      const dbConfig = await aiConfigService.getConfigurationByType(
-        "openwebui"
-      );
+    const configLoader = AIConfigLoader.getInstance();
+    const { providers } = await configLoader.getConfiguration();
 
-      if (dbConfig && dbConfig.isEnabled) {
-        this.baseUrl =
-          dbConfig.configData.baseUrl ||
-          process.env.OPENWEBUI_BASE_URL ||
-          "http://localhost:8080";
-        this.apiKey =
-          dbConfig.configData.apiKey || process.env.OPENWEBUI_API_KEY;
-        this.timeout =
-          dbConfig.configData.timeout ||
-          parseInt(process.env.OPENWEBUI_TIMEOUT || "30000");
-      } else {
-        // Fallback to environment variables
-        this.baseUrl =
-          process.env.OPENWEBUI_BASE_URL || "http://localhost:8080";
-        this.apiKey = process.env.OPENWEBUI_API_KEY;
-        this.timeout = parseInt(process.env.OPENWEBUI_TIMEOUT || "30000");
-      }
-    } catch (error) {
-      console.warn(
-        "Failed to load OpenWebUI configuration from database, using environment variables:",
-        error
-      );
-      // Fallback to environment variables
-      this.baseUrl = process.env.OPENWEBUI_BASE_URL || "http://localhost:8080";
-      this.apiKey = process.env.OPENWEBUI_API_KEY;
-      this.timeout = parseInt(process.env.OPENWEBUI_TIMEOUT || "30000");
+    const openwebuiConfig = providers.find(
+      (p) => p.providerType === "openwebui"
+    );
+
+    if (openwebuiConfig && openwebuiConfig.isEnabled) {
+      this.baseUrl =
+        openwebuiConfig.configData.baseUrl || "http://localhost:8080";
+      this.apiKey = openwebuiConfig.configData.apiKey;
+      this.timeout = openwebuiConfig.configData.timeout || 30000;
+    } else {
+      // Fallback defaults
+      this.baseUrl = "http://localhost:8080";
+      this.apiKey = undefined;
+      this.timeout = 30000;
     }
 
     // Validate configuration

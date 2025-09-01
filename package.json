@@ -11,7 +11,8 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "migrate": "node scripts/run-migrations.js",
-    "check-tables": "node scripts/check-tables.js"
+    "check-tables": "node scripts/check-tables.js",
+    "seed-ai-config": "node scripts/seed-ai-config.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.66",
