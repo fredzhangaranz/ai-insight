@@ -34,11 +34,11 @@ export async function GET(
         P.lastName,
         P.firstName + ' ' + P.lastName AS patientName
       FROM
-        SilhouetteAIDashboard.rpt.Patient AS P
+        rpt.Patient AS P
       JOIN
-        SilhouetteAIDashboard.rpt.Assessment AS A ON P.id = A.patientFk
-      JOIN 
-        SilhouetteAIDashboard.rpt.AssessmentTypeVersion AS ATV ON A.assessmentTypeVersionFk = ATV.id
+        rpt.Assessment AS A ON P.id = A.patientFk
+      JOIN
+        rpt.AssessmentTypeVersion AS ATV ON A.assessmentTypeVersionFk = ATV.id
       WHERE
         ATV.assessmentTypeId = @assessmentTypeId
       ORDER BY

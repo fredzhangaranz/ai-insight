@@ -25,7 +25,7 @@ export default function RootLayout({
             {/* Header */}
             <header className="bg-white border-b border-slate-200">
               <div className="max-w-7xl mx-auto px-6 py-4">
-                <div className="flex items-center">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                       <svg
@@ -46,6 +46,22 @@ export default function RootLayout({
                       InsightGen
                     </h1>
                   </div>
+
+                  {/* Navigation */}
+                  <nav className="flex items-center space-x-4">
+                    <a
+                      href="/"
+                      className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
+                    >
+                      Home
+                    </a>
+                    <a
+                      href="/admin"
+                      className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
+                    >
+                      Admin
+                    </a>
+                  </nav>
                 </div>
               </div>
             </header>

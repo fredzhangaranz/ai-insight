@@ -54,6 +54,7 @@ export function getInsightGenDbPool(): Promise<Pool> {
     const err = new Error(
       "Insight Gen database connection string is not configured in environment variables."
     );
+    console.error(`Missing INSIGHT_GEN_DB_URL environment variable`);
     return Promise.reject(err);
   }
 
@@ -65,10 +66,11 @@ export function getInsightGenDbPool(): Promise<Pool> {
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 2000,
       };
+
       const pool = new Pool(dbConfig);
 
       pool.on("error", (err) => {
-        console.error("Insight Gen database connection pool error:", err);
+        console.error("Connection pool error:", err);
         pool.end();
         insightGenDbPoolPromise = null;
       });
@@ -121,12 +123,22 @@ export function getSilhouetteDbPool(): Promise<sql.ConnectionPool> {
         return acc;
       }, {} as Record<string, string>);
 
+      // Parse server and port from server parameter if it contains both
+      let server = params.server;
+      let port = params.port ? Number(params.port) : 1433;
+
+      if (server && server.includes(":")) {
+        const [serverHost, serverPort] = server.split(":");
+        server = serverHost;
+        port = Number(serverPort);
+      }
+
       const dbConfig: sql.config = {
         user: params["user id"] || params.user,
         password: params.password,
-        server: params.server,
-        port: params.port ? Number(params.port) : 1433,
-        database: "SilhouetteAIDashboard",
+        server: server,
+        port: port,
+        database: params.database,
         pool: {
           max: 10,
           min: 0,
@@ -170,4 +182,28 @@ export function getSilhouetteDbPool(): Promise<sql.ConnectionPool> {
   })();
 
   return silhouetteDbPoolPromise;
+}
+
+/**
+ * Get the Silhouette database name from the connection string
+ * This is useful for constructing database-agnostic queries when needed
+ */
+export function getSilhouetteDatabaseName(): string | null {
+  const connectionString = process.env.SILHOUETTE_DB_URL;
+  if (!connectionString) return null;
+
+  const params = connectionString.split(";").reduce((acc, part) => {
+    const eqIndex = part.indexOf("=");
+    if (eqIndex > -1) {
+      const key = part.substring(0, eqIndex).trim().toLowerCase();
+      let value = part.substring(eqIndex + 1).trim();
+      if (value.startsWith("'") && value.endsWith("'")) {
+        value = value.substring(1, value.length - 1);
+      }
+      acc[key] = value;
+    }
+    return acc;
+  }, {} as Record<string, string>);
+
+  return params.database || null;
 }

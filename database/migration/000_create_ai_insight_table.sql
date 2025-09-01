@@ -21,6 +21,6 @@ COMMENT ON COLUMN "AIInsights"."insightsJson" IS 'The JSON object containing the
 COMMENT ON COLUMN "AIInsights"."generatedDate" IS 'The UTC timestamp when the insight was generated.';
 COMMENT ON COLUMN "AIInsights"."generatedBy" IS 'The AI model or user that generated the insight.';
 
--- Note: Foreign key constraint to SilhouetteAIDashboard.dbo.AssessmentTypeVersion(id) 
+-- Note: Foreign key constraint to dbo.AssessmentTypeVersion(id) 
 -- is not included because AssessmentTypeVersion is in an external database.
 -- The relationship is validated at the application level when inserting/updating records.

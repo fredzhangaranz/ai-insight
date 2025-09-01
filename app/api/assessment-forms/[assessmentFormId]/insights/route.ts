@@ -117,10 +117,10 @@ async function getAssessmentFormDefinition(
   try {
     const fieldsQuery = `
       SELECT att.name, att.dataType, att.id as AttributeTypeID
-      FROM SilhouetteAIDashboard.dbo.AssessmentTypeVersion atv
-      INNER JOIN SilhouetteAIDashboard.dbo.AttributeSetAssessmentTypeVersion asatv ON atv.id = asatv.assessmentTypeVersionFk
-      INNER JOIN SilhouetteAIDashboard.dbo.AttributeSet ats ON asatv.attributeSetFk = ats.id
-      INNER JOIN SilhouetteAIDashboard.dbo.AttributeType att ON ats.id = att.attributeSetFk
+      FROM dbo.AssessmentTypeVersion atv
+      INNER JOIN dbo.AttributeSetAssessmentTypeVersion asatv ON atv.id = asatv.assessmentTypeVersionFk
+      INNER JOIN dbo.AttributeSet ats ON asatv.attributeSetFk = ats.id
+      INNER JOIN dbo.AttributeType att ON ats.id = att.attributeSetFk
       WHERE atv.id = @id AND atv.isDeleted = 0 AND asatv.isDeleted = 0 AND ats.isDeleted = 0 AND att.isDeleted = 0
       ORDER BY asatv.orderIndex, att.orderIndex;
     `;
@@ -154,7 +154,7 @@ async function getAssessmentFormDefinition(
 
       if (fieldType === "SingleSelectList" || fieldType === "MultiSelectList") {
         const optionsStartTime = Date.now();
-        const optionsQuery = `SELECT [text] FROM SilhouetteAIDashboard.dbo.AttributeLookup WHERE attributeTypeFk = @attributeTypeFk AND isDeleted = 0 ORDER BY orderIndex;`;
+        const optionsQuery = `SELECT [text] FROM dbo.AttributeLookup WHERE attributeTypeFk = @attributeTypeFk AND isDeleted = 0 ORDER BY orderIndex;`;
         const optionsResult = await pool
           .request()
           .input("attributeTypeFk", sql.UniqueIdentifier, field.AttributeTypeID)

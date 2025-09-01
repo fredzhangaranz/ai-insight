@@ -4,6 +4,54 @@
 
 Integrate Open WebUI as a new AI provider option to enable local LLM inference, providing customers with privacy, cost control, and offline capabilities while maintaining compatibility with existing cloud providers.
 
+## Configuration Workflow
+
+### Path 1: Environment Variable Configuration
+
+- User configures LLM settings via environment variables during Docker container startup
+- App starts immediately with configured providers
+- Model selector shows all available models, with successfully configured models enabled and others disabled (with "needs configuration" labels)
+- Users can only select and use properly configured models
+
+### Path 2: Admin Configuration Setup
+
+- User starts app without any LLM environment variables
+- App displays initial LLM configuration screen requiring setup of at least one provider
+- User cannot proceed to main app until at least one LLM is successfully configured
+- After initial setup, users can access admin panel to modify configurations
+
+### Ongoing Management
+
+- Admin panel accessible from main app for updating, removing, or adding LLM configurations
+- Dynamic configuration changes without requiring container restarts
+- Clear visual indicators for model status and configuration requirements
+
+## User Experience Flow
+
+### First-Time Setup (No Environment Variables)
+
+1. User starts app → Redirected to `/setup` page
+2. Setup screen displays with all available LLM providers
+3. User must configure at least one provider to proceed
+4. Real-time validation provides immediate feedback
+5. Upon successful configuration → Redirected to main app
+6. Model selector shows configured model as selected
+
+### Returning User (Environment Variables Configured)
+
+1. User starts app → Goes directly to main app
+2. Model selector shows all models with status indicators
+3. Successfully configured models are enabled and selectable
+4. Unconfigured models are disabled with "needs configuration" labels
+5. User can click on disabled models to go to admin panel
+
+### Ongoing Usage
+
+1. Users can access admin panel anytime via navigation
+2. Configuration changes take effect immediately
+3. Model selector updates in real-time to reflect configuration changes
+4. Clear visual feedback for all configuration states
+
 ## Stage 1: Open WebUI Provider Implementation
 
 **Goal**: Create a new AI provider that communicates with Open WebUI API  
@@ -42,42 +90,55 @@ Integrate Open WebUI as a new AI provider option to enable local LLM inference, 
 
 **Status**: Not Started
 
-## Stage 3: Admin Configuration UI
+## Stage 3: Admin Configuration UI & Initial Setup
 
-**Goal**: Create admin interface for configuring AI providers without environment variables  
+**Goal**: Create admin interface for configuring AI providers and initial setup flow when no LLMs are configured
 **Success Criteria**:
 
-- Admin settings page accessible from main app
-- Secure storage of AI provider credentials in database
-- Support for all providers: Anthropic, Google, Open WebUI
-- Real-time validation of provider configurations
-- Graceful fallback when providers are unavailable
+- **Initial Setup Screen**: Display when no LLM providers are configured via environment variables
+- **Forced Configuration**: Users cannot access main app until at least one LLM provider is successfully configured
+- **Admin Panel**: Accessible from main app for ongoing management of LLM configurations
+- **Secure Storage**: AI provider credentials stored securely in database
+- **Provider Support**: Full support for Anthropic, Google, and Open WebUI providers
+- **Real-time Validation**: Immediate feedback on configuration validity
+- **Configuration Persistence**: Settings persist across app restarts
+- **Visual Feedback**: Clear status indicators for configuration success/failure
 
 **Tests**:
 
 - Admin UI component tests
+- Initial setup screen tests (display logic, validation, blocking behavior)
 - Credential storage and retrieval tests
 - Provider validation tests
 - Security tests for credential handling
 - Integration tests with existing providers
+- Configuration persistence tests
+- Forced configuration flow tests (cannot proceed without valid LLM)
 
 **Status**: Not Started
 
 ## Stage 4: UI Integration & Model Selection
 
-**Goal**: Update UI to allow users to select from all configured AI providers  
+**Goal**: Update UI to show all available models with selective enabling based on configuration status
 **Success Criteria**:
 
-- Model selector includes all configured providers (Anthropic, Google, Open WebUI)
-- Real-time model availability indicators
-- Clear distinction between local and cloud models
-- Performance/cost comparison information
-- Admin access to configuration settings
+- **Complete Model Visibility**: Model selector displays all available providers (Anthropic, Google, Open WebUI) regardless of configuration status
+- **Selective Enabling**: Only successfully configured models are selectable; others are disabled with clear "needs configuration" labels
+- **Configuration Status Indicators**: Visual cues show which models are ready to use vs. need setup
+- **Real-time Availability**: Live status indicators for model health and availability
+- **Provider Distinction**: Clear visual separation between local (Open WebUI) and cloud (Anthropic, Google) models
+- **Performance/Cost Info**: Display relevant metrics when available (response times, costs for cloud models)
+- **Admin Access**: Direct links to admin panel for configuration management
+- **Smart Defaults**: Automatically select best available configured model on first load
 
 **Tests**:
 
 - UI component tests
-- Model selection workflow tests
+- Model selection workflow tests (enabled vs disabled models)
+- Configuration status indicator tests
+- Selective enabling/disabling logic tests
+- Admin access link tests
+- Smart default selection tests
 - Responsive design tests
 - Accessibility compliance
 - Admin access control tests
@@ -132,18 +193,22 @@ Integrate Open WebUI as a new AI provider option to enable local LLM inference, 
   - `app/admin/page.tsx` - Main admin dashboard
   - `app/admin/ai-config/page.tsx` - AI provider configuration
   - `app/admin/ai-config/components/` - Admin UI components
+  - `app/setup/page.tsx` - Initial LLM setup screen (displayed when no providers configured)
 - `lib/services/admin-config.service.ts` - Admin configuration management
+- `lib/services/setup.service.ts` - Initial setup flow management
 - `database/migration/007_create_ai_config_table.sql` - Database table for AI config
 - `docs/admin-configuration.md` - Admin configuration guide
+- `lib/hooks/use-llm-config.ts` - Hook for LLM configuration state management
 
 ### Files to Modify:
 
-- `lib/config/ai-models.ts` - Add Open WebUI provider type
-- `lib/ai/providers/provider-factory.ts` - Add Open WebUI provider support
-- `lib/ai/providers/base-provider.ts` - Add credential loading from database
-- `components/funnel/ModelSelector.tsx` - Add admin config access
-- `app/page.tsx` - Add admin access link
-- `app/layout.tsx` - Add admin navigation
+- `lib/config/ai-models.ts` - Add Open WebUI provider type and configuration status tracking
+- `lib/ai/providers/provider-factory.ts` - Add Open WebUI provider support and configuration validation
+- `lib/ai/providers/base-provider.ts` - Add credential loading from database and environment variables
+- `components/funnel/ModelSelector.tsx` - Implement selective enabling based on configuration status with visual indicators
+- `app/page.tsx` - Add conditional routing to setup screen when no LLMs configured, plus admin access link
+- `app/layout.tsx` - Add admin navigation and setup flow routing logic
+- `lib/db.ts` - Add LLM configuration queries and setup status checks
 
 ### Environment Variables (Optional - for backward compatibility):
 
@@ -164,11 +229,13 @@ Integrate Open WebUI as a new AI provider option to enable local LLM inference, 
 
 ## Compatibility Strategy
 
-- **Zero Breaking Changes**: Existing environment variable configuration continues to work
-- **Dual Configuration**: Support both environment variables and admin UI configuration
-- **Graceful Fallback**: Environment variables take precedence over admin config
-- **Feature Flag**: Admin configuration can be disabled via environment variable
+- **Zero Breaking Changes**: Existing environment variable configuration continues to work unchanged
+- **Dual Configuration Paths**: Support both traditional env-var setup and new admin UI configuration
+- **Precedence Rules**: Environment variables take precedence over admin config when both exist
+- **Graceful Degradation**: App functions normally with env vars; requires setup only when no config exists
+- **Feature Flags**: Admin configuration and initial setup can be disabled via environment variables
 - **Versioned API**: Open WebUI provider uses same interface as existing providers
+- **Backward Compatibility**: Existing deployments continue working without any changes
 
 ## Risk Mitigation
 

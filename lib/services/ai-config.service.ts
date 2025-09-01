@@ -28,6 +28,7 @@ export interface ProviderHealthStatus {
   providerType: string;
   providerName: string;
   isHealthy: boolean;
+  status: "valid" | "invalid" | "error" | "pending";
   lastChecked: Date;
   errorMessage?: string;
   responseTime?: number;
@@ -123,6 +124,48 @@ export class AIConfigService {
   }
 
   /**
+   * Get configuration for a specific provider by type and name
+   */
+  async getConfigurationByName(
+    providerType: string,
+    providerName: string
+  ): Promise<AIConfiguration | null> {
+    const pool = await getInsightGenDbPool();
+
+    const result = await pool.query(
+      `
+      SELECT * FROM "AIConfiguration"
+      WHERE "providerType" = $1 AND "providerName" = $2
+      LIMIT 1
+    `,
+      [providerType, providerName]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      providerType: row.providerType,
+      providerName: row.providerName,
+      isEnabled: row.isEnabled,
+      isDefault: row.isDefault,
+      configData: row.configData,
+      createdBy: row.createdBy,
+      createdDate: new Date(row.createdDate),
+      lastModifiedBy: row.lastModifiedBy,
+      lastModifiedDate: new Date(row.lastModifiedDate),
+      lastValidatedDate: row.lastValidatedDate
+        ? new Date(row.lastValidatedDate)
+        : undefined,
+      validationStatus: row.validationStatus,
+      validationMessage: row.validationMessage,
+    };
+  }
+
+  /**
    * Get the default AI configuration
    */
   async getDefaultConfiguration(): Promise<AIConfiguration | null> {
@@ -159,7 +202,225 @@ export class AIConfigService {
   }
 
   /**
-   * Update configuration data for a provider
+   * Get all AI configurations (enabled and disabled) for admin interface
+   */
+  async getAllConfigurations(): Promise<AIConfiguration[]> {
+    const pool = await getInsightGenDbPool();
+
+    const result = await pool.query(`
+      SELECT * FROM "AIConfiguration"
+      ORDER BY "providerType", "providerName"
+    `);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      providerType: row.providerType,
+      providerName: row.providerName,
+      isEnabled: row.isEnabled,
+      isDefault: row.isDefault,
+      configData: row.configData,
+      createdBy: row.createdBy,
+      createdDate: new Date(row.createdDate),
+      lastModifiedBy: row.lastModifiedBy,
+      lastModifiedDate: new Date(row.lastModifiedDate),
+      lastValidatedDate: row.lastValidatedDate
+        ? new Date(row.lastValidatedDate)
+        : undefined,
+      validationStatus: row.validationStatus,
+      validationMessage: row.validationMessage,
+    }));
+  }
+
+  /**
+   * Check if any AI providers are properly configured and enabled
+   */
+  async hasConfiguredProviders(): Promise<boolean> {
+    const configs = await this.getEnabledConfigurations();
+    return configs.length > 0;
+  }
+
+  /**
+   * Create or update a complete configuration
+   */
+  async saveConfiguration(
+    providerType: string,
+    providerName: string,
+    configData: AIConfiguration["configData"],
+    isEnabled: boolean = true,
+    isDefault: boolean = false,
+    updatedBy: string = "admin"
+  ): Promise<AIConfiguration> {
+    const pool = await getInsightGenDbPool();
+
+    // If setting as default, unset other defaults
+    if (isDefault) {
+      await pool.query(
+        `UPDATE "AIConfiguration" SET "isDefault" = false WHERE "isDefault" = true`
+      );
+    }
+
+    // Check if configuration already exists
+    const existing = await pool.query(
+      `SELECT id FROM "AIConfiguration" WHERE "providerType" = $1 AND "providerName" = $2`,
+      [providerType, providerName]
+    );
+
+    if (existing.rows.length > 0) {
+      // Update existing configuration
+      const result = await pool.query(
+        `
+        UPDATE "AIConfiguration"
+        SET "configData" = $1,
+            "isEnabled" = $2,
+            "isDefault" = $3,
+            "lastModifiedBy" = $4,
+            "lastModifiedDate" = NOW(),
+            "validationStatus" = 'pending'
+        WHERE "providerType" = $5 AND "providerName" = $6
+        RETURNING *
+      `,
+        [
+          JSON.stringify(configData),
+          isEnabled,
+          isDefault,
+          updatedBy,
+          providerType,
+          providerName,
+        ]
+      );
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        providerType: row.providerType,
+        providerName: row.providerName,
+        isEnabled: row.isEnabled,
+        isDefault: row.isDefault,
+        configData: row.configData,
+        createdBy: row.createdBy,
+        createdDate: new Date(row.createdDate),
+        lastModifiedBy: row.lastModifiedBy,
+        lastModifiedDate: new Date(row.lastModifiedDate),
+        lastValidatedDate: row.lastValidatedDate
+          ? new Date(row.lastValidatedDate)
+          : undefined,
+        validationStatus: row.validationStatus,
+        validationMessage: row.validationMessage,
+      };
+    } else {
+      // Create new configuration
+      const result = await pool.query(
+        `
+        INSERT INTO "AIConfiguration" ("providerType", "providerName", "isEnabled", "isDefault", "configData", "createdBy", "lastModifiedBy")
+        VALUES ($1, $2, $3, $4, $5, $6, $6)
+        RETURNING *
+      `,
+        [
+          providerType,
+          providerName,
+          isEnabled,
+          isDefault,
+          JSON.stringify(configData),
+          updatedBy,
+        ]
+      );
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        providerType: row.providerType,
+        providerName: row.providerName,
+        isEnabled: row.isEnabled,
+        isDefault: row.isDefault,
+        configData: row.configData,
+        createdBy: row.createdBy,
+        createdDate: new Date(row.createdDate),
+        lastModifiedBy: row.lastModifiedBy,
+        lastModifiedDate: new Date(row.lastModifiedDate),
+        lastValidatedDate: row.lastValidatedDate
+          ? new Date(row.lastValidatedDate)
+          : undefined,
+        validationStatus: row.validationStatus,
+        validationMessage: row.validationMessage,
+      };
+    }
+  }
+
+  /**
+   * Enable or disable a provider configuration
+   */
+  async setProviderEnabled(
+    providerType: string,
+    providerName: string,
+    isEnabled: boolean,
+    updatedBy: string = "admin"
+  ): Promise<boolean> {
+    const pool = await getInsightGenDbPool();
+
+    const result = await pool.query(
+      `
+      UPDATE "AIConfiguration"
+      SET "isEnabled" = $1,
+          "lastModifiedBy" = $2,
+          "lastModifiedDate" = NOW()
+      WHERE "providerType" = $3 AND "providerName" = $4
+    `,
+      [isEnabled, updatedBy, providerType, providerName]
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Set a provider as the default
+   */
+  async setDefaultProvider(
+    providerType: string,
+    providerName: string,
+    updatedBy: string = "admin"
+  ): Promise<boolean> {
+    const pool = await getInsightGenDbPool();
+
+    // First, unset all defaults
+    await pool.query(
+      `UPDATE "AIConfiguration" SET "isDefault" = false WHERE "isDefault" = true`
+    );
+
+    // Then set the new default
+    const result = await pool.query(
+      `
+      UPDATE "AIConfiguration"
+      SET "isDefault" = true,
+          "lastModifiedBy" = $1,
+          "lastModifiedDate" = NOW()
+      WHERE "providerType" = $2 AND "providerName" = $3 AND "isEnabled" = true
+    `,
+      [updatedBy, providerType, providerName]
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Delete a provider configuration
+   */
+  async deleteConfiguration(
+    providerType: string,
+    providerName: string,
+    updatedBy: string = "admin"
+  ): Promise<boolean> {
+    const pool = await getInsightGenDbPool();
+
+    const result = await pool.query(
+      `DELETE FROM "AIConfiguration" WHERE "providerType" = $1 AND "providerName" = $2`,
+      [providerType, providerName]
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Update configuration data for a provider (partial update)
    */
   async updateConfiguration(
     providerType: string,
@@ -180,29 +441,38 @@ export class AIConfigService {
       [JSON.stringify(configData), updatedBy, providerType]
     );
 
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**
-   * Validate AI provider configuration and update status
+   * Validate AI provider configuration and update status by name
    */
-  async validateConfiguration(
-    providerType: string
+  async validateConfigurationByName(
+    providerType: string,
+    providerName: string
   ): Promise<ProviderHealthStatus> {
     const startTime = Date.now();
-    const config = await this.getConfigurationByType(providerType);
-
-    if (!config) {
-      return {
-        providerType,
-        providerName: "Unknown",
-        isHealthy: false,
-        lastChecked: new Date(),
-        errorMessage: "Configuration not found",
-      };
-    }
 
     try {
+      const config = await this.getConfigurationByName(
+        providerType,
+        providerName
+      );
+
+      if (!config) {
+        console.log(
+          `Configuration not found for ${providerType}:${providerName}`
+        );
+        return {
+          providerType,
+          providerName,
+          isHealthy: false,
+          status: "error" as const,
+          lastChecked: new Date(),
+          errorMessage: "Configuration not found",
+        };
+      }
+
       let isHealthy = false;
       let errorMessage = "";
 
@@ -218,61 +488,100 @@ export class AIConfigService {
           break;
         default:
           errorMessage = `Unknown provider type: ${providerType}`;
+          console.log(`Unknown provider type: ${providerType}`);
       }
 
       const responseTime = Date.now() - startTime;
 
       // Update validation status in database
-      const pool = await getInsightGenDbPool();
-      await pool.query(
-        `
-        UPDATE "AIConfiguration"
-        SET "validationStatus" = $1,
-            "validationMessage" = $2,
-            "lastValidatedDate" = NOW()
-        WHERE "providerType" = $3
-      `,
-        [
+      try {
+        const pool = await getInsightGenDbPool();
+
+        const updateQuery = `
+          UPDATE "AIConfiguration"
+          SET "validationStatus" = $1,
+              "validationMessage" = $2,
+              "lastValidatedDate" = NOW()
+          WHERE "providerType" = $3 AND "providerName" = $4
+        `;
+
+        const result = await pool.query(updateQuery, [
           isHealthy ? "valid" : "invalid",
           isHealthy ? null : errorMessage,
           providerType,
-        ]
-      );
+          providerName,
+        ]);
 
-      return {
+        console.log(
+          `Database update successful, rows affected: ${result.rowCount}`
+        );
+      } catch (dbError) {
+        console.error(`Database update failed:`, dbError);
+        throw new Error(
+          `Failed to update validation status: ${
+            dbError instanceof Error ? dbError.message : "Unknown error"
+          }`
+        );
+      }
+
+      const result = {
         providerType,
         providerName: config.providerName,
         isHealthy,
+        status: isHealthy ? ("valid" as const) : ("invalid" as const),
         lastChecked: new Date(),
         errorMessage: isHealthy ? undefined : errorMessage,
         responseTime,
       };
+
+      return result;
     } catch (error) {
       const responseTime = Date.now() - startTime;
       const errorMessage =
         error instanceof Error ? error.message : "Unknown validation error";
 
-      // Update validation status in database
-      const pool = await getInsightGenDbPool();
-      await pool.query(
-        `
-        UPDATE "AIConfiguration"
-        SET "validationStatus" = 'error',
-            "validationMessage" = $1,
-            "lastValidatedDate" = NOW()
-        WHERE "providerType" = $2
-      `,
-        [errorMessage, providerType]
-      );
+      console.error(`Validation failed with error:`, {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+        responseTime,
+      });
 
-      return {
+      // Update validation status in database
+      try {
+        const pool = await getInsightGenDbPool();
+
+        const errorUpdateQuery = `
+          UPDATE "AIConfiguration"
+          SET "validationStatus" = 'error',
+              "validationMessage" = $1,
+              "lastValidatedDate" = NOW()
+          WHERE "providerType" = $2 AND "providerName" = $3
+        `;
+
+        const result = await pool.query(errorUpdateQuery, [
+          errorMessage,
+          providerType,
+          providerName,
+        ]);
+        console.log(
+          `Error status update successful, rows affected: ${result.rowCount}`
+        );
+      } catch (dbError) {
+        console.error(`Failed to update error status in database:`, dbError);
+        // Don't throw here, we want to return the validation error, not the database update error
+      }
+
+      const errorResult = {
         providerType,
-        providerName: config.providerName,
+        providerName: providerType, // Fallback since we might not have config
         isHealthy: false,
+        status: "error" as const,
         lastChecked: new Date(),
         errorMessage,
         responseTime,
       };
+
+      return errorResult;
     }
   }
 
@@ -282,7 +591,7 @@ export class AIConfigService {
   async getAllProviderHealth(): Promise<ProviderHealthStatus[]> {
     const configs = await this.getEnabledConfigurations();
     const healthPromises = configs.map((config) =>
-      this.validateConfiguration(config.providerType)
+      this.validateConfigurationByName(config.providerType, config.providerName)
     );
 
     return Promise.all(healthPromises);
@@ -295,8 +604,9 @@ export class AIConfigService {
     // First try the default provider if it's healthy
     const defaultConfig = await this.getDefaultConfiguration();
     if (defaultConfig) {
-      const health = await this.validateConfiguration(
-        defaultConfig.providerType
+      const health = await this.validateConfigurationByName(
+        defaultConfig.providerType,
+        defaultConfig.providerName
       );
       if (health.isHealthy) {
         return defaultConfig;
@@ -306,7 +616,10 @@ export class AIConfigService {
     // Fall back to any healthy provider
     const allConfigs = await this.getEnabledConfigurations();
     for (const config of allConfigs) {
-      const health = await this.validateConfiguration(config.providerType);
+      const health = await this.validateConfigurationByName(
+        config.providerType,
+        config.providerName
+      );
       if (health.isHealthy) {
         return config;
       }

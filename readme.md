@@ -150,13 +150,13 @@ CREATE TABLE "SubQuestions" (
 - `SubQuestions` → `QueryResults` (1:N)
 - All tables reference `assessmentFormVersionFk` for form-specific data
 
-## How to Build as a Developer
+## Development Setup
 
 ### Prerequisites
 
 - Node.js 18 or higher
 - pnpm package manager
-- PostgreSQL database
+- Docker and Docker Compose (for database only)
 - Access to Microsoft SQL Server (for clinical data)
 
 ### Environment Setup
@@ -173,7 +173,7 @@ CREATE TABLE "SubQuestions" (
    ```env
    # Database Connections
    INSIGHT_GEN_DB_URL=postgresql://user:password@localhost:5432/insight_gen_db
-   SILHOUETTE_DB_URL=Server=server;Database=SilhouetteAIDashboard;User Id=user;Password=password;Encrypt=true;TrustServerCertificate=true
+   SILHOUETTE_DB_URL=Server=server;Database=SilhouetteDatabaseName;User Id=user;Password=password;Encrypt=true;TrustServerCertificate=true
 
    # AI Provider Configuration
    ANTHROPIC_API_KEY=your_anthropic_key
@@ -187,21 +187,66 @@ CREATE TABLE "SubQuestions" (
 
 ### Database Setup
 
-1. Run database migrations:
+1. Start PostgreSQL database using Docker Compose:
+
+   ```bash
+   # Start only the database (recommended for development)
+   docker-compose up db
+   ```
+
+2. Run database migrations:
 
    ```bash
    pnpm migrate
    ```
 
-2. Verify database tables:
+3. Verify database tables:
    ```bash
    pnpm check-tables
    ```
 
+## Development Workflow
+
+### **Recommended: Local Development with Docker Database**
+
+This is the **preferred approach** for development:
+
+```bash
+# Terminal 1: Start the database
+docker-compose up db
+
+# Terminal 2: Run your application
+pnpm dev
+```
+
+**Benefits:**
+
+- Fast iteration cycles with hot reloading
+- Clean, isolated database environment
+- Easy database reset when needed
+- Better debugging experience
+- No container overhead for your app
+
+### **Alternative: Full Docker Development**
+
+Use this approach sparingly:
+
+```bash
+# Start both app and database
+docker-compose up
+```
+
+**When to use:**
+
+- Testing the full containerized setup
+- Verifying Docker configuration
+- Team consistency testing
+- CI/CD testing
+
 ### Development Commands
 
 ```bash
-# Start development server
+# Start development server (recommended)
 pnpm dev
 
 # Build for production
@@ -218,6 +263,26 @@ pnpm test:ui
 
 # Lint code
 pnpm lint
+```
+
+### Database Management Commands
+
+```bash
+# Start database only
+docker-compose up db
+
+# Stop database
+docker-compose stop db
+
+# Reset database (removes all data)
+docker-compose down -v
+docker-compose up db
+
+# View database logs
+docker-compose logs db
+
+# Connect to database directly
+docker-compose exec db psql -U user -d insight_gen_db
 ```
 
 ### Project Structure
@@ -238,62 +303,30 @@ insight-gen/
 └── scripts/              # Build and deployment scripts
 ```
 
-## Build with Docker
+## Production Deployment
 
-### Quick Start with Docker Compose
+### Docker Production Build
 
-The easiest way to run InsightGen is using Docker Compose, which sets up both the application and PostgreSQL database:
+For production deployment, use the production Dockerfile:
 
 ```bash
-# Start the entire stack
-docker-compose up
+# Build production image
+docker build -f Dockerfile.prod -t insight-gen:prod .
 
-# Start in detached mode
-docker-compose up -d
-
-# Stop the stack
-docker-compose down
+# Run production container
+docker run -p 3005:3005 insight-gen:prod
 ```
 
-### Docker Configuration
+### Production Docker Compose
 
-The application uses a multi-stage Docker build:
+```bash
+# Start production stack
+docker-compose -f docker-compose.prod.yml up -d
+```
 
-1. **Base Stage**: Node.js 18 Alpine with pnpm
-2. **Dependencies**: Install all npm packages
-3. **Build Stage**: Compile Next.js application
-4. **Production Stage**: Optimized runtime image
+### Production Environment Variables
 
-### Docker Compose Services
-
-#### Application Service
-
-- **Image**: Built from local Dockerfile
-- **Port**: 3005 (mapped to host)
-- **Environment**: Loaded from `.env.local`
-- **Volumes**: Hot reload for development
-- **Dependencies**: PostgreSQL database
-
-#### PostgreSQL Service
-
-- **Image**: postgres:15-alpine
-- **Port**: 5432 (mapped to host)
-- **Database**: insight_gen_db
-- **Credentials**: user/password
-- **Persistence**: Named volume for data
-
-### Production Deployment
-
-For production deployment, refer to the existing Docker documentation:
-
-- **Dockerization Design**: See `docs/design/dockerization-and-separate-db.md`
-- **Production Dockerfile**: `Dockerfile.prod`
-- **Production Compose**: `docker-compose.prod.yml`
-- **Deployment Guide**: `README-DEPLOYMENT.md`
-
-### Environment Variables for Docker
-
-Create a `.env.local` file with the following variables:
+Create a production `.env` file:
 
 ```env
 # Database
@@ -307,7 +340,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
 
 # Application
 NEXTAUTH_SECRET=your_secret
-NEXTAUTH_URL=http://localhost:3005
+NEXTAUTH_URL=https://yourdomain.com
 ```
 
 ## Documentation
