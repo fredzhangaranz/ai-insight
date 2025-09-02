@@ -4,7 +4,7 @@ import { AIConfigLoader } from "@/lib/config/ai-config-loader";
 export async function GET() {
   try {
     const configLoader = AIConfigLoader.getInstance();
-    const { providers } = await configLoader.getConfiguration();
+    const { providers, source } = await configLoader.getConfiguration();
 
     // In development mode, the providers are already in the right format
     // In production mode, they're loaded from database and already formatted

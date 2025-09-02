@@ -95,55 +95,55 @@ Integrate Open WebUI as a new AI provider option to enable local LLM inference, 
 **Goal**: Create admin interface for configuring AI providers and initial setup flow when no LLMs are configured
 **Success Criteria**:
 
-- **Initial Setup Screen**: Display when no LLM providers are configured via environment variables
-- **Forced Configuration**: Users cannot access main app until at least one LLM provider is successfully configured
-- **Admin Panel**: Accessible from main app for ongoing management of LLM configurations
-- **Secure Storage**: AI provider credentials stored securely in database
-- **Provider Support**: Full support for Anthropic, Google, and Open WebUI providers
-- **Real-time Validation**: Immediate feedback on configuration validity
-- **Configuration Persistence**: Settings persist across app restarts
-- **Visual Feedback**: Clear status indicators for configuration success/failure
+- **Initial Setup Screen**: Display when no LLM providers are configured via environment variables [DONE]
+- **Forced Configuration**: Users cannot access main app until at least one LLM provider is successfully configured [DONE]
+- **Admin Panel**: Accessible from main app for ongoing management of LLM configurations [DONE]
+- **Secure Storage**: AI provider credentials stored securely in database [DONE]
+- **Provider Support**: Full support for Anthropic, Google, and Open WebUI providers [DONE]
+- **Real-time Validation**: Immediate feedback on configuration validity [TODO]
+- **Configuration Persistence**: Settings persist across app restarts [DONE]
+- **Visual Feedback**: Clear status indicators for configuration success/failure [DONE]
 
 **Tests**:
 
-- Admin UI component tests
-- Initial setup screen tests (display logic, validation, blocking behavior)
-- Credential storage and retrieval tests
-- Provider validation tests
-- Security tests for credential handling
-- Integration tests with existing providers
-- Configuration persistence tests
-- Forced configuration flow tests (cannot proceed without valid LLM)
+- Admin UI component tests [TODO]
+- Initial setup screen tests (display logic, validation, blocking behavior) [TODO]
+- Credential storage and retrieval tests [TODO]
+- Provider validation tests [TODO]
+- Security tests for credential handling [TODO]
+- Integration tests with existing providers [TODO]
+- Configuration persistence tests [TODO]
+- Forced configuration flow tests (cannot proceed without valid LLM) [TODO]
 
-**Status**: Not Started
+**Status**: In Progress
 
 ## Stage 4: UI Integration & Model Selection
 
 **Goal**: Update UI to show all available models with selective enabling based on configuration status
 **Success Criteria**:
 
-- **Complete Model Visibility**: Model selector displays all available providers (Anthropic, Google, Open WebUI) regardless of configuration status
-- **Selective Enabling**: Only successfully configured models are selectable; others are disabled with clear "needs configuration" labels
-- **Configuration Status Indicators**: Visual cues show which models are ready to use vs. need setup
-- **Real-time Availability**: Live status indicators for model health and availability
-- **Provider Distinction**: Clear visual separation between local (Open WebUI) and cloud (Anthropic, Google) models
-- **Performance/Cost Info**: Display relevant metrics when available (response times, costs for cloud models)
-- **Admin Access**: Direct links to admin panel for configuration management
-- **Smart Defaults**: Automatically select best available configured model on first load
+- **Complete Model Visibility**: Model selector displays all available providers (Anthropic, Google, Open WebUI) regardless of configuration status [DONE]
+- **Selective Enabling**: Only successfully configured models are selectable; others are disabled with clear "needs configuration" labels [TODO]
+- **Configuration Status Indicators**: Visual cues show which models are ready to use vs. need setup [TODO]
+- **Real-time Availability**: Live status indicators for model health and availability [TODO]
+- **Provider Distinction**: Clear visual separation between local (Open WebUI) and cloud (Anthropic, Google) models [DONE]
+- **Performance/Cost Info**: Display relevant metrics when available (response times, costs for cloud models) [TODO]
+- **Admin Access**: Direct links to admin panel for configuration management [TODO]
+- **Smart Defaults**: Automatically select best available configured model on first load [TODO]
 
 **Tests**:
 
-- UI component tests
-- Model selection workflow tests (enabled vs disabled models)
-- Configuration status indicator tests
-- Selective enabling/disabling logic tests
-- Admin access link tests
-- Smart default selection tests
-- Responsive design tests
-- Accessibility compliance
-- Admin access control tests
+- UI component tests [TODO]
+- Model selection workflow tests (enabled vs disabled models) [TODO]
+- Configuration status indicator tests [TODO]
+- Selective enabling/disabling logic tests [TODO]
+- Admin access link tests [TODO]
+- Smart default selection tests [TODO]
+- Responsive design tests [TODO]
+- Accessibility compliance [TODO]
+- Admin access control tests [TODO]
 
-**Status**: Not Started
+**Status**: In Progress
 
 ## Stage 5: Performance Optimization & Monitoring
 
