@@ -22,7 +22,7 @@ export async function getAIProvider(
   const model = SUPPORTED_AI_MODELS.find((m) => m.id === modelId);
 
   if (!model) {
-    throw new Error(`Unsupported AI model ID: ${modelId}`);
+    throw new Error(`MisconfiguredProvider: Unsupported AI model ID: ${modelId}`);
   }
 
   // First, try to create the requested provider
@@ -64,8 +64,9 @@ export async function getAIProvider(
       providerError.message
     );
 
-    // If fallback is disabled or this was already a fallback attempt, throw the error
-    if (!enableFallback) {
+    // Respect explicit flag and AUTO_FAILOVER env toggle
+    const autoFailover = (process.env.AUTO_FAILOVER || "").toLowerCase() === "true";
+    if (!enableFallback || !autoFailover) {
       throw providerError;
     }
   }
@@ -87,7 +88,7 @@ export async function getAIProvider(
 
   // No fallback available
   throw new Error(
-    `Failed to initialize provider for model ${modelId}: ${providerError?.message}. No suitable fallback provider available.`
+    `NoUsableProvider: Failed to initialize provider for model ${modelId}. ${providerError?.message || "Unknown error"}. No suitable fallback provider available.`
   );
 }
 
@@ -98,26 +99,44 @@ export async function findFallbackProvider(
   failedProviderType: string
 ): Promise<{ provider: string; instance: IQueryFunnelProvider } | null> {
   try {
-    // Get all healthy providers from the configuration service
-    const healthStatuses = await aiConfigService.getAllProviderHealth();
-    const healthyProviders = healthStatuses.filter(
-      (status) => status.isHealthy
-    );
+    // Get enabled configs and health, then order by priority
+    const [configs, healthStatuses] = await Promise.all([
+      aiConfigService.getEnabledConfigurations(),
+      aiConfigService.getAllProviderHealth(),
+    ]);
+    const healthyProviders = healthStatuses.filter((status) => status.isHealthy);
 
     if (healthyProviders.length === 0) {
       console.warn("No healthy AI providers found for fallback");
       return null;
     }
 
-    // Define fallback priority order (excluding the failed provider)
-    const fallbackOrder = ["anthropic", "google", "openwebui"].filter(
-      (type) => type !== failedProviderType.toLowerCase()
-    );
-
-    for (const providerType of fallbackOrder) {
-      const healthyProvider = healthyProviders.find(
-        (hp) => hp.providerType === providerType
+    // Create an ordered list of candidate providers by ascending priority
+    const priorityOf = (providerType: string, providerName: string) => {
+      const cfg = configs.find(
+        (c) => c.providerType === providerType && c.providerName === providerName
       );
+      const defaultPriority =
+        providerType === "anthropic" ? 10 : providerType === "google" ? 20 : providerType === "openwebui" ? 30 : 100;
+      return (cfg && typeof cfg.configData.priority === "number")
+        ? (cfg.configData.priority as number)
+        : defaultPriority;
+    };
+
+    // Exclude the failed provider type
+    const candidates = healthyProviders
+      .filter((hp) => hp.providerType !== failedProviderType.toLowerCase())
+      .sort((a, b) => {
+        const pa = priorityOf(a.providerType, a.providerName);
+        const pb = priorityOf(b.providerType, b.providerName);
+        if (pa !== pb) return pa - pb;
+        if (a.providerType !== b.providerType)
+          return a.providerType.localeCompare(b.providerType);
+        return a.providerName.localeCompare(b.providerName);
+      });
+
+    for (const healthyProvider of candidates) {
+      const providerType = healthyProvider.providerType;
 
       if (healthyProvider) {
         // Find a model from this healthy provider
@@ -187,7 +206,7 @@ export function getAIProviderSync(modelId: string): IQueryFunnelProvider {
     case "Other":
     default:
       throw new Error(
-        `No provider implementation available for model: ${modelId} with provider type ${model.provider}`
+        `MisconfiguredProvider: No provider implementation for model: ${modelId} (${model.provider})`
       );
   }
 }

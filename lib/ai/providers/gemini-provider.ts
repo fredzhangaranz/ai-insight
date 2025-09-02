@@ -24,20 +24,13 @@ export class GeminiProvider extends BaseProvider {
       throw new Error("Google Vertex AI is not configured");
     }
 
-    const projectId =
-      geminiConfig.configData.projectId || process.env.GOOGLE_CLOUD_PROJECT;
-    const location =
-      geminiConfig.configData.location ||
-      process.env.GOOGLE_CLOUD_LOCATION ||
-      "us-central1";
-    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const projectId = geminiConfig.configData.projectId;
+    const location = geminiConfig.configData.location;
 
     if (!projectId) {
-      throw new Error("Google Cloud Project ID is not configured");
-    }
-
-    if (!credentialsPath) {
-      throw new Error("Google Application Credentials path is not configured");
+      throw new Error(
+        "MisconfiguredProvider: Google projectId missing in provider configuration"
+      );
     }
 
     // Initialize Vertex AI with proper configuration

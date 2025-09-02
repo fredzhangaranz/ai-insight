@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderHealthStatus } from "@/lib/services/ai-config.service";
+import { healthMonitorService } from "@/lib/services/health-monitor.service";
 
 /**
  * Validate provider configuration in development mode using environment variables
@@ -132,6 +133,8 @@ async function validateOpenWebUIEnvironment(): Promise<boolean> {
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure health monitor is running in production
+    healthMonitorService.start();
     const body = await request.json();
     const { action, providerType, providerName } = body;
 

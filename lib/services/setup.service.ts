@@ -34,37 +34,20 @@ export class SetupService {
    */
   async checkSetupStatus(): Promise<SetupStatus> {
     try {
-      // First check if environment variables are available
-      const hasEnvConfig = this.checkEnvironmentVariableSetup();
+      const isProduction = process.env.NODE_ENV === "production";
 
-      if (hasEnvConfig) {
-        // If environment variables exist, try to initialize them automatically
-        try {
-          console.log(
-            "Environment variables detected, attempting auto-initialization..."
-          );
-          await this.initializeFromEnvironment();
-          console.log("Auto-initialization completed successfully");
-
-          // After successful initialization, check database status
-          const allConfigs = await aiConfigService.getAllConfigurations();
-          const enabledConfigs =
-            await aiConfigService.getEnabledConfigurations();
-
-          return {
-            isSetupRequired: enabledConfigs.length === 0,
-            hasConfiguredProviders: enabledConfigs.length > 0,
-            configuredProvidersCount: enabledConfigs.length,
-            totalProvidersCount: allConfigs.length,
-          };
-        } catch (error) {
-          console.warn("Failed to auto-initialize from environment:", error);
-          // Fall through to database check
-        }
+      if (!isProduction) {
+        // Development: setup not required; do not touch the database
+        const envCount = this.countEnvironmentProviders();
+        return {
+          isSetupRequired: false,
+          hasConfiguredProviders: envCount > 0,
+          configuredProvidersCount: envCount,
+          totalProvidersCount: envCount,
+        };
       }
 
-      // Check database for existing configurations
-      console.log("Checking database for existing configurations...");
+      // Production: Check database only (no env auto-initialization)
       const allConfigs = await aiConfigService.getAllConfigurations();
       const enabledConfigs = await aiConfigService.getEnabledConfigurations();
 
@@ -99,9 +82,40 @@ export class SetupService {
   }
 
   /**
+   * Count configured providers from environment variables (dev convenience)
+   */
+  private countEnvironmentProviders(): number {
+    let count = 0;
+    if (process.env.ANTHROPIC_API_KEY) count++;
+    if (process.env.GOOGLE_CLOUD_PROJECT) count++;
+    if (process.env.OPENWEBUI_BASE_URL) count++;
+    return count;
+  }
+
+  /**
    * Initialize providers from environment variables if available
    */
   async initializeFromEnvironment(): Promise<SetupResult> {
+    // In development, do not touch database; report based on env presence
+    const isProduction = process.env.NODE_ENV === "production";
+    if (!isProduction) {
+      const configuredProviders: string[] = [];
+      if (process.env.ANTHROPIC_API_KEY) configuredProviders.push("Anthropic");
+      if (process.env.GOOGLE_CLOUD_PROJECT) configuredProviders.push("Google");
+      if (process.env.OPENWEBUI_BASE_URL) configuredProviders.push("Open WebUI");
+
+      return {
+        success: configuredProviders.length > 0,
+        configuredProviders,
+        errors:
+          configuredProviders.length === 0
+            ? [
+                "Development mode: no providers detected in .env.local. Add provider env vars or switch to production to seed DB.",
+              ]
+            : undefined,
+      };
+    }
+
     const errors: string[] = [];
     const configuredProviders: string[] = [];
 
@@ -235,6 +249,11 @@ export class SetupService {
    */
   async resetSetup(): Promise<boolean> {
     try {
+      const isProduction = process.env.NODE_ENV === "production";
+      if (!isProduction) {
+        // Development: nothing to reset in DB
+        return true;
+      }
       const allConfigs = await aiConfigService.getAllConfigurations();
 
       for (const config of allConfigs) {
@@ -262,30 +281,28 @@ export class SetupService {
     currentStep: string;
     isComplete: boolean;
   }> {
-    const status = await this.checkSetupStatus();
+    const isProduction = process.env.NODE_ENV === "production";
+    if (!isProduction) {
+      return {
+        totalSteps: 1,
+        completedSteps: 1,
+        currentStep: "Development mode - setup not required",
+        isComplete: true,
+      };
+    }
 
+    const status = await this.checkSetupStatus();
     if (!status.isSetupRequired) {
       return {
-        totalSteps: 3,
-        completedSteps: 3,
+        totalSteps: 1,
+        completedSteps: 1,
         currentStep: "Setup Complete",
         isComplete: true,
       };
     }
 
-    const hasEnvSetup = this.checkEnvironmentVariableSetup();
-
-    if (hasEnvSetup) {
-      return {
-        totalSteps: 3,
-        completedSteps: 1,
-        currentStep: "Environment variables detected - initializing providers",
-        isComplete: false,
-      };
-    }
-
     return {
-      totalSteps: 3,
+      totalSteps: 1,
       completedSteps: 0,
       currentStep: "Manual configuration required",
       isComplete: false,

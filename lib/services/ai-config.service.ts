@@ -14,6 +14,7 @@ export interface AIConfiguration {
     location?: string;
     modelId?: string;
     timeout?: number;
+    priority?: number;
   };
   createdBy: string;
   createdDate: Date;
@@ -445,6 +446,64 @@ export class AIConfigService {
   }
 
   /**
+   * Validate AI provider configuration by provider type (uses current enabled config)
+   */
+  async validateConfiguration(providerType: string): Promise<ProviderHealthStatus> {
+    const startTime = Date.now();
+    const config = await this.getConfigurationByType(providerType);
+    if (!config) {
+      return {
+        providerType,
+        providerName: providerType,
+        isHealthy: false,
+        status: "error",
+        lastChecked: new Date(),
+        errorMessage: "Configuration not found",
+      };
+    }
+
+    try {
+      let isHealthy = false;
+      switch (providerType) {
+        case "anthropic":
+          isHealthy = await this.validateAnthropicConfig(config);
+          break;
+        case "google":
+          isHealthy = await this.validateGoogleConfig(config);
+          break;
+        case "openwebui":
+          isHealthy = await this.validateOpenWebUIConfig(config);
+          break;
+        default:
+          throw new Error(`Unknown provider type: ${providerType}`);
+      }
+
+      const responseTime = Date.now() - startTime;
+      return {
+        providerType,
+        providerName: config.providerName,
+        isHealthy,
+        status: isHealthy ? "valid" : "invalid",
+        lastChecked: new Date(),
+        responseTime,
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown validation error";
+      return {
+        providerType,
+        providerName: config.providerName,
+        isHealthy: false,
+        status: "error",
+        lastChecked: new Date(),
+        errorMessage,
+        responseTime,
+      };
+    }
+  }
+
+  /**
    * Validate AI provider configuration and update status by name
    */
   async validateConfigurationByName(
@@ -601,67 +660,56 @@ export class AIConfigService {
    * Find the best available provider based on health and priority
    */
   async findBestAvailableProvider(): Promise<AIConfiguration | null> {
-    // First try the default provider if it's healthy
+    // Selection is purely based on configuration flags; no live validation here.
     const defaultConfig = await this.getDefaultConfiguration();
-    if (defaultConfig) {
-      const health = await this.validateConfigurationByName(
-        defaultConfig.providerType,
-        defaultConfig.providerName
-      );
-      if (health.isHealthy) {
-        return defaultConfig;
-      }
-    }
+    if (defaultConfig) return defaultConfig;
 
-    // Fall back to any healthy provider
     const allConfigs = await this.getEnabledConfigurations();
-    for (const config of allConfigs) {
-      const health = await this.validateConfigurationByName(
-        config.providerType,
-        config.providerName
-      );
-      if (health.isHealthy) {
-        return config;
-      }
-    }
+    if (allConfigs.length === 0) return null;
 
-    return null;
+    // Sort by explicit priority (asc), then by providerType/providerName as stable tie-breakers
+    const priorityOf = (c: AIConfiguration) =>
+      typeof c.configData.priority === "number"
+        ? c.configData.priority
+        : this.defaultPriorityFor(c.providerType);
+
+    allConfigs.sort((a, b) => {
+      const pa = priorityOf(a);
+      const pb = priorityOf(b);
+      if (pa !== pb) return pa - pb;
+      // tie-breakers to keep deterministic order
+      if (a.providerType !== b.providerType)
+        return a.providerType.localeCompare(b.providerType);
+      return a.providerName.localeCompare(b.providerName);
+    });
+
+    return allConfigs[0];
+  }
+
+  private defaultPriorityFor(providerType: string): number {
+    switch (providerType) {
+      case "anthropic":
+        return 10;
+      case "google":
+        return 20;
+      case "openwebui":
+        return 30;
+      default:
+        return 100;
+    }
   }
 
   /**
    * Get fallback configuration for a specific provider type
    */
-  getFallbackConfig(
-    providerType: string
-  ): Partial<AIConfiguration["configData"]> | null {
-    switch (providerType) {
-      case "anthropic":
-        return {
-          apiKey: process.env.ANTHROPIC_API_KEY,
-          baseUrl: "https://api.anthropic.com",
-        };
-      case "google":
-        return {
-          projectId: process.env.GOOGLE_CLOUD_PROJECT,
-          location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-        };
-      case "openwebui":
-        return {
-          baseUrl: process.env.OPENWEBUI_BASE_URL || "http://localhost:8080",
-          apiKey: process.env.OPENWEBUI_API_KEY,
-          timeout: parseInt(process.env.OPENWEBUI_TIMEOUT || "30000"),
-        };
-      default:
-        return null;
-    }
-  }
+  // Removed getFallbackConfig: validation must rely solely on stored config
 
   // Private validation methods
 
   private async validateAnthropicConfig(
     config: AIConfiguration
   ): Promise<boolean> {
-    const apiKey = config.configData.apiKey || process.env.ANTHROPIC_API_KEY;
+    const apiKey = config.configData.apiKey;
     if (!apiKey) {
       throw new Error("Anthropic API key not configured");
     }
@@ -678,8 +726,7 @@ export class AIConfigService {
   private async validateGoogleConfig(
     config: AIConfiguration
   ): Promise<boolean> {
-    const projectId =
-      config.configData.projectId || process.env.GOOGLE_CLOUD_PROJECT;
+    const projectId = config.configData.projectId;
     if (!projectId) {
       throw new Error("Google Cloud project ID not configured");
     }
@@ -691,7 +738,7 @@ export class AIConfigService {
   private async validateOpenWebUIConfig(
     config: AIConfiguration
   ): Promise<boolean> {
-    const baseUrl = config.configData.baseUrl || process.env.OPENWEBUI_BASE_URL;
+    const baseUrl = config.configData.baseUrl;
     if (!baseUrl) {
       throw new Error("Open WebUI base URL not configured");
     }

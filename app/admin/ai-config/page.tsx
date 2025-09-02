@@ -377,7 +377,7 @@ export default function AIConfigPage() {
                 <AlertDescription className="text-yellow-800">
                   <strong>Development Mode:</strong> Configuration management is
                   disabled. Add your AI provider keys to <code>.env.local</code>{" "}
-                  to configure providers.
+                  to configure providers. Validation is available.
                 </AlertDescription>
               </Alert>
             )}

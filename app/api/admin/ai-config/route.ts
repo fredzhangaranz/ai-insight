@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AIConfigLoader } from "@/lib/config/ai-config-loader";
+import { healthMonitorService } from "@/lib/services/health-monitor.service";
 
 export async function GET() {
   try {
+    // Ensure health monitor is running in production
+    healthMonitorService.start();
     const configLoader = AIConfigLoader.getInstance();
     const { providers, source } = await configLoader.getConfiguration();
 

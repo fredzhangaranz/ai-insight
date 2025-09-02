@@ -27,7 +27,9 @@ export class ClaudeProvider extends BaseProvider {
       !anthropicConfig.isEnabled ||
       !anthropicConfig.configData.apiKey
     ) {
-      throw new Error("Anthropic API key is not configured");
+      throw new Error(
+        "MisconfiguredProvider: Anthropic API key missing or provider disabled"
+      );
     }
 
     this.anthropic = new Anthropic({

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { setupService } from "@/lib/services/setup.service";
+import { healthMonitorService } from "@/lib/services/health-monitor.service";
 
 export async function GET() {
   try {
+    // Ensure health monitor is running in production
+    healthMonitorService.start();
     const setupStatus = await setupService.checkSetupStatus();
     return NextResponse.json(setupStatus);
   } catch (error) {

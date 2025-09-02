@@ -38,17 +38,24 @@ export class AIConfigLoader {
       };
     }
 
-    // Production: Use database configuration
+    // Production: Use database configuration only (no env fallback)
     try {
       const dbProviders = await this.configService.getEnabledConfigurations();
 
       if (dbProviders.length === 0) {
-        // Database is empty, seed from environment variables
-        const seededProviders = await this.seedFromEnvironment();
-        return {
-          providers: seededProviders,
-          source: "database",
-        };
+        const shouldSeed = (process.env.SEED_ON_BOOT || "").toLowerCase() === "true";
+
+        if (shouldSeed) {
+          const seededProviders = await this.seedFromEnvironment();
+          return {
+            providers: seededProviders,
+            source: "database",
+          };
+        }
+
+        throw new Error(
+          "SetupRequired: No AI providers configured. Set SEED_ON_BOOT=true to seed from environment or configure providers via Admin."
+        );
       }
 
       return {
@@ -56,14 +63,8 @@ export class AIConfigLoader {
         source: "database",
       };
     } catch (error) {
-      console.warn(
-        "Failed to load from database, falling back to environment:",
-        error
-      );
-      return {
-        providers: this.loadFromEnvironment(),
-        source: "env",
-      };
+      // Surface DB errors in production; do not fall back to env
+      throw error;
     }
   }
 
@@ -149,14 +150,14 @@ export class AIConfigLoader {
     // Insert into database
     for (const provider of envProviders) {
       try {
-        await this.configService.createConfiguration({
-          providerType: provider.providerType,
-          providerName: provider.providerName,
-          isEnabled: provider.isEnabled,
-          isDefault: provider.isDefault,
-          configData: provider.configData,
-          createdBy: "system-seed",
-        });
+        await this.configService.saveConfiguration(
+          provider.providerType,
+          provider.providerName,
+          provider.configData,
+          provider.isEnabled,
+          provider.isDefault,
+          "system-seed"
+        );
       } catch (error) {
         console.warn(
           `Failed to seed ${provider.providerType} configuration:`,

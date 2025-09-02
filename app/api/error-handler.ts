@@ -85,6 +85,39 @@ export function withErrorHandling<T = any>(
       const response = await handler(req, context);
       return response;
     } catch (error: any) {
+      const msg = typeof error?.message === "string" ? error.message : "";
+
+      // Map standardized configuration/availability errors to friendly responses
+      if (msg.startsWith("SetupRequired:")) {
+        return apiError(
+          ErrorType.AI_SERVICE_ERROR,
+          "No AI providers are configured. Configure a provider in Admin or enable seeding in production.",
+          503,
+          error,
+          requestId
+        );
+      }
+
+      if (msg.startsWith("NoUsableProvider:")) {
+        return apiError(
+          ErrorType.AI_SERVICE_ERROR,
+          "No usable AI provider is available right now. Please check provider health in Admin.",
+          503,
+          error,
+          requestId
+        );
+      }
+
+      if (msg.startsWith("MisconfiguredProvider:")) {
+        return apiError(
+          ErrorType.VALIDATION_ERROR,
+          msg.replace(/^MisconfiguredProvider:\s*/, ""),
+          400,
+          error,
+          requestId
+        );
+      }
+
       // Handle different types of errors
       if (error.name === "ValidationError") {
         return apiError(

@@ -162,6 +162,16 @@ NODE_ENV=production npm run seed-ai-config
 **Problem**: Admin UI not showing configurations
 **Solution**: Run seeding script: `npm run seed-ai-config`
 
+## Errors & Messaging
+
+To keep behavior predictable and user-friendly, provider and loader errors use standardized prefixes that the API maps to clear responses:
+
+- MisconfiguredProvider: A required field is missing or a provider is disabled. The API returns 400 with a human-readable message (e.g., "Anthropic API key missing or provider disabled").
+- NoUsableProvider: No provider could be initialized and no fallback succeeded. The API returns 503 with guidance to check provider health in Admin.
+- SetupRequired: No providers are configured in production and seeding is disabled. The API returns 503 with guidance to configure or enable seeding.
+
+Admin UI in development clearly indicates that configuration changes are disabled, but validation is available to test credentials/endpoints.
+
 ## Future Enhancements
 
 - **Configuration validation**: Add startup validation for required providers

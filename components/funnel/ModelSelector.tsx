@@ -49,8 +49,12 @@ export const ModelSelector: React.FC = () => {
     if (model.status === "error" || model.status === "invalid") {
       return <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500" />;
     }
+    // Pending/unverified: neutral indicator (no spinner)
     return (
-      <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+      <div
+        className="w-4 h-4 rounded-full bg-gray-300 border border-gray-400"
+        title="Unverified"
+      />
     );
   };
 
@@ -59,6 +63,7 @@ export const ModelSelector: React.FC = () => {
     if (model.status === "valid") return "text-green-600";
     if (model.status === "error" || model.status === "invalid")
       return "text-yellow-600";
+    // Pending/unverified
     return "text-gray-600";
   };
 

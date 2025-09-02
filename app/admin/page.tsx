@@ -257,7 +257,7 @@ export default function AdminDashboard() {
                 <strong>Development Mode:</strong> You are viewing
                 configurations loaded from your <code>.env.local</code> file.
                 Changes made here will not persist. To modify configurations,
-                update your environment variables.
+                update your environment variables. Validation is available.
               </AlertDescription>
             </Alert>
           )}

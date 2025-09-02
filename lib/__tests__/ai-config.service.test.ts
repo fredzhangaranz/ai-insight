@@ -285,13 +285,14 @@ describe("AIConfigService", () => {
       vi.spyOn(service, "getEnabledConfigurations").mockResolvedValue(
         mockConfigs
       );
-      vi.spyOn(service, "validateConfiguration").mockResolvedValue({
+      vi.spyOn(service, "validateConfigurationByName").mockResolvedValue({
         providerType: "anthropic",
         providerName: "Claude",
         isHealthy: true,
+        status: "valid",
         lastChecked: new Date(),
         responseTime: 100,
-      });
+      } as any);
 
       const result = await service.getAllProviderHealth();
 
@@ -302,7 +303,7 @@ describe("AIConfigService", () => {
   });
 
   describe("findBestAvailableProvider", () => {
-    it("should return healthy default provider when available", async () => {
+    it("returns the default provider when present (no live validation)", async () => {
       const mockConfig = {
         id: 1,
         providerType: "anthropic" as const,
@@ -318,37 +319,14 @@ describe("AIConfigService", () => {
         validationMessage: null,
       };
 
-      vi.spyOn(service, "getDefaultConfiguration").mockResolvedValue(
-        mockConfig
-      );
-      vi.spyOn(service, "validateConfiguration").mockResolvedValue({
-        providerType: "anthropic",
-        providerName: "Claude",
-        isHealthy: true,
-        lastChecked: new Date(),
-        responseTime: 100,
-      });
+      vi.spyOn(service, "getDefaultConfiguration").mockResolvedValue(mockConfig);
 
       const result = await service.findBestAvailableProvider();
-
       expect(result).toEqual(mockConfig);
     });
 
-    it("should fallback to other healthy providers when default is unavailable", async () => {
-      const mockDefaultConfig = {
-        id: 1,
-        providerType: "anthropic" as const,
-        providerName: "Claude",
-        isEnabled: true,
-        isDefault: true,
-        configData: { apiKey: "sk-ant-test" },
-        createdBy: "system",
-        createdDate: new Date(),
-        lastModifiedBy: "system",
-        lastModifiedDate: new Date(),
-        validationStatus: "valid" as const,
-        validationMessage: null,
-      };
+    it("returns first enabled provider when no default exists (no live validation)", async () => {
+      vi.spyOn(service, "getDefaultConfiguration").mockResolvedValue(null);
 
       const mockRows = [
         {
@@ -367,97 +345,21 @@ describe("AIConfigService", () => {
         },
       ];
 
-      vi.spyOn(service, "getDefaultConfiguration").mockResolvedValue(
-        mockDefaultConfig
-      );
-      vi.spyOn(service, "validateConfiguration")
-        .mockResolvedValueOnce({
-          providerType: "anthropic",
-          providerName: "Claude",
-          isHealthy: false,
-          lastChecked: new Date(),
-          errorMessage: "API key invalid",
-          responseTime: 100,
-        })
-        .mockResolvedValueOnce({
-          providerType: "google",
-          providerName: "Gemini",
-          isHealthy: true,
-          lastChecked: new Date(),
-          responseTime: 150,
-        });
-
-      mockQuery
-        .mockResolvedValueOnce({ rows: mockRows }) // for getEnabledConfigurations
-        .mockResolvedValueOnce({ rows: mockRows }); // for getConfigurationByType in validateConfiguration
+      mockQuery.mockResolvedValueOnce({ rows: mockRows });
 
       const result = await service.findBestAvailableProvider();
-
       expect(result).toBeTruthy();
       expect(result!.providerType).toBe("google");
     });
 
-    it("should return null when no healthy providers are available", async () => {
+    it("returns null when no enabled providers exist", async () => {
       vi.spyOn(service, "getDefaultConfiguration").mockResolvedValue(null);
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const result = await service.findBestAvailableProvider();
-
       expect(result).toBeNull();
     });
   });
 
-  describe("getFallbackConfig", () => {
-    it("should return fallback config for Anthropic", () => {
-      process.env.ANTHROPIC_API_KEY = "env-api-key";
-
-      const result = service.getFallbackConfig("anthropic");
-
-      expect(result).toEqual({
-        apiKey: "env-api-key",
-        baseUrl: "https://api.anthropic.com",
-      });
-    });
-
-    it("should return fallback config for Google", () => {
-      process.env.GOOGLE_CLOUD_PROJECT = "test-project";
-      process.env.GOOGLE_CLOUD_LOCATION = "us-west1";
-
-      const result = service.getFallbackConfig("google");
-
-      expect(result).toEqual({
-        projectId: "test-project",
-        location: "us-west1",
-      });
-    });
-
-    it("should return fallback config for OpenWebUI", () => {
-      process.env.OPENWEBUI_BASE_URL = "http://custom:9090";
-      process.env.OPENWEBUI_API_KEY = "custom-key";
-      process.env.OPENWEBUI_TIMEOUT = "10000";
-
-      const result = service.getFallbackConfig("openwebui");
-
-      expect(result).toEqual({
-        baseUrl: "http://custom:9090",
-        apiKey: "custom-key",
-        timeout: 10000,
-      });
-    });
-
-    it("should return null for unknown provider", () => {
-      const result = service.getFallbackConfig("unknown");
-
-      expect(result).toBeNull();
-    });
-
-    afterEach(() => {
-      delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_CLOUD_LOCATION;
-      delete process.env.OPENWEBUI_BASE_URL;
-      delete process.env.OPENWEBUI_API_KEY;
-      delete process.env.OPENWEBUI_TIMEOUT;
-    });
-  });
+  // Removed getFallbackConfig tests: service no longer reads env for validation
 });

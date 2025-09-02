@@ -29,17 +29,15 @@ export class OpenWebUIProvider extends BaseProvider {
       (p) => p.providerType === "openwebui"
     );
 
-    if (openwebuiConfig && openwebuiConfig.isEnabled) {
-      this.baseUrl =
-        openwebuiConfig.configData.baseUrl || "http://localhost:8080";
-      this.apiKey = openwebuiConfig.configData.apiKey;
-      this.timeout = openwebuiConfig.configData.timeout || 30000;
-    } else {
-      // Fallback defaults
-      this.baseUrl = "http://localhost:8080";
-      this.apiKey = undefined;
-      this.timeout = 30000;
+    if (!openwebuiConfig || !openwebuiConfig.isEnabled) {
+      throw new Error(
+        "MisconfiguredProvider: Open WebUI not configured or not enabled"
+      );
     }
+
+    this.baseUrl = openwebuiConfig.configData.baseUrl as string;
+    this.apiKey = openwebuiConfig.configData.apiKey;
+    this.timeout = (openwebuiConfig.configData.timeout as number) ?? 30000;
 
     // Validate configuration
     this.validateConfiguration();
@@ -51,9 +49,7 @@ export class OpenWebUIProvider extends BaseProvider {
    */
   private validateConfiguration(): void {
     if (!this.baseUrl) {
-      throw new Error(
-        "Open WebUI base URL is not configured. Set OPENWEBUI_BASE_URL environment variable or configure via admin panel."
-      );
+      throw new Error("MisconfiguredProvider: Open WebUI baseUrl is missing");
     }
 
     // Validate URL format
