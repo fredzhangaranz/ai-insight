@@ -37,14 +37,13 @@ describe("OpenWebUIProvider", () => {
       // environment variable is set before creating the provider instance.
     });
 
-    it("should throw error if OPENWEBUI_BASE_URL is not a valid URL", () => {
+    it("should throw error if OPENWEBUI_BASE_URL is not a valid URL", async () => {
       process.env.OPENWEBUI_BASE_URL = "invalid-url";
 
-      expect(() => {
-        new OpenWebUIProvider(mockModelId);
-      }).toThrow(
-        "Open WebUI base URL (OPENWEBUI_BASE_URL) is not a valid URL: invalid-url"
-      );
+      await expect(async () => {
+        const provider = new OpenWebUIProvider(mockModelId);
+        await (provider as any).loadConfiguration();
+      }).rejects.toThrow("Open WebUI base URL is not a valid URL: invalid-url");
     });
   });
 
@@ -87,7 +86,7 @@ describe("OpenWebUIProvider", () => {
       expect(result.usage.output_tokens).toBe(8);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://localhost:8080/v1/chat/completions",
+        "http://localhost:8080/api/v1/chat/completions",
         expect.objectContaining({
           method: "POST",
           headers: {
@@ -239,7 +238,7 @@ describe("OpenWebUIProvider", () => {
 
       expect(result).toBe(true);
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://localhost:8080/v1/models",
+        "http://localhost:8080/api/v1/models",
         expect.objectContaining({
           method: "GET",
           headers: {

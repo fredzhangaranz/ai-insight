@@ -15,7 +15,7 @@ describe("OpenWebUIProvider Integration", () => {
     fetchMock.mockClear();
 
     // Set up environment variables
-    process.env.OPENWEBUI_BASE_URL = "http://localhost:8080";
+    process.env.OPENWEBUI_BASE_URL = "http://localhost:3000";
     process.env.OPENWEBUI_API_KEY = "test-api-key";
     process.env.OPENWEBUI_TIMEOUT = "30000";
 
@@ -196,7 +196,7 @@ describe("OpenWebUIProvider Integration", () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(fetchMock).toHaveBeenNthCalledWith(
         1,
-        "http://localhost:8080/v1/chat/completions",
+        "http://localhost:3000/api/v1/chat/completions",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({

@@ -9,6 +9,8 @@ export const FUNNEL_SUBQUESTIONS_PROMPT = [
   "## CRITICAL: JSON Response Format",
   "You MUST respond with ONLY a valid JSON object. Do not include any explanatory text, markdown formatting, or natural language before or after the JSON. The response must be parseable by JSON.parse().",
   "",
+  "**ABSOLUTELY NO NATURAL LANGUAGE RESPONSES** - Do not say things like 'I'd be happy to help' or 'Here are the sub-questions'. Start your response immediately with { and end with }.",
+  "",
   "## Response Structure",
   "Return your response as a single JSON object:",
   "",
@@ -106,6 +108,8 @@ export const FUNNEL_SUBQUESTIONS_PROMPT = [
   "",
   "## FINAL INSTRUCTION",
   "Respond with ONLY the JSON object. No other text, explanations, or formatting. The response must be valid JSON that can be parsed directly.",
+  "",
+  "**REMINDER**: Your response must start with { and end with }. No greetings, no explanations, no markdown. Just pure JSON.",
 ].join("\n");
 
 /**

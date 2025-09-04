@@ -115,7 +115,7 @@ async function validateOpenWebUIEnvironment(): Promise<boolean> {
       headers.Authorization = `Bearer ${process.env.OPENWEBUI_API_KEY}`;
     }
 
-    const response = await fetch(`${baseUrl}/v1/models`, {
+    const response = await fetch(`${baseUrl}/api/v1/models`, {
       method: "GET",
       headers,
       signal: AbortSignal.timeout(5000), // 5 second timeout

@@ -448,7 +448,9 @@ export class AIConfigService {
   /**
    * Validate AI provider configuration by provider type (uses current enabled config)
    */
-  async validateConfiguration(providerType: string): Promise<ProviderHealthStatus> {
+  async validateConfiguration(
+    providerType: string
+  ): Promise<ProviderHealthStatus> {
     const startTime = Date.now();
     const config = await this.getConfigurationByType(providerType);
     if (!config) {
@@ -751,7 +753,7 @@ export class AIConfigService {
 
     // Test connection to Open WebUI
     try {
-      const response = await fetch(`${baseUrl}/v1/models`, {
+      const response = await fetch(`${baseUrl}/api/v1/models`, {
         method: "GET",
         headers: config.configData.apiKey
           ? {

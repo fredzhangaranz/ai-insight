@@ -96,7 +96,7 @@ export class OpenWebUIProvider extends BaseProvider {
     // Ensure configuration is loaded
     await this.ensureConfigLoaded();
 
-    const endpoint = `${this.baseUrl}/v1/chat/completions`;
+    const endpoint = `${this.baseUrl}/api/v1/chat/completions`;
 
     const requestBody = {
       model: this.modelId,
@@ -186,7 +186,7 @@ export class OpenWebUIProvider extends BaseProvider {
       // Ensure configuration is loaded
       await this.ensureConfigLoaded();
 
-      const endpoint = `${this.baseUrl}/v1/models`;
+      const endpoint = `${this.baseUrl}/api/v1/models`;
 
       const headers: Record<string, string> = {};
       if (this.apiKey) {
@@ -219,7 +219,7 @@ export class OpenWebUIProvider extends BaseProvider {
       // Ensure configuration is loaded
       await this.ensureConfigLoaded();
 
-      const endpoint = `${this.baseUrl}/v1/models`;
+      const endpoint = `${this.baseUrl}/api/v1/models`;
 
       const headers: Record<string, string> = {};
       if (this.apiKey) {
