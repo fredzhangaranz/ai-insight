@@ -36,6 +36,8 @@ import {
 } from "@/components/ui/select";
 import type { ChartType, TableData } from "@/lib/chart-contracts";
 import { shapeDataForChart } from "@/lib/data-shaper";
+import { ModelSelector } from "@/components/funnel/ModelSelector";
+import { useAIModel } from "@/lib/context/AIModelContext";
 
 // --- TYPE DEFINITIONS ---
 type FormField = { fieldtype: string; options: string[] };
@@ -74,6 +76,8 @@ export default function AnalysisPage({
   assessmentFormName,
   onBack,
 }: AnalysisPageProps) {
+  const { hasConfiguredModels } = useAIModel();
+
   const [state, setState] = useState<AnalysisState>("loading");
   const [definition, setDefinition] = useState<AssessmentFormDefinition | null>(
     null
@@ -645,375 +649,426 @@ export default function AnalysisPage({
         );
       case "initial":
         return (
-          <Card className="border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-8 text-center">
-              <div className="mb-6">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <SparklesIcon className="w-8 h-8 text-blue-600" />
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">
-                  No Insights Found
-                </h3>
-                <p className="text-slate-600">
-                  Click to generate AI-powered insights for this form.
+          <div className="space-y-6">
+            {/* Model Selector */}
+            <Card className="border-slate-200 bg-white shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg text-slate-900">
+                  AI Model Selection
+                </CardTitle>
+                <p className="text-sm text-slate-600">
+                  Choose which AI model to use for generating insights
                 </p>
-              </div>
-              <Button
-                onClick={() => fetchData(true)}
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <SparklesIcon className="w-5 h-5 mr-2" />
-                Analyze with AI
-              </Button>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <ModelSelector />
+              </CardContent>
+            </Card>
+
+            {/* No Insights Card */}
+            <Card className="border-slate-200 bg-white shadow-sm">
+              <CardContent className="p-8 text-center">
+                <div className="mb-6">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <SparklesIcon className="w-8 h-8 text-blue-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-slate-900 mb-2">
+                    No Insights Found
+                  </h3>
+                  <p className="text-slate-600">
+                    Click to generate AI-powered insights for this form.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => fetchData(true)}
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  disabled={!hasConfiguredModels}
+                >
+                  <SparklesIcon className="w-5 h-5 mr-2" />
+                  {hasConfiguredModels
+                    ? "Analyze with AI"
+                    : "Configure AI Models First"}
+                </Button>
+                {!hasConfiguredModels && (
+                  <p className="text-sm text-red-600 mt-2">
+                    No AI models are configured. Please configure at least one
+                    model in the admin panel.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         );
       case "insights":
         return (
           insights && (
-            <Card className="border-slate-200 bg-white shadow-sm">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="text-xl text-slate-900">
-                      AI-Generated Insights
-                    </CardTitle>
-                    <p className="text-slate-600 text-sm">
-                      Select a question to explore your data
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fetchData(true)}
-                  >
-                    <ArrowPathIcon className="w-4 h-4 mr-2" />
-                    Regenerate
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Accordion
-                  type="single"
-                  collapsible
-                  className="space-y-2"
-                  value={expandedCategory || undefined}
-                  onValueChange={setExpandedCategory}
-                >
-                  {insights.insights.map((cat, index) => (
-                    <AccordionItem
-                      key={index}
-                      value={cat.category}
-                      className="border border-slate-200 rounded-lg px-4"
+            <div className="space-y-6">
+              {/* Model Selector */}
+              <Card className="border-slate-200 bg-white shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg text-slate-900">
+                    AI Model Selection
+                  </CardTitle>
+                  <p className="text-sm text-slate-600">
+                    Choose which AI model to use for generating insights
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <ModelSelector />
+                </CardContent>
+              </Card>
+
+              {/* Insights Card */}
+              <Card className="border-slate-200 bg-white shadow-sm">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-xl text-slate-900">
+                        AI-Generated Insights
+                      </CardTitle>
+                      <p className="text-slate-600 text-sm">
+                        Select a question to explore your data
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchData(true)}
+                      disabled={!hasConfiguredModels}
                     >
-                      <AccordionTrigger className="text-left font-semibold text-slate-900 hover:no-underline">
-                        {cat.category}
-                      </AccordionTrigger>
-                      <AccordionContent className="space-y-2 pt-2">
-                        {cat.questions.map((question, qIndex) => (
-                          <div
-                            key={qIndex}
-                            className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 flex items-center justify-between"
-                          >
+                      <ArrowPathIcon className="w-4 h-4 mr-2" />
+                      Regenerate
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Accordion
+                    type="single"
+                    collapsible
+                    className="space-y-2"
+                    value={expandedCategory || undefined}
+                    onValueChange={setExpandedCategory}
+                  >
+                    {insights.insights.map((cat, index) => (
+                      <AccordionItem
+                        key={index}
+                        value={cat.category}
+                        className="border border-slate-200 rounded-lg px-4"
+                      >
+                        <AccordionTrigger className="text-left font-semibold text-slate-900 hover:no-underline">
+                          {cat.category}
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-2 pt-2">
+                          {cat.questions.map((question, qIndex) => (
                             <div
-                              className="flex-1 cursor-pointer"
-                              onClick={() => handleQuestionSelect(question)}
+                              key={qIndex}
+                              className="p-3 rounded-lg bg-slate-50 hover:bg-blue-50 flex items-center justify-between"
                             >
-                              <p className="text-slate-700 hover:text-blue-700 font-medium">
-                                {question.text}
+                              <div
+                                className="flex-1 cursor-pointer"
+                                onClick={() => handleQuestionSelect(question)}
+                              >
+                                <p className="text-slate-700 hover:text-blue-700 font-medium">
+                                  {question.text}
+                                </p>
+                              </div>
+                              <div className="flex items-center space-x-2 ml-4">
+                                {question.type === "single-patient" && (
+                                  <UserIcon className="w-5 h-5 text-slate-400" />
+                                )}
+                                {/* Custom/Modified question indicator */}
+                                {question.isCustom && (
+                                  <div className="flex items-center space-x-1 bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
+                                    <SparklesIcon className="w-3 h-3" />
+                                    <span>
+                                      {question.originalQuestionId
+                                        ? "Modified"
+                                        : "Custom"}
+                                    </span>
+                                  </div>
+                                )}
+                                {/* Edit button - for all questions */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditQuestionClick(
+                                      question,
+                                      qIndex,
+                                      cat.category
+                                    );
+                                  }}
+                                  className="text-slate-400 hover:text-slate-600"
+                                >
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                    />
+                                  </svg>
+                                </Button>
+                                {/* Delete button - for all questions */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteQuestionClick(
+                                      question,
+                                      qIndex,
+                                      cat.category
+                                    );
+                                  }}
+                                  className="text-red-400 hover:text-red-600"
+                                  title={
+                                    question.isCustom
+                                      ? "Delete custom question"
+                                      : "AI questions cannot be deleted"
+                                  }
+                                >
+                                  <TrashIcon className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Add your own question button */}
+                          <div className="pt-2 border-t border-slate-200">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleAddQuestionClick(cat.category)
+                              }
+                              className="w-full text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100"
+                            >
+                              <SparklesIcon className="w-4 h-4 mr-2" />
+                              Add your own question
+                            </Button>
+                          </div>
+
+                          {/* Add question form */}
+                          {showAddQuestionForm === cat.category && (
+                            <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Your Question
+                                  </label>
+                                  <textarea
+                                    value={newQuestionText}
+                                    onChange={(e) =>
+                                      setNewQuestionText(e.target.value)
+                                    }
+                                    placeholder="Enter your custom question..."
+                                    className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    rows={3}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Question Type
+                                  </label>
+                                  <select
+                                    value={newQuestionType}
+                                    onChange={(e) =>
+                                      setNewQuestionType(
+                                        e.target.value as
+                                          | "single-patient"
+                                          | "all-patient"
+                                      )
+                                    }
+                                    className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="all-patient">
+                                      All Patients
+                                    </option>
+                                    <option value="single-patient">
+                                      Single Patient
+                                    </option>
+                                  </select>
+                                </div>
+
+                                <div className="flex space-x-2">
+                                  <Button
+                                    onClick={() =>
+                                      handleSaveCustomQuestion(cat.category)
+                                    }
+                                    disabled={
+                                      !newQuestionText.trim() ||
+                                      isAddingQuestion
+                                    }
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                  >
+                                    {isAddingQuestion
+                                      ? "Saving..."
+                                      : "Save Question"}
+                                  </Button>
+                                  <Button
+                                    onClick={handleCancelAddQuestion}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isAddingQuestion}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+
+                  {/* Edit question form */}
+                  {editingQuestion && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                        <h3 className="text-lg font-semibold mb-4">
+                          Edit Question
+                        </h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Question Text
+                            </label>
+                            <textarea
+                              value={editQuestionText}
+                              onChange={(e) =>
+                                setEditQuestionText(e.target.value)
+                              }
+                              className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              rows={3}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Question Type
+                            </label>
+                            <select
+                              value={editQuestionType}
+                              onChange={(e) =>
+                                setEditQuestionType(
+                                  e.target.value as
+                                    | "single-patient"
+                                    | "all-patient"
+                                )
+                              }
+                              className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="all-patient">All Patients</option>
+                              <option value="single-patient">
+                                Single Patient
+                              </option>
+                            </select>
+                          </div>
+
+                          <div className="flex space-x-2 pt-4">
+                            <Button
+                              onClick={handleSaveEditQuestion}
+                              disabled={
+                                !editQuestionText.trim() || isEditingQuestion
+                              }
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                              {isEditingQuestion ? "Saving..." : "Save Changes"}
+                            </Button>
+                            <Button
+                              onClick={handleCancelEditQuestion}
+                              variant="outline"
+                              disabled={isEditingQuestion}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delete question confirmation modal */}
+                  {deletingQuestion && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                        <h3 className="text-lg font-semibold mb-4">
+                          {deletingQuestion.isAIQuestion
+                            ? "Cannot Delete AI Question"
+                            : "Delete Question"}
+                        </h3>
+                        <div className="space-y-4">
+                          {deletingQuestion.isAIQuestion ? (
+                            <div>
+                              <p className="text-slate-600 mb-4">
+                                AI-generated questions cannot be deleted from
+                                the database. However, you can:
+                              </p>
+                              <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
+                                <li>
+                                  Edit the question to create a custom version
+                                </li>
+                                <li>
+                                  Regenerate all insights to get different AI
+                                  questions
+                                </li>
+                              </ul>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-slate-600 mb-4">
+                                Are you sure you want to delete this custom
+                                question?
+                              </p>
+                              <p className="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded">
+                                "{deletingQuestion.text}"
+                              </p>
+                              <p className="text-xs text-slate-500 mt-2">
+                                This action cannot be undone.
                               </p>
                             </div>
-                            <div className="flex items-center space-x-2 ml-4">
-                              {question.type === "single-patient" && (
-                                <UserIcon className="w-5 h-5 text-slate-400" />
-                              )}
-                              {/* Custom/Modified question indicator */}
-                              {question.isCustom && (
-                                <div className="flex items-center space-x-1 bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
-                                  <SparklesIcon className="w-3 h-3" />
-                                  <span>
-                                    {question.originalQuestionId
-                                      ? "Modified"
-                                      : "Custom"}
-                                  </span>
-                                </div>
-                              )}
-                              {/* Edit button - for all questions */}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditQuestionClick(
-                                    question,
-                                    qIndex,
-                                    cat.category
-                                  );
-                                }}
-                                className="text-slate-400 hover:text-slate-600"
-                              >
-                                <svg
-                                  className="w-4 h-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                  />
-                                </svg>
-                              </Button>
-                              {/* Delete button - for all questions */}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteQuestionClick(
-                                    question,
-                                    qIndex,
-                                    cat.category
-                                  );
-                                }}
-                                className="text-red-400 hover:text-red-600"
-                                title={
-                                  question.isCustom
-                                    ? "Delete custom question"
-                                    : "AI questions cannot be deleted"
-                                }
-                              >
-                                <TrashIcon className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-
-                        {/* Add your own question button */}
-                        <div className="pt-2 border-t border-slate-200">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleAddQuestionClick(cat.category)}
-                            className="w-full text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300 bg-blue-50 hover:bg-blue-100"
-                          >
-                            <SparklesIcon className="w-4 h-4 mr-2" />
-                            Add your own question
-                          </Button>
-                        </div>
-
-                        {/* Add question form */}
-                        {showAddQuestionForm === cat.category && (
-                          <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <div className="space-y-3">
-                              <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                  Your Question
-                                </label>
-                                <textarea
-                                  value={newQuestionText}
-                                  onChange={(e) =>
-                                    setNewQuestionText(e.target.value)
-                                  }
-                                  placeholder="Enter your custom question..."
-                                  className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  rows={3}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                  Question Type
-                                </label>
-                                <select
-                                  value={newQuestionType}
-                                  onChange={(e) =>
-                                    setNewQuestionType(
-                                      e.target.value as
-                                        | "single-patient"
-                                        | "all-patient"
-                                    )
-                                  }
-                                  className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                >
-                                  <option value="all-patient">
-                                    All Patients
-                                  </option>
-                                  <option value="single-patient">
-                                    Single Patient
-                                  </option>
-                                </select>
-                              </div>
-
-                              <div className="flex space-x-2">
-                                <Button
-                                  onClick={() =>
-                                    handleSaveCustomQuestion(cat.category)
-                                  }
-                                  disabled={
-                                    !newQuestionText.trim() || isAddingQuestion
-                                  }
-                                  size="sm"
-                                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                                >
-                                  {isAddingQuestion
-                                    ? "Saving..."
-                                    : "Save Question"}
-                                </Button>
-                                <Button
-                                  onClick={handleCancelAddQuestion}
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isAddingQuestion}
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-
-                {/* Edit question form */}
-                {editingQuestion && (
-                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                      <h3 className="text-lg font-semibold mb-4">
-                        Edit Question
-                      </h3>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Question Text
-                          </label>
-                          <textarea
-                            value={editQuestionText}
-                            onChange={(e) =>
-                              setEditQuestionText(e.target.value)
-                            }
-                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            rows={3}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Question Type
-                          </label>
-                          <select
-                            value={editQuestionType}
-                            onChange={(e) =>
-                              setEditQuestionType(
-                                e.target.value as
-                                  | "single-patient"
-                                  | "all-patient"
-                              )
-                            }
-                            className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="all-patient">All Patients</option>
-                            <option value="single-patient">
-                              Single Patient
-                            </option>
-                          </select>
-                        </div>
-
-                        <div className="flex space-x-2 pt-4">
-                          <Button
-                            onClick={handleSaveEditQuestion}
-                            disabled={
-                              !editQuestionText.trim() || isEditingQuestion
-                            }
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            {isEditingQuestion ? "Saving..." : "Save Changes"}
-                          </Button>
-                          <Button
-                            onClick={handleCancelEditQuestion}
-                            variant="outline"
-                            disabled={isEditingQuestion}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Delete question confirmation modal */}
-                {deletingQuestion && (
-                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                      <h3 className="text-lg font-semibold mb-4">
-                        {deletingQuestion.isAIQuestion
-                          ? "Cannot Delete AI Question"
-                          : "Delete Question"}
-                      </h3>
-                      <div className="space-y-4">
-                        {deletingQuestion.isAIQuestion ? (
-                          <div>
-                            <p className="text-slate-600 mb-4">
-                              AI-generated questions cannot be deleted from the
-                              database. However, you can:
-                            </p>
-                            <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
-                              <li>
-                                Edit the question to create a custom version
-                              </li>
-                              <li>
-                                Regenerate all insights to get different AI
-                                questions
-                              </li>
-                            </ul>
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="text-slate-600 mb-4">
-                              Are you sure you want to delete this custom
-                              question?
-                            </p>
-                            <p className="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded">
-                              "{deletingQuestion.text}"
-                            </p>
-                            <p className="text-xs text-slate-500 mt-2">
-                              This action cannot be undone.
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="flex space-x-2 pt-4">
-                          {!deletingQuestion.isAIQuestion && (
-                            <Button
-                              onClick={handleConfirmDeleteQuestion}
-                              disabled={isDeletingQuestion}
-                              className="bg-red-600 hover:bg-red-700 text-white"
-                            >
-                              {isDeletingQuestion
-                                ? "Deleting..."
-                                : "Delete Question"}
-                            </Button>
                           )}
-                          <Button
-                            onClick={handleCancelDeleteQuestion}
-                            variant="outline"
-                            disabled={isDeletingQuestion}
-                          >
-                            {deletingQuestion.isAIQuestion ? "Close" : "Cancel"}
-                          </Button>
+
+                          <div className="flex space-x-2 pt-4">
+                            {!deletingQuestion.isAIQuestion && (
+                              <Button
+                                onClick={handleConfirmDeleteQuestion}
+                                disabled={isDeletingQuestion}
+                                className="bg-red-600 hover:bg-red-700 text-white"
+                              >
+                                {isDeletingQuestion
+                                  ? "Deleting..."
+                                  : "Delete Question"}
+                              </Button>
+                            )}
+                            <Button
+                              onClick={handleCancelDeleteQuestion}
+                              variant="outline"
+                              disabled={isDeletingQuestion}
+                            >
+                              {deletingQuestion.isAIQuestion
+                                ? "Close"
+                                : "Cancel"}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )
         );
       case "sqlGenerated":

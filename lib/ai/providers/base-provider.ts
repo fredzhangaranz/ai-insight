@@ -99,7 +99,14 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
           console.log("Attempting to extract JSON from response...");
           return JSON.parse(jsonMatch[0]) as T;
         } else {
-          throw new Error("No JSON object found in response");
+          // If no JSON found, this might be a local LLM that ignored JSON instructions
+          // Try to re-prompt with a more explicit JSON request
+          console.log(
+            "No JSON found in response, attempting to re-prompt for JSON format..."
+          );
+          throw new Error(
+            "AI returned natural language instead of JSON format"
+          );
         }
       } catch (extractError) {
         console.error("Failed to extract JSON from response:", extractError);
@@ -444,14 +451,35 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         schemaContext
       );
       console.log("AI Prompt for sub-questions generation:", prompt);
-      const aiResponse = await this._executeModel(
+
+      let aiResponse = await this._executeModel(
         prompt,
         "Please break down this complex question into incremental sub-questions."
       );
 
-      const parsedResponse = await this.parseJsonResponse<any>(
-        aiResponse.responseText
-      );
+      let parsedResponse: any;
+      try {
+        parsedResponse = await this.parseJsonResponse<any>(
+          aiResponse.responseText
+        );
+      } catch (jsonError) {
+        // If JSON parsing fails, try a more explicit JSON request
+        console.log(
+          "First attempt failed, trying with more explicit JSON instruction..."
+        );
+        const jsonPrompt =
+          prompt +
+          "\n\nIMPORTANT: You must respond with ONLY a valid JSON object. Do not include any explanatory text, markdown, or natural language. The response must start with { and end with }.";
+
+        aiResponse = await this._executeModel(
+          jsonPrompt,
+          "Respond with ONLY a JSON object containing the sub-questions breakdown. No other text."
+        );
+
+        parsedResponse = await this.parseJsonResponse<any>(
+          aiResponse.responseText
+        );
+      }
       if (!validateFunnelSubquestionsResponse(parsedResponse)) {
         throw new Error("AI returned invalid sub-questions format");
       }

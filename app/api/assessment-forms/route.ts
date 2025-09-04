@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
           name,
           definitionVersion,
           ROW_NUMBER() OVER (PARTITION BY assessmentTypeId ORDER BY definitionVersion DESC) as rn
-        FROM SilhouetteAIDashboard.rpt.AssessmentTypeVersion
+        FROM rpt.AssessmentTypeVersion
       )
       SELECT 
         id,

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { BaseProvider } from "./base-provider";
+import { AIConfigLoader } from "../../config/ai-config-loader";
 
 /**
  * An AI provider that uses Anthropic's Claude models to power the query funnel.
@@ -10,11 +11,29 @@ export class ClaudeProvider extends BaseProvider {
   constructor(modelId: string) {
     super(modelId);
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error("Anthropic API key is not configured");
+    this.initializeAnthropic();
+  }
+
+  private async initializeAnthropic(): Promise<void> {
+    const configLoader = AIConfigLoader.getInstance();
+    const { providers } = await configLoader.getConfiguration();
+
+    const anthropicConfig = providers.find(
+      (p) => p.providerType === "anthropic"
+    );
+
+    if (
+      !anthropicConfig ||
+      !anthropicConfig.isEnabled ||
+      !anthropicConfig.configData.apiKey
+    ) {
+      throw new Error(
+        "MisconfiguredProvider: Anthropic API key missing or provider disabled"
+      );
     }
+
     this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: anthropicConfig.configData.apiKey,
     });
   }
 

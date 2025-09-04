@@ -55,10 +55,10 @@ export async function GET(
 
     const fieldsQuery = `
       SELECT att.name, att.dataType, att.id as AttributeTypeID
-      FROM SilhouetteAIDashboard.dbo.AssessmentTypeVersion atv
-      INNER JOIN SilhouetteAIDashboard.dbo.AttributeSetAssessmentTypeVersion asatv ON atv.id = asatv.assessmentTypeVersionFk
-      INNER JOIN SilhouetteAIDashboard.dbo.AttributeSet ats ON asatv.attributeSetFk = ats.id
-      INNER JOIN SilhouetteAIDashboard.dbo.AttributeType att ON ats.id = att.attributeSetFk
+      FROM dbo.AssessmentTypeVersion atv
+      INNER JOIN dbo.AttributeSetAssessmentTypeVersion asatv ON atv.id = asatv.assessmentTypeVersionFk
+      INNER JOIN dbo.AttributeSet ats ON asatv.attributeSetFk = ats.id
+      INNER JOIN dbo.AttributeType att ON ats.id = att.attributeSetFk
       WHERE atv.id = @id AND atv.isDeleted = 0 AND asatv.isDeleted = 0 AND ats.isDeleted = 0 AND att.isDeleted = 0
       ORDER BY asatv.orderIndex, att.orderIndex;
     `;
@@ -97,7 +97,7 @@ export async function GET(
       if (fieldType === "SingleSelectList" || fieldType === "MultiSelectList") {
         const optionsQuery = `
           SELECT [text] 
-          FROM SilhouetteAIDashboard.dbo.AttributeLookup 
+          FROM dbo.AttributeLookup 
           WHERE attributeTypeFk = @attributeTypeFk AND isDeleted = 0
           ORDER BY orderIndex;
         `;

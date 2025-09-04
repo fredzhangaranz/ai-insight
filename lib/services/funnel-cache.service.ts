@@ -71,7 +71,7 @@ export async function getOrGenerateSubQuestions(
     `No cache found, generating new sub-questions for: "${originalQuestion}" using model ${modelId}`
   );
 
-  const provider = getAIProvider(modelId);
+  const provider = await getAIProvider(modelId);
   const aiResponse = await provider.generateSubQuestions({
     originalQuestion,
     formDefinition,

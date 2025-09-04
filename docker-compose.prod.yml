@@ -16,6 +16,11 @@ services:
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/app/credentials/google-credentials.json}
       - AI_MODEL_NAME=${AI_MODEL_NAME:-claude-3-5-sonnet-latest}
+      # Open WebUI Configuration (optional)
+      - OPENWEBUI_BASE_URL=${OPENWEBUI_BASE_URL}
+      - OPENWEBUI_API_KEY=${OPENWEBUI_API_KEY}
+      - OPENWEBUI_MODEL_ID=${OPENWEBUI_MODEL_ID}
+      - OPENWEBUI_TIMEOUT=${OPENWEBUI_TIMEOUT}
     env_file:
       - .env.production
     volumes:
@@ -24,6 +29,13 @@ services:
     restart: unless-stopped
     networks:
       - insightgen_net
+    command: >
+      sh -c "
+        echo 'Running AI config seeding...' &&
+        node scripts/seed-ai-config.js &&
+        echo 'Starting application...' &&
+        npm start
+      "
 
   # Optional: Include database if customer doesn't have one
   db:

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { ClipboardDocumentIcon } from "@/components/heroicons";
 import AnalysisPage from "./components/analysis-page";
 import { LoadingDots } from "./components/loading-dots";
+import { useLLMConfig } from "@/lib/hooks/use-llm-config";
 
 // Define a type for our assessment form data
 type AssessmentForm = {
@@ -25,11 +27,34 @@ type SelectedForm = {
 type PageState = "form-selection" | "analysis";
 
 export default function HomePage() {
+  const router = useRouter();
+  const { setupStatus, isSetupLoading, checkSetupStatus } = useLLMConfig();
+
   const [selectedForm, setSelectedForm] = useState<SelectedForm>(null);
   const [pageState, setPageState] = useState<PageState>("form-selection");
   const [forms, setForms] = useState<AssessmentForm[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Check setup status on component mount
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        await checkSetupStatus();
+      } catch (error) {
+        console.error("Error checking setup status:", error);
+      }
+    };
+
+    checkSetup();
+  }, [checkSetupStatus]);
+
+  // Redirect to setup if required
+  useEffect(() => {
+    if (setupStatus && setupStatus.isSetupRequired && !isSetupLoading) {
+      router.push("/setup");
+    }
+  }, [setupStatus, isSetupLoading, router]);
 
   useEffect(() => {
     const fetchAssessmentForms = async () => {
@@ -48,8 +73,11 @@ export default function HomePage() {
       }
     };
 
-    fetchAssessmentForms();
-  }, []);
+    // Only fetch forms if setup is not required
+    if (setupStatus && !setupStatus.isSetupRequired) {
+      fetchAssessmentForms();
+    }
+  }, [setupStatus]);
 
   // If a form is selected, render the AnalysisPage with both IDs
   if (selectedForm) {
@@ -63,9 +91,33 @@ export default function HomePage() {
     );
   }
 
+  // Show loading while checking setup status
+  if (isSetupLoading || (setupStatus && setupStatus.isSetupRequired)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <LoadingDots />
+          <p className="text-slate-600 mt-4">
+            {isSetupLoading
+              ? "Checking setup status..."
+              : "Redirecting to setup..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-12">
+        <div className="flex justify-end mb-4">
+          <a
+            href="/admin"
+            className="text-sm text-slate-600 hover:text-slate-900 underline"
+          >
+            Admin Panel
+          </a>
+        </div>
         <h1 className="text-4xl font-bold text-slate-900 mb-4">
           Select an Assessment Form to Analyze
         </h1>

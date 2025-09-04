@@ -9,6 +9,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-}
+  // Ensure consistent port in development
+  experimental: {
+    serverComponentsExternalPackages: [],
+  },
+};
 
-export default nextConfig
+export default nextConfig;

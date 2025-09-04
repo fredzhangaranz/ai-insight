@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3005",
     "build": "next build",
     "start": "next start -p 3005",
     "lint": "next lint",
@@ -11,7 +11,8 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "migrate": "node scripts/run-migrations.js",
-    "check-tables": "node scripts/check-tables.js"
+    "check-tables": "node scripts/check-tables.js",
+    "seed-ai-config": "node scripts/seed-ai-config.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.66",
@@ -28,6 +29,7 @@
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-toast": "^1.1.5",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^20",

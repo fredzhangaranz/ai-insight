@@ -1,5 +1,6 @@
 import { BaseProvider } from "@/lib/ai/providers/base-provider";
 import { VertexAI } from "@google-cloud/vertexai";
+import { AIConfigLoader } from "@/lib/config/ai-config-loader";
 
 /**
  * An AI provider that uses Google's Vertex AI Gemini models to power the query funnel.
@@ -10,20 +11,25 @@ export class GeminiProvider extends BaseProvider {
   constructor(modelId: string) {
     super(modelId);
 
-    // Check for required environment variables
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
-    const location = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
-    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    this.initializeVertexAI();
+  }
+
+  private async initializeVertexAI(): Promise<void> {
+    const configLoader = AIConfigLoader.getInstance();
+    const { providers } = await configLoader.getConfiguration();
+
+    const geminiConfig = providers.find((p) => p.providerType === "google");
+
+    if (!geminiConfig || !geminiConfig.isEnabled) {
+      throw new Error("Google Vertex AI is not configured");
+    }
+
+    const projectId = geminiConfig.configData.projectId;
+    const location = geminiConfig.configData.location;
 
     if (!projectId) {
       throw new Error(
-        "Google Cloud Project ID (GOOGLE_CLOUD_PROJECT) is not configured in .env.local"
-      );
-    }
-
-    if (!credentialsPath) {
-      throw new Error(
-        "Google Application Credentials (GOOGLE_APPLICATION_CREDENTIALS) is not configured in .env.local"
+        "MisconfiguredProvider: Google projectId missing in provider configuration"
       );
     }
 
