@@ -12,6 +12,13 @@ interface ChartGenerationModalProps {
   onClose: () => void;
   queryResults: any[];
   subQuestion: string;
+  sql?: string; // for saving
+  assessmentFormId?: string; // for scope detection
+  canSave?: boolean; // gated by NEXT_PUBLIC flag
+  onRequestSave?: (payload: {
+    chartType: ChartType;
+    chartMapping: Record<string, string> | {};
+  }) => void;
 }
 
 type ChartMapping = {
@@ -32,6 +39,10 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
   onClose,
   queryResults,
   subQuestion,
+  sql,
+  assessmentFormId,
+  canSave = false,
+  onRequestSave,
 }) => {
   const { handleError } = useErrorHandler();
 
@@ -149,14 +160,32 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
     }
   };
 
-  const handleSaveChart = () => {
-    // TODO: Save chart configuration to database
-    console.log("Saving chart configuration:", {
-      chartType: selectedChartType,
-      mapping: chartMapping,
-      data: chartData,
-    });
-    onClose();
+  const handleSaveChart = async () => {
+    if (!canSave) {
+      onClose();
+      return;
+    }
+    try {
+      if (!selectedChartType) {
+        throw new Error("Please select a chart type");
+      }
+      if (selectedChartType !== "table") {
+        const required = getRequiredFields(selectedChartType);
+        const missing = required.filter((f) => !chartMapping[f]);
+        if (missing.length) {
+          throw new Error(
+            `Please map all required fields before saving: ${missing.join(", ")}`
+          );
+        }
+      }
+      onClose();
+      onRequestSave?.({
+        chartType: selectedChartType,
+        chartMapping: selectedChartType === "table" ? {} : chartMapping,
+      });
+    } catch (err: any) {
+      handleError(err, "Save Insight");
+    }
   };
 
   if (!isOpen) return null;
@@ -388,7 +417,7 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
                 onClick={handleSaveChart}
                 className="px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600"
               >
-                Save Chart
+                Save Insight
               </button>
             )}
           </div>

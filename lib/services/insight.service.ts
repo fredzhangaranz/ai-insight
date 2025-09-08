@@ -1,0 +1,255 @@
+import { Pool } from "pg";
+import { NextResponse } from "next/server";
+import { getInsightGenDbPool, getSilhouetteDbPool } from "@/lib/db";
+import { shapeDataForChart } from "@/lib/data-shaper";
+import type { ChartType } from "@/lib/chart-contracts";
+
+export type InsightScope = "form" | "schema";
+
+export interface SavedInsight {
+  id: number;
+  name: string;
+  question: string;
+  scope: InsightScope;
+  formId?: string | null;
+  sql: string;
+  chartType: ChartType;
+  chartMapping: any;
+  chartOptions?: any;
+  description?: string | null;
+  tags?: string[] | null;
+  isActive: boolean;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateInsightInput {
+  name: string;
+  question: string;
+  scope: InsightScope;
+  formId?: string | null;
+  sql: string;
+  chartType: ChartType;
+  chartMapping: any;
+  chartOptions?: any;
+  description?: string | null;
+  tags?: string[] | null;
+  createdBy?: string | null;
+}
+
+export interface UpdateInsightInput extends Partial<CreateInsightInput> {}
+
+function ensureApiEnabled() {
+  if (process.env.CHART_INSIGHTS_API_ENABLED !== "true") {
+    throw new Error("ChartInsightsAPI:Disabled");
+  }
+}
+
+function validateCreate(input: CreateInsightInput) {
+  if (!input.name?.trim()) throw new Error("Validation: name required");
+  if (!input.question?.trim()) throw new Error("Validation: question required");
+  if (!input.sql?.trim()) throw new Error("Validation: sql required");
+  if (!input.scope || !["form", "schema"].includes(input.scope))
+    throw new Error("Validation: invalid scope");
+  if (!input.chartType) throw new Error("Validation: chartType required");
+  // Allow empty mapping for table type; require mapping for others
+  if (input.chartType !== "table" && !input.chartMapping) {
+    throw new Error("Validation: chartMapping required for non-table charts");
+  }
+  if (input.scope === "form" && !input.formId)
+    throw new Error("Validation: formId required for scope=form");
+  // Basic SQL safety: only SELECT/WITH
+  const upper = input.sql.trim().toUpperCase();
+  if (!upper.startsWith("SELECT") && !upper.startsWith("WITH")) {
+    throw new Error("Validation: only SELECT/WITH allowed");
+  }
+}
+
+function validateAndFixQuery(sql: string): string {
+  // Fix ORDER BY alias referring to CASE alias
+  const orderByAliasRegex = /ORDER BY\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i;
+  const match = sql.match(orderByAliasRegex);
+  if (match) {
+    const alias = match[1];
+    const caseRegex = new RegExp(`CASE[\\s\\S]*?END AS ${alias}`, "i");
+    const caseMatch = sql.match(caseRegex);
+    if (caseMatch) {
+      sql = sql.replace(
+        orderByAliasRegex,
+        `ORDER BY ${caseMatch[0].replace(` AS ${alias}`, "")}`
+      );
+    }
+  }
+  // Prefix common tables with rpt.
+  const tableRegex = /(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
+  sql = sql.replace(tableRegex, "rpt.$1");
+  // Add TOP limit if not present
+  if (!sql.match(/\bTOP\s+\d+\b/i) && !sql.match(/\bOFFSET\b/i)) {
+    sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+  }
+  return sql;
+}
+
+export class InsightService {
+  private static instance: InsightService;
+  static getInstance(): InsightService {
+    if (!InsightService.instance) InsightService.instance = new InsightService();
+    return InsightService.instance;
+  }
+
+  async list(params: {
+    scope?: InsightScope;
+    formId?: string;
+    search?: string;
+    activeOnly?: boolean;
+  }): Promise<SavedInsight[]> {
+    ensureApiEnabled();
+    const pool = await getInsightGenDbPool();
+    const conds: string[] = [];
+    const values: any[] = [];
+    let i = 1;
+    if (params.activeOnly !== false) conds.push(`"isActive" = TRUE`);
+    if (params.scope) {
+      conds.push(`scope = $${i++}`);
+      values.push(params.scope);
+    }
+    if (params.formId) {
+      conds.push(`"formId" = $${i++}`);
+      values.push(params.formId);
+    }
+    if (params.search) {
+      conds.push(`(name ILIKE $${i} OR question ILIKE $${i})`);
+      values.push(`%${params.search}%`);
+      i++;
+    }
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+    const sql = `SELECT id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" ${where} ORDER BY "updatedAt" DESC LIMIT 100`;
+    const res = await pool.query(sql, values);
+    return res.rows as any;
+  }
+
+  async getById(id: number): Promise<SavedInsight | null> {
+    ensureApiEnabled();
+    const pool = await getInsightGenDbPool();
+    const res = await pool.query(
+      `SELECT id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" WHERE id = $1`,
+      [id]
+    );
+    return res.rows[0] || null;
+  }
+
+  async create(input: CreateInsightInput): Promise<SavedInsight> {
+    ensureApiEnabled();
+    validateCreate(input);
+    const pool = await getInsightGenDbPool();
+    const res = await pool.query(
+      `INSERT INTO "SavedInsights" (name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "createdBy")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
+      [
+        input.name,
+        input.question,
+        input.scope,
+        input.formId || null,
+        input.sql,
+        input.chartType,
+        input.chartType === "table"
+          ? JSON.stringify(input.chartMapping || {})
+          : JSON.stringify(input.chartMapping),
+        input.chartOptions ? JSON.stringify(input.chartOptions) : null,
+        input.description || null,
+        input.tags ? JSON.stringify(input.tags) : null,
+        input.createdBy || null,
+      ]
+    );
+    return res.rows[0] as any;
+  }
+
+  async update(id: number, input: UpdateInsightInput): Promise<SavedInsight | null> {
+    ensureApiEnabled();
+    const pool = await getInsightGenDbPool();
+    const fields: string[] = [];
+    const values: any[] = [];
+    let i = 1;
+    if (input.name !== undefined) {
+      fields.push(`name = $${i++}`);
+      values.push(input.name);
+    }
+    if (input.question !== undefined) {
+      fields.push(`question = $${i++}`);
+      values.push(input.question);
+    }
+    if (input.scope !== undefined) {
+      fields.push(`scope = $${i++}`);
+      values.push(input.scope);
+    }
+    if (input.formId !== undefined) {
+      fields.push(`"formId" = $${i++}`);
+      values.push(input.formId);
+    }
+    if (input.sql !== undefined) {
+      // enforce read-only
+      const upper = input.sql.trim().toUpperCase();
+      if (!upper.startsWith("SELECT") && !upper.startsWith("WITH")) {
+        throw new Error("Validation: only SELECT/WITH allowed");
+      }
+      fields.push(`sql = $${i++}`);
+      values.push(input.sql);
+    }
+    if (input.chartType !== undefined) {
+      fields.push(`"chartType" = $${i++}`);
+      values.push(input.chartType);
+    }
+    if (input.chartMapping !== undefined) {
+      fields.push(`"chartMapping" = $${i++}`);
+      values.push(JSON.stringify(input.chartMapping));
+    }
+    if (input.chartOptions !== undefined) {
+      fields.push(`"chartOptions" = $${i++}`);
+      values.push(input.chartOptions ? JSON.stringify(input.chartOptions) : null);
+    }
+    if (input.description !== undefined) {
+      fields.push(`description = $${i++}`);
+      values.push(input.description);
+    }
+    if (input.tags !== undefined) {
+      fields.push(`tags = $${i++}`);
+      values.push(input.tags ? JSON.stringify(input.tags) : null);
+    }
+    if (input.createdBy !== undefined) {
+      fields.push(`"createdBy" = $${i++}`);
+      values.push(input.createdBy);
+    }
+    if (!fields.length) return (await this.getById(id));
+    values.push(id);
+    const res = await pool.query(
+      `UPDATE "SavedInsights" SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
+      values
+    );
+    return res.rows[0] || null;
+  }
+
+  async softDelete(id: number): Promise<void> {
+    ensureApiEnabled();
+    const pool = await getInsightGenDbPool();
+    await pool.query(`UPDATE "SavedInsights" SET "isActive" = FALSE WHERE id = $1`, [id]);
+  }
+
+  async execute(id: number): Promise<{ rows: any[]; chart: { chartType: ChartType; data: any } } | null> {
+    ensureApiEnabled();
+    const insight = await this.getById(id);
+    if (!insight || !insight.isActive) return null;
+    const sqlText = validateAndFixQuery(insight.sql);
+    const pool = await getSilhouetteDbPool();
+    const req = pool.request();
+    const result = await req.query(sqlText);
+    const rows = result.recordset || [];
+    const data = insight.chartType === "table"
+      ? rows
+      : shapeDataForChart(rows, { chartType: insight.chartType, mapping: insight.chartMapping, options: insight.chartOptions }, insight.chartType);
+    return { rows, chart: { chartType: insight.chartType, data } };
+  }
+}
+
+export const insightService = InsightService.getInstance();

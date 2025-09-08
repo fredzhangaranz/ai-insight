@@ -8,10 +8,12 @@ import {
 import { shapeDataForChart } from "@/lib/data-shaper";
 import type { ChartType } from "@/lib/chart-contracts";
 import { ChartGenerationModal } from "./ChartGenerationModal";
+import { SaveInsightDialog, type SaveInsightInitial } from "@/components/insights/SaveInsightDialog";
 
 interface FunnelPanelProps {
   subQuestion: SubQuestion;
   assessmentFormDefinition?: any;
+  assessmentFormId?: string;
   patientId?: string | null;
   onEditQuestion?: (questionId: string, newText: string) => void;
   onEditSql?: (
@@ -34,6 +36,7 @@ interface FunnelPanelProps {
 export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   subQuestion,
   assessmentFormDefinition,
+  assessmentFormId,
   patientId,
   onEditQuestion,
   onEditSql,
@@ -85,9 +88,13 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   );
   const [chartData, setChartData] = useState<ChartDataType | null>(null);
   const [chartViewMode, setChartViewMode] = useState<"chart" | "data">("data");
+  const [lastChartMapping, setLastChartMapping] = useState<Record<string, any> | null>(null);
 
   // Manual chart generation modal state
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
+  // Save Insight dialog state
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [saveInitial, setSaveInitial] = useState<SaveInsightInitial | null>(null);
 
   // --- Enrichment (Lean MVP: AI-first Field Inclusion) ---
   const ALLOWED_FIELDS = [
@@ -164,6 +171,32 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     } catch (error: any) {
       handleError(error, "Mark Complete");
     }
+  };
+
+  const openSaveDialog = (override?: { chartType?: ChartType; chartMapping?: any }) => {
+    if (!subQuestion.sqlQuery) {
+      handleError(new Error("No SQL to save"), "Save Insight");
+      return;
+    }
+    const ct: ChartType = override?.chartType || (selectedChartType as ChartType) || "table";
+    const mapping = override?.chartMapping || (ct === "table" ? {} : lastChartMapping);
+    if (ct !== "table" && !mapping) {
+      handleError(new Error("Missing chart mapping"), "Save Insight");
+      return;
+    }
+    const initial: SaveInsightInitial = {
+      name: subQuestion.text.slice(0, 100),
+      question: subQuestion.text,
+      scope: assessmentFormId ? "form" : "schema",
+      formId: assessmentFormId || null,
+      sql: subQuestion.sqlQuery,
+      chartType: ct,
+      chartMapping: mapping || {},
+      chartOptions: undefined,
+      tags: [],
+    };
+    setSaveInitial(initial);
+    setIsSaveDialogOpen(true);
   };
 
   const handleQuestionSave = async () => {
@@ -486,6 +519,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   const generateChartData = async (chartType: ChartType, mapping: any) => {
     if (!queryResult || !mapping) {
       setChartData(null);
+      setLastChartMapping(null);
       return;
     }
 
@@ -493,6 +527,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       if (chartType === "table") {
         // For table type, use raw data directly
         setChartData(queryResult);
+        setLastChartMapping(null);
       } else {
         // For other chart types, use the data shaper
         const shapedData = shapeDataForChart(
@@ -504,6 +539,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           chartType
         );
         setChartData(shapedData);
+        setLastChartMapping(mapping);
       }
     } catch (error: any) {
       console.error("Error shaping chart data:", error);
@@ -1172,8 +1208,18 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         <div>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium text-gray-700">Results</h3>
-            {queryResult && queryResult.length > 0 && (
-              <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
+              {typeof window !== "undefined" && process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true" && subQuestion.sqlQuery && (
+                <button
+                  onClick={() => openSaveDialog()}
+                  className="px-2.5 py-1 text-xs bg-green-600 text-white rounded"
+                  title="Save this sub-question as a reusable insight"
+                >
+                  Save Insight
+                </button>
+              )}
+              {queryResult && queryResult.length > 0 && (
+              <>
                 <span className="text-xs text-gray-500">View:</span>
                 <div className="flex bg-gray-200 rounded-md p-1">
                   <button
@@ -1197,8 +1243,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                     Table
                   </button>
                 </div>
-              </div>
-            )}
+              </>
+              )}
+            </div>
           </div>
           {isExecuting && (
             <div className="text-xs text-blue-600 mb-2 flex items-center space-x-2">
@@ -1370,6 +1417,16 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                             className="w-full h-full"
                           />
                         </div>
+                        {typeof window !== "undefined" && process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true" && (
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              className="px-3 py-1.5 text-xs bg-green-600 text-white rounded"
+                              onClick={() => openSaveDialog()}
+                            >
+                              Save Insight
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1411,6 +1468,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
             onClose={() => setIsChartModalOpen(false)}
             queryResults={queryResult || []}
             subQuestion={subQuestion.text}
+            sql={subQuestion.sqlQuery || undefined}
+            assessmentFormId={assessmentFormId}
+            canSave={typeof window !== "undefined" && process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true"}
+            onRequestSave={(payload) => {
+              openSaveDialog({ chartType: payload.chartType as ChartType, chartMapping: payload.chartMapping });
+            }}
           />
 
           {/* Mark as Complete button below Results */}
@@ -1438,8 +1501,16 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
               </button>
             </div>
           )}
-        </div>
       </div>
     </div>
-  );
+      {isSaveDialogOpen && saveInitial && (
+        <SaveInsightDialog
+          open={isSaveDialogOpen}
+          onClose={() => setIsSaveDialogOpen(false)}
+          initial={saveInitial}
+          onSaved={() => handleSuccess("Insight saved", "Save Insight")}
+        />
+      )}
+  </div>
+);
 };

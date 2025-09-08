@@ -55,6 +55,14 @@ export default function RootLayout({
                     >
                       Home
                     </a>
+                    {process.env.CHART_INSIGHTS_ENABLED === "true" && (
+                      <a
+                        href="/insights"
+                        className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
+                      >
+                        Insights
+                      </a>
+                    )}
                     <a
                       href="/admin"
                       className="text-sm text-slate-600 hover:text-slate-900 transition-colors"

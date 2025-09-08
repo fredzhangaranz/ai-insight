@@ -692,6 +692,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
               <FunnelPanel
                 subQuestion={currentQuestion}
                 assessmentFormDefinition={assessmentFormDefinition}
+                assessmentFormId={assessmentFormId}
                 patientId={patientId}
                 onEditQuestion={handleEditQuestion}
                 onEditSql={handleEditSql}
