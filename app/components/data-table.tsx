@@ -11,9 +11,9 @@ export function DataTable({ data, className = "" }: DataTableProps) {
   const columns = Object.keys(data[0]);
 
   return (
-    <div className={`overflow-x-auto ${className}`}>
+    <div className={`w-full h-full overflow-auto ${className}`}>
       <table className="w-full text-sm">
-        <thead>
+        <thead className="sticky top-0 bg-slate-50 z-10">
           <tr className="border-b border-slate-200">
             {columns.map((column) => (
               <th

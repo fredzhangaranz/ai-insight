@@ -24,6 +24,7 @@ Source: Aligns with AGENTS.md and .cursor/rules/70-implementation-plan.mdc
 - Status: planned
 
 Deliverables
+
 - DB
   - Migration 008: `SavedInsights` table in Postgres (JSONB for mapping/options; soft delete via `isActive`).
   - Scripts: update `scripts/run-migrations.js` migration list.
@@ -54,6 +55,7 @@ Deliverables
 - Status: planned
 
 Deliverables
+
 - DB
   - Migration 009: `Dashboards` table with `layout` and `panels` JSONB.
 - API
@@ -79,6 +81,7 @@ Deliverables
 - Status: planned
 
 Deliverables
+
 - API
   - `GET /api/stats/overview` → `{ formsActive, insightsTotal }`
 - UI (flagged)
@@ -98,6 +101,7 @@ Deliverables
 - Status: planned
 
 Deliverables
+
 - UI
   - Insights “New” CTA: choose Form‑specific vs Database (no form);
   - Wire into existing funnel component with mode prop.
@@ -119,6 +123,7 @@ Deliverables
 - Status: planned
 
 Deliverables
+
 - API
   - Extend list filters (scope, formId, tags, search text).
   - Optional cache layer w/ TTL (in‑memory first; env‑tunable).
@@ -128,13 +133,13 @@ Deliverables
 ## Shared Details
 
 - Data Definitions (from design):
-  - SavedInsight: { id, name, question, scope, formId, sql, chartType, chartMapping JSON, chartOptions JSON, tags JSON, isActive, createdBy, createdAt, updatedAt }
+  - SavedInsight: { id, name, question, scope, assessmentFormVersionFk, sql, chartType, chartMapping JSON, chartOptions JSON, tags JSON, isActive, createdBy, createdAt, updatedAt }
   - Dashboard: { id, name, layout JSON, panels JSON, createdBy, createdAt, updatedAt }
 - Execution Flow:
-  1) Load insight from Postgres.
-  2) Execute `sql` against MS SQL via `getSilhouetteDbPool()`.
-  3) Shape rows: `shapeDataForChart(rows, chartMapping, chartType)`.
-  4) Return `{ rows, chart: { chartType, data } }`.
+  1. Load insight from Postgres.
+  2. Execute `sql` against MS SQL via `getSilhouetteDbPool()`.
+  3. Shape rows: `shapeDataForChart(rows, chartMapping, chartType)`.
+  4. Return `{ rows, chart: { chartType, data } }`.
 - Env & Flags:
   - `INSIGHT_GEN_DB_URL` (Postgres) — already used by migrations.
   - `SILHOUETTE_DB_URL` (MS SQL) — already present.
@@ -143,8 +148,8 @@ Deliverables
 ## Migrations (DDL Sketch)
 
 - 008_create_saved_insights.sql
-  - `SavedInsights(id SERIAL PK, name VARCHAR(255) NOT NULL, question TEXT NOT NULL, scope VARCHAR(10) NOT NULL CHECK (scope IN ('form','schema')), formId UUID NULL, sql TEXT NOT NULL, chartType VARCHAR(20) NOT NULL, chartMapping JSONB NOT NULL, chartOptions JSONB NULL, description TEXT NULL, tags JSONB NULL, isActive BOOLEAN NOT NULL DEFAULT TRUE, createdBy VARCHAR(255) NULL, createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(), updatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW())`
-  - Indexes: `idx_saved_insights_active`, `idx_saved_insights_scope_form`, GIN on `tags`.
+  - `SavedInsights(id SERIAL PK, name VARCHAR(255) NOT NULL, question TEXT NOT NULL, scope VARCHAR(10) NOT NULL CHECK (scope IN ('form','schema')), assessmentFormVersionFk UUID NULL, sql TEXT NOT NULL, chartType VARCHAR(20) NOT NULL, chartMapping JSONB NOT NULL, chartOptions JSONB NULL, description TEXT NULL, tags JSONB NULL, isActive BOOLEAN NOT NULL DEFAULT TRUE, createdBy VARCHAR(255) NULL, createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(), updatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW())`
+  - Indexes: `idx_saved_insights_active`, `idx_saved_insights_scope_form_fk`, GIN on `tags`.
 - 009_create_dashboards.sql
   - `Dashboards(id SERIAL PK, name VARCHAR(255) NOT NULL, layout JSONB NOT NULL, panels JSONB NOT NULL, createdBy VARCHAR(255) NULL, createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(), updatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW())`
 
@@ -159,4 +164,3 @@ Deliverables
 - Run migrations: `pnpm migrate` (uses `scripts/run-migrations.js`).
 - Verify env: `INSIGHT_GEN_DB_URL` and `SILHOUETTE_DB_URL` set.
 - Observability: log errors at API boundaries; mask SQL in user‑facing errors.
-

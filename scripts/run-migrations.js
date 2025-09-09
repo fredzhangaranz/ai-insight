@@ -35,6 +35,8 @@ const migrations = [
   "006_add_original_question_id_to_custom_questions.sql",
   "007_create_ai_config_table.sql",
   "008_create_saved_insights.sql",
+  "009_create_dashboards.sql",
+  "010_rename_formid_in_saved_insights.sql",
 ];
 
 async function runMigrations() {

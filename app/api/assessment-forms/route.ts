@@ -21,25 +21,15 @@ export async function GET(req: NextRequest) {
   try {
     const pool = await getSilhouetteDbPool();
 
-    // Get latest version of each assessment type
+    // Get all versions of assessment types (not just latest)
     const query = `
-      WITH LatestVersions AS (
-        SELECT 
-          id,
-          assessmentTypeId,
-          name,
-          definitionVersion,
-          ROW_NUMBER() OVER (PARTITION BY assessmentTypeId ORDER BY definitionVersion DESC) as rn
-        FROM rpt.AssessmentTypeVersion
-      )
       SELECT 
         id,
         assessmentTypeId,
         name,
         definitionVersion
-      FROM LatestVersions
-      WHERE rn = 1
-      ORDER BY name;
+      FROM rpt.AssessmentTypeVersion
+      ORDER BY name, definitionVersion DESC;
     `;
 
     console.log("Executing query:", query);

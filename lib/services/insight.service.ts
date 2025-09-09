@@ -11,6 +11,7 @@ export interface SavedInsight {
   name: string;
   question: string;
   scope: InsightScope;
+  // Expose as formId for UI compatibility
   formId?: string | null;
   sql: string;
   chartType: ChartType;
@@ -28,7 +29,7 @@ export interface CreateInsightInput {
   name: string;
   question: string;
   scope: InsightScope;
-  formId?: string | null;
+  assessmentFormVersionFk?: string | null;
   sql: string;
   chartType: ChartType;
   chartMapping: any;
@@ -57,8 +58,14 @@ function validateCreate(input: CreateInsightInput) {
   if (input.chartType !== "table" && !input.chartMapping) {
     throw new Error("Validation: chartMapping required for non-table charts");
   }
-  if (input.scope === "form" && !input.formId)
-    throw new Error("Validation: formId required for scope=form");
+  if (input.scope === "form") {
+    const formFk = (input as any).assessmentFormVersionFk ?? (input as any).formId;
+    if (!formFk) {
+      throw new Error(
+        "Validation: assessmentFormVersionFk (or formId) required for scope=form"
+      );
+    }
+  }
   // Basic SQL safety: only SELECT/WITH
   const upper = input.sql.trim().toUpperCase();
   if (!upper.startsWith("SELECT") && !upper.startsWith("WITH")) {
@@ -82,7 +89,8 @@ function validateAndFixQuery(sql: string): string {
     }
   }
   // Prefix common tables with rpt.
-  const tableRegex = /(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
+  const tableRegex =
+    /(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
   sql = sql.replace(tableRegex, "rpt.$1");
   // Add TOP limit if not present
   if (!sql.match(/\bTOP\s+\d+\b/i) && !sql.match(/\bOFFSET\b/i)) {
@@ -94,7 +102,8 @@ function validateAndFixQuery(sql: string): string {
 export class InsightService {
   private static instance: InsightService;
   static getInstance(): InsightService {
-    if (!InsightService.instance) InsightService.instance = new InsightService();
+    if (!InsightService.instance)
+      InsightService.instance = new InsightService();
     return InsightService.instance;
   }
 
@@ -115,7 +124,7 @@ export class InsightService {
       values.push(params.scope);
     }
     if (params.formId) {
-      conds.push(`"formId" = $${i++}`);
+      conds.push(`"assessmentFormVersionFk" = $${i++}`);
       values.push(params.formId);
     }
     if (params.search) {
@@ -124,7 +133,7 @@ export class InsightService {
       i++;
     }
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
-    const sql = `SELECT id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" ${where} ORDER BY "updatedAt" DESC LIMIT 100`;
+    const sql = `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" ${where} ORDER BY "updatedAt" DESC LIMIT 100`;
     const res = await pool.query(sql, values);
     return res.rows as any;
   }
@@ -133,7 +142,7 @@ export class InsightService {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const res = await pool.query(
-      `SELECT id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" WHERE id = $1`,
+      `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" WHERE id = $1`,
       [id]
     );
     return res.rows[0] || null;
@@ -144,14 +153,14 @@ export class InsightService {
     validateCreate(input);
     const pool = await getInsightGenDbPool();
     const res = await pool.query(
-      `INSERT INTO "SavedInsights" (name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "createdBy")
+      `INSERT INTO "SavedInsights" (name, question, scope, "assessmentFormVersionFk", sql, "chartType", "chartMapping", "chartOptions", description, tags, "createdBy")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
+       RETURNING id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
       [
         input.name,
         input.question,
         input.scope,
-        input.formId || null,
+        (input as any).assessmentFormVersionFk ?? (input as any).formId ?? null,
         input.sql,
         input.chartType,
         input.chartType === "table"
@@ -166,7 +175,10 @@ export class InsightService {
     return res.rows[0] as any;
   }
 
-  async update(id: number, input: UpdateInsightInput): Promise<SavedInsight | null> {
+  async update(
+    id: number,
+    input: UpdateInsightInput
+  ): Promise<SavedInsight | null> {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const fields: string[] = [];
@@ -184,9 +196,9 @@ export class InsightService {
       fields.push(`scope = $${i++}`);
       values.push(input.scope);
     }
-    if (input.formId !== undefined) {
-      fields.push(`"formId" = $${i++}`);
-      values.push(input.formId);
+    if (input.assessmentFormVersionFk !== undefined) {
+      fields.push(`"assessmentFormVersionFk" = $${i++}`);
+      values.push(input.assessmentFormVersionFk);
     }
     if (input.sql !== undefined) {
       // enforce read-only
@@ -207,7 +219,9 @@ export class InsightService {
     }
     if (input.chartOptions !== undefined) {
       fields.push(`"chartOptions" = $${i++}`);
-      values.push(input.chartOptions ? JSON.stringify(input.chartOptions) : null);
+      values.push(
+        input.chartOptions ? JSON.stringify(input.chartOptions) : null
+      );
     }
     if (input.description !== undefined) {
       fields.push(`description = $${i++}`);
@@ -221,10 +235,12 @@ export class InsightService {
       fields.push(`"createdBy" = $${i++}`);
       values.push(input.createdBy);
     }
-    if (!fields.length) return (await this.getById(id));
+    if (!fields.length) return await this.getById(id);
     values.push(id);
     const res = await pool.query(
-      `UPDATE "SavedInsights" SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, name, question, scope, "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
+      `UPDATE "SavedInsights" SET ${fields.join(
+        ", "
+      )} WHERE id = $${i} RETURNING id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
       values
     );
     return res.rows[0] || null;
@@ -233,10 +249,18 @@ export class InsightService {
   async softDelete(id: number): Promise<void> {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
-    await pool.query(`UPDATE "SavedInsights" SET "isActive" = FALSE WHERE id = $1`, [id]);
+    await pool.query(
+      `UPDATE "SavedInsights" SET "isActive" = FALSE WHERE id = $1`,
+      [id]
+    );
   }
 
-  async execute(id: number): Promise<{ rows: any[]; chart: { chartType: ChartType; data: any } } | null> {
+  async execute(
+    id: number
+  ): Promise<{
+    rows: any[];
+    chart: { chartType: ChartType; data: any };
+  } | null> {
     ensureApiEnabled();
     const insight = await this.getById(id);
     if (!insight || !insight.isActive) return null;
@@ -245,9 +269,18 @@ export class InsightService {
     const req = pool.request();
     const result = await req.query(sqlText);
     const rows = result.recordset || [];
-    const data = insight.chartType === "table"
-      ? rows
-      : shapeDataForChart(rows, { chartType: insight.chartType, mapping: insight.chartMapping, options: insight.chartOptions }, insight.chartType);
+    const data =
+      insight.chartType === "table"
+        ? rows
+        : shapeDataForChart(
+            rows,
+            {
+              chartType: insight.chartType,
+              mapping: insight.chartMapping,
+              options: insight.chartOptions,
+            },
+            insight.chartType
+          );
     return { rows, chart: { chartType: insight.chartType, data } };
   }
 }
