@@ -1,7 +1,10 @@
 export const dynamic = "force-dynamic";
 
 async function getOverview() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/stats/overview`, { cache: "no-store" });
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3005";
+  const res = await fetch(`${baseUrl}/api/stats/overview`, {
+    cache: "no-store",
+  });
   if (!res.ok) {
     return { formsActive: 0, insightsTotal: 0 };
   }
@@ -11,7 +14,9 @@ async function getOverview() {
 export default async function HomePage() {
   if (process.env.CHART_INSIGHTS_ENABLED !== "true") {
     return (
-      <div className="text-sm text-gray-600">New Home is disabled. Set CHART_INSIGHTS_ENABLED=true.</div>
+      <div className="text-sm text-gray-600">
+        New Home is disabled. Set CHART_INSIGHTS_ENABLED=true.
+      </div>
     );
   }
   const { formsActive, insightsTotal } = await getOverview();
@@ -31,4 +36,3 @@ export default async function HomePage() {
     </div>
   );
 }
-

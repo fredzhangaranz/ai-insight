@@ -19,12 +19,14 @@ import {
 import { HomeIcon } from "@/components/heroicons";
 import { Squares2x2Icon } from "@/components/heroicons";
 import { ClipboardDocumentIcon } from "@/components/heroicons";
+import { SparklesIcon } from "@/components/heroicons";
 import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/home", label: "Home", icon: HomeIcon },
   { href: "/dashboard", label: "Dashboard", icon: Squares2x2Icon },
   { href: "/insights", label: "Insights", icon: ClipboardDocumentIcon },
+  { href: "/analysis", label: "Create Insight", icon: SparklesIcon },
 ];
 
 export function SideNav() {
