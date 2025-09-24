@@ -48,6 +48,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   selectedModelId,
 }) => {
   const { handleError, handleSuccess } = useErrorHandler();
+  const scope: "form" | "schema" = assessmentFormId ? "form" : "schema";
 
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
   const [isEditingSql, setIsEditingSql] = useState(false);
@@ -187,7 +188,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     const initial: SaveInsightInitial = {
       name: subQuestion.text.slice(0, 100),
       question: subQuestion.text,
-      scope: assessmentFormId ? "form" : "schema",
+      scope,
       formId: assessmentFormId || null,
       sql: subQuestion.sqlQuery,
       chartType: ct,
@@ -338,11 +339,12 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         body: JSON.stringify({
           subQuestion: subQuestion.text,
           previousQueries: previousSqlQueries,
-          assessmentFormDefinition: assessmentFormDefinition || {},
-          databaseSchemaContext: "", // TODO: Pass actual schema context
+          assessmentFormDefinition:
+            scope === "form" ? assessmentFormDefinition || {} : undefined,
           modelId: selectedModelId,
           // Lean MVP: pass desiredFields (server may ignore until wired)
           desiredFields,
+          scope,
         }),
       });
 
@@ -483,8 +485,10 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           sqlQuery: subQuestion.sqlQuery,
           queryResults: queryResult,
           subQuestion: subQuestion.text,
-          assessmentFormDefinition: assessmentFormDefinition || {},
+          assessmentFormDefinition:
+            scope === "form" ? assessmentFormDefinition || {} : undefined,
           modelId: selectedModelId,
+          scope,
         }),
       });
 

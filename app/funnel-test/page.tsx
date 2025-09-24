@@ -68,7 +68,7 @@ export default function FunnelTestPage({
       <div className="min-h-screen bg-slate-50">
         {/* Header */}
         <div className="bg-white border-b border-slate-200 px-6 py-4">
-          <div className="max-w-7xl mx-auto">
+          <div className="w-full">
             <Button
               variant="ghost"
               onClick={handleBackToSetup}
@@ -86,7 +86,7 @@ export default function FunnelTestPage({
         </div>
 
         {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="w-full px-6 py-8">
           {/* Patient Info (if applicable) */}
           {patientId && (
             <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">

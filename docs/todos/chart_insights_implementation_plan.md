@@ -21,7 +21,7 @@ Source: Aligns with AGENTS.md and .cursor/rules/70-implementation-plan.mdc
   - Unit: validate insight payload schema (chartType, chartMapping contracts).
   - Integration: POST /api/insights then GET /api/insights/:id; mock MS SQL for /execute.
   - Manual: Create from funnel → list → detail → execute chart.
-- Status: planned
+- Status: in_progress
 
 Deliverables
 
@@ -102,13 +102,24 @@ Deliverables
 
 Deliverables
 
-- UI
-  - Insights “New” CTA: choose Form‑specific vs Database (no form);
-  - Wire into existing funnel component with mode prop.
-- API
-  - Reuse Stage 1 endpoints; no new tables.
+- Prompt & AI scope handling
+  - Add a shared `loadDatabaseSchemaContext()` helper so all AI services reuse the same normalized rpt schema text.
+  - Thread a `scope: "form" | "schema"` flag through sub-question, SQL, and chart recommendation prompt builders; emit scope-specific preambles.
+  - In schema mode omit FORM DEFINITION blocks and inject a concise “Schema Mode Context” section that highlights rpt join rules (e.g., wound state handling).
+- Backend & caching
+  - Make `assessmentFormVersionFk` optional when `scope === "schema"`; use a deterministic sentinel ID in `QueryFunnel` storage so caching still works.
+  - Update `/api/ai/funnel/generate-subquestions` to accept schema mode (optional formId + required scope) and pass the schema context string downstream.
+  - Ensure insight creation persists `scope="schema"` without a form FK and reuse Stage 1 endpoints for execution.
+- UI workflow
+  - Add a “New Insight” CTA on `Insights` that opens a mode picker (Form vs Database) and routes accordingly.
+  - Create a schema-mode analysis page that mounts `FunnelContainer` without form props, passes the schema context, and tags saved insights with schema scope.
+  - Update save dialogs and client-side fetches to include the new scope parameter while keeping existing form flow unchanged.
+- Tests & verification
+  - Unit-test prompt builders for both scopes and schema-mode caching fallbacks.
+  - Add integration coverage that creates a schema-scoped insight and executes it, asserting `{ formsActive, insightsTotal }` style responses still work.
+  - Manual: run schema-mode funnel, save an insight, confirm it lists, executes, and can be placed on the dashboard.
 - Compatibility & Rollback
-  - Feature surfaced only when flag ON; no schema changes.
+  - Keep all new surfaces behind `CHART_INSIGHTS_ENABLED`/`_API_ENABLED`; no migrations required. Revert by disabling the flag or removing the schema mode routes.
 
 ## Stage 5 — Editing, Tags/Search, Caching, Polish
 

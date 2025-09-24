@@ -16,7 +16,10 @@ async function generateQueryHandler(
     databaseSchemaContext,
     modelId,
     desiredFields,
+    scope: rawScope,
   } = body;
+
+  const scope = rawScope === "schema" ? "schema" : "form";
 
   // Validate required fields
   if (!subQuestion || typeof subQuestion !== "string") {
@@ -42,9 +45,11 @@ async function generateQueryHandler(
     const result = await provider.generateQuery({
       subQuestion,
       previousQueries: previousQueries || [],
-      assessmentFormDefinition: assessmentFormDefinition || {},
-      databaseSchemaContext: databaseSchemaContext || "",
+      assessmentFormDefinition:
+        scope === "schema" ? undefined : assessmentFormDefinition || {},
+      databaseSchemaContext,
       desiredFields: Array.isArray(desiredFields) ? desiredFields : undefined,
+      scope,
     });
 
     console.log("✅ SQL generated successfully");

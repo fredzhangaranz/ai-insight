@@ -10,6 +10,7 @@ interface FunnelContainerProps {
   assessmentFormDefinition?: any;
   assessmentFormId?: string;
   patientId?: string | null;
+  scope?: "form" | "schema";
   onEditQuestion?: (questionId: string, newText: string) => void;
   onEditSql?: (
     questionId: string,
@@ -30,12 +31,15 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   assessmentFormDefinition,
   assessmentFormId,
   patientId,
+  scope,
   onEditQuestion,
   onEditSql,
   onExecuteQuery,
   onMarkComplete,
 }) => {
   const { selectedModelId } = useAIModel();
+  const insightScope: "form" | "schema" =
+    scope ?? (assessmentFormId ? "form" : "schema");
   const [currentSubQuestions, setCurrentSubQuestions] =
     useState<SubQuestion[]>(subQuestions);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -80,14 +84,20 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
         selectedModelId,
       });
 
-      if (!originalQuestion || !assessmentFormId) {
+      if (!originalQuestion || (insightScope === "form" && !assessmentFormId)) {
         console.log("Missing required parameters:", {
           originalQuestion,
           assessmentFormId,
+          insightScope,
         });
-        if (!assessmentFormId) {
+        if (insightScope === "form" && !assessmentFormId) {
           setSubQuestionError(
             "Assessment form ID is missing. Please go back and select a form."
+          );
+        }
+        if (!originalQuestion) {
+          setSubQuestionError(
+            "Original question is missing. Please provide a question to analyze."
           );
         }
         return;
@@ -106,10 +116,14 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
           },
           body: JSON.stringify({
             originalQuestion,
-            formDefinition: assessmentFormDefinition || {},
-            databaseSchemaContext: "",
-            assessmentFormVersionFk: assessmentFormId,
+            formDefinition:
+              insightScope === "form"
+                ? assessmentFormDefinition || {}
+                : undefined,
+            assessmentFormVersionFk:
+              insightScope === "form" ? assessmentFormId : undefined,
             modelId: selectedModelId,
+            scope: insightScope,
           }),
         });
 
@@ -219,7 +233,7 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
     try {
       console.log("Regenerating sub-questions for:", originalQuestion);
 
-      if (!assessmentFormId) {
+      if (insightScope === "form" && !assessmentFormId) {
         throw new Error(
           "Assessment form ID is required but not provided. Please go back and select a form."
         );
@@ -227,10 +241,12 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
 
       const requestBody = {
         originalQuestion,
-        formDefinition: assessmentFormDefinition || {},
-        databaseSchemaContext: "", // TODO: Pass actual schema context
-        assessmentFormVersionFk: assessmentFormId,
+        formDefinition:
+          insightScope === "form" ? assessmentFormDefinition || {} : undefined,
+        assessmentFormVersionFk:
+          insightScope === "form" ? assessmentFormId : undefined,
         modelId: selectedModelId,
+        scope: insightScope,
       };
 
       console.log("Request body:", requestBody);
@@ -415,10 +431,10 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
   );
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col w-full">
       {/* Top Section - Original Question */}
-      <div className="p-4 border-b border-gray-200 bg-white">
-        <div className="flex flex-col">
+      <div className="p-4 border-b border-gray-200 bg-white w-full">
+        <div className="flex flex-col w-full">
           <div className="flex justify-between items-center mb-2">
             <h2 className="text-lg font-semibold text-gray-900">
               Query Funnel
@@ -463,8 +479,8 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
       </div>
 
       {/* Middle Section - Sub-Questions Overview */}
-      <div className="p-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex flex-col">
+      <div className="p-4 border-b border-gray-200 bg-gray-50 w-full">
+        <div className="flex flex-col w-full">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-md font-medium text-gray-700">
               Sub-Questions Overview
@@ -487,8 +503,8 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
             </div>
           </div>
 
-          {/* Scrollable sub-questions container */}
-          <div className="overflow-x-auto">
+          {/* Sub-questions container */}
+          <div className="w-full">
             {isLoadingCache ? (
               <div className="flex items-center justify-center min-h-[120px]">
                 <div className="text-center text-gray-500">
@@ -499,14 +515,14 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
                 </div>
               </div>
             ) : currentSubQuestions.length > 0 ? (
-              <div className="flex space-x-4 pb-2 min-h-[120px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 pb-2 min-h-[120px]">
                 {currentSubQuestions.map((question, index) => (
                   <div
                     key={question.id}
                     onClick={() =>
                       canNavigateToStep(index) && setCurrentIndex(index)
                     }
-                    className={`flex-shrink-0 w-80 h-full p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                    className={`h-full p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
                       index === currentIndex
                         ? "border-blue-500 bg-blue-50 shadow-md"
                         : canNavigateToStep(index)
@@ -586,8 +602,8 @@ export const FunnelContainer: React.FC<FunnelContainerProps> = ({
       </div>
 
       {/* Bottom Section - Current Sub-Question Panel */}
-      <div className="flex-1 p-4 bg-white">
-        <div className="h-full flex flex-col">
+      <div className="flex-1 p-4 bg-white w-full">
+        <div className="h-full flex flex-col w-full">
           {/* Navigation Controls */}
           <div className="flex justify-center mb-4 space-x-4">
             <button

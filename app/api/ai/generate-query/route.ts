@@ -9,10 +9,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getInsightGenDbPool, getSilhouetteDbPool } from "@/lib/db";
 import type { AnalysisPlan } from "@/lib/types/analysis-plan";
 import Anthropic from "@anthropic-ai/sdk";
-import fs from "fs";
-import path from "path";
 import * as sql from "mssql";
 import { MetricsMonitor } from "@/lib/monitoring";
+import { loadDatabaseSchemaContext } from "@/lib/ai/schema-context";
 
 // --- CONFIGURATION ---
 const anthropic = new Anthropic({
@@ -74,12 +73,7 @@ async function generateAIPlan(
   console.log("Starting AI plan generation...");
   try {
     // Load the static database schema context from the file
-    const schemaContextPath = path.join(
-      process.cwd(),
-      "lib",
-      "database-schema-context.md"
-    );
-    const databaseSchemaContext = fs.readFileSync(schemaContextPath, "utf-8");
+    const databaseSchemaContext = loadDatabaseSchemaContext();
 
     // Construct the System Prompt for the AI
     const systemPrompt = `

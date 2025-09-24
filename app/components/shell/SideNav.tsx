@@ -20,13 +20,34 @@ import { HomeIcon } from "@/components/heroicons";
 import { Squares2x2Icon } from "@/components/heroicons";
 import { ClipboardDocumentIcon } from "@/components/heroicons";
 import { SparklesIcon } from "@/components/heroicons";
+import { UserIcon } from "@/components/heroicons";
 import { usePathname } from "next/navigation";
 
 const items = [
-  { href: "/home", label: "Home", icon: HomeIcon },
-  { href: "/dashboard", label: "Dashboard", icon: Squares2x2Icon },
-  { href: "/insights", label: "Insights", icon: ClipboardDocumentIcon },
-  { href: "/analysis", label: "Create Insight", icon: SparklesIcon },
+  {
+    href: "/home",
+    label: "Home",
+    icon: HomeIcon,
+    match: ["/home"],
+  },
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: Squares2x2Icon,
+    match: ["/dashboard"],
+  },
+  {
+    href: "/insights",
+    label: "Insights",
+    icon: ClipboardDocumentIcon,
+    match: ["/insights"],
+  },
+  {
+    href: "/insights/new",
+    label: "Create Insight",
+    icon: SparklesIcon,
+    match: ["/insights/new", "/analysis", "/analysis/schema"],
+  },
 ];
 
 export function SideNav() {
@@ -109,7 +130,10 @@ export function SideNav() {
             <SidebarMenu>
               {items.map((it) => {
                 const Icon = it.icon as any;
-                const active = pathname === it.href;
+                const active = it.match.some(
+                  (prefix: string) =>
+                    pathname === prefix || pathname.startsWith(`${prefix}/`)
+                );
                 return (
                   <SidebarMenuItem key={it.href}>
                     <Link href={it.href} className="block w-full">
@@ -125,7 +149,27 @@ export function SideNav() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter />
+      <SidebarFooter>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <Link href="/admin" className="block w-full">
+                  <SidebarMenuButton
+                    isActive={
+                      pathname === "/admin" || pathname.startsWith("/admin/")
+                    }
+                    tooltip="Admin Panel"
+                  >
+                    <UserIcon className="w-4 h-4" />
+                    <span>Admin</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarFooter>
     </Sidebar>
   );
 }

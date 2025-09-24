@@ -48,44 +48,6 @@ export default function RootLayout({
                       InsightGensss
                     </h1> */}
                   </div>
-
-                  {/* Navigation */}
-                  <nav className="flex items-center space-x-4">
-                    <a
-                      href="/"
-                      className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
-                    >
-                      Home
-                    </a>
-                    {process.env.CHART_INSIGHTS_ENABLED === "true" && (
-                      <>
-                        <a
-                          href="/home"
-                          className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
-                        >
-                          New Home
-                        </a>
-                        <a
-                          href="/dashboard"
-                          className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
-                        >
-                          Dashboard
-                        </a>
-                        <a
-                          href="/insights"
-                          className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
-                        >
-                          Insights
-                        </a>
-                      </>
-                    )}
-                    <a
-                      href="/admin"
-                      className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
-                    >
-                      Admin
-                    </a>
-                  </nav>
                 </div>
               </div>
             </header>

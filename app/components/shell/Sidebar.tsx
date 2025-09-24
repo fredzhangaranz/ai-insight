@@ -6,6 +6,7 @@ import {
   Squares2x2Icon,
   ClipboardDocumentIcon,
   SparklesIcon,
+  UserIcon,
 } from "@/components/heroicons";
 
 type NavItem = { href: string; label: string; icon: React.ReactNode };
@@ -29,6 +30,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <SparklesIcon className={iconCls} />,
   },
 ];
+
+const ADMIN_ITEM: NavItem = {
+  href: "/admin",
+  label: "Admin",
+  icon: <UserIcon className={iconCls} />,
+};
 
 export function Sidebar({
   collapsed,
@@ -75,6 +82,20 @@ export function Sidebar({
           </Link>
         ))}
       </nav>
+
+      {/* Admin link at the bottom */}
+      <div className="mt-auto pt-4 border-t border-slate-200">
+        <Link
+          href={ADMIN_ITEM.href}
+          className={`flex items-center gap-2 text-sm text-slate-700 hover:text-slate-900 rounded px-2 py-1.5 ${
+            collapsed ? "justify-center" : ""
+          }`}
+          title={collapsed ? ADMIN_ITEM.label : undefined}
+        >
+          <span aria-hidden>{ADMIN_ITEM.icon}</span>
+          {!collapsed && <span className="truncate">{ADMIN_ITEM.label}</span>}
+        </Link>
+      </div>
     </aside>
   );
 }

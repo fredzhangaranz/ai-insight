@@ -15,7 +15,10 @@ async function generateSubQuestionsHandler(
     databaseSchemaContext,
     assessmentFormVersionFk,
     modelId,
+    scope: rawScope,
   } = body;
+
+  const scope = rawScope === "schema" ? "schema" : "form";
 
   // Validate required fields
   if (!originalQuestion || typeof originalQuestion !== "string") {
@@ -24,7 +27,10 @@ async function generateSubQuestionsHandler(
     );
   }
 
-  if (!assessmentFormVersionFk || typeof assessmentFormVersionFk !== "string") {
+  if (
+    scope === "form" &&
+    (!assessmentFormVersionFk || typeof assessmentFormVersionFk !== "string")
+  ) {
     return createErrorResponse.badRequest(
       "assessmentFormVersionFk is required and must be a string"
     );
@@ -38,15 +44,16 @@ async function generateSubQuestionsHandler(
 
   try {
     console.log(
-      `Getting or generating sub-questions for: "${originalQuestion}" using model ${modelId}`
+      `Getting or generating sub-questions for: "${originalQuestion}" using model ${modelId} (scope=${scope})`
     );
 
     const result = await getOrGenerateSubQuestions(
-      assessmentFormVersionFk,
+      scope === "schema" ? undefined : assessmentFormVersionFk,
       originalQuestion,
       formDefinition,
       databaseSchemaContext,
-      modelId
+      modelId,
+      scope
     );
 
     console.log(
@@ -59,6 +66,7 @@ async function generateSubQuestionsHandler(
       funnelId: result.funnelId,
       subQuestions: result.subQuestions,
       wasCached: result.wasCached,
+      scope,
     });
   } catch (error: any) {
     console.error("Error in sub-question generation:", error);

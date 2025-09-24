@@ -1,5 +1,3 @@
-import * as fs from "fs";
-import * as path from "path";
 import {
   IQueryFunnelProvider,
   SubQuestionGenerationRequest,
@@ -23,6 +21,7 @@ import {
 } from "../../prompts/chart-recommendations.prompt";
 import { MetricsMonitor } from "../../monitoring";
 import { matchTemplates } from "../../services/query-template.service";
+import { loadDatabaseSchemaContext } from "../schema-context";
 
 /**
  * Abstract base class for AI providers, containing shared logic for the query funnel.
@@ -56,12 +55,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     if (providedContext && providedContext.trim() !== "") {
       return providedContext;
     }
-    const schemaContextPath = path.join(
-      process.cwd(),
-      "lib",
-      "database-schema-context.md"
-    );
-    return fs.readFileSync(schemaContextPath, "utf-8");
+    return loadDatabaseSchemaContext();
   }
 
   /**
@@ -448,7 +442,8 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       const prompt = constructFunnelSubquestionsPrompt(
         request.originalQuestion,
         request.formDefinition,
-        schemaContext
+        schemaContext,
+        request.scope ?? "form"
       );
       console.log("AI Prompt for sub-questions generation:", prompt);
 
@@ -573,7 +568,8 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         request.assessmentFormDefinition,
         schemaContext,
         fieldValidation.fieldsApplied,
-        matchedTemplates
+        matchedTemplates,
+        request.scope ?? "form"
       );
       console.log("AI Prompt for SQL generation:", prompt);
       const aiResponse = await this._executeModel(
@@ -683,13 +679,16 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     const aiStartTime = Date.now();
 
     try {
-      const schemaContext = this.getDatabaseSchemaContext();
+      const schemaContext = this.getDatabaseSchemaContext(
+        request.databaseSchemaContext
+      );
       const prompt = constructChartRecommendationsPrompt(
         request.subQuestion,
         request.sqlQuery,
         request.queryResults,
         request.assessmentFormDefinition,
-        schemaContext
+        schemaContext,
+        request.scope ?? "form"
       );
       console.log("AI Prompt for chart recommendations:", prompt);
       const aiResponse = await this._executeModel(
