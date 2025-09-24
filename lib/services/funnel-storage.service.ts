@@ -49,6 +49,22 @@ export async function findFunnelByQuestion(
   return result.rows[0] || null;
 }
 
+export async function findMostRecentFunnelByKey(
+  assessmentFormVersionFk: string
+): Promise<QueryFunnel | null> {
+  const pool = await getInsightGenDbPool();
+  const result = await pool.query(
+    `
+      SELECT * FROM "QueryFunnel"
+      WHERE "assessmentFormVersionFk" = $1
+      ORDER BY "createdDate" DESC
+      LIMIT 1
+    `,
+    [assessmentFormVersionFk]
+  );
+  return result.rows[0] || null;
+}
+
 export async function listFunnels(): Promise<QueryFunnel[]> {
   const pool = await getInsightGenDbPool();
   const result = await pool.query(

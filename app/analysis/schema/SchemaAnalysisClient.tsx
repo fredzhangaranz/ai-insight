@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { FunnelContainer } from "@/components/funnel/FunnelContainer";
@@ -14,6 +14,39 @@ export default function SchemaAnalysisClient() {
   const [showFunnel, setShowFunnel] = useState(false);
   const [funnelKey, setFunnelKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    const loadRecentQuestion = async () => {
+      try {
+        const res = await fetch("/api/ai/funnel/recent/schema", {
+          cache: "no-store",
+        });
+        if (ignore) return;
+        if (res.status === 204) {
+          return;
+        }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.message || "Failed to load recent schema question");
+        }
+        const data = await res.json();
+        if (data?.originalQuestion && question === DEFAULT_QUESTION) {
+          setQuestion(data.originalQuestion);
+        }
+      } catch (err: any) {
+        if (!ignore) {
+          setLoadError(err?.message || "Unable to load previous question");
+        }
+      }
+    };
+    loadRecentQuestion();
+    return () => {
+      ignore = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startFunnel = () => {
     if (!question.trim()) {
@@ -90,6 +123,9 @@ export default function SchemaAnalysisClient() {
             placeholder="Example: Which wound care interventions drive the biggest improvement in area reduction across all facilities?"
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
+          {loadError && !error && (
+            <p className="text-xs text-amber-600">{loadError}</p>
+          )}
         </div>
 
         <div>

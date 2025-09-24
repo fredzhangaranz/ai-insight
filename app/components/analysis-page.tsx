@@ -1032,7 +1032,7 @@ export default function AnalysisPage({
                                 question?
                               </p>
                               <p className="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded">
-                                "{deletingQuestion.text}"
+                                &ldquo;{deletingQuestion.text}&rdquo;
                               </p>
                               <p className="text-xs text-slate-500 mt-2">
                                 This action cannot be undone.
@@ -1195,140 +1195,176 @@ export default function AnalysisPage({
           question={currentQuestion.text}
         />
       )}
-      <div className="max-w-7xl mx-auto">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="mb-6 text-slate-600 hover:text-slate-900"
-        >
-          ← Back to Forms
-        </Button>
-        {state === "results" ? (
-          // This block will now be the final step of your new flow
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="text-center">
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">
-                {currentQuestion?.text || "Analysis Results"}
-              </h1>
-              <p className="text-slate-600">
-                Analysis based on {assessmentFormName} data
-              </p>
+      <div className="min-h-screen bg-slate-50">
+        <div className="max-w-[1920px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Header with Breadcrumb and Page Title */}
+          <div className="mb-8">
+            <Button
+              variant="ghost"
+              onClick={onBack}
+              className="mb-4 text-slate-600 hover:text-slate-900"
+            >
+              ← Back to Forms
+            </Button>
+            <div className="border-b border-slate-200 pb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <nav className="flex text-sm text-slate-500 mb-2">
+                    <span>Analysis</span>
+                    <span className="mx-2">/</span>
+                    <span className="text-slate-900 font-medium">
+                      {assessmentFormName}
+                    </span>
+                  </nav>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+                    {state === "results" && currentQuestion
+                      ? currentQuestion.text
+                      : `${assessmentFormName} Analysis`}
+                  </h1>
+                  <p className="text-slate-600 mt-1">
+                    {state === "results"
+                      ? `Analysis results based on ${assessmentFormName} data`
+                      : "Generate AI-powered insights from your clinical data"}
+                  </p>
+                </div>
+                <div className="mt-4 sm:mt-0">
+                  <div className="text-sm text-slate-500">
+                    Form ID:{" "}
+                    <span className="font-mono text-xs">
+                      {assessmentFormId}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-            {/* The final chart, rendered with real data */}
-            <Card className="border-slate-200 bg-white shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-xl text-slate-900">
-                  Data Visualization
-                </CardTitle>
-                <Select
-                  value={selectedChartType}
-                  onValueChange={handleChartTypeChange}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select chart type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.keys(availableMappings).map((type) => (
-                      <SelectItem key={type} value={type as ChartType}>
-                        {type.charAt(0).toUpperCase() + type.slice(1)} Chart
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardHeader>
-              <CardContent>
-                {chartData ? (
-                  <div className="h-[400px]">
-                    <ChartComponent
-                      chartType={selectedChartType}
-                      data={chartData}
-                      title={currentQuestion?.text}
-                      className="w-full h-full"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-[400px] text-slate-500">
-                    No data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* The verified SQL query */}
+          </div>
+          {state === "results" ? (
+            // This block will now be the final step of your new flow
+            <div className="space-y-8 animate-in fade-in duration-500">
+              {/* The final chart, rendered with real data */}
               <Card className="border-slate-200 bg-white shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-lg text-slate-900">
-                    Generated SQL
+                  <CardTitle className="text-xl text-slate-900">
+                    Data Visualization
                   </CardTitle>
-                  {generatedSql && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        navigator.clipboard.writeText(generatedSql)
-                      }
-                      className="text-slate-600 hover:text-slate-900"
-                    >
-                      <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
-                      Copy SQL
-                    </Button>
+                  <Select
+                    value={selectedChartType}
+                    onValueChange={handleChartTypeChange}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select chart type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(availableMappings).map((type) => (
+                        <SelectItem key={type} value={type as ChartType}>
+                          {type.charAt(0).toUpperCase() + type.slice(1)} Chart
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </CardHeader>
+                <CardContent>
+                  {chartData ? (
+                    <div className="h-[300px] sm:h-[400px] lg:h-[450px]">
+                      <ChartComponent
+                        chartType={selectedChartType}
+                        data={chartData}
+                        title={currentQuestion?.text}
+                        className="w-full h-full"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-[300px] sm:h-[400px] text-slate-500">
+                      No data available
+                    </div>
                   )}
-                </CardHeader>
-                <CardContent>
-                  {generatedSql && <CodeBlock code={generatedSql} />}
                 </CardContent>
               </Card>
-              {/* The raw data table */}
-              <Card className="border-slate-200 bg-white shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-lg text-slate-900">
-                    Raw Data
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {tableData && <DataTable data={tableData} />}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        ) : (
-          <div className="grid lg:grid-cols-2 gap-8">
-            <Card className="border-slate-200 bg-slate-50/50 h-fit">
-              <CardHeader>
-                <CardTitle className="text-xl text-slate-900">
-                  {assessmentFormName} Definition
-                </CardTitle>
-                <p className="text-sm text-slate-600">
-                  Form fields available for analysis
-                </p>
-              </CardHeader>
-              <CardContent>
-                {definition ? (
-                  <div className="space-y-3 max-h-[32rem] overflow-y-auto">
-                    {Object.entries(definition).map(
-                      ([fieldName, fieldData]) => (
-                        <FormFieldDisplay
-                          key={fieldName}
-                          fieldName={fieldName}
-                          fieldType={fieldData.fieldtype}
-                          options={fieldData.options}
-                        />
-                      )
+              <div className="grid md:grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* The verified SQL query */}
+                <Card className="border-slate-200 bg-white shadow-sm">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="text-lg text-slate-900">
+                      Generated SQL
+                    </CardTitle>
+                    {generatedSql && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          navigator.clipboard.writeText(generatedSql)
+                        }
+                        className="text-slate-600 hover:text-slate-900"
+                      >
+                        <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
+                        Copy SQL
+                      </Button>
                     )}
-                  </div>
-                ) : (
-                  <div className="text-center p-6">
-                    <LoadingDots />
-                    <p className="text-sm text-slate-600 mt-2">
-                      Loading form definition...
+                  </CardHeader>
+                  <CardContent>
+                    {generatedSql && <CodeBlock code={generatedSql} />}
+                  </CardContent>
+                </Card>
+                {/* The raw data table */}
+                <Card className="border-slate-200 bg-white shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-slate-900">
+                      Raw Data
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {tableData && <DataTable data={tableData} />}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col xl:grid xl:grid-cols-2 gap-6 xl:gap-8">
+              {/* Form Definition Panel - Full width on mobile/tablet, left side on desktop */}
+              <div className="order-2 xl:order-1">
+                <Card className="border-slate-200 bg-white shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-lg xl:text-xl text-slate-900 flex items-center">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                      Form Definition
+                    </CardTitle>
+                    <p className="text-sm text-slate-600">
+                      Available fields in {assessmentFormName}
                     </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <div className="space-y-6">{renderRightPanelContent()}</div>
-          </div>
-        )}
+                  </CardHeader>
+                  <CardContent>
+                    {definition ? (
+                      <div className="space-y-3 max-h-[28rem] xl:max-h-[32rem] overflow-y-auto">
+                        {Object.entries(definition).map(
+                          ([fieldName, fieldData]) => (
+                            <FormFieldDisplay
+                              key={fieldName}
+                              fieldName={fieldName}
+                              fieldType={fieldData.fieldtype}
+                              options={fieldData.options}
+                            />
+                          )
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center p-6">
+                        <LoadingDots />
+                        <p className="text-sm text-slate-600 mt-2">
+                          Loading form definition...
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Insights Panel - Full width on mobile/tablet, right side on desktop */}
+              <div className="order-1 xl:order-2">
+                <div className="space-y-6">{renderRightPanelContent()}</div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

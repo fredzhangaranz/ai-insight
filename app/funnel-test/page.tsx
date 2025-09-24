@@ -86,7 +86,7 @@ export default function FunnelTestPage({
         </div>
 
         {/* Main Content */}
-        <div className="w-full px-6 py-8">
+        <div className="max-w-[1920px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Patient Info (if applicable) */}
           {patientId && (
             <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -139,7 +139,7 @@ export default function FunnelTestPage({
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-[1920px] w-full mx-auto">
           <Button
             variant="ghost"
             onClick={onBack}
@@ -157,7 +157,7 @@ export default function FunnelTestPage({
       </div>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-[1920px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Setup Card */}
         <Card className="mb-6">
           <CardHeader>

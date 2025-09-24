@@ -105,81 +105,83 @@ export default function AnalysisRoutePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-12">
-        <div className="mb-6">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <SparklesIcon className="w-8 h-8 text-blue-600" />
-          </div>
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">
-            Create New Insight
-          </h1>
-          <p className="text-lg text-slate-600">
-            Select an assessment form to create AI-powered insights from your
-            clinical data
-          </p>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="text-center">
-          <LoadingDots />
-          <p className="text-slate-600 mt-4">Loading assessment forms...</p>
-        </div>
-      ) : error ? (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6 text-center">
-            <p className="text-red-600">{error}</p>
-          </CardContent>
-        </Card>
-      ) : forms.length === 0 ? (
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <SparklesIcon className="w-8 h-8 text-slate-400" />
+    <div className="min-h-screen bg-slate-50">
+      <div className="w-full px-6 py-8">
+        <div className="text-center mb-12">
+          <div className="mb-6">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <SparklesIcon className="w-8 h-8 text-blue-600" />
             </div>
-            <h3 className="text-xl font-semibold text-slate-900 mb-2">
-              No Assessment Forms Available
-            </h3>
-            <p className="text-slate-600">
-              There are no assessment forms available for analysis. Please check
-              your database connection or contact your administrator.
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">
+              Create New Insight
+            </h1>
+            <p className="text-lg text-slate-600">
+              Select an assessment form to create AI-powered insights from your
+              clinical data
             </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {forms.map((form) => (
-            <Card
-              key={form.assessmentFormId}
-              className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() =>
-                setSelectedForm({
-                  id: form.assessmentFormId,
-                  typeId: form.assessmentTypeId,
-                  name: form.assessmentFormName,
-                })
-              }
-            >
-              <CardHeader>
-                <CardTitle className="text-lg text-slate-900">
-                  {form.assessmentFormName}
-                </CardTitle>
-                <p className="text-sm text-slate-600">
-                  Version {form.definitionVersion}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-500">
-                    Form ID: {form.assessmentFormId}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          </div>
         </div>
-      )}
+
+        {isLoading ? (
+          <div className="text-center">
+            <LoadingDots />
+            <p className="text-slate-600 mt-4">Loading assessment forms...</p>
+          </div>
+        ) : error ? (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="p-6 text-center">
+              <p className="text-red-600">{error}</p>
+            </CardContent>
+          </Card>
+        ) : forms.length === 0 ? (
+          <Card className="border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-8 text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <SparklesIcon className="w-8 h-8 text-slate-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                No Assessment Forms Available
+              </h3>
+              <p className="text-slate-600">
+                There are no assessment forms available for analysis. Please
+                check your database connection or contact your administrator.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {forms.map((form) => (
+              <Card
+                key={form.assessmentFormId}
+                className="border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() =>
+                  setSelectedForm({
+                    id: form.assessmentFormId,
+                    typeId: form.assessmentTypeId,
+                    name: form.assessmentFormName,
+                  })
+                }
+              >
+                <CardHeader>
+                  <CardTitle className="text-lg text-slate-900">
+                    {form.assessmentFormName}
+                  </CardTitle>
+                  <p className="text-sm text-slate-600">
+                    Version {form.definitionVersion}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
+                      Form ID: {form.assessmentFormId}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

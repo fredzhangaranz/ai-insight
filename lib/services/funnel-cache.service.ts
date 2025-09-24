@@ -15,7 +15,7 @@ export interface CachedSubQuestionResult {
   wasCached: boolean;
 }
 
-const SCHEMA_SCOPE_SENTINEL = "00000000-0000-0000-0000-000000000000";
+export const SCHEMA_SCOPE_SENTINEL = "00000000-0000-0000-0000-000000000000";
 
 export async function getOrGenerateSubQuestions(
   assessmentFormVersionFk: string | undefined,

@@ -174,7 +174,9 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
         const missing = required.filter((f) => !chartMapping[f]);
         if (missing.length) {
           throw new Error(
-            `Please map all required fields before saving: ${missing.join(", ")}`
+            `Please map all required fields before saving: ${missing.join(
+              ", "
+            )}`
           );
         }
       }
@@ -357,15 +359,14 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-y-auto max-h-[60vh]">
                 <h4 className="text-sm font-medium text-gray-700 mb-3">
                   {subQuestion}
                 </h4>
-                <div className="h-80">
+                <div className="min-h-[320px]">
                   <ChartComponent
                     chartType={selectedChartType}
                     data={chartData}
-                    title={subQuestion}
                     className="w-full h-full"
                   />
                 </div>

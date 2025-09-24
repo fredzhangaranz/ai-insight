@@ -108,8 +108,8 @@ export default function HomePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-12">
+    <div className="min-h-screen bg-slate-50">
+      <div className="w-full px-6 py-8">
         <div className="flex justify-end mb-4">
           <a
             href="/admin"
@@ -118,59 +118,61 @@ export default function HomePage() {
             Admin Panel
           </a>
         </div>
-        <h1 className="text-4xl font-bold text-slate-900 mb-4">
-          Select an Assessment Form to Analyze
-        </h1>
-        <p className="text-lg text-slate-600">
-          Choose a form to unlock AI-powered insights from your clinical data
-        </p>
-      </div>
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-slate-900 mb-4">
+            Select an Assessment Form to Analyze
+          </h1>
+          <p className="text-lg text-slate-600">
+            Choose a form to unlock AI-powered insights from your clinical data
+          </p>
+        </div>
 
-      {isLoading ? (
-        <div className="text-center">
-          <LoadingDots />
-          <p className="text-slate-600">Loading forms from database...</p>
-        </div>
-      ) : error ? (
-        <div className="text-center text-red-600 bg-red-50 p-4 rounded-lg border border-red-200">
-          <p className="font-bold">An Error Occurred</p>
-          <p>{error}</p>
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {forms.map((form) => (
-            <Card
-              key={form.assessmentFormId}
-              className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] border-slate-200 bg-white"
-              onClick={() =>
-                setSelectedForm({
-                  id: form.assessmentFormId, // Version-specific ID for form definition
-                  typeId: form.assessmentTypeId, // Type ID for patient listing
-                  name: form.assessmentFormName,
-                })
-              }
-            >
-              <CardContent className="p-6">
-                <div className="flex items-start space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <ClipboardDocumentIcon className="w-6 h-6 text-blue-600" />
+        {isLoading ? (
+          <div className="text-center">
+            <LoadingDots />
+            <p className="text-slate-600">Loading forms from database...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center text-red-600 bg-red-50 p-4 rounded-lg border border-red-200">
+            <p className="font-bold">An Error Occurred</p>
+            <p>{error}</p>
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {forms.map((form) => (
+              <Card
+                key={form.assessmentFormId}
+                className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] border-slate-200 bg-white"
+                onClick={() =>
+                  setSelectedForm({
+                    id: form.assessmentFormId, // Version-specific ID for form definition
+                    typeId: form.assessmentTypeId, // Type ID for patient listing
+                    name: form.assessmentFormName,
+                  })
+                }
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <ClipboardDocumentIcon className="w-6 h-6 text-blue-600" />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                        {form.assessmentFormName} - v{form.definitionVersion}
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        Analyze clinical data and track healing progression.
+                      </p>
                     </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                      {form.assessmentFormName} - v{form.definitionVersion}
-                    </h3>
-                    <p className="text-sm text-slate-600">
-                      Analyze clinical data and track healing progression.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
