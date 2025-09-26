@@ -6,6 +6,10 @@ import {
   type ChartDataType,
 } from "@/app/components/charts/chart-component";
 import { shapeDataForChart } from "@/lib/data-shaper";
+import {
+  normalizeChartMapping,
+  normalizeAvailableMappings,
+} from "@/lib/chart-mapping-utils";
 import type { ChartType } from "@/lib/chart-contracts";
 import { ChartGenerationModal } from "./ChartGenerationModal";
 import { SaveInsightDialog, type SaveInsightInitial } from "@/components/insights/SaveInsightDialog";
@@ -502,13 +506,20 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       const result = await response.json();
       console.log("Chart recommendations generated:", result);
 
-      setChartRecommendations(result);
+      const normalizedMappings = normalizeAvailableMappings(
+        result.availableMappings || {}
+      );
+
+      setChartRecommendations({
+        ...result,
+        availableMappings: normalizedMappings,
+      });
       setSelectedChartType(result.recommendedChartType);
 
       // Generate the chart data using the recommended chart type
       await generateChartData(
         result.recommendedChartType,
-        result.availableMappings[result.recommendedChartType]
+        normalizedMappings[result.recommendedChartType]
       );
 
       setChartViewMode("chart");
@@ -533,17 +544,23 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         setChartData(queryResult);
         setLastChartMapping(null);
       } else {
+        const normalizedMapping = normalizeChartMapping(chartType, mapping);
+        if (!normalizedMapping) {
+          setChartData(null);
+          setLastChartMapping(null);
+          return;
+        }
         // For other chart types, use the data shaper
         const shapedData = shapeDataForChart(
           queryResult,
           {
             chartType,
-            mapping,
+            mapping: normalizedMapping,
           },
           chartType
         );
         setChartData(shapedData);
-        setLastChartMapping(mapping);
+        setLastChartMapping(normalizedMapping);
       }
     } catch (error: any) {
       console.error("Error shaping chart data:", error);

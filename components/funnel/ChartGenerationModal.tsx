@@ -5,6 +5,7 @@ import {
   type ChartDataType,
 } from "@/app/components/charts/chart-component";
 import { shapeDataForChart } from "@/lib/data-shaper";
+import { normalizeChartMapping } from "@/lib/chart-mapping-utils";
 import { useErrorHandler } from "@/lib/error-handler";
 
 interface ChartGenerationModalProps {
@@ -132,15 +133,20 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
       if (selectedChartType === "table") {
         setChartData(queryResults);
       } else {
+        const normalizedMapping = normalizeChartMapping(
+          selectedChartType,
+          chartMapping
+        ) as ChartMapping;
         const shapedData = shapeDataForChart(
           queryResults,
           {
             chartType: selectedChartType,
-            mapping: chartMapping,
+            mapping: normalizedMapping,
           },
           selectedChartType
         );
         setChartData(shapedData);
+        setChartMapping(normalizedMapping);
       }
 
       setStep("preview");
@@ -367,7 +373,7 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
                   <ChartComponent
                     chartType={selectedChartType}
                     data={chartData}
-                    className="w-full h-full"
+                    className="w-full h-[320px]"
                   />
                 </div>
               </div>

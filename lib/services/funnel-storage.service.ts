@@ -73,6 +73,23 @@ export async function listFunnels(): Promise<QueryFunnel[]> {
   return result.rows;
 }
 
+export async function listFunnelsByAssessmentKey(
+  assessmentFormVersionFk: string,
+  limit = 50
+): Promise<QueryFunnel[]> {
+  const pool = await getInsightGenDbPool();
+  const result = await pool.query(
+    `
+      SELECT * FROM "QueryFunnel"
+      WHERE "assessmentFormVersionFk" = $1
+      ORDER BY "createdDate" DESC
+      LIMIT $2
+    `,
+    [assessmentFormVersionFk, limit]
+  );
+  return result.rows;
+}
+
 export async function updateFunnelStatus(
   id: number,
   status: QueryFunnelStatus
@@ -197,6 +214,26 @@ export async function updateSubQuestionText(
     'UPDATE "SubQuestions" SET "questionText" = $1 WHERE id = $2',
     [questionText, id]
   );
+}
+
+export async function deleteFunnelCascade(id: number): Promise<void> {
+  const pool = await getInsightGenDbPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      'DELETE FROM "QueryResults" WHERE "subQuestionId" IN (SELECT id FROM "SubQuestions" WHERE "funnelId" = $1)',
+      [id]
+    );
+    await client.query('DELETE FROM "SubQuestions" WHERE "funnelId" = $1', [id]);
+    await client.query('DELETE FROM "QueryFunnel" WHERE id = $1', [id]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // QueryResults
