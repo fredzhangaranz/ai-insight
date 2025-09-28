@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { ChartComponent } from "@/app/components/charts/chart-component";
 import type { ChartType } from "@/lib/chart-contracts";
+import { ChartGenerationModal } from "@/components/funnel/ChartGenerationModal";
 
 export default function InsightDetailPage({
   params,
@@ -20,6 +21,8 @@ export default function InsightDetailPage({
   const [isEditingSQL, setIsEditingSQL] = useState(false);
   const [editedSQL, setEditedSQL] = useState("");
   const [saveLoading, setSaveLoading] = useState(false);
+  const [isEditingChart, setIsEditingChart] = useState(false);
+  const [chartEditLoading, setChartEditLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -97,6 +100,52 @@ export default function InsightDetailPage({
       setError(e.message);
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  const startEditingChart = async () => {
+    if (!execData?.rows || execData.rows.length === 0) {
+      setError("Please execute the query first to get data for chart editing");
+      return;
+    }
+    setIsEditingChart(true);
+    setError(null);
+  };
+
+  const handleChartSave = async (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => {
+    setChartEditLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/insights/${params.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chartType: config.chartType,
+          chartMapping: config.chartMapping,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(
+          data?.message || "Failed to update chart configuration"
+        );
+
+      // Update the insight with the new chart configuration
+      setInsight(data);
+      setIsEditingChart(false);
+
+      // Re-execute to show updated chart
+      await execute();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setChartEditLoading(false);
     }
   };
 
@@ -182,8 +231,17 @@ export default function InsightDetailPage({
 
           {execData && (
             <div className="space-y-3">
-              <div className="text-sm text-gray-700">
-                Rows returned: {execData.rows?.length || 0}
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Rows returned: {execData.rows?.length || 0}
+                </div>
+                <button
+                  onClick={startEditingChart}
+                  disabled={isEditingSQL || chartEditLoading}
+                  className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                >
+                  Edit Chart
+                </button>
               </div>
               <div className="h-96 bg-white border rounded p-4">
                 <ChartComponent
@@ -197,6 +255,21 @@ export default function InsightDetailPage({
           )}
         </div>
       </div>
+
+      {/* Chart Edit Modal */}
+      {isEditingChart && execData && insight && (
+        <ChartGenerationModal
+          isOpen={isEditingChart}
+          onClose={() => setIsEditingChart(false)}
+          queryResults={execData.rows}
+          subQuestion={insight.question}
+          canSave={true}
+          onRequestSave={handleChartSave}
+          editMode={true}
+          initialChartType={insight.chartType}
+          initialChartMapping={insight.chartMapping || {}}
+        />
+      )}
     </div>
   );
 }

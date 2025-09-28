@@ -6,6 +6,7 @@ import {
 } from "@/app/components/charts/chart-component";
 import { shapeDataForChart } from "@/lib/data-shaper";
 import { normalizeChartMapping } from "@/lib/chart-mapping-utils";
+import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
 import { useErrorHandler } from "@/lib/error-handler";
 
 interface ChartGenerationModalProps {
@@ -20,6 +21,10 @@ interface ChartGenerationModalProps {
     chartType: ChartType;
     chartMapping: Record<string, string> | {};
   }) => void;
+  // Edit mode props
+  editMode?: boolean;
+  initialChartType?: ChartType;
+  initialChartMapping?: Record<string, string>;
 }
 
 type ChartMapping = {
@@ -35,42 +40,65 @@ const CHART_TYPE_DESCRIPTIONS = {
     "Tables show detailed raw data when no clear visualization pattern exists. Use for complex data or when users need to see exact values.",
 };
 
-export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
-  isOpen,
-  onClose,
-  queryResults,
-  subQuestion,
-  sql,
-  assessmentFormId,
-  canSave = false,
-  onRequestSave,
-}) => {
+export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = (
+  props
+) => {
+  const {
+    isOpen,
+    onClose,
+    queryResults,
+    subQuestion,
+    sql,
+    assessmentFormId,
+    canSave = false,
+    onRequestSave,
+    editMode = false,
+    initialChartType,
+    initialChartMapping,
+  } = props;
   const { handleError } = useErrorHandler();
 
   const [step, setStep] = useState<"type-selection" | "mapping" | "preview">(
-    "type-selection"
+    editMode ? "mapping" : "type-selection"
   );
   const [selectedChartType, setSelectedChartType] = useState<ChartType | null>(
-    null
+    editMode ? initialChartType || null : null
   );
-  const [chartMapping, setChartMapping] = useState<ChartMapping>({});
+  const [chartMapping, setChartMapping] = useState<ChartMapping>(() =>
+    editMode && initialChartMapping ? { ...initialChartMapping } : {}
+  );
   const [chartData, setChartData] = useState<ChartDataType | null>(null);
   const [availableFields, setAvailableFields] = useState<string[]>([]);
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+
+    if (editMode) {
+      // In edit mode, show the configuration dialog directly
+      setShowConfigDialog(true);
+      setSelectedChartType(initialChartType || null);
+      setChartMapping(initialChartMapping ? { ...initialChartMapping } : {});
+    } else {
+      // In create mode, start with type selection and wait for user input
       setStep("type-selection");
       setSelectedChartType(null);
       setChartMapping({});
-      setChartData(null);
-
-      // Extract available fields from query results
-      if (queryResults && queryResults.length > 0) {
-        setAvailableFields(Object.keys(queryResults[0]));
-      }
+      setShowConfigDialog(false);
     }
-  }, [isOpen, queryResults]);
+    setChartData(null);
+
+    if (queryResults && queryResults.length > 0) {
+      setAvailableFields(Object.keys(queryResults[0]));
+    }
+  }, [
+    isOpen,
+    queryResults,
+    editMode,
+    initialChartType,
+    initialChartMapping,
+  ]);
 
   const getRequiredFields = (chartType: ChartType): string[] => {
     switch (chartType) {
@@ -91,15 +119,56 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
 
   const handleChartTypeSelect = (chartType: ChartType) => {
     setSelectedChartType(chartType);
-    setStep("mapping");
 
-    // Initialize mapping with empty values
-    const requiredFields = getRequiredFields(chartType);
+    if (editMode) {
+      // In edit mode, open the configuration dialog
+      setShowConfigDialog(true);
+
+      // Initialize mapping with empty values for edit mode
+      const requiredFields = getRequiredFields(chartType);
+      const initialMapping: ChartMapping = {};
+      requiredFields.forEach((field) => {
+        initialMapping[field] = "";
+      });
+      setChartMapping(initialMapping);
+    } else {
+      // In create mode, just select the chart type - user will click Continue
+      setShowConfigDialog(false); // Ensure config dialog is not shown in create mode
+    }
+  };
+
+  const handleContinueToMapping = () => {
+    if (!selectedChartType) return;
+
+    // Initialize mapping with empty values when continuing to mapping step
+    const requiredFields = getRequiredFields(selectedChartType);
     const initialMapping: ChartMapping = {};
     requiredFields.forEach((field) => {
       initialMapping[field] = "";
     });
     setChartMapping(initialMapping);
+
+    setStep("mapping");
+  };
+
+  const handleConfigSave = (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => {
+    setSelectedChartType(config.chartType);
+    setChartMapping(config.chartMapping);
+    setShowConfigDialog(false);
+
+    // Call the original save handler
+    onRequestSave?.(config);
+    onClose();
+  };
+
+  const handleConfigClose = () => {
+    setShowConfigDialog(false);
+    if (editMode) {
+      onClose();
+    }
   };
 
   const handleMappingChange = (chartField: string, dataField: string) => {
@@ -198,6 +267,23 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
 
   if (!isOpen) return null;
 
+  // In edit mode, show the configuration dialog directly
+  if (editMode && showConfigDialog && selectedChartType) {
+    return (
+      <ChartConfigurationDialog
+        isOpen={showConfigDialog}
+        onClose={handleConfigClose}
+        queryResults={queryResults}
+        chartType={selectedChartType}
+        initialMapping={chartMapping}
+        title={subQuestion}
+        onSave={handleConfigSave}
+        saveButtonText={canSave ? "Update Insight" : "Close"}
+        allowTypeChange={false}
+      />
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -225,7 +311,11 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
                   ([type, description]) => (
                     <div
                       key={type}
-                      className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-colors"
+                      className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                        selectedChartType === type
+                          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
+                          : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                      }`}
                       onClick={() => handleChartTypeSelect(type as ChartType)}
                     >
                       <div className="text-center mb-3">
@@ -402,7 +492,7 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = ({
 
             {step === "type-selection" && (
               <button
-                onClick={() => setStep("mapping")}
+                onClick={handleContinueToMapping}
                 disabled={!selectedChartType}
                 className="px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
