@@ -17,6 +17,9 @@ export default function InsightDetailPage({
     chart: { chartType: ChartType; data: any };
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingSQL, setIsEditingSQL] = useState(false);
+  const [editedSQL, setEditedSQL] = useState("");
+  const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -51,6 +54,52 @@ export default function InsightDetailPage({
     }
   };
 
+  const startEditingSQL = () => {
+    setEditedSQL(insight?.sql || "");
+    setIsEditingSQL(true);
+    setError(null);
+  };
+
+  const cancelEditingSQL = () => {
+    setIsEditingSQL(false);
+    setEditedSQL("");
+    setError(null);
+  };
+
+  const saveSQL = async () => {
+    if (!editedSQL.trim()) {
+      setError("SQL cannot be empty");
+      return;
+    }
+
+    setSaveLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/insights/${params.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sql: editedSQL }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to save SQL");
+
+      // Update the insight with the new SQL
+      setInsight(data);
+      setIsEditingSQL(false);
+      setEditedSQL("");
+
+      // Clear any existing execution data since SQL changed
+      setExecData(null);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
   if (!enabled)
     return (
       <div className="p-6 text-sm text-gray-600">Insights are disabled.</div>
@@ -68,18 +117,67 @@ export default function InsightDetailPage({
             <div className="text-sm text-gray-600">{insight.question}</div>
           </div>
           <div className="text-xs bg-gray-50 p-3 rounded border">
-            <div className="font-medium mb-1">SQL</div>
-            <pre className="whitespace-pre-wrap">{insight.sql}</pre>
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium">SQL</div>
+              {!isEditingSQL && (
+                <button
+                  onClick={startEditingSQL}
+                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Edit SQL
+                </button>
+              )}
+            </div>
+            {isEditingSQL ? (
+              <>
+                <textarea
+                  value={editedSQL}
+                  onChange={(e) => setEditedSQL(e.target.value)}
+                  className="w-full text-xs font-mono bg-transparent border-none resize-none whitespace-pre-wrap focus:outline-none"
+                  placeholder="Enter your SQL query..."
+                  rows={Math.max(6, editedSQL.split("\n").length)}
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={saveSQL}
+                    disabled={saveLoading}
+                    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {saveLoading ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    onClick={cancelEditingSQL}
+                    disabled={saveLoading}
+                    className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <pre className="whitespace-pre-wrap">{insight.sql}</pre>
+            )}
           </div>
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button
               onClick={execute}
               className="px-3 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
-              disabled={execLoading}
+              disabled={execLoading || isEditingSQL}
             >
               {execLoading ? "Executing..." : "Execute"}
             </button>
+            {isEditingSQL && (
+              <div className="text-sm text-gray-600 flex items-center">
+                Save your SQL changes before executing
+              </div>
+            )}
           </div>
 
           {execData && (

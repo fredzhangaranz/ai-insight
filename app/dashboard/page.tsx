@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [formsById, setFormsById] = useState<
     Record<string, { name: string; version: number }>
   >({});
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   useEffect(() => {
     const load = async () => {
@@ -200,6 +201,21 @@ export default function DashboardPage() {
     })();
   }, [panels]);
 
+  // Auto refresh all bound insights when auto refresh is enabled and panels are loaded
+  useEffect(() => {
+    if (!autoRefresh || panels.length === 0) return;
+
+    const boundPanels = panels.filter((p) => p.insightId);
+    if (boundPanels.length === 0) return;
+
+    // Execute all bound insights automatically
+    boundPanels.forEach((panel) => {
+      if (panel.insightId) {
+        execute(panel.id, panel.insightId);
+      }
+    });
+  }, [autoRefresh, panels]);
+
   if (!uiEnabled)
     return (
       <div className="p-6 text-sm text-gray-600">
@@ -212,7 +228,24 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <div className="flex items-center space-x-2">
+          <label
+            htmlFor="auto-refresh"
+            className="text-sm font-medium text-gray-700"
+          >
+            Auto Refresh
+          </label>
+          <input
+            id="auto-refresh"
+            type="checkbox"
+            checked={autoRefresh}
+            onChange={(e) => setAutoRefresh(e.target.checked)}
+            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+          />
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         {panels.map((p: any) => (
           <div
