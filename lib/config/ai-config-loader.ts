@@ -43,7 +43,8 @@ export class AIConfigLoader {
       const dbProviders = await this.configService.getEnabledConfigurations();
 
       if (dbProviders.length === 0) {
-        const shouldSeed = (process.env.SEED_ON_BOOT || "").toLowerCase() === "true";
+        const shouldSeed =
+          (process.env.SEED_ON_BOOT || "").toLowerCase() === "true";
 
         if (shouldSeed) {
           const seededProviders = await this.seedFromEnvironment();

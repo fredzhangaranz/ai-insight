@@ -61,28 +61,37 @@ function isKpiData(data: any): data is KpiData {
   return isValid;
 }
 
-function ErrorBoundary({ children }: { children: React.ReactNode }) {
-  const [hasError, setHasError] = React.useState(false);
-  const [error, setError] = React.useState<Error | null>(null);
-
-  React.useEffect(() => {
-    if (error) {
-      console.error("Chart Error:", error);
-    }
-  }, [error]);
-
-  if (hasError) {
-    return (
-      <div className="p-4 text-red-600 bg-red-50 rounded-lg">
-        <h3 className="font-semibold">Chart Rendering Error</h3>
-        <p className="text-sm">
-          {error?.message || "An unknown error occurred"}
-        </p>
-      </div>
-    );
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
   }
 
-  return <>{children}</>;
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Chart Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 text-red-600 bg-red-50 rounded-lg">
+          <h3 className="font-semibold">Chart Rendering Error</h3>
+          <p className="text-sm">
+            {this.state.error?.message || "An unknown error occurred"}
+          </p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 export function ChartComponent({

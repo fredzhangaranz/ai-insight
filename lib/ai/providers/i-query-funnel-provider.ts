@@ -1,11 +1,14 @@
+export type QueryFunnelScope = "form" | "schema";
+
 /**
  * Request to generate sub-questions from a complex original question.
  */
 export interface SubQuestionGenerationRequest {
   originalQuestion: string;
-  formDefinition: any;
-  databaseSchemaContext: string;
-  assessmentFormVersionFk: string; // Used for caching key
+  formDefinition?: any;
+  databaseSchemaContext?: string;
+  assessmentFormVersionFk?: string; // Used for caching key when form scoped
+  scope?: QueryFunnelScope;
 }
 
 /**
@@ -31,9 +34,10 @@ export interface SubQuestionGenerationResponse {
 export interface GenerateQueryRequest {
   subQuestion: string;
   previousQueries: string[];
-  assessmentFormDefinition: any;
-  databaseSchemaContext: string;
+  assessmentFormDefinition?: any;
+  databaseSchemaContext?: string;
   desiredFields?: string[]; // Optional enrichment fields (entity.field)
+  scope?: QueryFunnelScope;
 }
 
 /**
@@ -57,7 +61,9 @@ export interface GenerateChartRecommendationsRequest {
   sqlQuery: string;
   queryResults: any[];
   subQuestion: string;
-  assessmentFormDefinition: any;
+  assessmentFormDefinition?: any;
+  databaseSchemaContext?: string;
+  scope?: QueryFunnelScope;
 }
 
 /**

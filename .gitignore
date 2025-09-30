@@ -31,3 +31,5 @@ next-env.d.ts
 
 /.cursor/
 .cursor-doc.md
+AGENTS.md
+.DS_Store

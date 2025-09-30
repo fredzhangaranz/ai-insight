@@ -1,3 +1,5 @@
+import type { PromptScope } from "./funnel-subquestions.prompt";
+
 // System prompt for generating incremental SQL queries for funnel sub-questions
 
 /**
@@ -106,7 +108,8 @@ export function constructFunnelSqlPrompt(
   formDefinition?: any,
   databaseSchemaContext?: string,
   desiredFields?: string[],
-  matchedTemplates?: Array<{ name: string; sqlPattern: string }>
+  matchedTemplates?: Array<{ name: string; sqlPattern: string }>,
+  scope: PromptScope = "form"
 ): string {
   let prompt = FUNNEL_SQL_PROMPT;
   prompt += `\n\nSUB-QUESTION:\n${subQuestion}`;
@@ -128,12 +131,21 @@ export function constructFunnelSqlPrompt(
       .join("\n");
     prompt += `\n\nMATCHED TEMPLATES (TOP ${topK.length}):\n${mt}`;
   }
-  if (formDefinition) {
+  if (scope !== "schema" && formDefinition) {
     prompt +=
       `\n\nFORM DEFINITION:\n` + JSON.stringify(formDefinition, null, 2);
   }
   if (databaseSchemaContext) {
     prompt += `\n\nDATABASE SCHEMA CONTEXT:\n` + databaseSchemaContext;
+  }
+  if (scope === "schema") {
+    prompt +=
+      "\n\nSCHEMA MODE CONTEXT:\n" +
+      [
+        "- The question spans the entire rpt.* schema; do not rely on form-specific field definitions.",
+        "- Follow the wound state guidance by joining rpt.WoundState and rpt.WoundStateType (never infer from rpt.Note).",
+        "- Prefer table-driven joins (Assessment → DimDate/Patient/Wound) and keep SQL parameterized for filters.",
+      ].join("\n");
   }
   if (desiredFields && desiredFields.length > 0) {
     // Inject lean-MVP enrichment constraints

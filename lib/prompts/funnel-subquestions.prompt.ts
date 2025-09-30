@@ -3,6 +3,8 @@
 /**
  * System prompt for sub-question decomposition
  */
+export type PromptScope = "form" | "schema";
+
 export const FUNNEL_SUBQUESTIONS_PROMPT = [
   "You are a helpful clinical data analyst assistant. Your task is to take a complex analytical question related to clinical wound assessment data and break it down into smaller, incremental sub-questions. Each sub-question must be simple, clear, and individually answerable with a straightforward SQL query.",
   "",
@@ -118,16 +120,26 @@ export const FUNNEL_SUBQUESTIONS_PROMPT = [
 export function constructFunnelSubquestionsPrompt(
   originalQuestion: string,
   formDefinition?: any,
-  databaseSchemaContext?: string
+  databaseSchemaContext?: string,
+  scope: PromptScope = "form"
 ): string {
   let prompt = FUNNEL_SUBQUESTIONS_PROMPT;
   prompt += `\n\nORIGINAL QUESTION:\n${originalQuestion}`;
-  if (formDefinition) {
+  if (scope !== "schema" && formDefinition) {
     prompt +=
       `\n\nFORM DEFINITION:\n` + JSON.stringify(formDefinition, null, 2);
   }
   if (databaseSchemaContext) {
     prompt += `\n\nDATABASE SCHEMA CONTEXT:\n` + databaseSchemaContext;
+  }
+  if (scope === "schema") {
+    prompt +=
+      "\n\nSCHEMA MODE CONTEXT:\n" +
+      [
+        "- No form was selected; operate across the rpt.* schema using the relationships described above.",
+        "- Favor joins through rpt.DimDate for calendaring and follow the wound state guidance (use rpt.WoundState and rpt.WoundStateType instead of rpt.Note).",
+        "- Avoid assuming assessment form fields exist; derive groupings directly from schema tables and AttributeType metadata when needed.",
+      ].join("\n");
   }
   return prompt;
 }

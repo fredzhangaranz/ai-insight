@@ -15,7 +15,11 @@ async function generateChartHandler(
     subQuestion,
     assessmentFormDefinition,
     modelId,
+    databaseSchemaContext,
+    scope: rawScope,
   } = body;
+
+  const scope = rawScope === "schema" ? "schema" : "form";
 
   // Validate required fields
   if (!sqlQuery || typeof sqlQuery !== "string") {
@@ -55,7 +59,10 @@ async function generateChartHandler(
       sqlQuery,
       queryResults,
       subQuestion,
-      assessmentFormDefinition: assessmentFormDefinition || {},
+      assessmentFormDefinition:
+        scope === "schema" ? undefined : assessmentFormDefinition || {},
+      databaseSchemaContext,
+      scope,
     });
 
     console.log("✅ Chart recommendations generated successfully");

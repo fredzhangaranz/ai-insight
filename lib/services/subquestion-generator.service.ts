@@ -2,10 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   constructFunnelSubquestionsPrompt,
   validateFunnelSubquestionsResponse,
+  type PromptScope,
 } from "@/lib/prompts/funnel-subquestions.prompt";
 import { MetricsMonitor } from "@/lib/monitoring";
-import fs from "fs";
-import path from "path";
+import { loadDatabaseSchemaContext } from "@/lib/ai/schema-context";
 
 // Configuration
 const anthropic = new Anthropic({
@@ -17,6 +17,7 @@ export interface SubQuestionGenerationRequest {
   originalQuestion: string;
   formDefinition?: any;
   databaseSchemaContext?: string;
+  scope?: PromptScope;
 }
 
 export interface SubQuestionGenerationResponse {
@@ -47,21 +48,15 @@ export async function generateSubQuestions(
     }
 
     // Load database schema context if not provided
-    let schemaContext = request.databaseSchemaContext;
-    if (!schemaContext) {
-      const schemaContextPath = path.join(
-        process.cwd(),
-        "lib",
-        "database-schema-context.md"
-      );
-      schemaContext = fs.readFileSync(schemaContextPath, "utf-8");
-    }
+    const schemaContext =
+      request.databaseSchemaContext || loadDatabaseSchemaContext();
 
     // Construct the prompt with context
     const prompt = constructFunnelSubquestionsPrompt(
       request.originalQuestion,
       request.formDefinition,
-      schemaContext
+      schemaContext,
+      request.scope ?? "form"
     );
 
     console.log("Calling Anthropic API for sub-question generation...");

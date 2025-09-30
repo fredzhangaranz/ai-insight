@@ -7,6 +7,7 @@ import {
 import type { SubQuestion } from "@/lib/types/funnel";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
+import type { InsightScope } from "@/lib/services/insight.service";
 
 export interface CachedSubQuestionResult {
   funnelId: number;
@@ -14,13 +15,25 @@ export interface CachedSubQuestionResult {
   wasCached: boolean;
 }
 
+export const SCHEMA_SCOPE_SENTINEL = "00000000-0000-0000-0000-000000000000";
+
 export async function getOrGenerateSubQuestions(
-  assessmentFormVersionFk: string,
+  assessmentFormVersionFk: string | undefined,
   originalQuestion: string,
   formDefinition?: any,
   databaseSchemaContext?: any,
-  modelId: string = DEFAULT_AI_MODEL_ID
+  modelId: string = DEFAULT_AI_MODEL_ID,
+  scope: InsightScope = "form"
 ): Promise<CachedSubQuestionResult> {
+  const cacheKey =
+    scope === "schema"
+      ? SCHEMA_SCOPE_SENTINEL
+      : assessmentFormVersionFk;
+  if (!cacheKey) {
+    throw new Error(
+      "assessmentFormVersionFk is required when scope is 'form'"
+    );
+  }
   // TODO: The current caching mechanism is not model-aware. It finds a funnel
   // by question text alone. This means if a user generates sub-questions with
   // Claude, and another user requests the same question with Gemini, the Claude
@@ -28,10 +41,7 @@ export async function getOrGenerateSubQuestions(
   // to store the modelId with the funnel, which is beyond the scope of this refactor.
 
   // First, check if we already have a funnel with this exact question
-  const existingFunnel = await findFunnelByQuestion(
-    assessmentFormVersionFk,
-    originalQuestion
-  );
+  const existingFunnel = await findFunnelByQuestion(cacheKey, originalQuestion);
 
   if (existingFunnel) {
     console.log(
@@ -75,13 +85,14 @@ export async function getOrGenerateSubQuestions(
   const aiResponse = await provider.generateSubQuestions({
     originalQuestion,
     formDefinition,
-    databaseSchemaContext: databaseSchemaContext || "",
-    assessmentFormVersionFk,
+    databaseSchemaContext,
+    assessmentFormVersionFk: cacheKey,
+    scope,
   });
 
   // Create a new funnel
   const newFunnel = await createFunnel({
-    assessmentFormVersionFk,
+    assessmentFormVersionFk: cacheKey,
     originalQuestion,
   });
 

@@ -1,4 +1,5 @@
 import type { ChartType } from "../chart-contracts";
+import type { PromptScope } from "./funnel-subquestions.prompt";
 
 /**
  * Constructs the system prompt for chart recommendations based on SQL results.
@@ -8,8 +9,22 @@ export function constructChartRecommendationsPrompt(
   sqlQuery: string,
   queryResults: any[],
   assessmentFormDefinition: any,
-  databaseSchemaContext: string
+  databaseSchemaContext: string,
+  scope: PromptScope = "form"
 ): string {
+  const queryResultsPreview = JSON.stringify(queryResults.slice(0, 10), null, 2);
+  const formSection =
+    scope === "schema" || !assessmentFormDefinition
+      ? "- Schema Mode: No form definition is supplied; derive fields from the rpt.* schema context."
+      : `- Assessment Form Definition: ${JSON.stringify(
+          assessmentFormDefinition,
+          null,
+          2
+        )}`;
+  const schemaReminder =
+    scope === "schema"
+      ? "\n- Schema Mode Guidance: Use rpt.WoundState/rpt.WoundStateType for wound state, prefer rpt.DimDate for calendar joins, and avoid relying on form-only fields."
+      : "";
   return `
 You are an expert data visualization specialist. Your task is to analyze SQL query results and recommend the best chart type and data mappings for visualization.
 
@@ -18,17 +33,13 @@ CONTEXT:
 - SQL Query: \`\`\`sql
 ${sqlQuery}
 \`\`\`
-- Query Results: ${JSON.stringify(queryResults.slice(0, 10), null, 2)}${
+- Query Results: ${queryResultsPreview}${
     queryResults.length > 10
       ? `\n(Showing first 10 of ${queryResults.length} rows)`
       : ""
   }
-- Assessment Form Definition: ${JSON.stringify(
-    assessmentFormDefinition,
-    null,
-    2
-  )}
-- Database Schema Context: ${databaseSchemaContext}
+${formSection}
+- Database Schema Context: ${databaseSchemaContext}${schemaReminder}
 
 TASK:
 Analyze the SQL query and its results to recommend the best chart type and provide mappings for all suitable chart types.

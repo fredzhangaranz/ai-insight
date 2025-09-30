@@ -3,15 +3,25 @@
 const { Pool } = require("pg");
 const fs = require("fs");
 const path = require("path");
+// Load local env if present (helpful when running outside docker)
+try {
+  const dotenvPath = path.join(process.cwd(), ".env.local");
+  if (fs.existsSync(dotenvPath)) {
+    require("dotenv").config({ path: dotenvPath });
+  }
+} catch (_) {}
 
 // Database connection configuration
+let connectionString =
+  process.env.INSIGHT_GEN_DB_URL ||
+  process.env.DATABASE_URL ||
+  "postgresql://user:password@localhost:5432/insight_gen_db";
+
 const dbConfig = {
-  connectionString:
-    process.env.INSIGHT_GEN_DB_URL ||
-    "postgresql://user:password@localhost:5432/insight_gen_db",
+  connectionString,
   max: 1,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
 };
 
 // Migration files in order
@@ -24,14 +34,58 @@ const migrations = [
   "005_create_custom_questions_table.sql",
   "006_add_original_question_id_to_custom_questions.sql",
   "007_create_ai_config_table.sql",
+  "008_create_saved_insights.sql",
+  "009_create_dashboards.sql",
+  "010_rename_formid_in_saved_insights.sql",
 ];
 
 async function runMigrations() {
-  const pool = new Pool(dbConfig);
+  // Build connection candidates to mitigate common host issues
+  const url = new URL(connectionString);
+  const candidates = new Set([connectionString]);
+  if (url.hostname === "localhost") {
+    const u = new URL(connectionString);
+    u.hostname = "127.0.0.1";
+    candidates.add(u.toString());
+  }
+  if (url.hostname !== "db") {
+    const u = new URL(connectionString);
+    u.hostname = "db";
+    candidates.add(u.toString());
+  }
+
+  let pool = null;
+  let connected = false;
 
   try {
-    console.log("🔌 Connecting to database...");
-    await pool.connect();
+    let lastErr;
+    for (const candidate of candidates) {
+      const cUrl = new URL(candidate);
+      console.log(
+        `🔌 Connecting to database... (${cUrl.host}${cUrl.pathname})`
+      );
+      pool = new Pool({ ...dbConfig, connectionString: candidate });
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          // Use pool.query directly - it handles client acquisition and release automatically
+          await pool.query("SELECT 1");
+          lastErr = null;
+          connected = true;
+          connectionString = candidate; // record working connection
+          break;
+        } catch (err) {
+          lastErr = err;
+          console.warn(
+            `⏳ Attempt ${attempt} failed for ${cUrl.host}: ${
+              err?.message || err
+            }`
+          );
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
+      }
+      if (connected) break;
+    }
+    if (!connected) throw lastErr || new Error("Failed to connect to DB");
     console.log("✅ Connected to database successfully");
 
     // Check if migrations table exists
