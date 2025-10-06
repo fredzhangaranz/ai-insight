@@ -10,7 +10,7 @@ The Template System documentation is organized into **separate, focused document
 
 ```
 docs/
-├── design/
+├── design/templating_system/
 │   ├── template_improvement_design.md         ← Architecture & Data Model
 │   ├── template_system_ui_mockups.md          ← UI/UX Specifications (NEW)
 │   └── TEMPLATE_SYSTEM_DOCS_README.md         ← This file

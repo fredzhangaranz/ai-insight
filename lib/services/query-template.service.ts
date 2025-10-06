@@ -1,6 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { isTemplateSystemEnabled } from "../config/template-flags";
+
 export interface QueryTemplate {
   name: string;
   description?: string;
@@ -29,8 +31,14 @@ export interface ValidationResult {
   warnings: string[];
 }
 
-let cachedCatalog: TemplateCatalog | null = null;
-let lastLoadedAtMs = 0;
+type TemplateCatalogSource = "json" | "db";
+
+interface TemplateCatalogCacheEntry {
+  catalog: TemplateCatalog;
+  loadedAt: number;
+}
+
+const catalogCache: Partial<Record<TemplateCatalogSource, TemplateCatalogCacheEntry>> = {};
 
 const CATALOG_RELATIVE_PATH = path.join(
   process.cwd(),
@@ -46,15 +54,17 @@ export async function getTemplates(options?: {
   forceReload?: boolean;
 }): Promise<TemplateCatalog> {
   const forceReload = options?.forceReload === true;
+  const source: TemplateCatalogSource = isTemplateSystemEnabled() ? "db" : "json";
 
-  if (!forceReload && cachedCatalog) {
-    return cachedCatalog;
+  if (!forceReload) {
+    const cached = catalogCache[source];
+    if (cached) {
+      return cached.catalog;
+    }
   }
 
-  const jsonRaw = await fs.promises.readFile(CATALOG_RELATIVE_PATH, "utf-8");
-  const parsed = JSON.parse(jsonRaw) as TemplateCatalog;
-
-  const validation = validateTemplateCatalog(parsed);
+  const catalog = await loadTemplateCatalog(source);
+  const validation = validateTemplateCatalog(catalog);
   if (!validation.valid) {
     const message = `Query template catalog validation failed: ${validation.errors.join(
       "; "
@@ -63,16 +73,40 @@ export async function getTemplates(options?: {
   }
 
   if (validation.warnings.length > 0) {
-    // Log warnings without failing
     console.warn(
-      "Query template catalog warnings:",
+      `Query template catalog warnings (${source}):`,
       validation.warnings.join("; ")
     );
   }
 
-  cachedCatalog = parsed;
-  lastLoadedAtMs = Date.now();
-  return parsed;
+  catalogCache[source] = { catalog, loadedAt: Date.now() };
+  return catalog;
+}
+
+async function loadTemplateCatalog(
+  source: TemplateCatalogSource
+): Promise<TemplateCatalog> {
+  if (source === "db") {
+    return loadCatalogFromDb();
+  }
+  return loadCatalogFromJson();
+}
+
+async function loadCatalogFromJson(): Promise<TemplateCatalog> {
+  const jsonRaw = await fs.promises.readFile(CATALOG_RELATIVE_PATH, "utf-8");
+  return JSON.parse(jsonRaw) as TemplateCatalog;
+}
+
+let hasWarnedAboutDbFallback = false;
+
+async function loadCatalogFromDb(): Promise<TemplateCatalog> {
+  if (!hasWarnedAboutDbFallback) {
+    console.warn(
+      "AI_TEMPLATES_ENABLED is true, but DB-backed template catalog is not implemented yet. Falling back to JSON catalog."
+    );
+    hasWarnedAboutDbFallback = true;
+  }
+  return loadCatalogFromJson();
 }
 
 /**
@@ -248,4 +282,10 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
     if (large.has(t)) intersection += 1;
   }
   return intersection / (a.size + b.size - intersection);
+}
+
+export function resetTemplateCatalogCache(): void {
+  delete catalogCache.json;
+  delete catalogCache.db;
+  hasWarnedAboutDbFallback = false;
 }

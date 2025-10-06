@@ -36,7 +36,7 @@ Tests:
 - Baseline SQL generation test suite (existing) passes with flag OFF
 - No schema changes to existing tables (only new tables added)
 
-Status: Not Started
+Status: In Progress — feature flag scaffolding landed in codebase
 
 ## Stage 1: DB Schema + Migration + Seed Import
 
