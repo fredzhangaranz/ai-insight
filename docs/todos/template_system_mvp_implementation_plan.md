@@ -89,18 +89,18 @@ Tests:
 - Unit tests for each validator (placeholder integrity, safety checks, schema prefixing, placeholdersSpec schema)
 - Validation errors return actionable messages with line/position context where applicable
 
-Status: Not Started
+Status: Completed — shared validator module live and wired everywhere
 
 Tasks
 
-- Create `template-validator.service.ts` with:
+- ✅ Create `template-validator.service.ts` with:
   - `validatePlaceholders(sqlPattern, placeholdersSpec)` — check declared vs. used
   - `validateSafety(sqlPattern)` — SELECT/WITH-only, dangerous keywords
   - `validateSchemaPrefix(sqlPattern)` — ensure `rpt.` prefix on tables
   - `validatePlaceholdersSpec(spec)` — JSON schema compliance
   - `validateTemplate(template)` — orchestrator for all checks
-- Define TypeScript types: `ValidationResult`, `ValidationError`, `ValidationWarning`
-- Import into existing `query-template.service.ts` and replace inline validation
+- ✅ Define TypeScript types: `ValidationResult`, `ValidationError`, `ValidationWarning`
+- ✅ Import into existing `query-template.service.ts` and replace inline validation
 - Document validation rules in authoring guide (next stage)
 
 ## Stage 2.5: Documentation (Authoring Guide + placeholdersSpec Schema)
@@ -118,19 +118,19 @@ Tests:
 - Documentation review by team
 - Walkthrough reproducible by new developer (try creating a template following guide)
 
-Status: Not Started
+Status: Completed — authoring guide published and cross-linked ([docs/template-authoring-guide.md](../template-authoring-guide.md))
 
 Tasks
 
-- Create `docs/template-authoring-guide.md` covering:
+- ✅ Create `docs/template-authoring-guide.md` covering:
   - placeholdersSpec schema with examples (guid, int, string, date types; semantic types; validators)
   - Validation rules (placeholder integrity, safety, schema prefixing)
   - Template lifecycle (Draft creation, editing, publishing, deprecation)
   - Worked examples (use cases from query-templates.json)
   - Best practices (naming, keywords, examples, when to create new template vs. edit)
-- Add placeholdersSpec examples to guide (at least 3 different slot type patterns)
-- Document immutable versioning strategy in guide
-- Link guide from design doc and implementation plan
+- ✅ Add placeholdersSpec examples to guide (at least 3 different slot type patterns)
+- ✅ Document immutable versioning strategy in guide
+- ✅ Link guide from design doc and implementation plan
 
 ## Stage 3: Template Service + Selector (DB-first, JSON fallback)
 

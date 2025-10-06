@@ -22,6 +22,7 @@ Primary anchor files and endpoints (current state):
 
 - **UI Mockups:** [template_system_ui_mockups.md](./template_system_ui_mockups.md) - Detailed UI/UX designs for template editor, admin page, and apply wizard
 - **Implementation Plan:** [template_system_mvp_implementation_plan.md](../todos/template_system_mvp_implementation_plan.md) - Stage-by-stage development plan
+- **Authoring Guide:** [template-authoring-guide.md](../template-authoring-guide.md) - Lifecycle, validation rules, placeholdersSpec schema
 - **Database Schema:** [011_create_template_catalog.sql](../../database/migration/011_create_template_catalog.sql) - Table definitions
 
 ## Goals

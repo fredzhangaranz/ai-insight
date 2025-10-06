@@ -3,6 +3,11 @@ import * as path from "path";
 
 import { getInsightGenDbPool } from "../db";
 import { isTemplateSystemEnabled } from "../config/template-flags";
+import {
+  PlaceholdersSpec,
+  validateTemplate,
+  ValidationResult,
+} from "./template-validator.service";
 
 export interface QueryTemplate {
   name: string;
@@ -11,6 +16,7 @@ export interface QueryTemplate {
   keywords?: string[];
   tags?: string[];
   placeholders?: string[];
+  placeholdersSpec?: PlaceholdersSpec;
   sqlPattern: string;
   version: number;
 }
@@ -26,12 +32,6 @@ export interface TemplateMatch {
   matchedExample?: string;
 }
 
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-}
-
 type TemplateCatalogSource = "json" | "db";
 
 interface TemplateCatalogCacheEntry {
@@ -44,10 +44,8 @@ const catalogCache: Partial<Record<TemplateCatalogSource, TemplateCatalogCacheEn
 interface DbTemplateRow {
   name: string;
   description: string | null;
-  intent: string;
-  status: string;
   sqlPattern: string;
-  placeholdersSpec: unknown;
+  placeholdersSpec: PlaceholdersSpec | null;
   keywords: string[] | null;
   tags: string[] | null;
   examples: string[] | null;
@@ -78,7 +76,7 @@ export async function getTemplates(options?: {
   }
 
   const catalog = await loadTemplateCatalog(source);
-  const validation = validateTemplateCatalog(catalog);
+  const validation = runCatalogValidation(catalog);
   if (!validation.valid) {
     const message = `Query template catalog validation failed: ${validation.errors.join(
       "; "
@@ -157,10 +155,7 @@ async function loadCatalogFromDb(): Promise<TemplateCatalog> {
   }
 }
 
-/**
- * Validates the entire template catalog for schema shape, SQL safety, and placeholder integrity.
- */
-export function validateTemplateCatalog(
+function runCatalogValidation(
   catalog: TemplateCatalog
 ): ValidationResult {
   const errors: string[] = [];
@@ -174,92 +169,42 @@ export function validateTemplateCatalog(
     return { valid: false, errors: ["'templates' must be an array"], warnings };
   }
 
-  catalog.templates.forEach((tpl, idx) => {
-    const prefix = `Template[${idx}] '${tpl?.name ?? "<unnamed>"}':`;
-
+  catalog.templates.forEach((tpl, index) => {
     if (!tpl || typeof tpl !== "object") {
-      errors.push(`${prefix} not an object`);
+      errors.push(`Template[${index}] is not an object.`);
       return;
     }
-    if (!tpl.name || typeof tpl.name !== "string") {
-      errors.push(`${prefix} missing valid 'name'`);
-    }
-    if (
-      tpl.version === undefined ||
-      tpl.version === null ||
-      Number.isNaN(Number(tpl.version))
-    ) {
-      errors.push(`${prefix} missing valid 'version'`);
-    }
-    if (!tpl.sqlPattern || typeof tpl.sqlPattern !== "string") {
-      errors.push(`${prefix} missing valid 'sqlPattern'`);
+
+    const name =
+      typeof tpl.name === "string" && tpl.name.trim().length > 0
+        ? tpl.name.trim()
+        : "";
+    if (!name) {
+      errors.push(`Template[${index}] missing valid 'name'.`);
     }
 
-    // Placeholder integrity: all placeholders in pattern must be declared (best-effort)
-    if (tpl.sqlPattern) {
-      const bracePlaceholders = Array.from(
-        tpl.sqlPattern.matchAll(/\{([a-zA-Z0-9_\[\]\?]+)\}/g)
-      ).map((m) => m[1]);
-      const declared = new Set((tpl.placeholders ?? []).map((p) => String(p)));
-      for (const ph of bracePlaceholders) {
-        if (!declared.has(ph)) {
-          warnings.push(
-            `${prefix} placeholder '{${ph}}' not listed in placeholders[]`
-          );
-        }
-      }
-      for (const ph of Array.from(declared)) {
-        if (!bracePlaceholders.includes(ph)) {
-          warnings.push(
-            `${prefix} placeholders[] contains '${ph}' which does not appear in sqlPattern`
-          );
-        }
-      }
+    const hasValidVersion =
+      tpl.version !== undefined && tpl.version !== null && !Number.isNaN(+tpl.version);
+    if (!hasValidVersion) {
+      errors.push(`Template '${name || `<index:${index}>`}' missing valid 'version'.`);
     }
 
-    // SQL safety checks
-    if (tpl.sqlPattern) {
-      const sql = tpl.sqlPattern.trim();
-      const upper = sql.toUpperCase();
-
-      const dangerous = [
-        "DROP",
-        "DELETE",
-        "UPDATE",
-        "INSERT",
-        "TRUNCATE",
-        "ALTER",
-        "CREATE",
-        "EXEC",
-        "EXECUTE",
-        " SP_",
-        " XP_",
-      ];
-      for (const kw of dangerous) {
-        if (upper.includes(kw)) {
-          errors.push(
-            `${prefix} contains potentially dangerous keyword '${kw.trim()}'`
-          );
-        }
-      }
-
-      const startsWithSelectOrWith =
-        upper.startsWith("SELECT") || upper.startsWith("WITH");
-
-      if (!startsWithSelectOrWith) {
-        // Allow fragments like unions or combinators; warn but do not fail
-        warnings.push(
-          `${prefix} sqlPattern does not start with SELECT/WITH (treated as fragment)`
-        );
-      } else {
-        // Heuristic schema prefixing reminder
-        const hasFrom = /\bFROM\b/i.test(sql) || /\bJOIN\b/i.test(sql);
-        const hasRptPrefix = /\brpt\./i.test(sql);
-        if (hasFrom && !hasRptPrefix) {
-          warnings.push(`${prefix} no 'rpt.' schema prefix detected`);
-        }
-      }
+    if (typeof tpl.sqlPattern !== "string" || tpl.sqlPattern.trim().length === 0) {
+      errors.push(
+        `Template '${name || `<index:${index}>`}' missing valid 'sqlPattern'.`
+      );
+      return;
     }
+
+    const templateValidation = validateTemplate({
+      name: name || tpl.name || `<index:${index}>`,
+      sqlPattern: tpl.sqlPattern,
+      placeholders: tpl.placeholders,
+      placeholdersSpec: tpl.placeholdersSpec,
+    });
+
+    templateValidation.errors.forEach((issue) => errors.push(issue.message));
+    templateValidation.warnings.forEach((issue) => warnings.push(issue.message));
   });
 
   return { valid: errors.length === 0, errors, warnings };
@@ -371,6 +316,7 @@ function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
     sqlPattern: row.sqlPattern,
     version: row.version,
     placeholders: slots.length > 0 ? slots : undefined,
+    placeholdersSpec: row.placeholdersSpec ?? undefined,
     keywords: normalizeTextArray(row.keywords),
     tags: normalizeTextArray(row.tags),
     questionExamples: normalizeTextArray(row.examples),
