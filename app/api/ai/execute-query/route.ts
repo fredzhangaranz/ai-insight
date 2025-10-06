@@ -45,7 +45,12 @@ function validateAndFixQuery(sql: string): string {
 
   // 3. Fix: Add TOP clause for large result sets if not present
   if (!sql.match(/\bTOP\s+\d+\b/i) && !sql.match(/\bOFFSET\b/i)) {
-    sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+    // Handle DISTINCT + TOP syntax correctly for MS SQL Server
+    if (sql.match(/\bSELECT\s+DISTINCT\b/i)) {
+      sql = sql.replace(/\bSELECT\s+DISTINCT\b/i, "SELECT DISTINCT TOP 1000");
+    } else {
+      sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+    }
   }
 
   return sql;

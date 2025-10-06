@@ -36,7 +36,7 @@ Tests:
 - Baseline SQL generation test suite (existing) passes with flag OFF
 - No schema changes to existing tables (only new tables added)
 
-Status: In Progress — feature flag scaffolding landed in codebase
+Status: Completed — feature flag scaffolding landed in codebase
 
 ## Stage 1: DB Schema + Migration + Seed Import
 
@@ -56,7 +56,7 @@ Tests:
 - JSON fallback works when flag off
 - updatedAt trigger fires on Template updates
 
-Status: Not Started
+Status: Completed — migrations, seeder, and DB loader in place
 
 Tasks
 
@@ -67,13 +67,13 @@ Tasks
   - Partial unique index on (name, intent) for active templates only
   - placeholdersSpec schema documented in SQL comments
   - TemplateTest table commented out (Phase 2)
-- Implement seed/import utility: `scripts/seed-template-catalog.ts`
+- ✅ Implement seed/import utility: `scripts/seed-template-catalog.ts`
   - Load `lib/prompts/query-templates.json` into Template/TemplateVersion
   - Set status=Approved, version=1 for existing templates
   - Convert JSON placeholders[] to placeholdersSpec JSONB structure
   - Idempotent: check existence by (name, intent) before inserting
-- Document rollback steps in design doc (drop tables; set flag off; fallback to JSON)
-- Verify feature flag gating in existing `query-template.service.ts`
+- ✅ Document rollback steps in design doc (drop tables; set flag off; fallback to JSON)
+- ✅ Verify feature flag gating in existing `query-template.service.ts`
 
 ## Stage 2: Consolidated Validation Service
 

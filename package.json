@@ -12,7 +12,8 @@
     "test:run": "vitest run",
     "migrate": "node scripts/run-migrations.js",
     "check-tables": "node scripts/check-tables.js",
-    "seed-ai-config": "node scripts/seed-ai-config.js"
+    "seed-ai-config": "node scripts/seed-ai-config.js",
+    "seed-template-catalog": "node scripts/seed-template-catalog.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.66",
@@ -66,6 +67,7 @@
     "@types/mssql": "^9.1.7",
     "@vitejs/plugin-react": "^5.0.0",
     "@vitest/ui": "^3.2.4",
+    "dotenv": "^17.2.3",
     "eslint": "^8",
     "eslint-config-next": "14.2.4",
     "jest": "^29.7.0",

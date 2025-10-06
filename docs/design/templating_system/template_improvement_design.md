@@ -434,9 +434,11 @@ Modal wizard for filling placeholder values:
 
 ## Compatibility & Rollback
 
-- Default path stays JSON-backed; DB tables introduced behind feature flags.
+- Default path stays JSON-backed; DB tables introduced behind the `AI_TEMPLATES_ENABLED` feature flag (off by default).
 - Additive schema changes only; safe to revert to a previous catalog version.
 - Migration notes required when moving to DB-backed templates; include rollback to file-backed registry.
+- Rollback script `database/migration/011_rollback_template_catalog.sql` drops Template/TemplateVersion/TemplateUsage tables and trigger, enabling a clean revert.
+- Seeding utility `scripts/seed-template-catalog.ts` (invoked via `node scripts/seed-template-catalog.js`) re-imports the legacy JSON catalog; rerunnable and idempotent.
 
 ## Phase 1 vs Phase 2 Breakdown
 

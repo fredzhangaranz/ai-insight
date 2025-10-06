@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { getInsightGenDbPool } from "../db";
 import { isTemplateSystemEnabled } from "../config/template-flags";
 
 export interface QueryTemplate {
@@ -39,6 +40,19 @@ interface TemplateCatalogCacheEntry {
 }
 
 const catalogCache: Partial<Record<TemplateCatalogSource, TemplateCatalogCacheEntry>> = {};
+
+interface DbTemplateRow {
+  name: string;
+  description: string | null;
+  intent: string;
+  status: string;
+  sqlPattern: string;
+  placeholdersSpec: unknown;
+  keywords: string[] | null;
+  tags: string[] | null;
+  examples: string[] | null;
+  version: number;
+}
 
 const CATALOG_RELATIVE_PATH = path.join(
   process.cwd(),
@@ -100,13 +114,47 @@ async function loadCatalogFromJson(): Promise<TemplateCatalog> {
 let hasWarnedAboutDbFallback = false;
 
 async function loadCatalogFromDb(): Promise<TemplateCatalog> {
-  if (!hasWarnedAboutDbFallback) {
-    console.warn(
-      "AI_TEMPLATES_ENABLED is true, but DB-backed template catalog is not implemented yet. Falling back to JSON catalog."
+  try {
+    const pool = await getInsightGenDbPool();
+    const result = await pool.query<DbTemplateRow>(
+      `SELECT
+         t.name,
+         t.description,
+         t.intent,
+         tv."sqlPattern" AS "sqlPattern",
+         tv."placeholdersSpec" AS "placeholdersSpec",
+         tv.keywords,
+         tv.tags,
+         tv.examples,
+         tv.version
+       FROM "Template" t
+       JOIN LATERAL (
+         SELECT v.*
+         FROM "TemplateVersion" v
+         WHERE v."templateId" = t.id
+         ORDER BY (v.id = t."activeVersionId") DESC, v.version DESC
+         LIMIT 1
+       ) tv ON TRUE
+       WHERE t.status = 'Approved'`
     );
-    hasWarnedAboutDbFallback = true;
+
+    if (result.rows.length === 0) {
+      warnDbFallback(
+        "no approved templates found in DB (seed may not have been run yet)"
+      );
+      return loadCatalogFromJson();
+    }
+
+    const templates = result.rows.map(transformDbRowToQueryTemplate);
+    return { templates };
+  } catch (error) {
+    warnDbFallback(
+      `failed to load templates from DB: ${
+        (error as Error)?.message ?? String(error)
+      }`
+    );
+    return loadCatalogFromJson();
   }
-  return loadCatalogFromJson();
 }
 
 /**
@@ -288,4 +336,43 @@ export function resetTemplateCatalogCache(): void {
   delete catalogCache.json;
   delete catalogCache.db;
   hasWarnedAboutDbFallback = false;
+}
+
+function warnDbFallback(reason: string): void {
+  if (hasWarnedAboutDbFallback) {
+    return;
+  }
+  console.warn(
+    `AI_TEMPLATES_ENABLED is true, but ${reason}. Falling back to JSON catalog.`
+  );
+  hasWarnedAboutDbFallback = true;
+}
+
+function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
+  const placeholdersSpec = row.placeholdersSpec as
+    | { slots?: Array<{ name?: string }> }
+    | null
+    | undefined;
+
+  const slots = Array.isArray(placeholdersSpec?.slots)
+    ? placeholdersSpec!.slots
+        .map((slot) => (slot?.name ?? "").trim())
+        .filter((name): name is string => Boolean(name))
+    : [];
+
+  const normalizeTextArray = (value: string[] | null | undefined) =>
+    Array.isArray(value) && value.length > 0
+      ? value.map((item) => String(item))
+      : undefined;
+
+  return {
+    name: row.name,
+    description: row.description ?? undefined,
+    sqlPattern: row.sqlPattern,
+    version: row.version,
+    placeholders: slots.length > 0 ? slots : undefined,
+    keywords: normalizeTextArray(row.keywords),
+    tags: normalizeTextArray(row.tags),
+    questionExamples: normalizeTextArray(row.examples),
+  };
 }

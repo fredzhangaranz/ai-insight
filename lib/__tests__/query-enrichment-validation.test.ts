@@ -131,8 +131,17 @@ class MockBaseProvider {
 
     // 3. Enforce TOP clause for safety
     if (!upperSql.includes("TOP") && !upperSql.includes("OFFSET")) {
-      // Add TOP 1000 if not present
-      modifiedSql = modifiedSql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+      // Handle DISTINCT + TOP syntax correctly for MS SQL Server
+      if (upperSql.includes("DISTINCT")) {
+        // Replace "SELECT DISTINCT" with "SELECT DISTINCT TOP 1000"
+        modifiedSql = modifiedSql.replace(
+          /\bSELECT\s+DISTINCT\b/i,
+          "SELECT DISTINCT TOP 1000"
+        );
+      } else {
+        // Add TOP 1000 if not present
+        modifiedSql = modifiedSql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+      }
       warnings.push("Added TOP 1000 clause for safety");
     }
 

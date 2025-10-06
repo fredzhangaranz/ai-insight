@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS "Template" (
   dialect TEXT NOT NULL DEFAULT 'mssql', -- target SQL dialect for sqlPattern
   status VARCHAR(20) NOT NULL DEFAULT 'Draft', -- Draft | Approved | Deprecated
   "activeVersionId" INTEGER, -- Points to current active TemplateVersion (set after TemplateVersion created)
-  createdBy TEXT,
+  "createdBy" TEXT,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT "CHK_Template_Status" CHECK (status IN ('Draft','Approved','Deprecated'))
