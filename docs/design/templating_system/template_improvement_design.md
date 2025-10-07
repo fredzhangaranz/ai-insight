@@ -451,6 +451,8 @@ Modal wizard for filling placeholder values:
 
 - **DB Schema:** Template, TemplateVersion, TemplateUsage tables (TemplateTest deferred)
 - **Service Layer:** Consolidated validation service, DB-backed template service with JSON fallback
+  - `lib/services/template-validator.service.ts` — reusable validation (placeholders, safety, schema prefixes)
+  - `lib/services/template.service.ts` — list/filter/suggest helpers, success-rate weighting, cache hooks
 - **APIs:** List, suggest, create, edit, publish, deprecate, import-json, reload
 - **Selection:** Keyword + Jaccard matching with success-rate weighting (minimal enhancement)
 - **UI:** Template Editor modal (unified apply/create), Template Admin (browse/edit/publish), matched template panel

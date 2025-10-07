@@ -9,6 +9,8 @@ import {
   ValidationResult,
 } from "./template-validator.service";
 
+export type TemplateStatus = "Draft" | "Approved" | "Deprecated";
+
 export interface QueryTemplate {
   name: string;
   description?: string;
@@ -19,6 +21,13 @@ export interface QueryTemplate {
   placeholdersSpec?: PlaceholdersSpec;
   sqlPattern: string;
   version: number;
+  intent?: string;
+  status?: TemplateStatus;
+  templateId?: number;
+  templateVersionId?: number;
+  successRate?: number;
+  successCount?: number;
+  usageCount?: number;
 }
 
 export interface TemplateCatalog {
@@ -28,8 +37,10 @@ export interface TemplateCatalog {
 export interface TemplateMatch {
   template: QueryTemplate;
   score: number;
+  baseScore: number;
   matchedKeywords: string[];
   matchedExample?: string;
+  successRate?: number;
 }
 
 type TemplateCatalogSource = "json" | "db";
@@ -42,14 +53,20 @@ interface TemplateCatalogCacheEntry {
 const catalogCache: Partial<Record<TemplateCatalogSource, TemplateCatalogCacheEntry>> = {};
 
 interface DbTemplateRow {
+  templateId: number;
+  templateVersionId: number;
   name: string;
   description: string | null;
+  intent: string;
+  status: TemplateStatus;
   sqlPattern: string;
   placeholdersSpec: PlaceholdersSpec | null;
   keywords: string[] | null;
   tags: string[] | null;
   examples: string[] | null;
   version: number;
+  successCount: number | null;
+  usageCount: number | null;
 }
 
 const CATALOG_RELATIVE_PATH = path.join(
@@ -116,15 +133,20 @@ async function loadCatalogFromDb(): Promise<TemplateCatalog> {
     const pool = await getInsightGenDbPool();
     const result = await pool.query<DbTemplateRow>(
       `SELECT
+         t.id AS "templateId",
+         tv.id AS "templateVersionId",
          t.name,
          t.description,
          t.intent,
+         t.status,
          tv."sqlPattern" AS "sqlPattern",
          tv."placeholdersSpec" AS "placeholdersSpec",
          tv.keywords,
          tv.tags,
          tv.examples,
-         tv.version
+         tv.version,
+         usage.success_count AS "successCount",
+         usage.total_count AS "usageCount"
        FROM "Template" t
        JOIN LATERAL (
          SELECT v.*
@@ -133,6 +155,13 @@ async function loadCatalogFromDb(): Promise<TemplateCatalog> {
          ORDER BY (v.id = t."activeVersionId") DESC, v.version DESC
          LIMIT 1
        ) tv ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*) FILTER (WHERE tu.success IS TRUE) AS success_count,
+           COUNT(*) AS total_count
+         FROM "TemplateUsage" tu
+         WHERE tu."templateVersionId" = tv.id
+       ) usage ON TRUE
        WHERE t.status = 'Approved'`
     );
 
@@ -242,16 +271,21 @@ export async function matchTemplates(
       }
     }
 
-    const score =
+    const baseScore =
       keywordMatches.length * 3 +
       nameDescMatches.length * 1 +
       bestExampleScore * 4;
 
+    const successRate = typeof tpl.successRate === "number" ? clamp01(tpl.successRate) : undefined;
+    const weightedScore = baseScore * (successRate !== undefined ? 1 + successRate : 1);
+
     return {
       template: tpl,
-      score,
+      score: weightedScore,
+      baseScore,
       matchedKeywords: keywordMatches,
       matchedExample: bestExample,
+      successRate,
     };
   });
 
@@ -283,6 +317,10 @@ export function resetTemplateCatalogCache(): void {
   hasWarnedAboutDbFallback = false;
 }
 
+export function reloadTemplateCatalog(): void {
+  resetTemplateCatalogCache();
+}
+
 function warnDbFallback(reason: string): void {
   if (hasWarnedAboutDbFallback) {
     return;
@@ -291,6 +329,13 @@ function warnDbFallback(reason: string): void {
     `AI_TEMPLATES_ENABLED is true, but ${reason}. Falling back to JSON catalog.`
   );
   hasWarnedAboutDbFallback = true;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
 }
 
 function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
@@ -310,7 +355,13 @@ function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
       ? value.map((item) => String(item))
       : undefined;
 
+  const successCount = row.successCount ?? 0;
+  const usageCount = row.usageCount ?? 0;
+  const successRate = usageCount > 0 ? Math.min(Math.max(successCount / usageCount, 0), 1) : undefined;
+
   return {
+    templateId: row.templateId,
+    templateVersionId: row.templateVersionId,
     name: row.name,
     description: row.description ?? undefined,
     sqlPattern: row.sqlPattern,
@@ -320,5 +371,10 @@ function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
     keywords: normalizeTextArray(row.keywords),
     tags: normalizeTextArray(row.tags),
     questionExamples: normalizeTextArray(row.examples),
+    intent: row.intent,
+    status: row.status,
+    successRate,
+    successCount,
+    usageCount,
   };
 }

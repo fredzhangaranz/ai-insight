@@ -147,16 +147,16 @@ Tests:
 - Prompt length checks (injected templates ≤ N characters)
 - Fallback path verified when DB disabled or flag off
 
-Status: Not Started
+Status: Completed — selector now DB-first with success weighting and tooling hooks
 
 Tasks
 
-- Implement DB-backed TemplateService for list/filter/search/suggest
-- Wire `matchTemplates()` to use DB when flag is on, else JSON fallback
-- **Add success-rate weighting:** Query TemplateUsage for recent success rates; boost templates with high success %
-- Add minimal in-memory cache with manual reload hook
-- Ensure cache invalidation on publish/deprecate operations
-- Log selection rationale consistently (matchedKeywords/example, score breakdown) across DB and JSON paths
+- ✅ Implement DB-backed TemplateService for list/filter/search/suggest
+- ✅ Wire `matchTemplates()` to use DB when flag is on, else JSON fallback
+- ✅ **Add success-rate weighting:** Query TemplateUsage for recent success rates; boost templates with high success %
+- ✅ Add minimal in-memory cache with manual reload hook
+- ✅ Ensure cache invalidation on publish/deprecate operations (exposed `invalidateTemplateCache`)
+- ✅ Log selection rationale consistently (matchedKeywords/example, score breakdown, success rate)
 
 ## Stage 4: Developer APIs (List/Suggest/Create/Publish)
 

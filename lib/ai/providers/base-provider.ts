@@ -559,6 +559,8 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
           matches.map((m) => ({
             name: m.template.name,
             score: m.score,
+            baseScore: m.baseScore,
+            successRate: m.successRate,
             matchedKeywords: m.matchedKeywords,
             matchedExample: m.matchedExample,
           }))

@@ -8,6 +8,7 @@ vi.mock("../db", () => ({
 import { getInsightGenDbPool } from "../db";
 import {
   getTemplates,
+  matchTemplates,
   resetTemplateCatalogCache,
 } from "./query-template.service";
 
@@ -51,6 +52,8 @@ describe("query template catalog feature flag gating", () => {
     const mockQuery = vi.fn().mockResolvedValue({
       rows: [
         {
+          templateId: 1,
+          templateVersionId: 11,
           name: "From DB",
           description: null,
           intent: "aggregation_by_category",
@@ -61,6 +64,8 @@ describe("query template catalog feature flag gating", () => {
           tags: ["tag"],
           examples: ["example"],
           version: 1,
+          successCount: 8,
+          usageCount: 10,
         },
       ],
     });
@@ -111,5 +116,54 @@ describe("query template catalog feature flag gating", () => {
     expect(readFileSpy).toHaveBeenCalledTimes(1);
 
     readFileSpy.mockRestore();
+  });
+
+  it("boosts templates with higher success rate", async () => {
+    process.env.AI_TEMPLATES_ENABLED = "true";
+
+    const mockQuery = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          templateId: 1,
+          templateVersionId: 101,
+          name: "High Success",
+          description: "",
+          intent: "aggregation_by_category",
+          status: "Approved",
+          sqlPattern: "SELECT 1 WHERE value = {term}",
+          placeholdersSpec: { slots: [{ name: "term" }] },
+          keywords: ["term"],
+          tags: ["demo"],
+          examples: ["term usage"],
+          version: 1,
+          successCount: 9,
+          usageCount: 10,
+        },
+        {
+          templateId: 2,
+          templateVersionId: 102,
+          name: "Low Success",
+          description: "",
+          intent: "aggregation_by_category",
+          status: "Approved",
+          sqlPattern: "SELECT 1 WHERE value = {term}",
+          placeholdersSpec: { slots: [{ name: "term" }] },
+          keywords: ["term"],
+          tags: ["demo"],
+          examples: ["term usage"],
+          version: 1,
+          successCount: 1,
+          usageCount: 10,
+        },
+      ],
+    });
+
+    mockGetInsightGenDbPool.mockResolvedValue({ query: mockQuery } as any);
+
+    const matches = await matchTemplates("term", 2);
+
+    expect(matches[0]?.template.name).toBe("High Success");
+    expect(matches[0]?.successRate).toBeCloseTo(0.9, 2);
+    expect(matches[1]?.template.name).toBe("Low Success");
   });
 });
