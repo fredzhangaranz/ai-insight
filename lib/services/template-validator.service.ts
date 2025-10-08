@@ -74,6 +74,13 @@ export function validateTemplate(
   errors.push(...specResult.errors);
   warnings.push(...specResult.warnings);
 
+  const scaffoldResult = detectFunnelScaffold(
+    template.sqlPattern,
+    template.name
+  );
+  errors.push(...scaffoldResult.errors);
+  warnings.push(...scaffoldResult.warnings);
+
   return {
     valid: errors.length === 0,
     errors,
@@ -219,6 +226,61 @@ export function validateSchemaPrefix(
   return { valid: errors.length === 0, errors, warnings };
 }
 
+/**
+ * Detects funnel execution scaffolding patterns that should be simplified.
+ * Warns when SQL contains temporary CTE chains like Step1_Results, Step2_Results, etc.
+ */
+export function detectFunnelScaffold(
+  sqlPattern: string,
+  templateName?: string
+): ValidationResult {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
+
+  // Pattern to detect Step<number>_Results identifiers
+  const stepResultsPattern = /\bStep\d+_Results\b/gi;
+  const matches = sqlPattern.match(stepResultsPattern);
+
+  if (matches && matches.length > 0) {
+    const uniqueMatches = Array.from(
+      new Set(matches.map((m) => m.toUpperCase()))
+    );
+    const matchList = uniqueMatches.join(", ");
+
+    warnings.push({
+      code: "sql.funnelScaffold",
+      message: formatMessage(
+        templateName,
+        `Template may contain funnel scaffolding CTEs (${matchList}). Consider simplifying to only essential logic for better reusability.`
+      ),
+      meta: {
+        scaffoldIdentifiers: uniqueMatches,
+        count: uniqueMatches.length,
+      },
+    });
+  }
+
+  // Additional pattern: CTE definitions like "WITH Step1 AS", "WITH Step2 AS", etc.
+  const withStepPattern = /\bWITH\s+Step\d+\s+AS\b/gi;
+  const withStepMatches = sqlPattern.match(withStepPattern);
+
+  if (withStepMatches && withStepMatches.length > 0 && !matches) {
+    // Only warn if we haven't already warned about Step*_Results
+    warnings.push({
+      code: "sql.funnelScaffold",
+      message: formatMessage(
+        templateName,
+        `Template contains step-numbered CTEs (WITH Step1 AS, etc.). Consider using descriptive CTE names for clarity.`
+      ),
+      meta: {
+        pattern: "WITH Step<N> AS",
+      },
+    });
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
 export function validatePlaceholdersSpec(
   spec: PlaceholdersSpec | null | undefined,
   templateName?: string
@@ -283,16 +345,20 @@ export function validatePlaceholdersSpec(
         code: "spec.slot.unknownType",
         message: formatMessage(
           templateName,
-          `${prefix}: type '${slot.type}' is not in the allowed set (${Array.from(
-            ALLOWED_SLOT_TYPES
-          ).join(", ")}).`
+          `${prefix}: type '${
+            slot.type
+          }' is not in the allowed set (${Array.from(ALLOWED_SLOT_TYPES).join(
+            ", "
+          )}).`
         ),
         meta: { index, type: slot.type },
       });
     }
 
     if (slot.validators) {
-      const invalid = slot.validators.filter((rule) => typeof rule !== "string");
+      const invalid = slot.validators.filter(
+        (rule) => typeof rule !== "string"
+      );
       if (invalid.length > 0) {
         warnings.push({
           code: "spec.slot.invalidValidator",
@@ -309,7 +375,10 @@ export function validatePlaceholdersSpec(
   return { valid: errors.length === 0, errors, warnings };
 }
 
-function formatMessage(templateName: string | undefined, message: string): string {
+function formatMessage(
+  templateName: string | undefined,
+  message: string
+): string {
   if (!templateName) return message;
   return `Template '${templateName}': ${message}`;
 }

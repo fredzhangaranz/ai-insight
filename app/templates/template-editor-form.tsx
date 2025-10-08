@@ -19,7 +19,17 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { TemplateListItem } from "@/lib/services/template.service";
+import {
+  INTENT_METADATA,
+  type IntentMetadata,
+} from "@/lib/config/intent-metadata";
 
 const SLOT_TYPES = [
   "guid",
@@ -258,8 +268,8 @@ export default function TemplateEditorForm({
           {mode === "edit" ? "Edit Template" : "Create Template"}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Follow the steps to {mode === "edit" ? "update" : "define"} a reusable SQL
-          template. Drafts stay private until you publish them.
+          Follow the steps to {mode === "edit" ? "update" : "define"} a reusable
+          SQL template. Drafts stay private until you publish them.
         </p>
       </header>
 
@@ -297,7 +307,41 @@ export default function TemplateEditorForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="template-intent">Intent (Query Family)</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="template-intent">Query Pattern Intent</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-muted-foreground/30 text-[10px] text-muted-foreground hover:bg-muted"
+                        >
+                          ?
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="font-medium">What is Intent?</p>
+                        <p className="mt-1 text-xs">
+                          Intent categorizes the SQL pattern type (aggregation,
+                          time series, ranking, etc.) to help match templates to
+                          questions. Choose the category that best describes
+                          what the query does.
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          See{" "}
+                          <a
+                            href="/docs/template-authoring-guide.md"
+                            className="underline"
+                            target="_blank"
+                          >
+                            authoring guide
+                          </a>{" "}
+                          for details.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <Select
                   value={state.intent}
                   onValueChange={(value) =>
@@ -305,16 +349,83 @@ export default function TemplateEditorForm({
                   }
                 >
                   <SelectTrigger id="template-intent">
-                    <SelectValue placeholder="Select intent" />
+                    <SelectValue>
+                      {state.intent && INTENT_METADATA[state.intent] ? (
+                        <span className="flex items-center gap-2">
+                          <span>{INTENT_METADATA[state.intent].icon}</span>
+                          <span>{INTENT_METADATA[state.intent].label}</span>
+                        </span>
+                      ) : (
+                        "Select a query pattern"
+                      )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {intents.map((intent) => (
-                      <SelectItem key={intent} value={intent}>
-                        {intent}
-                      </SelectItem>
+                    {/* Group by category */}
+                    {Object.entries(
+                      intents.reduce((acc, intentValue) => {
+                        const metadata = INTENT_METADATA[intentValue];
+                        if (!metadata) return acc;
+                        const category = metadata.category;
+                        if (!acc[category]) acc[category] = [];
+                        acc[category].push(metadata);
+                        return acc;
+                      }, {} as Record<string, IntentMetadata[]>)
+                    ).map(([category, intentList]) => (
+                      <div key={category}>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          {category}
+                        </div>
+                        {intentList.map((metadata) => (
+                          <SelectItem
+                            key={metadata.value}
+                            value={metadata.value}
+                            className="pl-6"
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="mt-0.5 text-base">
+                                {metadata.icon}
+                              </span>
+                              <div className="flex-1">
+                                <div className="font-medium">
+                                  {metadata.label}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {metadata.description}
+                                </div>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </div>
                     ))}
                   </SelectContent>
                 </Select>
+                {/* Context-aware help text */}
+                {state.intent && INTENT_METADATA[state.intent] && (
+                  <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs">
+                    <p className="font-medium text-blue-900">
+                      {INTENT_METADATA[state.intent].icon}{" "}
+                      {INTENT_METADATA[state.intent].label}
+                    </p>
+                    <p className="mt-1 text-blue-800">
+                      <span className="font-medium">SQL Pattern:</span>{" "}
+                      {INTENT_METADATA[state.intent].sqlHint}
+                    </p>
+                    <div className="mt-2">
+                      <p className="font-medium text-blue-900">
+                        Example questions:
+                      </p>
+                      <ul className="mt-1 list-inside list-disc space-y-0.5 text-blue-800">
+                        {INTENT_METADATA[state.intent].examples.map(
+                          (example, idx) => (
+                            <li key={idx}>{example}</li>
+                          )
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -354,7 +465,10 @@ export default function TemplateEditorForm({
                     placeholder="comma separated tags"
                     value={state.tags}
                     onChange={(event) =>
-                      setState((prev) => ({ ...prev, tags: event.target.value }))
+                      setState((prev) => ({
+                        ...prev,
+                        tags: event.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -368,7 +482,10 @@ export default function TemplateEditorForm({
                 className="min-h-[220px] font-mono"
                 value={state.sqlPattern}
                 onChange={(event) =>
-                  setState((prev) => ({ ...prev, sqlPattern: event.target.value }))
+                  setState((prev) => ({
+                    ...prev,
+                    sqlPattern: event.target.value,
+                  }))
                 }
               />
               <p className="text-xs text-muted-foreground">
@@ -382,10 +499,15 @@ export default function TemplateEditorForm({
                 <div>
                   <p className="text-sm text-muted-foreground">
                     Configure placeholders used in the SQL pattern. Names should
-                    match tokens inside curly braces: <code>{"{placeholder}"}</code>
+                    match tokens inside curly braces:{" "}
+                    <code>{"{placeholder}"}</code>
                   </p>
                 </div>
-                <Button type="button" variant="outline" onClick={handleAddPlaceholder}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddPlaceholder}
+                >
                   Add placeholder
                 </Button>
               </div>
@@ -406,7 +528,11 @@ export default function TemplateEditorForm({
                         <Input
                           value={slot.name}
                           onChange={(event) =>
-                            handlePlaceholderChange(slot.id, "name", event.target.value)
+                            handlePlaceholderChange(
+                              slot.id,
+                              "name",
+                              event.target.value
+                            )
                           }
                         />
                       </div>
@@ -447,7 +573,11 @@ export default function TemplateEditorForm({
                         <Switch
                           checked={slot.required}
                           onCheckedChange={(checked) =>
-                            handlePlaceholderChange(slot.id, "required", checked)
+                            handlePlaceholderChange(
+                              slot.id,
+                              "required",
+                              checked
+                            )
                           }
                           id={`placeholder-required-${slot.id}`}
                         />
@@ -477,12 +607,16 @@ export default function TemplateEditorForm({
                   placeholder={"One example per line"}
                   value={state.examples}
                   onChange={(event) =>
-                    setState((prev) => ({ ...prev, examples: event.target.value }))
+                    setState((prev) => ({
+                      ...prev,
+                      examples: event.target.value,
+                    }))
                   }
                   className="min-h-[160px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  These examples help template matching and appear in the admin detail view.
+                  These examples help template matching and appear in the admin
+                  detail view.
                 </p>
               </div>
             </TabsContent>
@@ -499,7 +633,9 @@ export default function TemplateEditorForm({
                   </div>
                   <div className="rounded border bg-muted/50 p-3 text-sm">
                     <p className="font-medium">Intent</p>
-                    <p className="text-muted-foreground">{state.intent || "—"}</p>
+                    <p className="text-muted-foreground">
+                      {state.intent || "—"}
+                    </p>
                   </div>
                 </div>
               </section>
@@ -534,7 +670,9 @@ export default function TemplateEditorForm({
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No examples provided.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No examples provided.
+                  </p>
                 )}
               </section>
             </TabsContent>
@@ -564,7 +702,10 @@ export default function TemplateEditorForm({
             >
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={!canSubmit || isSubmitting}>
+            <Button
+              onClick={handleSubmit}
+              disabled={!canSubmit || isSubmitting}
+            >
               {isSubmitting
                 ? mode === "edit"
                   ? "Saving…"

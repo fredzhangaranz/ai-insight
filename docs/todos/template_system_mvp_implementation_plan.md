@@ -218,31 +218,166 @@ Tests:
 - Matched template name saved to `SubQuestions.sqlMatchedTemplate`
 - Edits to template slots clear existing results and require re-execution
 
-Status: In Progress — catalog shell/filters/detail/authoring implemented; AI-assisted capture workflow pending
+Status: Completed — AI-assisted capture workflow, template admin UI, and apply template wizard all implemented
 
 Tasks
 
 - ✅ Template catalog page with filters/search and detail dialog
 - ✅ Dedicated authoring/editor pages for create/edit drafts (manual fallback)
 - ✅ Publish and deprecate actions wired to APIs with feedback
-- TODO: **AI Template Extraction Service** — create `POST /api/ai/templates/extract` endpoint:
+- ✅ **AI Template Extraction Service** — create `POST /api/ai/templates/extract` endpoint:
   - Input: `{ questionText, sqlQuery, schemaContext? }`
   - AI extracts: intent, placeholders, keywords, description, examples, placeholdersSpec
   - Returns draft template JSON for review
   - Uses existing LLM provider infrastructure
-- TODO: **"Save as Template" button** in funnel panel:
+- ✅ **"Save as Template" button** in funnel panel:
   - Show after successful SQL execution (results returned, no errors)
   - Contextual: passes current question + generated SQL to extraction API
   - Opens review modal with AI-drafted template
-- TODO: **Template Review Modal** — AI-assisted creation flow:
+- ✅ **Template Review Modal** — AI-assisted creation flow:
   - Display AI-extracted template with all fields pre-filled
   - Allow developer to edit/override any field (name, description, SQL pattern, placeholders, keywords, intent)
   - Live validation feedback (inline errors/warnings)
   - "Save as Draft" action creates template in DB
   - Link to full editor for complex refinements
-- TODO: Surface template suggestions (match rationale, success-rate context) via `/api/ai/templates/suggest`
-- TODO: Integrate Apply Template wizard in funnel panel (slot-filling experience for existing templates)
-- TODO: Final polish & QA — responsive states, accessibility pass, end-to-end smoke test of both capture and manual workflows
+- ✅ Surface template suggestions (match rationale, success-rate context) via `/api/ai/templates/suggest`
+- ✅ Integrate Apply Template wizard in funnel panel (slot-filling experience for existing templates)
+- ✅ Final polish & QA — responsive states, accessibility pass, end-to-end smoke test of both capture and manual workflows
+
+## Stage 5.5: Template Quality & Deduplication Improvements
+
+Goal: Improve extracted SQL pattern quality, prevent template duplication, enhance extraction accuracy, and improve developer UX.  
+Success Criteria:
+
+- **SQL pattern simplification**: AI removes funnel scaffolding (Step1_Results, Step2_Results chains) and extracts clean, standalone patterns
+- **Funnel scaffold detection**: Validation warns when SQL patterns contain temporary CTE chains
+- **Duplicate detection**: Before saving, system checks for similar existing templates and warns developer
+- **Enhanced extraction prompt**: Includes instructions for SQL simplification, intent classification guidance, and keyword quality rules
+- **Intent field UX**: Developers see human-readable intent names with descriptions, icons, examples, and contextual help instead of raw technical values
+
+Tests:
+
+- **SQL simplification tests**: Funnel SQL with multiple CTE chains → extracted pattern contains only essential CTEs
+- **Scaffold detection**: SQL with `Step\d+_Results` pattern triggers validation warning
+- **Similarity detection**: Creating template with 70%+ similarity to existing template shows warning modal
+- **Extraction quality improvement**: Test on 10 sample funnel queries; verify simplified SQL patterns are cleaner and more reusable
+- **Deduplication UX**: Warning modal displays similar templates with names, similarity scores, success rates, and action options
+- **Intent UX**: Developers can understand each intent without referring to documentation; select dropdown shows icons, labels, descriptions; contextual help displays for selected intent
+
+Status: Not Started
+
+Tasks
+
+- [x] **Enhance extraction prompt** (`lib/prompts/template-extraction.prompt.ts`):
+  - Add SQL simplification instructions section:
+    - Remove multi-step CTE chains (Step1_Results, Step2_Results, etc.)
+    - Extract only the final SELECT logic and essential CTEs
+    - Remove temporary scaffolding that exists for funnel chaining
+    - Preserve CTEs that represent reusable analytical logic (date calculations, aggregations)
+    - Convert simple temporary CTEs into inline subqueries
+  - Add EXAMPLE TRANSFORMATION showing before/after:
+    - Before: `WITH Step1_Results AS (...), Step2_Results AS (...) SELECT * FROM Step2_Results`
+    - After: Clean standalone SELECT with only essential logic
+  - Add intent classification guidance:
+    - Provide examples for each intent category (aggregation_by_category, time_series_trend, top_k, etc.)
+    - Explain distinguishing characteristics of each intent
+  - Add keyword quality instructions:
+    - Focus on domain-specific terms (wound, patient, etiology, measurement)
+    - Avoid generic SQL terms (select, from, group, where)
+    - Include synonyms users might naturally use
+    - Aim for 5-10 distinctive, lower-case tokens
+  - Document common pitfalls and how to avoid them
+- [x] **Add funnel scaffold detection** to validator (`lib/services/template-validator.service.ts`):
+  - Create `detectFunnelScaffold(sqlPattern: string): ValidationWarning[]` function
+  - Detect patterns: `Step\d+_Results`, `WITH Step1`, `FROM Step2_Results`, etc.
+  - Return warning: "Template may contain funnel scaffolding CTEs (Step1_Results, Step2_Results). Consider simplifying to only essential logic."
+  - Integrate into `validateTemplate()` orchestrator
+  - Add unit tests for scaffold detection (positive and negative cases)
+- [x] **Implement similarity check service** (`lib/services/template-similarity.service.ts`):
+  - Create `SimilarTemplateWarning` interface: `{ templateId, name, intent, similarity, successRate, message }`
+  - Implement `checkSimilarTemplates(draft: TemplateDraft): Promise<SimilarTemplateWarning[]>` function:
+    - Tokenize draft name + description + keywords
+    - Filter catalog by same intent
+    - Calculate Jaccard similarity for each template
+    - Return templates with similarity > 70%, sorted by similarity descending
+    - Include similarity percentage, success rate, and template metadata
+  - Add configuration constant: `SIMILARITY_THRESHOLD = 0.70`
+  - Unit tests: test similarity calculation with known duplicates and distinct templates
+- [x] **Add duplicate check API endpoint** (`app/api/ai/templates/check-duplicates/route.ts`):
+  - Endpoint: `POST /api/ai/templates/check-duplicates`
+  - Input: `{ name, description, keywords, intent, tags? }`
+  - Output: `{ similar: SimilarTemplateWarning[] }`
+  - Feature-flag gated
+  - Return empty array when flag off or no similarities found
+  - API contract tests for duplicate detection scenarios
+- [x] **Enhance Template Review Modal** with duplicate warnings:
+  - Call `/api/ai/templates/check-duplicates` when AI extraction completes
+  - Display warning banner if similar templates found:
+    - "⚠️ Similar templates detected - Review before saving"
+    - Show list: template name, similarity %, success rate, "View" link
+  - Action buttons: "Save Anyway", "Review Existing Template", "Cancel"
+  - Log user decision: saved-despite-warning vs. cancelled vs. reviewed-existing
+  - Visual hierarchy: warning is prominent but doesn't block workflow
+- [x] **Improve Intent field UX** in Template Review Modal (`components/funnel/TemplateReviewModal.tsx`):
+  - Create `INTENT_METADATA` constant with user-friendly metadata for each intent:
+    - `label`: Human-readable name (e.g., "Aggregation by Category" instead of "aggregation_by_category")
+    - `description`: Plain-English explanation (1 sentence)
+    - `icon`: Visual emoji/icon for quick recognition
+    - `examples`: 2-3 real-world question examples
+    - `sqlHint`: Technical pattern description
+  - Enhanced Select dropdown display:
+    - Show icon + label instead of raw value in trigger
+    - Render each option with icon, label, and description
+    - Group intents by category (Basic Analysis, Time-Based, Ranking, etc.)
+  - Add help tooltip with Info icon:
+    - Explain what "intent" means in context
+    - Show examples for currently selected intent
+    - Link to authoring guide for more details
+  - Context-aware help text below select:
+    - Display SQL hint and examples for selected intent
+    - Highlight if intent matches AI suggestion with "✨ AI Suggested" badge
+  - Update intent field label: "Intent" → "Query Pattern Intent" for clarity
+  - ✅ Applied same improvements to manual template editor form (`app/templates/template-editor-form.tsx`) for consistency
+- [x] **Add authoring guide section** on SQL pattern quality (`docs/template-authoring-guide.md`):
+  - Section: "Writing Clean SQL Patterns"
+  - Examples of good vs. bad patterns:
+    - ❌ Bad: Funnel CTE chains, overly specific joins, missing TOP clause
+    - ✅ Good: Standalone query, essential CTEs only, parameterized, schema-prefixed
+  - Guidelines for simplifying extracted SQL:
+    - Identify the core analytical intent
+    - Remove temporary scaffolding
+    - Generalize specific filters to placeholders
+    - Add safety constraints (TOP, schema prefixes)
+  - Troubleshooting: "My extracted SQL has Step1_Results" → how to fix
+- [x] **Add intent classification documentation** (`docs/template-authoring-guide.md`):
+  - Section: "Understanding Query Pattern Intents"
+  - Comprehensive table with all 9 intent types:
+    - Intent name, description, use cases, SQL patterns, examples
+  - Decision tree or flowchart: "Which intent should I choose?"
+  - Common mistakes and how to avoid them (e.g., confusing latest_per_entity with as_of_state)
+  - Examples showing same question with different intents
+- [x] **Add template similarity documentation** (`docs/template-authoring-guide.md`):
+  - Section: "Avoiding Duplicate Templates"
+  - Explain similarity detection algorithm (keyword/intent matching)
+  - Best practices:
+    - Check existing templates before creating new ones
+    - Use template search to find similar patterns
+    - Consider editing/versioning existing template vs. creating new
+    - Deprecate old template when replacing with better version
+  - Document governance workflow for Phase 2 (merge/consolidate)
+- [ ] **Update existing extraction tests** to verify simplification:
+  - Test cases with funnel CTE chains → verify Step\*\_Results removed
+  - Test cases with complex nested CTEs → verify only essential CTEs retained
+  - Measure extraction quality delta (compare before/after prompt enhancement)
+  - Add golden test cases to `lib/__tests__/template-extraction.test.ts`
+- [ ] **Integration testing**:
+  - E2E test: Execute funnel query with CTE chain → "Save as Template" → verify simplified SQL in modal
+  - E2E test: Extract template similar to existing → verify warning shown → "Save Anyway" → template created
+  - E2E test: Extract template similar to existing → "Review Existing" → navigates to existing template detail
+  - E2E test: Open Template Review Modal → verify intent dropdown shows icons and descriptions → hover tooltip shows examples
+  - E2E test: Select different intents → verify context-aware help text updates with relevant SQL hints and examples
+  - Verify scaffold warning appears in validation results
+  - Verify similarity check doesn't block saving (inform, don't prevent)
 
 ## Stage 6: Provider/Runtime Integration & Usage Logging
 
