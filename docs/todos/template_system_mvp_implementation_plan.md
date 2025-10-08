@@ -166,6 +166,7 @@ Success Criteria:
 - `GET /api/ai/templates` — list/filter by status/tags/q
 - `GET /api/ai/templates/:id` — get template details with active version
 - `POST /api/ai/templates/suggest` — top-k matches for a question with match rationale
+- `POST /api/ai/templates/extract` — AI-assisted extraction from (question, SQL) pair; returns draft template for review
 - `POST /api/ai/templates` — create Draft (automatic validation; returns errors/warnings in response)
 - `PATCH /api/ai/templates/:id` — edit Draft template (validation automatic)
 - `POST /api/ai/templates/:id/publish` — Draft → Approved with version increment (validation automatic)
@@ -180,58 +181,68 @@ Tests:
 - Validation automatic in create/edit/publish; failures return actionable messages with field-level errors
 - Versioning: publishing increments version correctly; activeVersionId updated
 - Import idempotent (re-running doesn't duplicate)
+- **Extract endpoint**: AI extraction quality on sample queries (placeholder detection, intent classification, keyword relevance)
 
-Status: Not Started
+Status: In Progress — CRUD + lifecycle endpoints live; AI extraction, docs, and contract tests still pending
 
 Tasks
 
-- Remove `/validate` endpoint (validation now automatic in create/edit/publish)
-- Implement all endpoints using TemplateService and consolidated validator
-- Return validation results in response body for create/edit/publish
-- Add OpenAPI/Swagger docs for all endpoints
-- Feature-flag gating in middleware
-- Write API contract tests (request/response shapes, error codes)
+- ✅ Remove `/validate` endpoint (validation now automatic in create/edit/publish)
+- ✅ Implement list/detail/suggest/create/update/publish/deprecate/import/reload endpoints using `TemplateService`
+- ✅ Return validation results in response body for create/edit/publish (includes warnings on success and structured errors on failure)
+- ✅ Feature-flag gating via `isTemplateSystemEnabled()` checks on every route
+- ✅ **Implement `/extract` endpoint** with AI provider call for template structure extraction (supports Stage 5 UI workflow)
+- 🟡 Add OpenAPI/Swagger docs for all endpoints
+- ✅ Write API contract tests (request/response shapes, error codes)
 
 ## Stage 5: UI — Template Admin + Funnel Enhancements (Developer Mode)
 
-Goal: Author/manage templates and apply them in-context.  
+Goal: Capture templates from successful queries with AI assistance; provide manual authoring for edge cases; enable in-context application.  
 Success Criteria:
 
-- **Template Editor modal** (unified apply/create): slot-filling wizard with schema hints; validation feedback inline
+- **Primary workflow: Capture from success** — "Save as Template" in funnel panel after successful execution; AI extracts template structure from (question, SQL) pair; developer reviews/refines in modal before saving as Draft
+- **AI template extraction**: Given (question, SQL, schema context), AI pre-fills: intent classification, placeholder extraction, keywords, description, example questions, placeholdersSpec types
+- **Manual authoring fallback**: Dedicated template editor pages remain available for edge cases, bulk imports, and admin corrections
 - **Template Admin page**: browse/filter/search templates; view details; edit Drafts; publish/deprecate workflows
 - **Funnel Panel**: Matched template details with tooltip (why matched, link to template)
 - **No test case UI** (deferred to Phase 2)
 
 Tests:
 
-- Manual E2E walkthrough: create Draft → edit → publish → apply in funnel
+- **Capture workflow E2E**: Execute query in funnel → "Save as Template" → AI drafts template → developer reviews/edits → saves as Draft → publish → template available for selection
+- AI extraction quality: placeholder detection accuracy ≥90%, intent classification ≥80% correct on gold set
+- Review modal: validation feedback inline; developer can override all AI suggestions; saves correctly to DB
+- Manual authoring path: create Draft from scratch → edit → publish (existing flow still works)
 - SQL regenerates and persists when template applied
 - Validation errors displayed inline in editor
 - Matched template name saved to `SubQuestions.sqlMatchedTemplate`
 - Edits to template slots clear existing results and require re-execution
 
-Status: Not Started
+Status: In Progress — catalog shell/filters/detail/authoring implemented; AI-assisted capture workflow pending
 
 Tasks
 
-- Create unified `TemplateEditorModal` component:
-  - Mode prop: 'apply' | 'create'
-  - Apply mode: slot-filling wizard using placeholdersSpec; schema hints for column/table suggestions
-  - Create mode: name/description/keywords/tags/placeholders input; sqlPattern editor with syntax highlighting
-  - Validation feedback inline (errors in red, warnings in yellow)
-  - Auto-save Draft for create mode
-- Create `TemplateAdminPage`:
-  - Browse/search/filter (status/tags/keywords)
-  - Template cards with name, intent, status, usage count
-  - View details: version history, sqlPattern, placeholders, matched examples
-  - Edit button (Drafts only); publish/deprecate buttons with confirmation
-  - Preview prompt injection snippet
-- Update `FunnelPanel`:
-  - Matched template panel with tooltip (matched keywords, example, score)
-  - "Apply Template" button → opens TemplateEditorModal in apply mode
-  - "Save as Template" button → opens TemplateEditorModal in create mode (pre-filled with current SQL)
-- Wire up all API calls to Stage 4 endpoints
-- Feature-flag guard for UI visibility
+- ✅ Template catalog page with filters/search and detail dialog
+- ✅ Dedicated authoring/editor pages for create/edit drafts (manual fallback)
+- ✅ Publish and deprecate actions wired to APIs with feedback
+- TODO: **AI Template Extraction Service** — create `POST /api/ai/templates/extract` endpoint:
+  - Input: `{ questionText, sqlQuery, schemaContext? }`
+  - AI extracts: intent, placeholders, keywords, description, examples, placeholdersSpec
+  - Returns draft template JSON for review
+  - Uses existing LLM provider infrastructure
+- TODO: **"Save as Template" button** in funnel panel:
+  - Show after successful SQL execution (results returned, no errors)
+  - Contextual: passes current question + generated SQL to extraction API
+  - Opens review modal with AI-drafted template
+- TODO: **Template Review Modal** — AI-assisted creation flow:
+  - Display AI-extracted template with all fields pre-filled
+  - Allow developer to edit/override any field (name, description, SQL pattern, placeholders, keywords, intent)
+  - Live validation feedback (inline errors/warnings)
+  - "Save as Draft" action creates template in DB
+  - Link to full editor for complex refinements
+- TODO: Surface template suggestions (match rationale, success-rate context) via `/api/ai/templates/suggest`
+- TODO: Integrate Apply Template wizard in funnel panel (slot-filling experience for existing templates)
+- TODO: Final polish & QA — responsive states, accessibility pass, end-to-end smoke test of both capture and manual workflows
 
 ## Stage 6: Provider/Runtime Integration & Usage Logging
 

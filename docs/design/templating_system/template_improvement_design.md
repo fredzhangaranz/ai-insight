@@ -273,6 +273,7 @@ Templates follow an immutable versioning model to ensure audit trail integrity:
 - `GET /api/ai/templates` — list templates (filter by status/tags/q)
 - `GET /api/ai/templates/:id` — get template details with active version
 - `POST /api/ai/templates/suggest` — return top-k matches for a question (with match rationale)
+- `POST /api/ai/templates/extract` — **AI-assisted extraction** from (question, SQL) pair; returns draft template structure for developer review
 - `POST /api/ai/templates` — create Draft (name, intent, sqlPattern, placeholdersSpec, keywords/tags, examples)
   - **Automatic validation** on create; returns errors/warnings in response body
 - `PATCH /api/ai/templates/:id` — edit Draft template (validation automatic)
@@ -298,9 +299,35 @@ Templates follow an immutable versioning model to ensure audit trail integrity:
 
 ### Phase 1 (MVP)
 
-**1. Template Editor Modal** (Create/Edit Templates)
+**Primary Workflow: Capture from Success** (AI-Assisted)
 
-Multi-tab wizard for template creation with enhanced placeholdersSpec UX:
+The main template creation path leverages successful queries in the funnel:
+
+- **"Save as Template" button** appears in funnel panel after successful SQL execution
+- **AI extraction** analyzes (question, SQL, schema context) and pre-fills template structure:
+  - Intent classification based on SQL patterns and question semantics
+  - Placeholder detection and parameterization from SQL values
+  - Keyword extraction from natural language question
+  - Example question generation with variations
+  - placeholdersSpec type inference (guid, int, date, etc.)
+- **Review modal** displays AI-drafted template with all fields editable
+- Developer reviews, refines, and saves as Draft
+- Reduces 5-tab manual authoring to quick review/approval workflow
+
+**Key Philosophy:** Templates are **promoted from successful real-world usage**, not authored in isolation.
+
+**1. Template Review Modal** (AI-Assisted Creation)
+
+Streamlined review interface for AI-extracted templates:
+
+- Pre-filled fields from AI extraction (name, intent, SQL pattern, placeholders, keywords, examples)
+- All fields editable/overridable by developer
+- Real-time validation feedback
+- Quick "Save as Draft" or "Edit in Full Editor" options
+
+**2. Template Editor Pages** (Manual Authoring Fallback)
+
+Multi-tab wizard remains available for edge cases, bulk imports, and admin corrections:
 
 - **Tab 1: Basic Info** - Name, intent, description, keywords, tags
 - **Tab 2: SQL Pattern** - Code editor with real-time validation, smart actions (copy from similar, import from clipboard), schema helper
@@ -316,7 +343,7 @@ Multi-tab wizard for template creation with enhanced placeholdersSpec UX:
 - Auto-detection of placeholders from SQL
 - Smart actions: copy from similar templates, load from query history
 
-**2. Template Admin Page** (Browse/Manage)
+**3. Template Admin Page** (Browse/Manage)
 
 Central hub for template discovery and management:
 
@@ -347,11 +374,16 @@ Modal wizard for filling placeholder values:
 
 **4. Funnel Panel Enhancements**
 
+- **"Save as Template" button** (primary capture workflow)
+  - Appears after successful SQL execution (results returned, no errors)
+  - Triggers AI extraction via `/api/ai/templates/extract` endpoint
+  - Opens review modal with AI-drafted template pre-filled
+  - Contextual: automatically passes current question + generated SQL + schema context
+  - Reduces template creation from 5-tab manual process to quick review workflow
 - **Matched Template section** (expandable like Explanation/Validation Notes)
   - Shows template name, match score, success rate
   - Match rationale: keywords, example question, intent
-  - Actions: View details, Apply different template, Save as new template
-- **Template action prompt**: "Save as Template" button for successful SQL
+  - Actions: View details, Apply different template
 
 **Clarification UX**
 
@@ -453,11 +485,12 @@ Modal wizard for filling placeholder values:
 - **Service Layer:** Consolidated validation service, DB-backed template service with JSON fallback
   - `lib/services/template-validator.service.ts` — reusable validation (placeholders, safety, schema prefixes)
   - `lib/services/template.service.ts` — list/filter/suggest helpers, success-rate weighting, cache hooks
-- **APIs:** List, suggest, create, edit, publish, deprecate, import-json, reload
+- **APIs:** List, suggest, **extract (AI-assisted)**, create, edit, publish, deprecate, import-json, reload
+- **AI Template Extraction:** Given (question, SQL, schema context), AI pre-fills: intent, placeholders, keywords, description, examples, placeholdersSpec
 - **Selection:** Keyword + Jaccard matching with success-rate weighting (minimal enhancement)
-- **UI:** Template Editor modal (unified apply/create), Template Admin (browse/edit/publish), matched template panel
+- **UI:** "Save as Template" in funnel (AI-assisted capture), Template Review Modal, Template Admin (browse/edit/publish), Template Editor (manual fallback), matched template panel
 - **Logging:** Full telemetry to TemplateUsage (selection rationale, success/failure)
-- **Evaluation:** Gold set baseline (parity check), coverage gaps identified
+- **Evaluation:** Gold set baseline (parity check), coverage gaps identified, AI extraction quality metrics
 - **Documentation:** Authoring guide, placeholdersSpec schema, evaluation procedures
 
 **Success Criteria:**

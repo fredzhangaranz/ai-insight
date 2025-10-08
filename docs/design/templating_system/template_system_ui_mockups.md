@@ -9,26 +9,161 @@ This document provides detailed UI/UX mockups for the Template System (Phase 1 M
 
 **Target Users:** Developers creating and managing AI query templates
 
+**Primary Workflow:** Templates are captured from successful queries using AI-assisted extraction, reducing manual authoring to quick review/approval.
+
 ---
 
 ## Table of Contents
 
-1. [Template Editor Modal (Create/Edit)](#template-editor-modal-createedit)
-2. [Template Admin Page (Browse/Manage)](#template-admin-page-browsemanage)
-3. [Apply Template Wizard (Slot-Filling)](#apply-template-wizard-slot-filling)
-4. [Funnel Panel Template Info](#funnel-panel-template-info)
-5. [Field Mapping Reference](#field-mapping-reference)
-6. [Component Usage Guidelines](#component-usage-guidelines)
+1. [Template Review Modal (AI-Assisted Capture)](#template-review-modal-ai-assisted-capture) — **Primary workflow**
+2. [Template Editor Modal (Manual Authoring)](#template-editor-modal-manual-authoring) — Fallback for edge cases
+3. [Template Admin Page (Browse/Manage)](#template-admin-page-browsemanage)
+4. [Apply Template Wizard (Slot-Filling)](#apply-template-wizard-slot-filling)
+5. [Funnel Panel Template Info](#funnel-panel-template-info)
+6. [Field Mapping Reference](#field-mapping-reference)
+7. [Component Usage Guidelines](#component-usage-guidelines)
 
 ---
 
-## Template Editor Modal (Create/Edit)
+## Template Review Modal (AI-Assisted Capture)
+
+**Path:** Triggered from Funnel Panel → "Save as Template" button (after successful SQL execution)
+
+**Purpose:** Streamlined review workflow for AI-extracted templates. Reduces 5-tab manual authoring to quick review/approval.
+
+**Workflow:**
+
+1. User generates successful SQL in funnel
+2. Clicks "Save as Template" button
+3. AI extraction API (`/api/ai/templates/extract`) analyzes (question, SQL, schema context)
+4. Review modal opens with all fields pre-filled by AI
+5. Developer reviews, optionally edits, and saves as Draft
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  Review AI-Extracted Template                                                 ✕ │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                   │
+│  🤖 AI has analyzed your successful query and generated a template draft.        │
+│  Review and edit the fields below, then save as Draft.                           │
+│                                                                                   │
+│  ╔═══════════════════════════════════════════════════════════════════════════╗  │
+│  ║  BASIC INFO                                                               ║  │
+│  ╠═══════════════════════════════════════════════════════════════════════════╣  │
+│  ║                                                                           ║  │
+│  ║  Template Name * (AI-suggested)                                           ║  │
+│  ║  ┌─────────────────────────────────────────────────────────────────────┐ ║  │
+│  ║  │ Count Assessments by Time Window                                    │ ║  │
+│  ║  └─────────────────────────────────────────────────────────────────────┘ ║  │
+│  ║  💡 Based on your question pattern                                        ║  │
+│  ║                                                                           ║  │
+│  ║  Intent * (AI-classified)                                                 ║  │
+│  ║  ┌─────────────────────────────────────────────────────────────────────┐ ║  │
+│  ║  │ Aggregation by category                                          ▼  │ ║  │
+│  ║  └─────────────────────────────────────────────────────────────────────┘ ║  │
+│  ║  ✅ Confidence: 92% - based on COUNT and GROUP BY patterns               ║  │
+│  ║                                                                           ║  │
+│  ║  Description (AI-generated)                                               ║  │
+│  ║  ┌─────────────────────────────────────────────────────────────────────┐ ║  │
+│  ║  │ Counts distinct assessments within a specified time window         │ ║  │
+│  ║  │ for a given patient. Useful for analyzing visit frequency.         │ ║  │
+│  ║  └─────────────────────────────────────────────────────────────────────┘ ║  │
+│  ║                                                                           ║  │
+│  ║  Keywords (AI-extracted from question)                                    ║  │
+│  ║  ┌─────────────────────────────────────────────────────────────────────┐ ║  │
+│  ║  │ [count ✕] [assessments ✕] [time window ✕] [patient ✕] [+ Add]     │ ║  │
+│  ║  └─────────────────────────────────────────────────────────────────────┘ ║  │
+│  ║                                                                           ║  │
+│  ╚═══════════════════════════════════════════════════════════════════════════╝  │
+│                                                                                   │
+│  ╔═══════════════════════════════════════════════════════════════════════════╗  │
+│  ║  SQL PATTERN (AI-parameterized)                                           ║  │
+│  ╠═══════════════════════════════════════════════════════════════════════════╣  │
+│  ║  ┌─────────────────────────────────────────────────────────────────────┐ ║  │
+│  ║  │  SELECT COUNT(DISTINCT A.id) AS assessmentCount                     │ ║  │
+│  ║  │  FROM rpt.Assessment A                                               │ ║  │
+│  ║  │  JOIN rpt.DimDate D ON A.dimDateFk = D.id                            │ ║  │
+│  ║  │  WHERE A.patientFk = {patientId}                                    │ ║  │
+│  ║  │    AND D.date > DATEADD(day, -{windowDays}, {endDate})             │ ║  │
+│  ║  │    AND D.date <= {endDate}                                          │ ║  │
+│  ║  └─────────────────────────────────────────────────────────────────────┘ ║  │
+│  ║  ✅ 3 placeholders detected and parameterized                             ║  │
+│  ╚═══════════════════════════════════════════════════════════════════════════╝  │
+│                                                                                   │
+│  ╔═══════════════════════════════════════════════════════════════════════════╗  │
+│  ║  PLACEHOLDERS (AI-inferred types)                                         ║  │
+│  ╠═══════════════════════════════════════════════════════════════════════════╣  │
+│  ║  ┌─────────────────────────────────────────────────────────────────────┐ ║  │
+│  ║  │  • {patientId} — type: guid, semantic: patient_id, required         │ ║  │
+│  ║  │  • {windowDays} — type: int, semantic: time_window, default: 180    │ ║  │
+│  ║  │  • {endDate} — type: date, semantic: date_range_end, default: today │ ║  │
+│  ║  └─────────────────────────────────────────────────────────────────────┘ ║  │
+│  ║  💡 Types inferred from SQL context and schema                            ║  │
+│  ║  [Edit Placeholders in Detail →]                                          ║  │
+│  ╚═══════════════════════════════════════════════════════════════════════════╝  │
+│                                                                                   │
+│  ╔═══════════════════════════════════════════════════════════════════════════╗  │
+│  ║  EXAMPLE QUESTIONS (AI-generated variations)                              ║  │
+│  ╠═══════════════════════════════════════════════════════════════════════════╣  │
+│  ║  ┌─────────────────────────────────────────────────────────────────────┐ ║  │
+│  ║  │  1. How many assessments did this patient have in the last 180 days?│ ║  │
+│  ║  │  2. Count assessments for patient in past 6 months                  │ ║  │
+│  ║  │  3. Show me assessment count for patient by date range               │ ║  │
+│  ║  └─────────────────────────────────────────────────────────────────────┘ ║  │
+│  ║  [+ Add more examples]                                                     ║  │
+│  ╚═══════════════════════════════════════════════════════════════════════════╝  │
+│                                                                                   │
+│  ╔═══════════════════════════════════════════════════════════════════════════╗  │
+│  ║  VALIDATION                                                               ║  │
+│  ╠═══════════════════════════════════════════════════════════════════════════╣  │
+│  ║  ✅ All required fields complete                                          ║  │
+│  ║  ✅ SQL validation passed                                                 ║  │
+│  ║  ✅ Placeholders configured correctly                                     ║  │
+│  ║  ✅ Ready to save as Draft                                                ║  │
+│  ╚═══════════════════════════════════════════════════════════════════════════╝  │
+│                                                                                   │
+│  ┌─────────────────────────────────────────────────────────────────────────────┐│
+│  │  [Cancel] [Open Full Editor] [Save as Draft]                               ││
+│  └─────────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Components Used:**
+
+- `Dialog` (large size, ~800px width)
+- `Card` sections for each category
+- `Input` for name and keywords
+- `Select` for intent (overridable)
+- `Textarea` for description and SQL (editable)
+- `Badge` for keyword chips
+- `Alert` for validation status
+- `Button` for actions
+
+**Key Features:**
+
+- **All fields editable:** Developer can override any AI suggestion
+- **Confidence indicators:** Show AI classification confidence where applicable
+- **Quick save:** "Save as Draft" immediately creates template
+- **Full editor escape hatch:** "Open Full Editor" opens 5-tab manual editor for complex refinements
+- **Real-time validation:** Validation runs as developer edits fields
+
+**AI Extraction Details:**
+
+- **Intent classification:** Pattern matching (COUNT → aggregation, ROW_NUMBER → latest_per_entity, etc.)
+- **Placeholder detection:** Regex + value analysis (GUIDs → patient_id, numbers → metrics/windows, dates → time bounds)
+- **Keyword extraction:** NLP from original question (noun phrases, domain terms)
+- **Example generation:** Template original question + generated variations
+- **Type inference:** FROM schema joins, WHERE clause patterns, parameter usage
+
+---
+
+## Template Editor Modal (Manual Authoring)
 
 **Path:** Accessed from:
 
-- Funnel Panel: "Save as Template" button (create mode, pre-filled with SQL)
+- Template Review Modal: "Open Full Editor" button (for complex refinements)
 - Template Admin: "Edit" button on Draft templates
-- Template Admin: "New Template" button (blank slate)
+- Template Admin: "New Template" button (blank slate, edge cases)
 
 **Component:** Full-screen modal with tabs (`Dialog` + `Tabs` from shadcn/ui)
 
@@ -903,12 +1038,16 @@ This document provides detailed UI/UX mockups for the Template System (Phase 1 M
 
 **Features:**
 
+- **"Save as Template" Button** (Primary Capture Workflow):
+  - Appears after successful SQL execution (results returned, no errors)
+  - Triggers AI extraction API call: `POST /api/ai/templates/extract { questionText, sqlQuery, schemaContext }`
+  - Opens Template Review Modal with AI-drafted template pre-filled
+  - Single-click path from success to template creation
 - **Match Rationale**: Shows why this template was selected (keywords, example, score)
 - **Success Rate**: Displays template's historical success rate from TemplateUsage
 - **Actions**:
   - **View Template Details**: Opens Template Detail modal
   - **Apply Different Template**: Opens template selector to manually pick another template
-  - **Save as New**: Creates new template from current SQL (if no template matched or user customized)
 
 ---
 

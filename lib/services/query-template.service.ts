@@ -7,6 +7,8 @@ import {
   PlaceholdersSpec,
   validateTemplate,
   ValidationResult,
+  ValidationError,
+  ValidationWarning,
 } from "./template-validator.service";
 
 export type TemplateStatus = "Draft" | "Approved" | "Deprecated";
@@ -50,7 +52,9 @@ interface TemplateCatalogCacheEntry {
   loadedAt: number;
 }
 
-const catalogCache: Partial<Record<TemplateCatalogSource, TemplateCatalogCacheEntry>> = {};
+const catalogCache: Partial<
+  Record<TemplateCatalogSource, TemplateCatalogCacheEntry>
+> = {};
 
 interface DbTemplateRow {
   templateId: number;
@@ -83,7 +87,9 @@ export async function getTemplates(options?: {
   forceReload?: boolean;
 }): Promise<TemplateCatalog> {
   const forceReload = options?.forceReload === true;
-  const source: TemplateCatalogSource = isTemplateSystemEnabled() ? "db" : "json";
+  const source: TemplateCatalogSource = isTemplateSystemEnabled()
+    ? "db"
+    : "json";
 
   if (!forceReload) {
     const cached = catalogCache[source];
@@ -95,16 +101,16 @@ export async function getTemplates(options?: {
   const catalog = await loadTemplateCatalog(source);
   const validation = runCatalogValidation(catalog);
   if (!validation.valid) {
-    const message = `Query template catalog validation failed: ${validation.errors.join(
-      "; "
-    )}`;
+    const message = `Query template catalog validation failed: ${validation.errors
+      .map((e) => e.message)
+      .join("; ")}`;
     throw new Error(message);
   }
 
   if (validation.warnings.length > 0) {
     console.warn(
       `Query template catalog warnings (${source}):`,
-      validation.warnings.join("; ")
+      validation.warnings.map((w) => w.message).join("; ")
     );
   }
 
@@ -184,23 +190,40 @@ async function loadCatalogFromDb(): Promise<TemplateCatalog> {
   }
 }
 
-function runCatalogValidation(
-  catalog: TemplateCatalog
-): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
+function runCatalogValidation(catalog: TemplateCatalog): ValidationResult {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
 
   if (!catalog || typeof catalog !== "object") {
-    return { valid: false, errors: ["Catalog is not an object"], warnings };
+    return {
+      valid: false,
+      errors: [
+        { code: "catalog.invalidObject", message: "Catalog is not an object" },
+      ],
+      warnings,
+    };
   }
 
   if (!Array.isArray(catalog.templates)) {
-    return { valid: false, errors: ["'templates' must be an array"], warnings };
+    return {
+      valid: false,
+      errors: [
+        {
+          code: "catalog.invalidTemplates",
+          message: "'templates' must be an array",
+        },
+      ],
+      warnings,
+    };
   }
 
   catalog.templates.forEach((tpl, index) => {
     if (!tpl || typeof tpl !== "object") {
-      errors.push(`Template[${index}] is not an object.`);
+      errors.push({
+        code: "template.invalidObject",
+        message: `Template[${index}] is not an object.`,
+        meta: { index },
+      });
       return;
     }
 
@@ -209,19 +232,38 @@ function runCatalogValidation(
         ? tpl.name.trim()
         : "";
     if (!name) {
-      errors.push(`Template[${index}] missing valid 'name'.`);
+      errors.push({
+        code: "template.missingName",
+        message: `Template[${index}] missing valid 'name'.`,
+        meta: { index },
+      });
     }
 
     const hasValidVersion =
-      tpl.version !== undefined && tpl.version !== null && !Number.isNaN(+tpl.version);
+      tpl.version !== undefined &&
+      tpl.version !== null &&
+      !Number.isNaN(+tpl.version);
     if (!hasValidVersion) {
-      errors.push(`Template '${name || `<index:${index}>`}' missing valid 'version'.`);
+      errors.push({
+        code: "template.missingVersion",
+        message: `Template '${
+          name || `<index:${index}>`
+        }' missing valid 'version'.`,
+        meta: { index, name: name || `<index:${index}>` },
+      });
     }
 
-    if (typeof tpl.sqlPattern !== "string" || tpl.sqlPattern.trim().length === 0) {
-      errors.push(
-        `Template '${name || `<index:${index}>`}' missing valid 'sqlPattern'.`
-      );
+    if (
+      typeof tpl.sqlPattern !== "string" ||
+      tpl.sqlPattern.trim().length === 0
+    ) {
+      errors.push({
+        code: "template.missingSqlPattern",
+        message: `Template '${
+          name || `<index:${index}>`
+        }' missing valid 'sqlPattern'.`,
+        meta: { index, name: name || `<index:${index}>` },
+      });
       return;
     }
 
@@ -232,8 +274,8 @@ function runCatalogValidation(
       placeholdersSpec: tpl.placeholdersSpec,
     });
 
-    templateValidation.errors.forEach((issue) => errors.push(issue.message));
-    templateValidation.warnings.forEach((issue) => warnings.push(issue.message));
+    errors.push(...templateValidation.errors);
+    warnings.push(...templateValidation.warnings);
   });
 
   return { valid: errors.length === 0, errors, warnings };
@@ -276,8 +318,12 @@ export async function matchTemplates(
       nameDescMatches.length * 1 +
       bestExampleScore * 4;
 
-    const successRate = typeof tpl.successRate === "number" ? clamp01(tpl.successRate) : undefined;
-    const weightedScore = baseScore * (successRate !== undefined ? 1 + successRate : 1);
+    const successRate =
+      typeof tpl.successRate === "number"
+        ? clamp01(tpl.successRate)
+        : undefined;
+    const weightedScore =
+      baseScore * (successRate !== undefined ? 1 + successRate : 1);
 
     return {
       template: tpl,
@@ -357,7 +403,10 @@ function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
 
   const successCount = row.successCount ?? 0;
   const usageCount = row.usageCount ?? 0;
-  const successRate = usageCount > 0 ? Math.min(Math.max(successCount / usageCount, 0), 1) : undefined;
+  const successRate =
+    usageCount > 0
+      ? Math.min(Math.max(successCount / usageCount, 0), 1)
+      : undefined;
 
   return {
     templateId: row.templateId,
