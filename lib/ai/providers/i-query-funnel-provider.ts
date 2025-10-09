@@ -63,6 +63,7 @@ export interface GenerateQueryRequest {
   databaseSchemaContext?: string;
   desiredFields?: string[]; // Optional enrichment fields (entity.field)
   scope?: QueryFunnelScope;
+  subQuestionId?: number;
 }
 
 /**
@@ -77,6 +78,7 @@ export interface GenerateQueryResponse {
   fieldsApplied?: string[];
   joinSummary?: string;
   sqlWarnings?: string[];
+  templateUsageId?: number;
 }
 
 /**

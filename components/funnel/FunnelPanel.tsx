@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import type { SubQuestion } from "@/lib/types/funnel";
 import { useErrorHandler } from "@/lib/error-handler";
 import type { ChartType } from "@/lib/chart-contracts";
@@ -126,6 +126,16 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   );
   const [lastExecutionSuccessful, setLastExecutionSuccessful] =
     useState<boolean>(false);
+  const [currentTemplateUsageId, setCurrentTemplateUsageId] =
+    useState<number | null>(null);
+
+  const numericSubQuestionId = useMemo(() => {
+    const raw = subQuestion.id?.startsWith("sq-")
+      ? subQuestion.id.slice(3)
+      : subQuestion.id;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }, [subQuestion.id]);
 
   useEffect(() => {
     // Reset all result-related states when navigating to a different sub-question
@@ -145,6 +155,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     setIsTemplateReviewOpen(false);
     setLocalMatchedTemplate(subQuestion.sqlMatchedTemplate ?? null);
     setLastExecutionSuccessful(false);
+    setCurrentTemplateUsageId(null);
   }, [subQuestion.id]);
 
   // Load initial results when they are provided
@@ -356,6 +367,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       setIsEditingQuestion(false);
       setLocalMatchedTemplate(null);
       setLastExecutionSuccessful(false);
+      setCurrentTemplateUsageId(null);
 
       handleSuccess("Question saved successfully", "Save Question");
       console.log("✅ Question saved successfully");
@@ -385,6 +397,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     setResultsCleared(true);
     setLocalMatchedTemplate(null);
     setLastExecutionSuccessful(false);
+    setCurrentTemplateUsageId(null);
 
     try {
       // Update in database cache
@@ -444,6 +457,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     setResultsCleared(true);
     setLocalMatchedTemplate(null);
     setLastExecutionSuccessful(false);
+    setCurrentTemplateUsageId(null);
 
     try {
       console.log("Generating SQL for question:", subQuestion.text);
@@ -462,6 +476,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           // Lean MVP: pass desiredFields (server may ignore until wired)
           desiredFields,
           scope,
+          subQuestionId: numericSubQuestionId,
         }),
       });
 
@@ -486,6 +501,11 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       setEditedSql(newSql);
       setLocalMatchedTemplate(matchedTemplate || null);
       setLastExecutionSuccessful(false);
+      setCurrentTemplateUsageId(
+        typeof result.templateUsageId === "number"
+          ? result.templateUsageId
+          : null
+      );
 
       // Save to database cache
       const saveResponse = await fetch(
@@ -555,7 +575,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         body: JSON.stringify({
           query: subQuestion.sqlQuery,
           params: Object.keys(params).length > 0 ? params : undefined,
-          subQuestionId: subQuestion.id.replace("sq-", ""),
+          subQuestionId:
+            numericSubQuestionId ?? subQuestion.id.replace("sq-", ""),
+          templateUsageId: currentTemplateUsageId ?? undefined,
         }),
       });
       if (!response.ok) {
@@ -569,11 +591,13 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         onQueryResult(subQuestion.id, result.data || []);
       }
       setLastExecutionSuccessful(true);
+      setCurrentTemplateUsageId(null);
       handleSuccess("Query executed successfully", "Execute Query");
     } catch (err: any) {
       setExecutionError(err.message);
       handleError(err, "Execute Query");
       setLastExecutionSuccessful(false);
+      setCurrentTemplateUsageId(null);
     } finally {
       setIsExecuting(false);
     }
@@ -628,6 +652,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       setTemplateModelId(result.modelId ?? undefined);
       setIsTemplateReviewOpen(true);
       setTemplatesFeatureAvailable(true);
+      setCurrentTemplateUsageId(null);
     } catch (error: any) {
       const message = error?.message || "Failed to extract template draft";
       setTemplateExtractionError(message);

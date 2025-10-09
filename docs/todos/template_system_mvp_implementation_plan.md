@@ -365,7 +365,7 @@ Tasks
     - Consider editing/versioning existing template vs. creating new
     - Deprecate old template when replacing with better version
   - Document governance workflow for Phase 2 (merge/consolidate)
-- [ ] **Update existing extraction tests** to verify simplification:
+- ✅ **Update existing extraction tests** to verify simplification:
   - Test cases with funnel CTE chains → verify Step\*\_Results removed
   - Test cases with complex nested CTEs → verify only essential CTEs retained
   - Measure extraction quality delta (compare before/after prompt enhancement)
@@ -398,21 +398,21 @@ Tests:
 - TemplateUsage entries recorded with all fields (questionText, chosen, matchedKeywords, matchedExample, latencyMs)
 - Success field updated after query execution (true/false/null)
 
-Status: Not Started
+Status: In Progress — provider logs template usage; execution updates outcomes; telemetry path active
 
 Tasks
 
-- Update `base-provider.ts` `generateQuery()`:
+- ✅ Update `base-provider.ts` `generateQuery()`:
   - Use DB-backed `matchTemplates()` when flag on
   - Log template selection with rationale
   - Create TemplateUsage entry on selection (chosen=true, success=null initially)
   - Pass templateVersionId to TemplateUsage
-- Update funnel SQL execution flow:
+- ✅ Update funnel SQL execution flow:
   - On successful execution: update TemplateUsage.success=true
   - On error: update TemplateUsage.success=false, errorType=classified error
   - Record latencyMs from selection to execution
-- Persist matched template name to SubQuestions.sqlMatchedTemplate
-- Add unit tests for TemplateUsage creation and updates
+- ✅ Persist matched template name to SubQuestions.sqlMatchedTemplate
+- ✅ Add unit tests for TemplateUsage creation and updates
 
 ## Stage 7: Evaluation Harness (Baseline & Telemetry)
 

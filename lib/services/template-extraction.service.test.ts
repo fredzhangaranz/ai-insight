@@ -44,17 +44,25 @@ describe("template-extraction.service", () => {
     ).rejects.toBeInstanceOf(TemplateServiceError);
   });
 
-  it("normalizes extracted draft and runs validation", async () => {
+  it("normalizes extracted draft, simplifies scaffold, and runs validation", async () => {
     const draft: TemplateExtractionDraft = {
       name: "Count Assessments by Window ",
       intent: " aggregation_by_category ",
-      description: " Counts distinct assessments for a patient over a lookback window. ",
-      sqlPattern: `SELECT TOP 1000
-  COUNT(DISTINCT A.id) AS assessmentCount
-FROM rpt.Assessment AS A
-JOIN rpt.DimDate AS D ON D.id = A.dimDateFk
-WHERE A.patientFk = {patientId}
-  AND D.date >= DATEADD(day, -{windowDays}, GETUTCDATE())`,
+      description:
+        " Counts distinct assessments for a patient over a lookback window. ",
+      sqlPattern: `WITH Step1_Results AS (
+  SELECT A.patientFk, COUNT(*) AS totalAssessments
+  FROM rpt.Assessment AS A
+  WHERE A.patientFk = {patientId}
+  GROUP BY A.patientFk
+),
+Step2_Results AS (
+  SELECT s1.patientFk, s1.totalAssessments
+  FROM Step1_Results AS s1
+  WHERE s1.totalAssessments > {minimumAssessments}
+)
+SELECT Step2_Results.patientFk, Step2_Results.totalAssessments
+FROM Step2_Results`,
       placeholdersSpec: {
         slots: [
           {
@@ -63,6 +71,12 @@ WHERE A.patientFk = {patientId}
             semantic: " patient_id ",
             required: true,
             validators: [" non-empty "],
+          },
+          {
+            name: " minimumAssessments ",
+            type: " int ",
+            required: true,
+            validators: [" min:1 "],
           },
         ],
       },
@@ -90,13 +104,17 @@ WHERE A.patientFk = {patientId}
     });
 
     expect(result.modelId).toBe("claude-3-5-sonnet-latest");
-    expect(result.warnings).toEqual([
-      "Ensure windowDays default is appropriate.",
-    ]);
+    expect(result.warnings).toContain(
+      "Ensure windowDays default is appropriate."
+    );
+    expect(result.warnings).toContain(
+      "Removed funnel scaffolding (Step*_Results CTEs) from extracted SQL pattern for cleaner templates."
+    );
+    expect(result.draft.sqlPattern).not.toMatch(/WITH\s+Step1_Results/i);
     expect(result.draft.name).toBe("Count Assessments by Window");
     expect(result.draft.intent).toBe("aggregation_by_category");
     expect(result.draft.placeholdersSpec?.slots.map((slot) => slot.name)).toEqual(
-      expect.arrayContaining(["patientId", "windowDays"])
+      expect.arrayContaining(["patientId", "minimumAssessments"])
     );
     expect(result.draft.keywords).toEqual([
       "count",

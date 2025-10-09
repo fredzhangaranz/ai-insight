@@ -14,6 +14,18 @@ import {
 } from "./template-validator.service";
 
 const PLACEHOLDER_REGEX = /\{([a-zA-Z0-9_\[\]\?]+)\}/g;
+const STEP_CTE_PATTERN = /^STEP\d+(_RESULTS)?$/i;
+
+interface ParsedCte {
+  name: string;
+  body: string;
+  raw: string;
+}
+
+interface ParsedWithClause {
+  ctes: ParsedCte[];
+  mainQuery: string;
+}
 
 export interface TemplateExtractionInput {
   questionText: string;
@@ -57,7 +69,10 @@ export async function extractTemplateDraft(
       schemaContext: input.schemaContext,
     });
 
-  const normalizedDraft = normalizeDraft(extraction.draft, sqlQuery);
+  const { draft: normalizedDraft, warnings: normalizationWarnings } = normalizeDraft(
+    extraction.draft,
+    sqlQuery
+  );
   const placeholders = derivePlaceholders(normalizedDraft);
   const validation = validateTemplate({
     name: normalizedDraft.name,
@@ -69,9 +84,12 @@ export async function extractTemplateDraft(
   return {
     draft: normalizedDraft,
     validation,
-    warnings: Array.isArray(extraction.warnings)
-      ? normalizeStringList(extraction.warnings)
-      : [],
+    warnings: [
+      ...(Array.isArray(extraction.warnings)
+        ? normalizeStringList(extraction.warnings)
+        : []),
+      ...normalizationWarnings,
+    ],
     modelId: extraction.modelId,
   };
 }
@@ -79,22 +97,32 @@ export async function extractTemplateDraft(
 function normalizeDraft(
   draft: TemplateExtractionDraft,
   fallbackSql: string
-): TemplateDraftPayload {
-  const sqlPattern = draft.sqlPattern?.trim() || fallbackSql;
+): { draft: TemplateDraftPayload; warnings: string[] } {
+  const rawSqlPattern = draft.sqlPattern?.trim() || fallbackSql;
+  const simplification = simplifyFunnelSqlPattern(rawSqlPattern);
+  const simplificationWarnings: string[] = simplification.changed
+    ? [
+        "Removed funnel scaffolding (Step*_Results CTEs) from extracted SQL pattern for cleaner templates.",
+      ]
+    : [];
+
   const placeholdersSpec = ensureSpecCoverage(
     normalizePlaceholdersSpec(draft.placeholdersSpec),
-    sqlPattern
+    simplification.sql
   );
 
   return {
-    name: draft.name.trim(),
-    intent: draft.intent.trim(),
-    description: draft.description?.trim(),
-    sqlPattern,
-    placeholdersSpec,
-    keywords: normalizeStringList(draft.keywords),
-    tags: normalizeStringList(draft.tags),
-    examples: normalizeStringList(draft.examples),
+    draft: {
+      name: draft.name.trim(),
+      intent: draft.intent.trim(),
+      description: draft.description?.trim(),
+      sqlPattern: simplification.sql,
+      placeholdersSpec,
+      keywords: normalizeStringList(draft.keywords),
+      tags: normalizeStringList(draft.tags),
+      examples: normalizeStringList(draft.examples),
+    },
+    warnings: simplificationWarnings,
   };
 }
 
@@ -188,4 +216,192 @@ function normalizeStringList(values?: string[] | null): string[] {
     seen.add(trimmed);
   }
   return Array.from(seen);
+}
+
+export function simplifyFunnelSqlPattern(
+  sqlPattern: string
+): { sql: string; changed: boolean } {
+  const original = sqlPattern ?? "";
+  const trimmed = original.trim();
+  if (!/^WITH\s/i.test(trimmed)) {
+    return { sql: trimmed, changed: false };
+  }
+
+  const parsed = parseWithClause(trimmed);
+  if (!parsed) {
+    return { sql: trimmed, changed: false };
+  }
+
+  const stepCtes = parsed.ctes.filter((cte) => STEP_CTE_PATTERN.test(cte.name));
+  if (stepCtes.length === 0) {
+    return { sql: trimmed, changed: false };
+  }
+
+  const resolvedBodies = new Map<string, string>();
+
+  for (const cte of stepCtes) {
+    let resolvedBody = cte.body;
+    for (const [name, body] of resolvedBodies.entries()) {
+      resolvedBody = inlineStepCte(resolvedBody, name, body);
+    }
+    resolvedBodies.set(cte.name.toUpperCase(), resolvedBody.trim());
+  }
+
+  let simplifiedMain = parsed.mainQuery;
+  for (const [name, body] of resolvedBodies.entries()) {
+    simplifiedMain = inlineStepCte(
+      simplifiedMain,
+      name,
+      body
+    );
+  }
+
+  if (!simplifiedMain.trim()) {
+    return { sql: trimmed, changed: false };
+  }
+
+  // Rebuild WITH clause with non-step CTEs only
+  const nonStepCtes = parsed.ctes.filter(
+    (cte) => !STEP_CTE_PATTERN.test(cte.name)
+  );
+
+  let finalSql = simplifiedMain.trim();
+  if (nonStepCtes.length > 0) {
+    const cteStrings = nonStepCtes.map((cte) => cte.raw.trim());
+    finalSql = `WITH ${cteStrings.join(
+      ",\n"
+    )}\n${finalSql}`.trim();
+  }
+
+  if (/WHERE\s+EXISTS\s*\(\s*SELECT[\s\S]+Step\d+_Results/i.test(finalSql)) {
+    // Still contains unresolved scaffolding; fallback to original
+    return { sql: trimmed, changed: false };
+  }
+
+  const normalizedOriginal = normalizeWhitespace(trimmed);
+  const normalizedFinal = normalizeWhitespace(finalSql);
+
+  if (normalizedOriginal === normalizedFinal) {
+    return { sql: trimmed, changed: false };
+  }
+
+  return { sql: finalSql, changed: true };
+}
+
+function parseWithClause(sql: string): ParsedWithClause | null {
+  const ctes: ParsedCte[] = [];
+  const length = sql.length;
+  let pos = 4; // position after 'WITH'
+
+  while (pos < length) {
+    // Skip whitespace and trailing commas
+    while (pos < length && /[\s,]/.test(sql[pos])) pos++;
+    const remaining = sql.slice(pos);
+    const match = remaining.match(/^([A-Za-z][A-Za-z0-9_]*)\s+AS\s*\(/i);
+    if (!match) break;
+
+    const name = match[1];
+    const openIndex = pos + match[0].lastIndexOf("(");
+    const extraction = extractParenthetical(sql, openIndex);
+    if (!extraction) {
+      return null;
+    }
+
+    const raw = sql.slice(pos, extraction.nextIndex).trim();
+    ctes.push({ name, body: extraction.content.trim(), raw });
+    pos = extraction.nextIndex;
+
+    // Continue if comma-separated CTEs
+    while (pos < length && /\s/.test(sql[pos])) pos++;
+    if (pos < length && sql[pos] === ",") {
+      pos += 1;
+      continue;
+    }
+    break;
+  }
+
+  if (ctes.length === 0) {
+    return null;
+  }
+
+  const mainQuery = sql.slice(pos).trim();
+  return { ctes, mainQuery };
+}
+
+function extractParenthetical(
+  text: string,
+  openIndex: number
+): { content: string; nextIndex: number } | null {
+  let depth = 0;
+  let i = openIndex;
+  const length = text.length;
+
+  while (i < length) {
+    const char = text[i];
+    if (char === "(") {
+      depth++;
+    } else if (char === ")") {
+      depth--;
+      if (depth === 0) {
+        const content = text.slice(openIndex + 1, i);
+        return {
+          content,
+          nextIndex: i + 1,
+        };
+      }
+    } else if (char === "'" || char === '"') {
+      i = skipQuoted(text, i);
+      continue;
+    }
+    i++;
+  }
+
+  return null;
+}
+
+function skipQuoted(text: string, startIndex: number): number {
+  const quote = text[startIndex];
+  let i = startIndex + 1;
+  while (i < text.length) {
+    if (text[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    if (text[i] === quote) {
+      return i;
+    }
+    i++;
+  }
+  return text.length - 1;
+}
+
+const JOIN_CLAUSE_PATTERN =
+  /\b(FROM|JOIN|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL JOIN|CROSS APPLY|OUTER APPLY)\s+([A-Za-z][A-Za-z0-9_]*)(\s+(?:AS\s+)?[A-Za-z][A-Za-z0-9_]*)?/gi;
+
+function inlineStepCte(sql: string, stepName: string, body: string): string {
+  const upperStep = stepName.toUpperCase();
+  const trimmedBody = body.trim();
+  if (!trimmedBody) return sql;
+
+  const replaced = sql.replace(
+    JOIN_CLAUSE_PATTERN,
+    (match: string, clause: string, namePart: string, aliasPart?: string) => {
+      if (namePart.toUpperCase() !== upperStep) {
+        return match;
+      }
+
+      let alias = namePart;
+      if (aliasPart) {
+        alias = aliasPart.trim().replace(/^AS\s+/i, "").trim();
+      }
+
+      return `${clause} (\n${trimmedBody}\n) AS ${alias}`;
+    }
+  );
+
+  return replaced;
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }

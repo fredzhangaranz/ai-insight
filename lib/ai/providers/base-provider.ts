@@ -30,6 +30,9 @@ import {
 import type { PlaceholdersSpecSlot } from "../../services/template-validator.service";
 import { MetricsMonitor } from "../../monitoring";
 import { matchTemplates } from "../../services/query-template.service";
+import type { TemplateMatch } from "../../services/query-template.service";
+import { isTemplateSystemEnabled } from "../../config/template-flags";
+import { createTemplateUsage } from "../../services/template-usage.service";
 import { loadDatabaseSchemaContext } from "../schema-context";
 
 /**
@@ -560,12 +563,13 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
       // 1. Match templates (heuristics) and prepare compact injection
       let matchedTemplates: Array<{ name: string; sqlPattern: string }> = [];
+      let templateMatches: TemplateMatch[] = [];
       try {
         // Fetch top 5 for logging; inject top 2
-        const matches = await matchTemplates(request.subQuestion, 5);
+        templateMatches = await matchTemplates(request.subQuestion, 5);
         console.log(
           "Template matches (top 5):",
-          matches.map((m) => ({
+          templateMatches.map((m) => ({
             name: m.template.name,
             score: m.score,
             baseScore: m.baseScore,
@@ -574,7 +578,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
             matchedExample: m.matchedExample,
           }))
         );
-        matchedTemplates = matches.slice(0, 2).map((m) => ({
+        matchedTemplates = templateMatches.slice(0, 2).map((m) => ({
           name: m.template.name,
           sqlPattern: m.template.sqlPattern,
         }));
@@ -659,6 +663,44 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
       console.log("Chosen matchedQueryTemplate:", matchedQueryTemplate);
 
+      let templateUsageId: number | undefined;
+      if (isTemplateSystemEnabled()) {
+        try {
+          const canonicalMatchedName = matchedQueryTemplate?.trim();
+          const matchedEntry = canonicalMatchedName
+            ? templateMatches.find(
+                (match) =>
+                  match.template.name &&
+                  match.template.name.localeCompare(
+                    canonicalMatchedName,
+                    undefined,
+                    { sensitivity: "accent" }
+                  ) === 0
+              )
+            : undefined;
+
+          const selectedEntry = matchedEntry ?? templateMatches[0];
+
+          if (selectedEntry?.template.templateVersionId) {
+            const usage = await createTemplateUsage({
+              templateVersionId: selectedEntry.template.templateVersionId,
+              subQuestionId:
+                typeof request.subQuestionId === "number" &&
+                Number.isFinite(request.subQuestionId)
+                  ? request.subQuestionId
+                  : undefined,
+              questionText: request.subQuestion,
+              matchedKeywords: selectedEntry.matchedKeywords,
+              matchedExample: selectedEntry.matchedExample,
+              chosen: true,
+            });
+            templateUsageId = usage.id;
+          }
+        } catch (usageError) {
+          console.warn("Failed to record template usage:", usageError);
+        }
+      }
+
       await metrics.logAIMetrics({
         promptTokens: aiResponse.usage.input_tokens,
         completionTokens: aiResponse.usage.output_tokens,
@@ -676,6 +718,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         fieldsApplied: fieldValidation.fieldsApplied,
         joinSummary: fieldValidation.joinSummary,
         sqlWarnings: safetyValidation.warnings,
+        templateUsageId,
       };
     } catch (error: any) {
       await metrics.logAIMetrics({
