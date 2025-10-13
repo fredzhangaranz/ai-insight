@@ -6,12 +6,6 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,8 +23,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useToast } from "@/components/ui/use-toast";
 import type { TemplateListItem } from "@/lib/services/template.service";
 
 interface TemplateCatalogClientProps {
@@ -154,15 +146,6 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-interface TemplateDetailDialogProps {
-  template: TemplateListItem | null;
-  open: boolean;
-  onOpenChange: (value: boolean) => void;
-  onPublish: (templateId: number) => Promise<void>;
-  onDeprecate: (templateId: number) => Promise<void>;
-  actionLoading: boolean;
-}
-
 function TemplateDetailDialog({
   template,
   open,
@@ -230,7 +213,9 @@ function TemplateDetailDialog({
                               <TableCell>{slot.type ?? "—"}</TableCell>
                               <TableCell>{slot.semantic ?? "—"}</TableCell>
                               <TableCell>
-                                {slot.required === false ? "Optional" : "Required"}
+                                {slot.required === false
+                                  ? "Optional"
+                                  : "Required"}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -384,13 +369,8 @@ export default function TemplateCatalogClient({
     data: initialTemplates,
     isLoading: false,
   });
-  const [actionLoading, setActionLoading] = useState(false);
 
   const didMountRef = useRef(false);
-  const [selectedTemplate, setSelectedTemplate] =
-    useState<TemplateListItem | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const { toast } = useToast();
 
   const selectedFilters = useMemo(
     () => ({ status: statusFilter, intent: intentFilter, tag: tagFilter }),
@@ -404,7 +384,9 @@ export default function TemplateCatalogClient({
       if (tpl.intent) intentSet.add(tpl.intent);
       tpl.tags?.forEach((tag) => tagSet.add(tag));
     });
-    setAvailableIntents(Array.from(intentSet).sort((a, b) => a.localeCompare(b)));
+    setAvailableIntents(
+      Array.from(intentSet).sort((a, b) => a.localeCompare(b))
+    );
     setAvailableTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b)));
   };
 
@@ -443,6 +425,32 @@ export default function TemplateCatalogClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFilters]);
 
+  // Listen for custom filter events from quick links
+  useEffect(() => {
+    const handleFilterEvent = (event: CustomEvent) => {
+      const { status } = event.detail;
+      if (status) {
+        setStatusFilter(status);
+        // Scroll to the template catalog section
+        const catalogElement = document.getElementById("template-catalog");
+        if (catalogElement) {
+          catalogElement.scrollIntoView({ behavior: "smooth" });
+        }
+      }
+    };
+
+    window.addEventListener(
+      "template-filter",
+      handleFilterEvent as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        "template-filter",
+        handleFilterEvent as EventListener
+      );
+    };
+  }, []);
+
   const handleReset = () => {
     setStatusFilter(undefined);
     setIntentFilter(undefined);
@@ -454,58 +462,6 @@ export default function TemplateCatalogClient({
 
   const showReset =
     statusFilter || intentFilter || tagFilter || searchTerm.trim().length > 0;
-
-  const handlePublish = async (templateId: number) => {
-    setActionLoading(true);
-    try {
-      const response = await fetch(`/api/ai/templates/${templateId}/publish`, {
-        method: "POST",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload?.message ?? "Publish failed");
-      }
-      toast({
-        title: "Template published",
-        description: payload?.data?.name ?? "Draft promoted",
-      });
-      await handleApplyFilters();
-    } catch (error: any) {
-      toast({
-        title: "Failed to publish",
-        description: error?.message ?? "Unexpected error",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeprecate = async (templateId: number) => {
-    setActionLoading(true);
-    try {
-      const response = await fetch(`/api/ai/templates/${templateId}/deprecate`, {
-        method: "POST",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload?.message ?? "Deprecate failed");
-      }
-      toast({
-        title: "Template deprecated",
-        description: payload?.data?.name ?? "Template hidden",
-      });
-      await handleApplyFilters();
-    } catch (error: any) {
-      toast({
-        title: "Failed to deprecate",
-        description: error?.message ?? "Unexpected error",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   return (
     <Card>
@@ -606,25 +562,12 @@ export default function TemplateCatalogClient({
         <TemplateTable
           state={state}
           onViewDetails={(template) => {
-            setSelectedTemplate(template);
-            setDetailOpen(true);
+            if (template.templateId) {
+              window.location.href = `/templates/${template.templateId}`;
+            }
           }}
         />
       </CardContent>
-
-      <TemplateDetailDialog
-        template={selectedTemplate}
-        open={detailOpen}
-        onOpenChange={(open) => {
-          setDetailOpen(open);
-          if (!open) {
-            setSelectedTemplate(null);
-          }
-        }}
-        onPublish={handlePublish}
-        onDeprecate={handleDeprecate}
-        actionLoading={actionLoading}
-      />
     </Card>
   );
 }

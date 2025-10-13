@@ -1,4 +1,5 @@
 import TemplateCatalogClient from "./template-catalog-client";
+import QuickLinks from "./quick-links";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,34 +92,15 @@ export default async function TemplatesPage() {
         </p>
       </header>
 
-      <div className="flex items-center justify-between rounded-md border bg-card p-4">
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">
-            Quick Links
-          </p>
-          <div className="flex flex-wrap gap-2 text-sm">
-            <a href="#section-drafts" className="underline-offset-4 hover:underline">
-              View Drafts
-            </a>
-            <a href="#section-approved" className="underline-offset-4 hover:underline">
-              View Approved
-            </a>
-            <a
-              href="/docs/template-authoring-guide"
-              className="underline-offset-4 hover:underline"
-            >
-              Authoring Guide
-            </a>
-          </div>
-        </div>
-        <Badge variant="outline">Stage 5 • Draft creation</Badge>
-      </div>
+      <QuickLinks />
 
-      <TemplateCatalogClient
-        initialTemplates={templates}
-        intents={intents}
-        tags={tags}
-      />
+      <div id="template-catalog">
+        <TemplateCatalogClient
+          initialTemplates={templates}
+          intents={intents}
+          tags={tags}
+        />
+      </div>
     </div>
   );
 }
