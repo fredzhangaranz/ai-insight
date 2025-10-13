@@ -1,4 +1,29 @@
+import type { PlaceholdersSpec } from "@/lib/services/template-validator.service";
+
 export type QueryFunnelScope = "form" | "schema";
+
+export interface TemplateExtractionRequest {
+  questionText: string;
+  sqlQuery: string;
+  schemaContext?: string;
+}
+
+export interface TemplateExtractionDraft {
+  name: string;
+  intent: string;
+  description: string;
+  sqlPattern: string;
+  placeholdersSpec: PlaceholdersSpec | null;
+  keywords: string[];
+  tags: string[];
+  examples: string[];
+}
+
+export interface TemplateExtractionResponse {
+  modelId: string;
+  draft: TemplateExtractionDraft;
+  warnings: string[];
+}
 
 /**
  * Request to generate sub-questions from a complex original question.
@@ -38,6 +63,7 @@ export interface GenerateQueryRequest {
   databaseSchemaContext?: string;
   desiredFields?: string[]; // Optional enrichment fields (entity.field)
   scope?: QueryFunnelScope;
+  subQuestionId?: number;
 }
 
 /**
@@ -52,6 +78,7 @@ export interface GenerateQueryResponse {
   fieldsApplied?: string[];
   joinSummary?: string;
   sqlWarnings?: string[];
+  templateUsageId?: number;
 }
 
 /**
@@ -99,4 +126,11 @@ export interface IQueryFunnelProvider {
   generateChartRecommendations(
     request: GenerateChartRecommendationsRequest
   ): Promise<GenerateChartRecommendationsResponse>;
+
+  /**
+   * Extracts a reusable template definition from a successful question + SQL pair.
+   */
+  extractTemplateDraft(
+    request: TemplateExtractionRequest
+  ): Promise<TemplateExtractionResponse>;
 }

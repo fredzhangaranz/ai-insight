@@ -1,6 +1,18 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { getInsightGenDbPool } from "../db";
+import { isTemplateSystemEnabled } from "../config/template-flags";
+import {
+  PlaceholdersSpec,
+  validateTemplate,
+  ValidationResult,
+  ValidationError,
+  ValidationWarning,
+} from "./template-validator.service";
+
+export type TemplateStatus = "Draft" | "Approved" | "Deprecated";
+
 export interface QueryTemplate {
   name: string;
   description?: string;
@@ -8,8 +20,16 @@ export interface QueryTemplate {
   keywords?: string[];
   tags?: string[];
   placeholders?: string[];
+  placeholdersSpec?: PlaceholdersSpec;
   sqlPattern: string;
   version: number;
+  intent?: string;
+  status?: TemplateStatus;
+  templateId?: number;
+  templateVersionId?: number;
+  successRate?: number;
+  successCount?: number;
+  usageCount?: number;
 }
 
 export interface TemplateCatalog {
@@ -19,18 +39,39 @@ export interface TemplateCatalog {
 export interface TemplateMatch {
   template: QueryTemplate;
   score: number;
+  baseScore: number;
   matchedKeywords: string[];
   matchedExample?: string;
+  successRate?: number;
 }
 
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
+type TemplateCatalogSource = "json" | "db";
+
+interface TemplateCatalogCacheEntry {
+  catalog: TemplateCatalog;
+  loadedAt: number;
 }
 
-let cachedCatalog: TemplateCatalog | null = null;
-let lastLoadedAtMs = 0;
+const catalogCache: Partial<
+  Record<TemplateCatalogSource, TemplateCatalogCacheEntry>
+> = {};
+
+interface DbTemplateRow {
+  templateId: number;
+  templateVersionId: number;
+  name: string;
+  description: string | null;
+  intent: string;
+  status: TemplateStatus;
+  sqlPattern: string;
+  placeholdersSpec: PlaceholdersSpec | null;
+  keywords: string[] | null;
+  tags: string[] | null;
+  examples: string[] | null;
+  version: number;
+  successCount: number | null;
+  usageCount: number | null;
+}
 
 const CATALOG_RELATIVE_PATH = path.join(
   process.cwd(),
@@ -46,138 +87,195 @@ export async function getTemplates(options?: {
   forceReload?: boolean;
 }): Promise<TemplateCatalog> {
   const forceReload = options?.forceReload === true;
+  const source: TemplateCatalogSource = isTemplateSystemEnabled()
+    ? "db"
+    : "json";
 
-  if (!forceReload && cachedCatalog) {
-    return cachedCatalog;
+  if (!forceReload) {
+    const cached = catalogCache[source];
+    if (cached) {
+      return cached.catalog;
+    }
   }
 
-  const jsonRaw = await fs.promises.readFile(CATALOG_RELATIVE_PATH, "utf-8");
-  const parsed = JSON.parse(jsonRaw) as TemplateCatalog;
-
-  const validation = validateTemplateCatalog(parsed);
+  const catalog = await loadTemplateCatalog(source);
+  const validation = runCatalogValidation(catalog);
   if (!validation.valid) {
-    const message = `Query template catalog validation failed: ${validation.errors.join(
-      "; "
-    )}`;
+    const message = `Query template catalog validation failed: ${validation.errors
+      .map((e) => e.message)
+      .join("; ")}`;
     throw new Error(message);
   }
 
   if (validation.warnings.length > 0) {
-    // Log warnings without failing
     console.warn(
-      "Query template catalog warnings:",
-      validation.warnings.join("; ")
+      `Query template catalog warnings (${source}):`,
+      validation.warnings.map((w) => w.message).join("; ")
     );
   }
 
-  cachedCatalog = parsed;
-  lastLoadedAtMs = Date.now();
-  return parsed;
+  catalogCache[source] = { catalog, loadedAt: Date.now() };
+  return catalog;
 }
 
-/**
- * Validates the entire template catalog for schema shape, SQL safety, and placeholder integrity.
- */
-export function validateTemplateCatalog(
-  catalog: TemplateCatalog
-): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
+async function loadTemplateCatalog(
+  source: TemplateCatalogSource
+): Promise<TemplateCatalog> {
+  if (source === "db") {
+    return loadCatalogFromDb();
+  }
+  return loadCatalogFromJson();
+}
+
+async function loadCatalogFromJson(): Promise<TemplateCatalog> {
+  const jsonRaw = await fs.promises.readFile(CATALOG_RELATIVE_PATH, "utf-8");
+  return JSON.parse(jsonRaw) as TemplateCatalog;
+}
+
+let hasWarnedAboutDbFallback = false;
+
+async function loadCatalogFromDb(): Promise<TemplateCatalog> {
+  try {
+    const pool = await getInsightGenDbPool();
+    const result = await pool.query<DbTemplateRow>(
+      `SELECT
+         t.id AS "templateId",
+         tv.id AS "templateVersionId",
+         t.name,
+         t.description,
+         t.intent,
+         t.status,
+         tv."sqlPattern" AS "sqlPattern",
+         tv."placeholdersSpec" AS "placeholdersSpec",
+         tv.keywords,
+         tv.tags,
+         tv.examples,
+         tv.version,
+         usage.success_count AS "successCount",
+         usage.total_count AS "usageCount"
+       FROM "Template" t
+       JOIN LATERAL (
+         SELECT v.*
+         FROM "TemplateVersion" v
+         WHERE v."templateId" = t.id
+         ORDER BY (v.id = t."activeVersionId") DESC, v.version DESC
+         LIMIT 1
+       ) tv ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*) FILTER (WHERE tu.success IS TRUE) AS success_count,
+           COUNT(*) AS total_count
+         FROM "TemplateUsage" tu
+         WHERE tu."templateVersionId" = tv.id
+       ) usage ON TRUE
+       WHERE t.status = 'Approved'`
+    );
+
+    if (result.rows.length === 0) {
+      warnDbFallback(
+        "no approved templates found in DB (seed may not have been run yet)"
+      );
+      return loadCatalogFromJson();
+    }
+
+    const templates = result.rows.map(transformDbRowToQueryTemplate);
+    return { templates };
+  } catch (error) {
+    warnDbFallback(
+      `failed to load templates from DB: ${
+        (error as Error)?.message ?? String(error)
+      }`
+    );
+    return loadCatalogFromJson();
+  }
+}
+
+function runCatalogValidation(catalog: TemplateCatalog): ValidationResult {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
 
   if (!catalog || typeof catalog !== "object") {
-    return { valid: false, errors: ["Catalog is not an object"], warnings };
+    return {
+      valid: false,
+      errors: [
+        { code: "catalog.invalidObject", message: "Catalog is not an object" },
+      ],
+      warnings,
+    };
   }
 
   if (!Array.isArray(catalog.templates)) {
-    return { valid: false, errors: ["'templates' must be an array"], warnings };
+    return {
+      valid: false,
+      errors: [
+        {
+          code: "catalog.invalidTemplates",
+          message: "'templates' must be an array",
+        },
+      ],
+      warnings,
+    };
   }
 
-  catalog.templates.forEach((tpl, idx) => {
-    const prefix = `Template[${idx}] '${tpl?.name ?? "<unnamed>"}':`;
-
+  catalog.templates.forEach((tpl, index) => {
     if (!tpl || typeof tpl !== "object") {
-      errors.push(`${prefix} not an object`);
+      errors.push({
+        code: "template.invalidObject",
+        message: `Template[${index}] is not an object.`,
+        meta: { index },
+      });
       return;
     }
-    if (!tpl.name || typeof tpl.name !== "string") {
-      errors.push(`${prefix} missing valid 'name'`);
+
+    const name =
+      typeof tpl.name === "string" && tpl.name.trim().length > 0
+        ? tpl.name.trim()
+        : "";
+    if (!name) {
+      errors.push({
+        code: "template.missingName",
+        message: `Template[${index}] missing valid 'name'.`,
+        meta: { index },
+      });
     }
+
+    const hasValidVersion =
+      tpl.version !== undefined &&
+      tpl.version !== null &&
+      !Number.isNaN(+tpl.version);
+    if (!hasValidVersion) {
+      errors.push({
+        code: "template.missingVersion",
+        message: `Template '${
+          name || `<index:${index}>`
+        }' missing valid 'version'.`,
+        meta: { index, name: name || `<index:${index}>` },
+      });
+    }
+
     if (
-      tpl.version === undefined ||
-      tpl.version === null ||
-      Number.isNaN(Number(tpl.version))
+      typeof tpl.sqlPattern !== "string" ||
+      tpl.sqlPattern.trim().length === 0
     ) {
-      errors.push(`${prefix} missing valid 'version'`);
-    }
-    if (!tpl.sqlPattern || typeof tpl.sqlPattern !== "string") {
-      errors.push(`${prefix} missing valid 'sqlPattern'`);
-    }
-
-    // Placeholder integrity: all placeholders in pattern must be declared (best-effort)
-    if (tpl.sqlPattern) {
-      const bracePlaceholders = Array.from(
-        tpl.sqlPattern.matchAll(/\{([a-zA-Z0-9_\[\]\?]+)\}/g)
-      ).map((m) => m[1]);
-      const declared = new Set((tpl.placeholders ?? []).map((p) => String(p)));
-      for (const ph of bracePlaceholders) {
-        if (!declared.has(ph)) {
-          warnings.push(
-            `${prefix} placeholder '{${ph}}' not listed in placeholders[]`
-          );
-        }
-      }
-      for (const ph of Array.from(declared)) {
-        if (!bracePlaceholders.includes(ph)) {
-          warnings.push(
-            `${prefix} placeholders[] contains '${ph}' which does not appear in sqlPattern`
-          );
-        }
-      }
+      errors.push({
+        code: "template.missingSqlPattern",
+        message: `Template '${
+          name || `<index:${index}>`
+        }' missing valid 'sqlPattern'.`,
+        meta: { index, name: name || `<index:${index}>` },
+      });
+      return;
     }
 
-    // SQL safety checks
-    if (tpl.sqlPattern) {
-      const sql = tpl.sqlPattern.trim();
-      const upper = sql.toUpperCase();
+    const templateValidation = validateTemplate({
+      name: name || tpl.name || `<index:${index}>`,
+      sqlPattern: tpl.sqlPattern,
+      placeholders: tpl.placeholders,
+      placeholdersSpec: tpl.placeholdersSpec,
+    });
 
-      const dangerous = [
-        "DROP",
-        "DELETE",
-        "UPDATE",
-        "INSERT",
-        "TRUNCATE",
-        "ALTER",
-        "CREATE",
-        "EXEC",
-        "EXECUTE",
-        " SP_",
-        " XP_",
-      ];
-      for (const kw of dangerous) {
-        if (upper.includes(kw)) {
-          errors.push(
-            `${prefix} contains potentially dangerous keyword '${kw.trim()}'`
-          );
-        }
-      }
-
-      const startsWithSelectOrWith =
-        upper.startsWith("SELECT") || upper.startsWith("WITH");
-
-      if (!startsWithSelectOrWith) {
-        // Allow fragments like unions or combinators; warn but do not fail
-        warnings.push(
-          `${prefix} sqlPattern does not start with SELECT/WITH (treated as fragment)`
-        );
-      } else {
-        // Heuristic schema prefixing reminder
-        const hasFrom = /\bFROM\b/i.test(sql) || /\bJOIN\b/i.test(sql);
-        const hasRptPrefix = /\brpt\./i.test(sql);
-        if (hasFrom && !hasRptPrefix) {
-          warnings.push(`${prefix} no 'rpt.' schema prefix detected`);
-        }
-      }
-    }
+    errors.push(...templateValidation.errors);
+    warnings.push(...templateValidation.warnings);
   });
 
   return { valid: errors.length === 0, errors, warnings };
@@ -215,16 +313,25 @@ export async function matchTemplates(
       }
     }
 
-    const score =
+    const baseScore =
       keywordMatches.length * 3 +
       nameDescMatches.length * 1 +
       bestExampleScore * 4;
 
+    const successRate =
+      typeof tpl.successRate === "number"
+        ? clamp01(tpl.successRate)
+        : undefined;
+    const weightedScore =
+      baseScore * (successRate !== undefined ? 1 + successRate : 1);
+
     return {
       template: tpl,
-      score,
+      score: weightedScore,
+      baseScore,
       matchedKeywords: keywordMatches,
       matchedExample: bestExample,
+      successRate,
     };
   });
 
@@ -248,4 +355,75 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
     if (large.has(t)) intersection += 1;
   }
   return intersection / (a.size + b.size - intersection);
+}
+
+export function resetTemplateCatalogCache(): void {
+  delete catalogCache.json;
+  delete catalogCache.db;
+  hasWarnedAboutDbFallback = false;
+}
+
+export function reloadTemplateCatalog(): void {
+  resetTemplateCatalogCache();
+}
+
+function warnDbFallback(reason: string): void {
+  if (hasWarnedAboutDbFallback) {
+    return;
+  }
+  console.warn(
+    `AI_TEMPLATES_ENABLED is true, but ${reason}. Falling back to JSON catalog.`
+  );
+  hasWarnedAboutDbFallback = true;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
+  const placeholdersSpec = row.placeholdersSpec as
+    | { slots?: Array<{ name?: string }> }
+    | null
+    | undefined;
+
+  const slots = Array.isArray(placeholdersSpec?.slots)
+    ? placeholdersSpec!.slots
+        .map((slot) => (slot?.name ?? "").trim())
+        .filter((name): name is string => Boolean(name))
+    : [];
+
+  const normalizeTextArray = (value: string[] | null | undefined) =>
+    Array.isArray(value) && value.length > 0
+      ? value.map((item) => String(item))
+      : undefined;
+
+  const successCount = row.successCount ?? 0;
+  const usageCount = row.usageCount ?? 0;
+  const successRate =
+    usageCount > 0
+      ? Math.min(Math.max(successCount / usageCount, 0), 1)
+      : undefined;
+
+  return {
+    templateId: row.templateId,
+    templateVersionId: row.templateVersionId,
+    name: row.name,
+    description: row.description ?? undefined,
+    sqlPattern: row.sqlPattern,
+    version: row.version,
+    placeholders: slots.length > 0 ? slots : undefined,
+    placeholdersSpec: row.placeholdersSpec ?? undefined,
+    keywords: normalizeTextArray(row.keywords),
+    tags: normalizeTextArray(row.tags),
+    questionExamples: normalizeTextArray(row.examples),
+    intent: row.intent,
+    status: row.status,
+    successRate,
+    successCount,
+    usageCount,
+  };
 }

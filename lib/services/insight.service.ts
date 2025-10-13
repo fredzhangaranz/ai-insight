@@ -59,7 +59,8 @@ function validateCreate(input: CreateInsightInput) {
     throw new Error("Validation: chartMapping required for non-table charts");
   }
   if (input.scope === "form") {
-    const formFk = (input as any).assessmentFormVersionFk ?? (input as any).formId;
+    const formFk =
+      (input as any).assessmentFormVersionFk ?? (input as any).formId;
     if (!formFk) {
       throw new Error(
         "Validation: assessmentFormVersionFk (or formId) required for scope=form"
@@ -94,7 +95,12 @@ function validateAndFixQuery(sql: string): string {
   sql = sql.replace(tableRegex, "rpt.$1");
   // Add TOP limit if not present
   if (!sql.match(/\bTOP\s+\d+\b/i) && !sql.match(/\bOFFSET\b/i)) {
-    sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+    // Handle DISTINCT + TOP syntax correctly for MS SQL Server
+    if (sql.match(/\bSELECT\s+DISTINCT\b/i)) {
+      sql = sql.replace(/\bSELECT\s+DISTINCT\b/i, "SELECT DISTINCT TOP 1000");
+    } else {
+      sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+    }
   }
   return sql;
 }
@@ -255,9 +261,7 @@ export class InsightService {
     );
   }
 
-  async execute(
-    id: number
-  ): Promise<{
+  async execute(id: number): Promise<{
     rows: any[];
     chart: { chartType: ChartType; data: any };
   } | null> {

@@ -17,6 +17,7 @@ async function generateQueryHandler(
     modelId,
     desiredFields,
     scope: rawScope,
+    subQuestionId,
   } = body;
 
   const scope = rawScope === "schema" ? "schema" : "form";
@@ -32,6 +33,18 @@ async function generateQueryHandler(
     return createErrorResponse.badRequest(
       "modelId is required and must be a string"
     );
+  }
+
+  let parsedSubQuestionId: number | undefined;
+  if (subQuestionId !== undefined && subQuestionId !== null) {
+    if (Number.isFinite(subQuestionId)) {
+      parsedSubQuestionId = Number(subQuestionId);
+    } else if (typeof subQuestionId === "string") {
+      const numeric = Number(subQuestionId);
+      if (!Number.isNaN(numeric)) {
+        parsedSubQuestionId = numeric;
+      }
+    }
   }
 
   try {
@@ -50,6 +63,7 @@ async function generateQueryHandler(
       databaseSchemaContext,
       desiredFields: Array.isArray(desiredFields) ? desiredFields : undefined,
       scope,
+      subQuestionId: parsedSubQuestionId,
     });
 
     console.log("✅ SQL generated successfully");
@@ -62,6 +76,7 @@ async function generateQueryHandler(
       fieldsApplied: result.fieldsApplied,
       joinSummary: result.joinSummary,
       sqlWarnings: result.sqlWarnings,
+      templateUsageId: result.templateUsageId,
     });
   } catch (error: any) {
     console.error("Error generating SQL:", error);

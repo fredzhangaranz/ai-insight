@@ -21,6 +21,7 @@ import { Squares2x2Icon } from "@/components/heroicons";
 import { ClipboardDocumentIcon } from "@/components/heroicons";
 import { SparklesIcon } from "@/components/heroicons";
 import { UserIcon } from "@/components/heroicons";
+import { DocumentDuplicateIcon } from "@/components/heroicons";
 import { usePathname } from "next/navigation";
 
 const items = [
@@ -41,6 +42,12 @@ const items = [
     label: "Insights",
     icon: ClipboardDocumentIcon,
     match: ["/insights"],
+  },
+  {
+    href: "/templates",
+    label: "Templates",
+    icon: DocumentDuplicateIcon,
+    match: ["/templates"],
   },
   {
     href: "/insights/new",

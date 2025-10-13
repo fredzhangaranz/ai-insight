@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as sql from "mssql";
 import { getSilhouetteDbPool } from "@/lib/db";
-import { FunnelCacheService } from "@/lib/services/funnel-cache.service";
+import { markTemplateUsageOutcome } from "@/lib/services/template-usage.service";
 import {
   withErrorHandling,
   createErrorResponse,
@@ -45,7 +45,12 @@ function validateAndFixQuery(sql: string): string {
 
   // 3. Fix: Add TOP clause for large result sets if not present
   if (!sql.match(/\bTOP\s+\d+\b/i) && !sql.match(/\bOFFSET\b/i)) {
-    sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+    // Handle DISTINCT + TOP syntax correctly for MS SQL Server
+    if (sql.match(/\bSELECT\s+DISTINCT\b/i)) {
+      sql = sql.replace(/\bSELECT\s+DISTINCT\b/i, "SELECT DISTINCT TOP 1000");
+    } else {
+      sql = sql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+    }
   }
 
   return sql;
@@ -56,8 +61,8 @@ async function executeQueryHandler(
 ): Promise<NextResponse> {
   // 1. Read and validate the request body
   const body = await request.json();
-  // Now accepts the query template, an optional parameters object, and optional subQuestionId
-  const { query, params, subQuestionId } = body;
+  // Now accepts the query template, an optional parameters object, optional subQuestionId, and templateUsage tracking id
+  const { query, params, subQuestionId, templateUsageId } = body;
 
   if (!query || typeof query !== "string") {
     return createErrorResponse.badRequest(
@@ -98,7 +103,39 @@ async function executeQueryHandler(
   }
 
   // 3c. Execute the fixed query with the bound parameters
-  const result = await dbRequest.query(fixedQuery);
+  const usageId =
+    templateUsageId !== undefined && templateUsageId !== null
+      ? Number(templateUsageId)
+      : undefined;
+
+  let result;
+  try {
+    result = await dbRequest.query(fixedQuery);
+    if (usageId && Number.isFinite(usageId)) {
+      try {
+        await markTemplateUsageOutcome({
+          templateUsageId: usageId,
+          success: true,
+          errorType: null,
+        });
+      } catch (usageUpdateError) {
+        console.warn("Failed to mark template usage success:", usageUpdateError);
+      }
+    }
+  } catch (queryError: any) {
+    if (usageId && Number.isFinite(usageId)) {
+      try {
+        await markTemplateUsageOutcome({
+          templateUsageId: usageId,
+          success: false,
+          errorType: classifySqlError(queryError),
+        });
+      } catch (usageUpdateError) {
+        console.warn("Failed to mark template usage failure:", usageUpdateError);
+      }
+    }
+    throw queryError;
+  }
 
   console.log("Query execution result:", result);
 
@@ -123,3 +160,14 @@ async function executeQueryHandler(
 }
 
 export const POST = withErrorHandling(executeQueryHandler);
+
+function classifySqlError(error: any): string {
+  if (!error) return "execution_error";
+  if (typeof error.code === "string" && error.code.trim().length > 0) {
+    return error.code;
+  }
+  if (typeof error.name === "string" && error.name.trim().length > 0) {
+    return error.name;
+  }
+  return "execution_error";
+}

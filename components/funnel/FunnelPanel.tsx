@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import type { SubQuestion } from "@/lib/types/funnel";
 import { useErrorHandler } from "@/lib/error-handler";
 import type { ChartType } from "@/lib/chart-contracts";
@@ -7,6 +7,12 @@ import {
   SaveInsightDialog,
   type SaveInsightInitial,
 } from "@/components/insights/SaveInsightDialog";
+import { Button } from "@/components/ui/button";
+import { TemplateReviewModal } from "./TemplateReviewModal";
+import { TemplateApplyModal } from "./TemplateApplyModal";
+import { TemplateSuggestions, type TemplateSuggestion } from "./TemplateSuggestions";
+import type { TemplateDraftPayload } from "@/lib/services/template.service";
+import type { ValidationResult } from "@/lib/services/template-validator.service";
 
 interface FunnelPanelProps {
   subQuestion: SubQuestion;
@@ -94,6 +100,43 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   const [fieldInput, setFieldInput] = useState<string>("");
   const MAX_FIELDS = 3;
 
+  const [templatesFeatureAvailable, setTemplatesFeatureAvailable] = useState(true);
+  const [isTemplateReviewOpen, setIsTemplateReviewOpen] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState<TemplateDraftPayload | null>(
+    null
+  );
+  const [templateValidation, setTemplateValidation] =
+    useState<ValidationResult | null>(null);
+  const [templateWarnings, setTemplateWarnings] = useState<string[]>([]);
+  const [templateModelId, setTemplateModelId] = useState<string | undefined>();
+  const [isExtractingTemplate, setIsExtractingTemplate] = useState(false);
+  const [templateExtractionError, setTemplateExtractionError] =
+    useState<string | null>(null);
+  const [isSavingTemplateDraft, setIsSavingTemplateDraft] = useState(false);
+  const [templateSuggestions, setTemplateSuggestions] =
+    useState<TemplateSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [selectedSuggestion, setSelectedSuggestion] =
+    useState<TemplateSuggestion | null>(null);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [localMatchedTemplate, setLocalMatchedTemplate] = useState<string | null>(
+    subQuestion.sqlMatchedTemplate ?? null
+  );
+  const [lastExecutionSuccessful, setLastExecutionSuccessful] =
+    useState<boolean>(false);
+  const [currentTemplateUsageId, setCurrentTemplateUsageId] =
+    useState<number | null>(null);
+
+  const numericSubQuestionId = useMemo(() => {
+    const raw = subQuestion.id?.startsWith("sq-")
+      ? subQuestion.id.slice(3)
+      : subQuestion.id;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }, [subQuestion.id]);
+
   useEffect(() => {
     // Reset all result-related states when navigating to a different sub-question
     setResultsCleared(false);
@@ -103,14 +146,105 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     // Reset enrichment per sub-question
     setDesiredFields([]);
     setFieldInput("");
+    setTemplateExtractionError(null);
+    setTemplateDraft(null);
+    setTemplateValidation(null);
+    setTemplateWarnings([]);
+    setSelectedSuggestion(null);
+    setIsApplyModalOpen(false);
+    setIsTemplateReviewOpen(false);
+    setLocalMatchedTemplate(subQuestion.sqlMatchedTemplate ?? null);
+    setLastExecutionSuccessful(false);
+    setCurrentTemplateUsageId(null);
   }, [subQuestion.id]);
 
   // Load initial results when they are provided
   useEffect(() => {
     if (initialResults !== undefined) {
       setQueryResult(initialResults);
+      setLastExecutionSuccessful(true);
     }
   }, [initialResults]);
+
+  useEffect(() => {
+    setLocalMatchedTemplate(subQuestion.sqlMatchedTemplate ?? null);
+  }, [subQuestion.id, subQuestion.sqlMatchedTemplate]);
+
+  useEffect(() => {
+    if (!isApplyModalOpen) {
+      setSelectedSuggestion(null);
+    }
+  }, [isApplyModalOpen]);
+
+  useEffect(() => {
+    if (!templatesFeatureAvailable) {
+      setTemplateSuggestions([]);
+      setSuggestionsError(null);
+      setSuggestionsLoading(false);
+      return;
+    }
+
+    const question = subQuestion.text?.trim();
+    if (!question || question.length < 5) {
+      setTemplateSuggestions([]);
+      setSuggestionsError(null);
+      setSuggestionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/ai/templates/suggest", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ question, limit: 3 }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            if (!cancelled) {
+              setTemplatesFeatureAvailable(false);
+              setTemplateSuggestions([]);
+            }
+            return;
+          }
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.message || "Failed to fetch template suggestions"
+          );
+        }
+
+        const body = await response.json();
+        if (!cancelled) {
+          setTemplateSuggestions(body.data ?? []);
+          setSuggestionsError(null);
+        }
+      } catch (err: any) {
+        if (cancelled || err?.name === "AbortError") return;
+        setSuggestionsError(err.message || "Unable to load suggestions");
+        setTemplateSuggestions([]);
+      } finally {
+        if (!cancelled) {
+          setSuggestionsLoading(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [subQuestion.id, subQuestion.text, templatesFeatureAvailable]);
 
   const handleMarkComplete = async () => {
     if (!onMarkComplete) return;
@@ -231,6 +365,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       // Reset result view mode to JSON
       setResultViewMode("json");
       setIsEditingQuestion(false);
+      setLocalMatchedTemplate(null);
+      setLastExecutionSuccessful(false);
+      setCurrentTemplateUsageId(null);
 
       handleSuccess("Question saved successfully", "Save Question");
       console.log("✅ Question saved successfully");
@@ -258,6 +395,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     setQueryResult(null);
     setExecutionError(null);
     setResultsCleared(true);
+    setLocalMatchedTemplate(null);
+    setLastExecutionSuccessful(false);
+    setCurrentTemplateUsageId(null);
 
     try {
       // Update in database cache
@@ -315,6 +455,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     setQueryResult(null);
     setExecutionError(null);
     setResultsCleared(true);
+    setLocalMatchedTemplate(null);
+    setLastExecutionSuccessful(false);
+    setCurrentTemplateUsageId(null);
 
     try {
       console.log("Generating SQL for question:", subQuestion.text);
@@ -333,6 +476,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           // Lean MVP: pass desiredFields (server may ignore until wired)
           desiredFields,
           scope,
+          subQuestionId: numericSubQuestionId,
         }),
       });
 
@@ -355,6 +499,13 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       const matchedTemplate = result.matchedQueryTemplate;
 
       setEditedSql(newSql);
+      setLocalMatchedTemplate(matchedTemplate || null);
+      setLastExecutionSuccessful(false);
+      setCurrentTemplateUsageId(
+        typeof result.templateUsageId === "number"
+          ? result.templateUsageId
+          : null
+      );
 
       // Save to database cache
       const saveResponse = await fetch(
@@ -424,7 +575,9 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         body: JSON.stringify({
           query: subQuestion.sqlQuery,
           params: Object.keys(params).length > 0 ? params : undefined,
-          subQuestionId: subQuestion.id.replace("sq-", ""),
+          subQuestionId:
+            numericSubQuestionId ?? subQuestion.id.replace("sq-", ""),
+          templateUsageId: currentTemplateUsageId ?? undefined,
         }),
       });
       if (!response.ok) {
@@ -437,12 +590,161 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       if (onQueryResult) {
         onQueryResult(subQuestion.id, result.data || []);
       }
+      setLastExecutionSuccessful(true);
+      setCurrentTemplateUsageId(null);
       handleSuccess("Query executed successfully", "Execute Query");
     } catch (err: any) {
       setExecutionError(err.message);
       handleError(err, "Execute Query");
+      setLastExecutionSuccessful(false);
+      setCurrentTemplateUsageId(null);
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  const handleOpenTemplateReview = async () => {
+    if (!subQuestion.sqlQuery) {
+      handleError(
+        new Error("Generate and execute SQL before saving a template."),
+        "Save as Template"
+      );
+      return;
+    }
+
+    if (!templatesFeatureAvailable) {
+      setTemplateExtractionError("Template system is disabled.");
+      return;
+    }
+
+    setIsExtractingTemplate(true);
+    setTemplateExtractionError(null);
+
+    try {
+      const response = await fetch("/api/ai/templates/extract", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionText: subQuestion.text,
+          sqlQuery: subQuestion.sqlQuery,
+          modelId: selectedModelId,
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setTemplatesFeatureAvailable(false);
+          setTemplateExtractionError("Template system is disabled.");
+          return;
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || "Failed to extract template draft"
+        );
+      }
+
+      const result = await response.json();
+      setTemplateDraft(result.data ?? null);
+      setTemplateValidation(result.validation ?? null);
+      setTemplateWarnings(result.warnings ?? []);
+      setTemplateModelId(result.modelId ?? undefined);
+      setIsTemplateReviewOpen(true);
+      setTemplatesFeatureAvailable(true);
+      setCurrentTemplateUsageId(null);
+    } catch (error: any) {
+      const message = error?.message || "Failed to extract template draft";
+      setTemplateExtractionError(message);
+      handleError(error, "Save as Template");
+    } finally {
+      setIsExtractingTemplate(false);
+    }
+  };
+
+  const handleSaveTemplateDraft = async (payload: TemplateDraftPayload) => {
+    setIsSavingTemplateDraft(true);
+    try {
+      const response = await fetch("/api/ai/templates", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || "Failed to save template draft"
+        );
+      }
+
+      const result = await response.json();
+      handleSuccess("Template draft saved", "Save Template");
+      setTemplateWarnings(result.warnings ?? []);
+      setTemplateDraft(payload);
+      setIsTemplateReviewOpen(false);
+    } catch (error: any) {
+      handleError(error, "Save Template");
+    } finally {
+      setIsSavingTemplateDraft(false);
+    }
+  };
+
+  const handleOpenApplyTemplate = (suggestion: TemplateSuggestion) => {
+    setSelectedSuggestion(suggestion);
+    setIsApplyModalOpen(true);
+  };
+
+  const handleApplyTemplate = async (
+    filledSql: string,
+    metadata: { matchedTemplate: string }
+  ) => {
+    setIsApplyingTemplate(true);
+    try {
+      const response = await fetch(
+        `/api/ai/funnel/subquestions/${subQuestion.id.replace("sq-", "")}/sql`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sqlQuery: filledSql,
+            sqlMatchedTemplate: metadata.matchedTemplate,
+            sqlExplanation: `Template applied: ${metadata.matchedTemplate}`,
+            sqlValidationNotes: null,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to apply template");
+      }
+
+      if (onEditSql) {
+        onEditSql(subQuestion.id, filledSql, {
+          matchedTemplate: metadata.matchedTemplate,
+        });
+      }
+
+      setEditedSql(filledSql);
+      setLocalMatchedTemplate(metadata.matchedTemplate);
+      setIsApplyModalOpen(false);
+      setLastExecutionSuccessful(false);
+      setQueryResult(null);
+      setResultsCleared(true);
+      setExpandedSections((prev) => ({ ...prev, template: true }));
+      handleSuccess(
+        `Template ${metadata.matchedTemplate} applied`,
+        "Apply Template"
+      );
+    } catch (error: any) {
+      handleError(error, "Apply Template");
+    } finally {
+      setIsApplyingTemplate(false);
     }
   };
 
@@ -860,7 +1162,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                   )}
                 </div>
 
-                {/* Matched Template */}
+                {/* Matched Template & Suggestions */}
                 <div className="border border-gray-200 rounded-md">
                   <button
                     onClick={() =>
@@ -871,16 +1173,29 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                     }
                     className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
                   >
-                    <span>🏷️ Matched Template</span>
+                    <span>🏷️ Matched Template & Suggestions</span>
                     <span className="text-gray-400">
                       {expandedSections.template ? "▼" : "▶"}
                     </span>
                   </button>
                   {expandedSections.template && (
-                    <div className="px-3 pb-3 text-xs text-gray-600 border-t border-gray-100">
-                      <span className="font-medium">
-                        {subQuestion.sqlMatchedTemplate || "None"}
-                      </span>
+                    <div className="space-y-3 border-t border-gray-100 px-3 pb-3 text-xs text-gray-600">
+                      <div>
+                        <span className="font-medium">Current match:</span>{" "}
+                        {localMatchedTemplate || "None"}
+                      </div>
+                      {templatesFeatureAvailable ? (
+                        <TemplateSuggestions
+                          suggestions={templateSuggestions}
+                          loading={suggestionsLoading}
+                          error={suggestionsError}
+                          onApply={handleOpenApplyTemplate}
+                        />
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Template system disabled.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -889,6 +1204,38 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           </div>
         )}
         {/* Enrichment: AI-first Field Inclusion (Lean MVP) */}
+        {templatesFeatureAvailable && (
+          <div className="mt-3 rounded border border-dashed border-blue-200 bg-blue-50/40 p-3 text-xs text-blue-900">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">Promote this SQL to a reusable template</p>
+                <p className="text-[11px] text-blue-800">
+                  Execute the query, then review the AI-drafted template before saving.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleOpenTemplateReview}
+                disabled={
+                  !lastExecutionSuccessful || isExtractingTemplate || isExecuting
+                }
+              >
+                {isExtractingTemplate ? "Preparing..." : "Save as Template"}
+              </Button>
+            </div>
+            {!lastExecutionSuccessful && (
+              <p className="mt-2 text-[11px] text-blue-700">
+                Run the query to enable template capture.
+              </p>
+            )}
+            {templateExtractionError && (
+              <p className="mt-2 text-[11px] text-red-600">
+                {templateExtractionError}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="mt-3 border-t border-gray-200 pt-3">
           <div className="border border-gray-200 rounded-md">
             <button
@@ -1253,6 +1600,23 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           )}
         </div>
       </div>
+      <TemplateReviewModal
+        open={isTemplateReviewOpen}
+        onOpenChange={setIsTemplateReviewOpen}
+        draft={templateDraft}
+        initialValidation={templateValidation}
+        initialWarnings={templateWarnings}
+        generatingModelId={templateModelId}
+        isSaving={isSavingTemplateDraft}
+        onSaveDraft={handleSaveTemplateDraft}
+      />
+      <TemplateApplyModal
+        open={isApplyModalOpen}
+        onOpenChange={setIsApplyModalOpen}
+        template={selectedSuggestion?.template ?? null}
+        isApplying={isApplyingTemplate}
+        onApply={handleApplyTemplate}
+      />
       {isSaveDialogOpen && saveInitial && (
         <SaveInsightDialog
           open={isSaveDialogOpen}

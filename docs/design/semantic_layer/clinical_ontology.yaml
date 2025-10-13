@@ -1,0 +1,501 @@
+# Clinical Ontology for Wound Care Analytics
+# Version: 1.0
+# Domain: Wound Care and Treatment
+# Last Updated: 2025-10-12
+
+version: "1.0"
+domain: "wound_care"
+description: "Universal clinical concepts for wound care analytics across customer implementations"
+
+# Core Concept Categories
+concepts:
+  # ============================================================
+  # WOUND CLASSIFICATION
+  # ============================================================
+  wound_classification:
+    type: "classification"
+    description: "Categorization of wounds by etiology or cause"
+
+    categories:
+      diabetic_ulcer:
+        canonical_name: "Diabetic Ulcer"
+        description: "Ulcers resulting from diabetic complications"
+        aliases:
+          - "Diabetic Foot Ulcer"
+          - "DFU"
+          - "Diabetic Wound"
+          - "Diabetes-Related Ulcer"
+          - "Neuropathic Ulcer"
+        icd_codes: ["E11.621", "E10.621"]
+        prevalence: 0.35 # ~35% of wounds in typical population
+
+      pressure_injury:
+        canonical_name: "Pressure Injury"
+        description: "Injury to skin and underlying tissue from sustained pressure"
+        aliases:
+          - "Pressure Ulcer"
+          - "Bedsore"
+          - "Decubitus Ulcer"
+          - "Pressure Sore"
+          - "PI"
+        stages:
+          - "Stage 1"
+          - "Stage 2"
+          - "Stage 3"
+          - "Stage 4"
+          - "Unstageable"
+          - "Deep Tissue Injury"
+        icd_codes: ["L89.*"]
+        prevalence: 0.30
+
+      venous_ulcer:
+        canonical_name: "Venous Ulcer"
+        description: "Ulcers caused by venous insufficiency"
+        aliases:
+          - "Venous Leg Ulcer"
+          - "VLU"
+          - "Stasis Ulcer"
+          - "Venous Insufficiency Ulcer"
+        icd_codes: ["I83.0", "I83.2"]
+        prevalence: 0.20
+
+      arterial_ulcer:
+        canonical_name: "Arterial Ulcer"
+        description: "Ulcers due to arterial insufficiency"
+        aliases:
+          - "Ischemic Ulcer"
+          - "Arterial Insufficiency Ulcer"
+        icd_codes: ["I70.25"]
+        prevalence: 0.05
+
+      surgical_wound:
+        canonical_name: "Surgical Wound"
+        description: "Incision or wound from surgical procedure"
+        aliases:
+          - "Surgical Site"
+          - "Post-Operative Wound"
+          - "Incision"
+          - "Surgical Incision"
+        prevalence: 0.08
+
+      traumatic_wound:
+        canonical_name: "Traumatic Wound"
+        description: "Wound from external physical trauma"
+        aliases:
+          - "Trauma"
+          - "Injury"
+          - "Laceration"
+          - "Abrasion"
+        prevalence: 0.02
+
+  # ============================================================
+  # TREATMENT INTERVENTIONS
+  # ============================================================
+  treatment_intervention:
+    type: "intervention"
+    description: "Clinical interventions and treatments applied to wounds"
+
+    categories:
+      advanced_dressing:
+        canonical_name: "Advanced Wound Dressing"
+        description: "Specialized dressings for wound management"
+        aliases:
+          - "Modern Dressing"
+          - "Specialty Dressing"
+          - "Advanced Dressing"
+          - "Composite Dressing"
+        subcategories:
+          - "Foam Dressing"
+          - "Hydrocolloid"
+          - "Alginate"
+          - "Hydrogel"
+          - "Film Dressing"
+
+      negative_pressure:
+        canonical_name: "Negative Pressure Wound Therapy"
+        description: "Vacuum-assisted wound closure therapy"
+        aliases:
+          - "NPWT"
+          - "VAC Therapy"
+          - "Vacuum Therapy"
+          - "Negative Pressure Therapy"
+          - "VAC"
+
+      compression_therapy:
+        canonical_name: "Compression Therapy"
+        description: "Application of compression for venous wound treatment"
+        aliases:
+          - "Compression"
+          - "Compression Bandaging"
+          - "Compression Wrapping"
+
+      debridement:
+        canonical_name: "Debridement"
+        description: "Removal of necrotic tissue"
+        aliases:
+          - "Sharp Debridement"
+          - "Surgical Debridement"
+          - "Mechanical Debridement"
+          - "Enzymatic Debridement"
+          - "Autolytic Debridement"
+
+      topical_therapy:
+        canonical_name: "Topical Therapy"
+        description: "Application of topical agents"
+        aliases:
+          - "Topical Treatment"
+          - "Topical Application"
+          - "Ointment"
+          - "Cream"
+        subcategories:
+          - "Antimicrobial"
+          - "Growth Factor"
+          - "Antiseptic"
+
+      offloading:
+        canonical_name: "Offloading"
+        description: "Pressure redistribution for diabetic foot ulcers"
+        aliases:
+          - "Pressure Offloading"
+          - "Pressure Relief"
+          - "Total Contact Cast"
+          - "Offloading Device"
+
+  # ============================================================
+  # INFECTION STATUS
+  # ============================================================
+  infection_status:
+    type: "assessment"
+    description: "Clinical signs of wound infection"
+
+    categories:
+      no_infection:
+        canonical_name: "No Signs of Infection"
+        aliases:
+          - "Clean"
+          - "No Infection"
+          - "Not Infected"
+
+      local_infection:
+        canonical_name: "Local Infection"
+        description: "Signs confined to wound area"
+        aliases:
+          - "Localized Infection"
+          - "Wound Infection"
+        clinical_signs:
+          - "Erythema"
+          - "Warmth"
+          - "Purulence"
+          - "Odor"
+
+      spreading_infection:
+        canonical_name: "Spreading Infection"
+        description: "Infection extending beyond wound"
+        aliases:
+          - "Cellulitis"
+          - "Spreading"
+        clinical_signs:
+          - "Cellulitis"
+          - "Lymphangitis"
+          - "Crepitus"
+
+      systemic_infection:
+        canonical_name: "Systemic Infection"
+        description: "Infection with systemic involvement"
+        aliases:
+          - "Sepsis"
+          - "Systemic"
+          - "SIRS"
+
+  # ============================================================
+  # WOUND STATE
+  # ============================================================
+  wound_state:
+    type: "state"
+    description: "Current state of wound in treatment lifecycle"
+
+    states:
+      open:
+        canonical_name: "Open"
+        description: "Wound actively being treated"
+        aliases:
+          - "Active"
+          - "Open Wound"
+
+      healing:
+        canonical_name: "Healing"
+        description: "Wound showing signs of healing"
+        aliases:
+          - "Improving"
+          - "Healing Well"
+
+      deteriorating:
+        canonical_name: "Deteriorating"
+        description: "Wound worsening despite treatment"
+        aliases:
+          - "Worsening"
+          - "Not Healing"
+
+      healed:
+        canonical_name: "Healed"
+        description: "Wound fully closed and epithelialized"
+        aliases:
+          - "Closed"
+          - "Resolved"
+          - "Epithelialized"
+
+      recurred:
+        canonical_name: "Recurred"
+        description: "Previously healed wound has reopened"
+        aliases:
+          - "Reopened"
+          - "Recurrence"
+
+  # ============================================================
+  # OUTCOME METRICS
+  # ============================================================
+  outcome_metrics:
+    type: "metric"
+    description: "Quantitative measures of wound outcomes"
+
+    metrics:
+      healing_rate:
+        canonical_name: "Healing Rate"
+        description: "Rate of wound area reduction over time"
+        calculation: "(initial_area - current_area) / days_elapsed"
+        units: ["cm²/day", "cm²/week", "mm²/day"]
+        data_sources:
+          - "rpt.Measurement.area"
+          - "rpt.Assessment.date"
+        typical_range: [0.1, 3.0] # cm²/week
+
+      time_to_closure:
+        canonical_name: "Time to Closure"
+        description: "Duration from baseline to complete healing"
+        calculation: "date_healed - date_baseline"
+        units: ["days", "weeks", "months"]
+        data_sources:
+          - "rpt.Wound.baselineDate"
+          - "rpt.WoundState (healed)"
+        typical_range: [14, 180] # days
+
+      percent_area_reduction:
+        canonical_name: "Percent Area Reduction"
+        description: "Percentage reduction in wound area"
+        calculation: "((initial_area - current_area) / initial_area) * 100"
+        units: ["%"]
+        data_sources:
+          - "rpt.Measurement.area"
+          - "rpt.Measurement.areaReduction"
+        typical_range: [0, 100]
+
+      recurrence_rate:
+        canonical_name: "Recurrence Rate"
+        description: "Percentage of healed wounds that reopen"
+        calculation: "recurred_wounds / healed_wounds * 100"
+        units: ["%"]
+        data_sources:
+          - "rpt.WoundState (healed → open)"
+        typical_range: [0, 30]
+
+      infection_rate:
+        canonical_name: "Infection Rate"
+        description: "Percentage of wounds developing infection"
+        calculation: "infected_wounds / total_wounds * 100"
+        units: ["%"]
+        data_sources:
+          - "rpt.Note (infection status fields)"
+        typical_range: [5, 25]
+
+      treatment_efficiency:
+        canonical_name: "Treatment Efficiency"
+        description: "Healing rate relative to treatment cost"
+        calculation: "healing_rate / treatment_cost"
+        units: ["cm²/day/$"]
+
+  # ============================================================
+  # ANATOMICAL LOCATIONS
+  # ============================================================
+  anatomical_location:
+    type: "location"
+    description: "Body locations for wound placement"
+
+    regions:
+      foot:
+        canonical_name: "Foot"
+        aliases:
+          - "Feet"
+          - "Pedal"
+        specific_locations:
+          - "Heel"
+          - "Toe"
+          - "Plantar Surface"
+          - "Dorsal Foot"
+          - "Metatarsal Head"
+
+      lower_leg:
+        canonical_name: "Lower Leg"
+        aliases:
+          - "Leg"
+          - "Calf"
+          - "Shin"
+
+      sacrum:
+        canonical_name: "Sacrum"
+        aliases:
+          - "Sacral"
+          - "Coccyx"
+          - "Tailbone"
+
+      buttock:
+        canonical_name: "Buttock"
+        aliases:
+          - "Ischium"
+          - "Ischial Tuberosity"
+          - "Gluteal"
+
+      trunk:
+        canonical_name: "Trunk"
+        aliases:
+          - "Torso"
+          - "Abdomen"
+          - "Back"
+
+      upper_extremity:
+        canonical_name: "Upper Extremity"
+        aliases:
+          - "Arm"
+          - "Hand"
+          - "Elbow"
+
+  # ============================================================
+  # TISSUE TYPES
+  # ============================================================
+  tissue_type:
+    type: "assessment"
+    description: "Types of tissue present in wound bed"
+
+    categories:
+      granulation:
+        canonical_name: "Granulation Tissue"
+        description: "Healthy pink/red tissue indicating healing"
+        aliases:
+          - "Granulation"
+          - "Granulating"
+          - "Pink Tissue"
+        color: "red/pink"
+        healing_indicator: "positive"
+
+      epithelial:
+        canonical_name: "Epithelial Tissue"
+        description: "New skin tissue forming over wound"
+        aliases:
+          - "Epithelialization"
+          - "New Skin"
+        healing_indicator: "positive"
+
+      slough:
+        canonical_name: "Slough"
+        description: "Yellow/white devitalized tissue"
+        aliases:
+          - "Fibrin"
+          - "Yellow Tissue"
+        color: "yellow/white"
+        healing_indicator: "negative"
+
+      necrotic:
+        canonical_name: "Necrotic Tissue"
+        description: "Dead tissue requiring removal"
+        aliases:
+          - "Eschar"
+          - "Black Tissue"
+          - "Necrosis"
+        color: "black/brown"
+        healing_indicator: "negative"
+
+  # ============================================================
+  # EXUDATE CHARACTERISTICS
+  # ============================================================
+  exudate_volume:
+    type: "assessment"
+    description: "Amount of fluid draining from wound"
+
+    levels:
+      none:
+        canonical_name: "None"
+        aliases: ["Dry", "No Drainage"]
+
+      minimal:
+        canonical_name: "Minimal"
+        aliases: ["Scant", "Small Amount", "Light"]
+
+      moderate:
+        canonical_name: "Moderate"
+        aliases: ["Medium", "Moderate Amount"]
+
+      heavy:
+        canonical_name: "Heavy"
+        aliases: ["Large", "Copious", "Excessive"]
+
+  exudate_type:
+    type: "assessment"
+    description: "Characteristics of wound drainage"
+
+    types:
+      serous:
+        canonical_name: "Serous"
+        description: "Clear, watery drainage"
+        clinical_significance: "normal"
+
+      serosanguineous:
+        canonical_name: "Serosanguineous"
+        description: "Pink, blood-tinged drainage"
+        clinical_significance: "normal"
+
+      sanguineous:
+        canonical_name: "Sanguineous"
+        description: "Frank blood"
+        clinical_significance: "concerning"
+
+      purulent:
+        canonical_name: "Purulent"
+        description: "Thick, opaque drainage"
+        aliases: ["Pus", "Infected"]
+        clinical_significance: "infection"
+
+# ============================================================
+# RELATIONSHIPS & DEPENDENCIES
+# ============================================================
+relationships:
+  - source: "diabetic_ulcer"
+    target: "offloading"
+    type: "common_treatment"
+    strength: 0.9
+
+  - source: "venous_ulcer"
+    target: "compression_therapy"
+    type: "standard_treatment"
+    strength: 0.95
+
+  - source: "pressure_injury"
+    target: "offloading"
+    type: "essential_treatment"
+    strength: 1.0
+
+  - source: "necrotic"
+    target: "debridement"
+    type: "required_treatment"
+    strength: 1.0
+
+# ============================================================
+# METADATA
+# ============================================================
+metadata:
+  created_by: "InsightGen Team"
+  last_updated: "2025-10-12"
+  version: "1.0"
+  domain_experts:
+    - "Wound Care Specialists"
+    - "Clinical Consultants"
+  review_cycle: "quarterly"
+  next_review: "2026-01-12"

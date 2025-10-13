@@ -1,11 +1,14 @@
 import {
+  GenerateChartRecommendationsRequest,
+  GenerateChartRecommendationsResponse,
+  GenerateQueryRequest,
+  GenerateQueryResponse,
   IQueryFunnelProvider,
   SubQuestionGenerationRequest,
   SubQuestionGenerationResponse,
-  GenerateQueryRequest,
-  GenerateQueryResponse,
-  GenerateChartRecommendationsRequest,
-  GenerateChartRecommendationsResponse,
+  TemplateExtractionRequest,
+  TemplateExtractionDraft,
+  TemplateExtractionResponse,
 } from "./i-query-funnel-provider";
 import {
   constructFunnelSubquestionsPrompt,
@@ -19,8 +22,17 @@ import {
   constructChartRecommendationsPrompt,
   validateChartRecommendationsResponse,
 } from "../../prompts/chart-recommendations.prompt";
+import {
+  constructTemplateExtractionPrompt,
+  TemplateExtractionAiResponse,
+  validateTemplateExtractionResponse,
+} from "../../prompts/template-extraction.prompt";
+import type { PlaceholdersSpecSlot } from "../../services/template-validator.service";
 import { MetricsMonitor } from "../../monitoring";
 import { matchTemplates } from "../../services/query-template.service";
+import type { TemplateMatch } from "../../services/query-template.service";
+import { isTemplateSystemEnabled } from "../../config/template-flags";
+import { createTemplateUsage } from "../../services/template-usage.service";
 import { loadDatabaseSchemaContext } from "../schema-context";
 
 /**
@@ -320,8 +332,17 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
     // 3. Enforce TOP clause for safety
     if (!upperSql.includes("TOP") && !upperSql.includes("OFFSET")) {
-      // Add TOP 1000 if not present
-      modifiedSql = modifiedSql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+      // Handle DISTINCT + TOP syntax correctly for MS SQL Server
+      if (upperSql.includes("DISTINCT")) {
+        // Replace "SELECT DISTINCT" with "SELECT DISTINCT TOP 1000"
+        modifiedSql = modifiedSql.replace(
+          /\bSELECT\s+DISTINCT\b/i,
+          "SELECT DISTINCT TOP 1000"
+        );
+      } else {
+        // Add TOP 1000 if not present
+        modifiedSql = modifiedSql.replace(/\bSELECT\b/i, "SELECT TOP 1000");
+      }
       warnings.push("Added TOP 1000 clause for safety");
     }
 
@@ -542,19 +563,22 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
       // 1. Match templates (heuristics) and prepare compact injection
       let matchedTemplates: Array<{ name: string; sqlPattern: string }> = [];
+      let templateMatches: TemplateMatch[] = [];
       try {
         // Fetch top 5 for logging; inject top 2
-        const matches = await matchTemplates(request.subQuestion, 5);
+        templateMatches = await matchTemplates(request.subQuestion, 5);
         console.log(
           "Template matches (top 5):",
-          matches.map((m) => ({
+          templateMatches.map((m) => ({
             name: m.template.name,
             score: m.score,
+            baseScore: m.baseScore,
+            successRate: m.successRate,
             matchedKeywords: m.matchedKeywords,
             matchedExample: m.matchedExample,
           }))
         );
-        matchedTemplates = matches.slice(0, 2).map((m) => ({
+        matchedTemplates = templateMatches.slice(0, 2).map((m) => ({
           name: m.template.name,
           sqlPattern: m.template.sqlPattern,
         }));
@@ -639,6 +663,44 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
       console.log("Chosen matchedQueryTemplate:", matchedQueryTemplate);
 
+      let templateUsageId: number | undefined;
+      if (isTemplateSystemEnabled()) {
+        try {
+          const canonicalMatchedName = matchedQueryTemplate?.trim();
+          const matchedEntry = canonicalMatchedName
+            ? templateMatches.find(
+                (match) =>
+                  match.template.name &&
+                  match.template.name.localeCompare(
+                    canonicalMatchedName,
+                    undefined,
+                    { sensitivity: "accent" }
+                  ) === 0
+              )
+            : undefined;
+
+          const selectedEntry = matchedEntry ?? templateMatches[0];
+
+          if (selectedEntry?.template.templateVersionId) {
+            const usage = await createTemplateUsage({
+              templateVersionId: selectedEntry.template.templateVersionId,
+              subQuestionId:
+                typeof request.subQuestionId === "number" &&
+                Number.isFinite(request.subQuestionId)
+                  ? request.subQuestionId
+                  : undefined,
+              questionText: request.subQuestion,
+              matchedKeywords: selectedEntry.matchedKeywords,
+              matchedExample: selectedEntry.matchedExample,
+              chosen: true,
+            });
+            templateUsageId = usage.id;
+          }
+        } catch (usageError) {
+          console.warn("Failed to record template usage:", usageError);
+        }
+      }
+
       await metrics.logAIMetrics({
         promptTokens: aiResponse.usage.input_tokens,
         completionTokens: aiResponse.usage.output_tokens,
@@ -656,6 +718,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         fieldsApplied: fieldValidation.fieldsApplied,
         joinSummary: fieldValidation.joinSummary,
         sqlWarnings: safetyValidation.warnings,
+        templateUsageId,
       };
     } catch (error: any) {
       await metrics.logAIMetrics({
@@ -729,4 +792,191 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       throw error;
     }
   }
+
+  public async extractTemplateDraft(
+    request: TemplateExtractionRequest
+  ): Promise<TemplateExtractionResponse> {
+    const metrics = MetricsMonitor.getInstance();
+    const aiStartTime = Date.now();
+
+    const question = request.questionText?.trim();
+    const sql = request.sqlQuery?.trim();
+
+    if (!question) {
+      throw new Error("Template extraction requires 'questionText'.");
+    }
+
+    if (!sql) {
+      throw new Error("Template extraction requires 'sqlQuery'.");
+    }
+
+    try {
+      const schemaContext = this.getDatabaseSchemaContext(request.schemaContext);
+      const prompt = constructTemplateExtractionPrompt(
+        question,
+        sql,
+        schemaContext
+      );
+      console.log("AI Prompt for template extraction:", prompt);
+
+      let aiResponse = await this._executeModel(
+        prompt,
+        "Return ONLY the JSON object describing the reusable template."
+      );
+
+      let parsedResponse: TemplateExtractionAiResponse;
+
+      try {
+        parsedResponse = await this.parseJsonResponse<TemplateExtractionAiResponse>(
+          aiResponse.responseText
+        );
+      } catch (error) {
+        console.log(
+          "Template extraction JSON parse failed, retrying with stricter instructions..."
+        );
+        const jsonPrompt =
+          prompt +
+          "\n\nIMPORTANT: Respond with ONLY the JSON object. No explanations, markdown, or prose.";
+        aiResponse = await this._executeModel(
+          jsonPrompt,
+          "Respond with JSON only."
+        );
+        parsedResponse = await this.parseJsonResponse<TemplateExtractionAiResponse>(
+          aiResponse.responseText
+        );
+      }
+
+      if (!validateTemplateExtractionResponse(parsedResponse)) {
+        throw new Error("AI returned invalid template extraction format");
+      }
+
+      const draft = normalizeExtractedTemplateDraft(parsedResponse, sql);
+      const warnings = normalizeStringList(parsedResponse.warnings);
+
+      await metrics.logAIMetrics({
+        promptTokens: aiResponse.usage.input_tokens,
+        completionTokens: aiResponse.usage.output_tokens,
+        totalTokens:
+          aiResponse.usage.input_tokens + aiResponse.usage.output_tokens,
+        latency: Date.now() - aiStartTime,
+        success: true,
+        model: this.modelId,
+        timestamp: new Date(),
+      });
+
+      return {
+        modelId: this.modelId,
+        draft,
+        warnings,
+      };
+    } catch (error: any) {
+      await metrics.logAIMetrics({
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        latency: Date.now() - aiStartTime,
+        success: false,
+        errorType: error.name || "UnknownError",
+        model: this.modelId,
+        timestamp: new Date(),
+      });
+      throw error;
+    }
+  }
+}
+
+const PLACEHOLDER_REGEX = /\{([a-zA-Z0-9_\[\]\?]+)\}/g;
+
+function normalizeExtractedTemplateDraft(
+  response: TemplateExtractionAiResponse,
+  fallbackSql: string
+): TemplateExtractionDraft {
+  const sqlPattern = response.sqlPattern?.trim() || fallbackSql;
+  const spec = ensureSpecCoverage(
+    normalizePlaceholdersSpec(response.placeholdersSpec),
+    sqlPattern
+  );
+
+  return {
+    name: response.name.trim(),
+    intent: response.intent.trim(),
+    description: response.description.trim(),
+    sqlPattern,
+    placeholdersSpec: spec,
+    keywords: normalizeStringList(response.keywords),
+    tags: normalizeStringList(response.tags),
+    examples: normalizeStringList(response.examples),
+  };
+}
+
+function normalizeStringList(values?: string[] | null): string[] {
+  if (!values) return [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value) continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    seen.add(trimmed);
+  }
+  return Array.from(seen);
+}
+
+function normalizePlaceholdersSpec(
+  spec: TemplateExtractionAiResponse["placeholdersSpec"]
+): TemplateExtractionDraft["placeholdersSpec"] {
+  if (!spec || !Array.isArray(spec.slots)) {
+    return null;
+  }
+
+  const slots = spec.slots
+    .map((slot) => {
+      if (!slot || typeof slot !== "object" || !slot.name) return null;
+      const name = slot.name.trim();
+      if (!name) return null;
+      const normalized: PlaceholdersSpecSlot = {
+        name,
+      };
+      if (slot.type && typeof slot.type === "string") {
+        normalized.type = slot.type.trim();
+      }
+      if (slot.semantic && typeof slot.semantic === "string") {
+        normalized.semantic = slot.semantic.trim();
+      }
+      if (typeof slot.required === "boolean") {
+        normalized.required = slot.required;
+      }
+      if (slot.default !== undefined) {
+        normalized.default = slot.default;
+      }
+      if (Array.isArray(slot.validators)) {
+        normalized.validators = normalizeStringList(slot.validators);
+      }
+      return normalized;
+    })
+    .filter((slot): slot is NonNullable<typeof slot> => Boolean(slot));
+
+  return slots.length > 0 ? { slots } : null;
+}
+
+function ensureSpecCoverage(
+  spec: TemplateExtractionDraft["placeholdersSpec"],
+  sqlPattern: string
+): TemplateExtractionDraft["placeholdersSpec"] {
+  const slots = spec ? [...spec.slots] : [];
+  const existing = new Set(slots.map((slot) => normalizePlaceholder(slot.name)));
+
+  for (const match of sqlPattern.matchAll(PLACEHOLDER_REGEX)) {
+    const raw = match[1]?.trim();
+    if (!raw) continue;
+    const normalized = normalizePlaceholder(raw);
+    if (existing.has(normalized)) continue;
+    slots.push({ name: raw });
+    existing.add(normalized);
+  }
+
+  return slots.length > 0 ? { slots } : null;
+}
+
+function normalizePlaceholder(name: string): string {
+  return name.replace(/\[\]$/, "").replace(/\?$/, "").toLowerCase();
 }
