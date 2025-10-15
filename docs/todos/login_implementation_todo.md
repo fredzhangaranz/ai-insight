@@ -237,18 +237,18 @@
 - Integration test: GET /api/auth/signout clears session cookie
 - Manual test: Session cookie has HttpOnly, Secure, SameSite=Lax flags
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create `lib/auth/auth-config.ts`:
+- [x] Create `lib/auth/auth-config.ts`:
 
   - Centralize reusable NextAuth configuration bits (session defaults, cookie settings)
   - Export helper (e.g. `getAuthConfig()`) that loads `NEXTAUTH_SECRET`/`NEXTAUTH_URL` and applies sane fallbacks
   - Surface clear error if required env vars missing to unblock Stage 3+ consumers
   - Re-export shared types/constants used by `auth-options.ts` and middleware helpers
 
-- [ ] Create `lib/auth/auth-options.ts`:
+- [x] Create `lib/auth/auth-options.ts`:
 
   ```typescript
   import { NextAuthOptions } from "next-auth";
@@ -315,7 +315,7 @@
   };
   ```
 
-- [ ] Create `app/api/auth/[...nextauth]/route.ts`:
+- [x] Create `app/api/auth/[...nextauth]/route.ts`:
 
   ```typescript
   import NextAuth from "next-auth";
@@ -325,13 +325,13 @@
   export { handler as GET, handler as POST };
   ```
 
-- [ ] Create `app/api/auth/change-password/route.ts`:
+- [x] Create `app/api/auth/change-password/route.ts`:
 
   - POST endpoint for authenticated users to change own password
   - Requires: oldPassword, newPassword, confirmPassword
   - Validates oldPassword, updates to newPassword, clears mustChangePassword
 
-- [ ] Extend NextAuth types in `types/next-auth.d.ts`:
+- [x] Extend NextAuth types in `types/next-auth.d.ts`:
 
   ```typescript
   import "next-auth";
@@ -353,7 +353,7 @@
   }
   ```
 
-- [ ] Write integration tests for auth API routes
+- [x] Write integration tests for auth API routes
 
 ---
 
@@ -377,11 +377,11 @@
 - Integration test: GET /login always accessible
 - Manual test: Navigate app flow - redirects to login, can access after signin
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create `middleware.ts` (root level):
+- [x] Create `middleware.ts` (root level):
 
   ```typescript
   import { withAuth } from "next-auth/middleware";
@@ -410,7 +410,7 @@
   };
   ```
 
-- [ ] Create `lib/middleware/auth-middleware.ts`:
+- [x] Create `lib/middleware/auth-middleware.ts`:
 
   ```typescript
   import { getServerSession } from "next-auth";
@@ -448,9 +448,8 @@
   }
   ```
 
-- [ ] Create `/app/unauthorized/page.tsx` - simple error page for 403 responses
-
-- [ ] Write unit tests for middleware helpers
+ - [x] Create `/app/unauthorized/page.tsx` - simple error page for 403 responses
+ - [x] Write unit tests for middleware helpers
 
 ---
 
