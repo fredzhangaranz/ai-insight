@@ -106,11 +106,11 @@
 - Rollback test: migrations can be reverted without data loss
 - UpdatedAt trigger fires on user updates
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create migration `database/migration/012_create_users_table.sql`:
+- [x] Create migration `database/migration/012_create_users_table.sql`:
 
   - User roles enum: `'standard_user' | 'admin'`
   - Users table with columns: id, username, email, passwordHash, fullName, role, isActive, mustChangePassword, lastLoginAt, createdBy (self-ref FK), createdAt, updatedAt
@@ -120,7 +120,7 @@
   - UserAuditLog table: userId, action, performedBy, details (JSONB), performedAt
   - Indexes on audit log: userId, performedAt DESC
 
-- [ ] Create migration `database/migration/013_add_user_ownership.sql`:
+- [x] Create migration `database/migration/013_add_user_ownership.sql`:
 
   - Add `userId INTEGER NULL REFERENCES Users(id) ON DELETE CASCADE` to:
     - SavedInsights
@@ -130,18 +130,18 @@
   - Create indexes: userId, visibility, composite (userId, visibility) where public
   - NOTE: SubQuestions inherit ownership via funnelId FK (no change needed)
 
-- [ ] Update `scripts/run-migrations.js` to include new migrations (012, 013)
+- [x] Update `scripts/run-migrations.js` to include new migrations (012, 013)
 
-- [ ] Document rollback plan in migration comments:
+- [x] Document rollback plan in migration comments:
 
   ```sql
   -- Rollback: DROP TABLE "UserAuditLog"; DROP TABLE "Users"; DROP TYPE user_role;
   -- Safe: No data loss; existing tables unchanged
   ```
 
-- [ ] Run migrations locally: `node scripts/run-migrations.js`
+- [x] Run migrations locally: `node scripts/run-migrations.js`
 
-- [ ] Verify schema in PostgreSQL:
+- [x] Verify schema in PostgreSQL:
   ```sql
   \d "Users"
   \d "UserAuditLog"
@@ -170,11 +170,11 @@
 - Unit test: passwordHash field excluded from returned user objects
 - Unit test: audit log entries created for create/reset/deactivate actions
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create `lib/auth/password.ts`:
+- [x] Create `lib/auth/password.ts`:
 
   ```typescript
   import bcrypt from "bcrypt";
@@ -193,7 +193,7 @@
   }
   ```
 
-- [ ] Create `lib/services/user-service.ts`:
+- [x] Create `lib/services/user-service.ts`:
 
   - Interface: `User` (without passwordHash)
   - Interface: `CreateUserInput` (username, email, fullName, password, role, createdBy)
@@ -205,7 +205,7 @@
   - Method: `deactivateUser(userId, performedBy)` - set isActive=false, log audit
   - Private method: `logAudit(userId, action, performedBy, details)` - insert audit record
 
-- [ ] Write unit tests in `lib/services/__tests__/user-service.test.ts`:
+- [x] Write unit tests in `lib/services/__tests__/user-service.test.ts`:
 
   - Test createUser with valid/invalid inputs
   - Test verifyPassword success/failure cases
@@ -213,7 +213,7 @@
   - Test audit log creation
   - Mock database queries with jest
 
-- [ ] Run tests: `npm test lib/services/user-service.test.ts`
+- [x] Run tests: `npm test lib/services/__tests__/user-service.test.ts`
 
 ---
 
