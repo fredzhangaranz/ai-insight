@@ -166,6 +166,35 @@ If customers use their own AI services:
 - `DATABASE_URL`: Connection string to Silhouette database
 - `NODE_ENV`: Set to `production`
 
+### Authentication & Session
+
+1. **Generate a secret for NextAuth**:
+
+   ```bash
+   openssl rand -base64 32
+   ```
+
+   Copy the output into `NEXTAUTH_SECRET`.
+
+2. **Set authentication variables** in `.env.production`:
+
+   ```bash
+   NEXTAUTH_SECRET=base64-secret-from-step-1
+   NEXTAUTH_URL=https://insightgen.yourcompany.local
+   NEXTAUTH_SESSION_MAX_AGE=604800  # 7 days
+
+   # Bootstrap admin (rotate after first login)
+   ADMIN_USERNAME=initial-admin
+   ADMIN_PASSWORD=ChangeMe123!
+   ADMIN_EMAIL=admin@yourcompany.local
+   ADMIN_FULL_NAME=InsightGen Administrator
+
+   # Feature flag to control rollout
+   AUTH_SYSTEM_ENABLED=true
+   ```
+
+3. **Rollout toggle**: Set `AUTH_SYSTEM_ENABLED=false` to temporarily disable authentication if you hit issues during cutover.
+
 ### AI Service Configuration
 
 **Choose one or both AI providers:**
