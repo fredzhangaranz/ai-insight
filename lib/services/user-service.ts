@@ -25,6 +25,12 @@ export interface CreateUserInput {
   createdBy: number | null;
 }
 
+export interface UpdateUserInput {
+  fullName?: string;
+  email?: string;
+  role?: UserRole;
+}
+
 type DbUserRow = {
   id: number;
   username: string;
@@ -38,6 +44,15 @@ type DbUserRow = {
   createdAt: string;
   updatedAt: string;
 };
+
+export interface UserAuditEntry {
+  id: number;
+  userId: number;
+  action: string;
+  performedBy: number | null;
+  details: Record<string, unknown> | null;
+  performedAt: string;
+}
 
 type AuditDetails = Record<string, unknown>;
 
@@ -109,18 +124,24 @@ export class UserService {
     userId: number,
     newPassword: string,
     performedBy: number | null
-  ): Promise<void> {
+  ): Promise<boolean> {
     const pool = await getInsightGenDbPool();
     const passwordHash = await hashPassword(newPassword);
 
-    await pool.query(
+    const result = await pool.query(
       `UPDATE "Users"
        SET "passwordHash" = $1, "mustChangePassword" = TRUE, "updatedAt" = NOW()
-       WHERE id = $2`,
+       WHERE id = $2
+       RETURNING id`,
       [passwordHash, userId]
     );
 
+    if (result.rows.length === 0) {
+      return false;
+    }
+
     await this.logAudit(userId, "password_reset", performedBy, {});
+    return true;
   }
 
   static async changePassword(
@@ -156,33 +177,145 @@ export class UserService {
   static async listUsers(): Promise<User[]> {
     const pool = await getInsightGenDbPool();
     const result = await pool.query<DbUserRow>(
-      `SELECT id, username, email, "fullName", role, "isActive",
+      `SELECT id, username, email, "passwordHash", "fullName", role, "isActive",
               "mustChangePassword", "lastLoginAt", "createdAt", "updatedAt"
        FROM "Users"
        ORDER BY username ASC`
     );
 
-    return result.rows.map((row) =>
-      sanitizeUser({
-        ...row,
-        passwordHash: "",
-      })
+    return result.rows.map((row) => sanitizeUser(row));
+  }
+
+  static async getUserById(userId: number): Promise<User | null> {
+    const pool = await getInsightGenDbPool();
+    const result = await pool.query<DbUserRow>(
+      `SELECT id, username, email, "passwordHash", "fullName", role,
+              "isActive", "mustChangePassword", "lastLoginAt", "createdAt", "updatedAt"
+       FROM "Users"
+       WHERE id = $1`,
+      [userId]
     );
+
+    const row = result.rows[0];
+    if (!row) return null;
+    return sanitizeUser(row);
+  }
+
+  static async updateUser(
+    userId: number,
+    updates: UpdateUserInput,
+    performedBy: number | null
+  ): Promise<User | null> {
+    const pool = await getInsightGenDbPool();
+
+    const currentResult = await pool.query<DbUserRow>(
+      `SELECT id, username, email, "passwordHash", "fullName", role,
+              "isActive", "mustChangePassword", "lastLoginAt", "createdAt", "updatedAt"
+       FROM "Users"
+       WHERE id = $1`,
+      [userId]
+    );
+
+    const current = currentResult.rows[0];
+    if (!current) {
+      return null;
+    }
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    const changes: Record<string, unknown> = {};
+
+    if (updates.fullName && updates.fullName !== current.fullName) {
+      fields.push(`"fullName" = $${paramIndex++}`);
+      values.push(updates.fullName);
+      changes.fullName = updates.fullName;
+    }
+
+    if (updates.email && updates.email !== current.email) {
+      fields.push(`email = $${paramIndex++}`);
+      values.push(updates.email);
+      changes.email = updates.email;
+    }
+
+    if (updates.role && updates.role !== current.role) {
+      if (updates.role !== "standard_user" && updates.role !== "admin") {
+        throw new Error("InvalidRole");
+      }
+      fields.push(`role = $${paramIndex++}`);
+      values.push(updates.role);
+      changes.role = updates.role;
+    }
+
+    if (fields.length === 0) {
+      return sanitizeUser(current);
+    }
+
+    fields.push(`"updatedAt" = NOW()`);
+
+    values.push(userId);
+
+    const updatedResult = await pool.query<DbUserRow>(
+      `UPDATE "Users"
+       SET ${fields.join(", ")}
+       WHERE id = $${paramIndex}
+       RETURNING id, username, email, "passwordHash", "fullName", role,
+                 "isActive", "mustChangePassword", "lastLoginAt", "createdAt", "updatedAt"`,
+      values
+    );
+
+    const updated = updatedResult.rows[0];
+
+    await this.logAudit(userId, "updated", performedBy, {
+      changes,
+    });
+
+    if (changes.role) {
+      await this.logAudit(userId, "role_changed", performedBy, {
+        previousRole: current.role,
+        newRole: changes.role,
+      });
+    }
+
+    return sanitizeUser(updated);
   }
 
   static async deactivateUser(
     userId: number,
     performedBy: number | null
-  ): Promise<void> {
+  ): Promise<boolean> {
     const pool = await getInsightGenDbPool();
-    await pool.query(
+    const result = await pool.query(
       `UPDATE "Users"
        SET "isActive" = FALSE, "updatedAt" = NOW()
-       WHERE id = $1`,
+       WHERE id = $1
+       RETURNING id`,
       [userId]
     );
 
+    if (result.rows.length === 0) {
+      return false;
+    }
+
     await this.logAudit(userId, "deactivated", performedBy, {});
+    return true;
+  }
+
+  static async getAuditLog(userId: number): Promise<UserAuditEntry[]> {
+    const pool = await getInsightGenDbPool();
+    const result = await pool.query<UserAuditEntry>(
+      `SELECT id, "userId", action, "performedBy", details, "performedAt"
+       FROM "UserAuditLog"
+       WHERE "userId" = $1
+       ORDER BY "performedAt" DESC`,
+      [userId]
+    );
+
+    return result.rows.map((row) => ({
+      ...row,
+      details: row.details ?? null,
+    }));
   }
 
   private static async logAudit(

@@ -176,7 +176,7 @@ If customers use their own AI services:
 
    Copy the output into `NEXTAUTH_SECRET`.
 
-2. **Set authentication variables** in `.env.production`:
+   2. **Set authentication variables** in `.env.production`:
 
    ```bash
    NEXTAUTH_SECRET=base64-secret-from-step-1
@@ -194,6 +194,15 @@ If customers use their own AI services:
    ```
 
 3. **Rollout toggle**: Set `AUTH_SYSTEM_ENABLED=false` to temporarily disable authentication if you hit issues during cutover.
+
+4. **Seed default admin** after running migrations:
+
+   ```bash
+   npm run migrate
+   npm run seed-admin
+   ```
+
+   Credentials come from the `ADMIN_*` environment variables above. Rotate the password after first login.
 
 ### AI Service Configuration
 

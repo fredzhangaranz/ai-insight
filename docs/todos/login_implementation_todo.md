@@ -472,30 +472,30 @@
 - Integration test: POST /api/admin/users/[id]/reset-password sets mustChangePassword=true
 - Integration test: DELETE /api/admin/users/[id] sets isActive=false (soft delete)
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create `app/api/admin/users/route.ts`:
+- [x] Create `app/api/admin/users/route.ts`:
 
   - GET: List all users (requireAdmin), calls UserService.listUsers()
   - POST: Create new user (requireAdmin), validates input, calls UserService.createUser()
 
-- [ ] Create `app/api/admin/users/[id]/route.ts`:
+- [x] Create `app/api/admin/users/[id]/route.ts`:
 
   - GET: Get user by ID (requireAdmin)
   - PATCH: Update user (requireAdmin) - fullName, email, role
   - DELETE: Deactivate user (requireAdmin), calls UserService.deactivateUser()
 
-- [ ] Create `app/api/admin/users/[id]/reset-password/route.ts`:
+- [x] Create `app/api/admin/users/[id]/reset-password/route.ts`:
 
   - POST: Reset password (requireAdmin), generates temp password, calls UserService.resetPassword()
 
-- [ ] Create `app/api/admin/users/[id]/audit-log/route.ts`:
+- [x] Create `app/api/admin/users/[id]/audit-log/route.ts`:
 
   - GET: Fetch audit trail for user (requireAdmin)
 
-- [ ] Write integration tests for all admin user management endpoints
+- [x] Write integration tests for all admin user management endpoints
 
 ---
 
@@ -517,11 +517,11 @@
 - Test script with missing env vars - fails with clear error message
 - Manual test: Login as admin after running script
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create `scripts/seed-default-admin.js`:
+- [x] Create `scripts/seed-default-admin.js`:
 
   ```javascript
   const { getInsightGenDbPool } = require("../lib/db");
@@ -563,7 +563,7 @@
     .finally(() => process.exit());
   ```
 
-- [ ] Add script to `package.json`:
+- [x] Add script to `package.json`:
 
   ```json
   {
@@ -573,9 +573,9 @@
   }
   ```
 
-- [ ] Update deployment documentation to run `npm run seed-admin` after migrations
+- [x] Update deployment documentation to run `npm run seed-admin` after migrations
 
-- [ ] Test script locally: `npm run seed-admin`
+- [x] Test script locally: `npm run seed-admin`
 
 - [ ] Verify admin login with credentials from .env.local
 
