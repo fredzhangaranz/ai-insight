@@ -224,6 +224,17 @@ export function SideNav() {
                 </SidebarMenuItem>
               )}
               <SidebarMenuItem>
+                <Link href="/profile" className="block w-full">
+                  <SidebarMenuButton
+                    isActive={pathname === "/profile"}
+                    tooltip="Profile"
+                  >
+                    <UserIcon className="w-4 h-4" />
+                    <span>Profile</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => signOut({ callbackUrl: "/login" })}
                   tooltip="Sign Out"

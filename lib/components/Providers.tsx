@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { AIModelProvider } from "@/lib/context/AIModelContext";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SideNav } from "@/app/components/shell/SideNav";
+import { MustChangePasswordBanner } from "@/app/components/profile/MustChangePasswordBanner";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -30,7 +31,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
         <main className="w-full px-6 py-8">
           <SidebarProvider>
             <SideNav />
-            <SidebarInset>{children}</SidebarInset>
+            <SidebarInset>
+              <MustChangePasswordBanner />
+              {children}
+            </SidebarInset>
           </SidebarProvider>
         </main>
       </div>
@@ -40,7 +44,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
   // For login page or when not authenticated, render children without sidebar
   return (
     <div className="min-h-screen bg-slate-50">
-      <main className="w-full">{children}</main>
+      <main className="w-full px-6 py-8">
+        <MustChangePasswordBanner />
+        {children}
+      </main>
     </div>
   );
 }

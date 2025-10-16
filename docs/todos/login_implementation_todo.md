@@ -714,17 +714,17 @@
 - Manual test: Change password with incorrect old password - error
 - Manual test: Password strength indicator shows weak/medium/strong
 
-**Status:** pending
+**Status:** in_progress
 
 **Tasks:**
 
-- [ ] Create `app/profile/page.tsx`:
+- [x] Create `app/profile/page.tsx`:
 
   - Display current user: username, email, fullName, role (read-only)
   - Show lastLoginAt timestamp
   - Link to change password form
 
-- [ ] Create `components/profile/ChangePasswordForm.tsx`:
+- [x] Create `components/profile/ChangePasswordForm.tsx`:
 
   - Form fields: current password, new password, confirm new password
   - Password strength indicator (use library or custom logic)
@@ -732,14 +732,14 @@
   - Submit: POST /api/auth/change-password
   - Success: Show confirmation, optionally log user out to re-authenticate
 
-- [ ] Add password requirements helper text:
+- [x] Add password requirements helper text:
 
   - Minimum 8 characters
   - At least one uppercase letter
   - At least one lowercase letter
   - At least one number
 
-- [ ] Add "must change password" banner at top of app if user.mustChangePassword === true:
+- [x] Add "must change password" banner at top of app if user.mustChangePassword === true:
 
   - "You must change your password before continuing"
   - Link to profile/change password page
