@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import {
   Sidebar,
   SidebarContent,
@@ -22,6 +23,7 @@ import { ClipboardDocumentIcon } from "@/components/heroicons";
 import { SparklesIcon } from "@/components/heroicons";
 import { UserIcon } from "@/components/heroicons";
 import { DocumentDuplicateIcon } from "@/components/heroicons";
+import { ArrowRightOnRectangleIcon } from "@/components/heroicons";
 import { usePathname } from "next/navigation";
 
 const items = [
@@ -172,6 +174,16 @@ export function SideNav() {
                     <span>Admin</span>
                   </SidebarMenuButton>
                 </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  tooltip="Sign Out"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <ArrowRightOnRectangleIcon className="w-4 h-4" />
+                  <span>Sign Out</span>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

@@ -600,11 +600,11 @@
 - Manual test: Login from /dashboard redirect - returns to /dashboard after success
 - Manual test: Login page accessible when not authenticated
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create `app/login/page.tsx`:
+- [x] Create `app/login/page.tsx`:
 
   - Client component using `signIn()` from next-auth/react
   - Form with username and password fields
@@ -614,15 +614,15 @@
   - "Forgot password" message: "Contact your administrator for assistance"
   - Clean, simple design matching InsightGen theme
 
-- [ ] Add form validation:
+- [x] Add form validation:
 
   - Username required, min 3 chars
   - Password required
   - Client-side validation before submit
 
-- [ ] Add loading indicator: button shows "Signing in..." when submitting
+- [x] Add loading indicator: button shows "Signing in..." when submitting
 
-- [ ] Style with Tailwind matching existing app design
+- [x] Style with Tailwind matching existing app design
 
 - [ ] Test all login scenarios manually
 

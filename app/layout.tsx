@@ -1,10 +1,8 @@
 import type React from "react";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { AIModelProvider } from "@/lib/context/AIModelContext";
+import { Providers } from "@/lib/components/Providers";
 import "./globals.css";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { SideNav } from "@/app/components/shell/SideNav";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,21 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AIModelProvider>
-          <div className="min-h-screen bg-slate-50">
-            {/* Main Content */}
-            <main className="w-full px-6 py-8">
-              {process.env.CHART_INSIGHTS_ENABLED === "true" ? (
-                <SidebarProvider>
-                  <SideNav />
-                  <SidebarInset>{children}</SidebarInset>
-                </SidebarProvider>
-              ) : (
-                children
-              )}
-            </main>
-          </div>
-        </AIModelProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

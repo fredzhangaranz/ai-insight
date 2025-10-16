@@ -51,7 +51,7 @@
     "lucide-react": "^0.263.1",
     "mssql": "^11.0.1",
     "next": "14.2.4",
-    "next-auth": "^5.0.0-beta.29",
+    "next-auth": "^4.24.11",
     "pg": "^8.16.3",
     "postcss": "^8",
     "react": "^18",

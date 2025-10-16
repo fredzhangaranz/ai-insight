@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
+import type { Session } from "next-auth";
 
 import { authOptions } from "@/lib/auth/auth-options";
 import { getAuthConfig } from "@/lib/auth/auth-config";
@@ -7,8 +8,8 @@ import { getAuthConfig } from "@/lib/auth/auth-config";
 const authConfig = getAuthConfig();
 
 type RequireAuthSuccess = {
-  session: Awaited<ReturnType<typeof getServerSession>>;
-  user: NonNullable<Awaited<ReturnType<typeof getServerSession>>["user"]>;
+  session: Session;
+  user: NonNullable<Session["user"]>;
 };
 
 export async function requireAuth(
