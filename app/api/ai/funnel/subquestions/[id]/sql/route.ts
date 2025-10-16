@@ -1,38 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withErrorHandling, createErrorResponse } from "@/app/api/error-handler";
+import { requireAuth } from "@/lib/middleware/auth-middleware";
 import * as FunnelStorage from "@/lib/services/funnel-storage.service";
 
+function parseSessionUserId(userId: string): number | null {
+  const parsed = Number.parseInt(userId, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 // PUT /api/ai/funnel/subquestions/[id]/sql - Update sub-question SQL
-export async function PUT(
+export const PUT = withErrorHandling(async (
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
-  try {
-    const body = await request.json();
-    const { sqlQuery, sqlExplanation, sqlValidationNotes, sqlMatchedTemplate } =
-      body;
-    const id = Number(params.id);
+) => {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
 
-    if (!id || isNaN(id)) {
-      return NextResponse.json(
-        { error: "Invalid sub-question ID." },
-        { status: 400 }
-      );
-    }
+  const body = await request.json();
+  const { sqlQuery, sqlExplanation, sqlValidationNotes, sqlMatchedTemplate } =
+    body;
+  const id = Number(params.id);
 
-    if (!sqlQuery || typeof sqlQuery !== "string") {
-      return NextResponse.json(
-        { error: "sqlQuery is required and must be a string." },
-        { status: 400 }
-      );
-    }
+  if (!id || isNaN(id)) {
+    return createErrorResponse.badRequest("Invalid sub-question ID.");
+  }
 
-    await FunnelStorage.updateSubQuestionSql(id, sqlQuery, {
+  if (!sqlQuery || typeof sqlQuery !== "string") {
+    return createErrorResponse.badRequest(
+      "sqlQuery is required and must be a string."
+    );
+  }
+
+  const userId = parseSessionUserId(authResult.user.id);
+  if (userId === null) {
+    return createErrorResponse.badRequest("Invalid user id in session");
+  }
+
+  await FunnelStorage.updateSubQuestionSql(
+    id,
+    sqlQuery,
+    {
       sqlExplanation,
       sqlValidationNotes,
       sqlMatchedTemplate,
-    });
-    return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
+    },
+    userId
+  );
+  return NextResponse.json({ success: true });
+});

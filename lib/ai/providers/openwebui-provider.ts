@@ -10,12 +10,10 @@ export class OpenWebUIProvider extends BaseProvider {
   private apiKey?: string;
   private timeout: number;
   private configLoaded: boolean = false;
+  private configLoadPromise: Promise<void> | null = null;
 
   constructor(modelId: string) {
     super(modelId);
-
-    // Load configuration with fallback to environment variables
-    this.loadConfiguration();
   }
 
   /**
@@ -74,9 +72,15 @@ export class OpenWebUIProvider extends BaseProvider {
    * Ensure configuration is loaded before use
    */
   private async ensureConfigLoaded(): Promise<void> {
-    if (!this.configLoaded) {
-      await this.loadConfiguration();
+    if (this.configLoaded) return;
+    if (!this.configLoadPromise) {
+      this.configLoadPromise = this.loadConfiguration().catch((error) => {
+        this.configLoadPromise = null;
+        this.configLoaded = false;
+        throw error;
+      });
     }
+    await this.configLoadPromise;
   }
 
   /**

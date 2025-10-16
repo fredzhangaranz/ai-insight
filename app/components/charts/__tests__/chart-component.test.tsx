@@ -47,6 +47,12 @@ vi.mock("../kpi-card", () => ({
   ),
 }));
 
+vi.mock("../../data-table", () => ({
+  DataTable: ({ data }: any) => (
+    <div data-testid="data-table">Rows: {data.length}</div>
+  ),
+}));
+
 describe("ChartComponent", () => {
   const barData: BarChartDataPoint[] = [
     { category: "A", value: 10, id: "1" },
@@ -140,53 +146,45 @@ describe("ChartComponent", () => {
     expect(screen.getByText("Value: 42")).toBeInTheDocument();
   });
 
-  it("throws error for invalid data format", () => {
-    // Suppress console.error for this test
-    const consoleSpy = vi.spyOn(console, "error");
-    consoleSpy.mockImplementation(() => {});
+  it("shows validation message for invalid data format", () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(() => {
-      render(
-        <ChartComponent
-          chartType="bar"
-          data={lineData as any}
-          title="Invalid Data"
-        />
-      );
-    }).toThrow("Invalid data format for bar chart");
+    render(
+      <ChartComponent
+        chartType="bar"
+        data={lineData as any}
+        title="Invalid Data"
+      />
+    );
 
+    expect(
+      screen.getByText("Invalid data format for bar chart")
+    ).toBeInTheDocument();
     consoleSpy.mockRestore();
   });
 
-  it("throws error for unsupported chart type", () => {
-    // Suppress console.error for this test
-    const consoleSpy = vi.spyOn(console, "error");
-    consoleSpy.mockImplementation(() => {});
+  it("renders unsupported type message", () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(() => {
-      render(
-        <ChartComponent
-          chartType={"unknown" as any}
-          data={barData}
-          title="Invalid Type"
-        />
-      );
-    }).toThrow("Unsupported chart type: unknown");
+    render(
+      <ChartComponent
+        chartType={"unknown" as any}
+        data={barData}
+        title="Invalid Type"
+      />
+    );
 
+    expect(
+      screen.getByText("Unsupported chart type: unknown")
+    ).toBeInTheDocument();
     consoleSpy.mockRestore();
   });
 
-  it("throws error for table type", () => {
-    // Suppress console.error for this test
-    const consoleSpy = vi.spyOn(console, "error");
-    consoleSpy.mockImplementation(() => {});
+  it("renders table view for table type data", () => {
+    render(
+      <ChartComponent chartType="table" data={barData} title="Table View" />
+    );
 
-    expect(() => {
-      render(
-        <ChartComponent chartType="table" data={barData} title="Table View" />
-      );
-    }).toThrow("Table view is not implemented in the chart component");
-
-    consoleSpy.mockRestore();
+    expect(screen.getByTestId("data-table")).toHaveTextContent("Rows: 2");
   });
 });

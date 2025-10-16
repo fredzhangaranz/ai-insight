@@ -4,10 +4,24 @@ import {
   withErrorHandling,
   createErrorResponse,
 } from "@/app/api/error-handler";
+import { requireAuth } from "@/lib/middleware/auth-middleware";
+
+function parseSessionUserId(userId: string): number | null {
+  const parsed = Number.parseInt(userId, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
 async function generateQueryHandler(
   request: NextRequest
 ): Promise<NextResponse> {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const userId = parseSessionUserId(authResult.user.id);
+  if (userId === null) {
+    return createErrorResponse.badRequest("Invalid user id in session");
+  }
+
   const body = await request.json();
   const {
     subQuestion,
@@ -64,6 +78,10 @@ async function generateQueryHandler(
       desiredFields: Array.isArray(desiredFields) ? desiredFields : undefined,
       scope,
       subQuestionId: parsedSubQuestionId,
+      userContext: {
+        id: userId,
+        username: authResult.user.username || authResult.user.name || null,
+      },
     });
 
     console.log("✅ SQL generated successfully");

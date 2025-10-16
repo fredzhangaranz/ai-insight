@@ -6,26 +6,22 @@ import type { PieChartDataPoint } from "@/lib/chart-contracts";
 import { vi } from "vitest";
 
 // Mock the ResponsiveContainer since it doesn't work well in tests
-vi.mock("recharts", () => {
-  const OriginalModule = vi.importActual("recharts");
+vi.mock("recharts", async () => {
+  const actual = await vi.importActual<typeof import("recharts")>("recharts");
+
+  const stub = (testId: string) =>
+    function Stub({ children }: { children?: React.ReactNode }) {
+      return <div data-testid={testId}>{children}</div>;
+    };
+
   return {
-    ...OriginalModule,
-    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-      <div>{children}</div>
-    ),
-    PieChart: ({ children, ...props }: any) => (
-      <div data-testid="recharts-pie-chart" {...props}>
-        {children}
-      </div>
-    ),
-    Pie: ({ ...props }: any) => <div data-testid="recharts-pie" {...props} />,
-    Cell: ({ ...props }: any) => <div data-testid="recharts-cell" {...props} />,
-    Tooltip: ({ ...props }: any) => (
-      <div data-testid="recharts-tooltip" {...props} />
-    ),
-    Legend: ({ ...props }: any) => (
-      <div data-testid="recharts-legend" {...props} />
-    ),
+    ...actual,
+    ResponsiveContainer: stub("recharts-responsive-container"),
+    PieChart: stub("recharts-pie-chart"),
+    Pie: stub("recharts-pie"),
+    Cell: stub("recharts-cell"),
+    Tooltip: stub("recharts-tooltip"),
+    Legend: stub("recharts-legend"),
   };
 });
 

@@ -150,7 +150,7 @@ export default function SetupPage() {
       if (setupStatus) {
         if (!setupStatus.isSetupRequired) {
           // Setup not required, redirect to main app
-          router.push("/");
+          router.push("/home");
           return;
         }
 
@@ -333,7 +333,7 @@ export default function SetupPage() {
 
   // Handle completion
   const handleComplete = () => {
-    router.push("/");
+    router.push("/home");
   };
 
   if (currentStep === "loading" || isSetupLoading) {

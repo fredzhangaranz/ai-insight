@@ -33,9 +33,13 @@ describe("KpiCard", () => {
     expect(screen.getByText("Average Healing Time")).toBeInTheDocument();
     expect(screen.getByText("45.5")).toBeInTheDocument();
     expect(screen.getByText("days")).toBeInTheDocument();
-    expect(screen.getByText("12.3")).toBeInTheDocument();
-    expect(screen.getByText("Previous Month:")).toBeInTheDocument();
-    expect(screen.getByText("57.8")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("12.3"))
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Previous Month/)).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("57.8"))
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Decreasing")).toBeInTheDocument();
   });
 

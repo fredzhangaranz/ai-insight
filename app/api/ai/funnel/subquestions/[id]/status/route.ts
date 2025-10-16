@@ -5,12 +5,21 @@ import {
   withErrorHandling,
   createErrorResponse,
 } from "@/app/api/error-handler";
+import { requireAuth } from "@/lib/middleware/auth-middleware";
+
+function parseSessionUserId(userId: string): number | null {
+  const parsed = Number.parseInt(userId, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
 // PUT /api/ai/funnel/subquestions/[id]/status - Update sub-question status
 async function updateStatusHandler(
   request: NextRequest,
   { params }: { params: { id: string } }
 ): Promise<NextResponse> {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   const body = await request.json();
   const { status } = body;
   const id = Number(params.id);
@@ -29,9 +38,14 @@ async function updateStatusHandler(
   }
 
   try {
+    const userId = parseSessionUserId(authResult.user.id);
+    if (userId === null) {
+      return createErrorResponse.badRequest("Invalid user id in session");
+    }
     await FunnelStorage.updateSubQuestionStatus(
       id,
-      status as SubQuestionStatus
+      status as SubQuestionStatus,
+      userId
     );
     return NextResponse.json({ success: true });
   } catch (error: any) {

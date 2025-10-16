@@ -166,6 +166,59 @@ If customers use their own AI services:
 - `DATABASE_URL`: Connection string to Silhouette database
 - `NODE_ENV`: Set to `production`
 
+### Authentication & Session
+
+1. **Generate a secret for NextAuth**:
+
+   ```bash
+   openssl rand -base64 32
+   ```
+
+   Copy the output into `NEXTAUTH_SECRET`.
+
+   2. **Set authentication variables** in `.env.production`:
+
+   ```bash
+   NEXTAUTH_SECRET=base64-secret-from-step-1
+   NEXTAUTH_URL=https://insightgen.yourcompany.local
+   NEXTAUTH_SESSION_MAX_AGE=604800  # 7 days
+
+   # Bootstrap admin (rotate after first login)
+   ADMIN_USERNAME=initial-admin
+   ADMIN_PASSWORD=ChangeMe123!
+   ADMIN_EMAIL=admin@yourcompany.local
+   ADMIN_FULL_NAME=InsightGen Administrator
+
+   # Feature flag to control rollout
+   AUTH_SYSTEM_ENABLED=true
+   ```
+
+2. **Rollout toggle**: Set `AUTH_SYSTEM_ENABLED=false` to temporarily disable authentication if you hit issues during cutover.
+
+3. **Seed default admin and backfill ownership** after running migrations:
+
+   ```bash
+   npm run migrate
+   npm run seed-admin
+   node scripts/backfill-user-ownership.js
+   ```
+
+   Credentials come from the `ADMIN_*` environment variables above. Rotate the password after first login. The backfill script assigns any legacy insights, dashboards, or funnels without a `userId` to the first admin user (or the username specified via `BACKFILL_OWNER_USERNAME`). Re-run the script after any manual data imports to keep ownership consistent.
+
+4. **Clean up duplicate dashboards** (optional but recommended):
+
+   ```bash
+   # Preview what will be deleted
+   node scripts/cleanup-duplicate-dashboards.js --dry-run
+
+   # Apply the cleanup
+   node scripts/cleanup-duplicate-dashboards.js
+   ```
+
+   This script removes duplicate "default" dashboards per user, keeping only the oldest one. This prevents inconsistent behavior when loading dashboards.
+
+5. **Rollback safety**: user ownership columns remain nullable by design. If issues arise, you can temporarily disable auth middleware and re-run the backfill once fixed—no schema rollback required.
+
 ### AI Service Configuration
 
 **Choose one or both AI providers:**

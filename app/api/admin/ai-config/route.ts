@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin, requireAuth } from "@/lib/middleware/auth-middleware";
 import { AIConfigLoader } from "@/lib/config/ai-config-loader";
 import { healthMonitorService } from "@/lib/services/health-monitor.service";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     // Ensure health monitor is running in production
     healthMonitorService.start();
     const configLoader = AIConfigLoader.getInstance();
@@ -11,7 +17,9 @@ export async function GET() {
 
     // In development mode, the providers are already in the right format
     // In production mode, they're loaded from database and already formatted
-    return NextResponse.json(providers);
+    return NextResponse.json(providers, {
+      headers: { "x-ai-config-source": source },
+    });
   } catch (error) {
     console.error("Error fetching AI configurations:", error);
     return NextResponse.json(
@@ -23,6 +31,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
+    }
+
     const body = await request.json();
     const { providerType, providerName, configData, isEnabled, isDefault } =
       body;
@@ -59,7 +72,7 @@ export async function POST(request: NextRequest) {
       configData,
       isEnabled ?? true,
       isDefault ?? false,
-      "admin"
+      authResult.user.username || authResult.user.name || "admin"
     );
 
     return NextResponse.json(configuration);

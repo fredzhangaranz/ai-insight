@@ -38,6 +38,8 @@ const migrations = [
   "009_create_dashboards.sql",
   "010_rename_formid_in_saved_insights.sql",
   "011_create_template_catalog.sql",
+  "012_create_users_table.sql",
+  "013_add_user_ownership.sql",
 ];
 
 async function runMigrations() {

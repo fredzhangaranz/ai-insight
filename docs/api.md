@@ -1,9 +1,66 @@
 ### **API Documentation: InsightGen POC (v2)**
 
 **Base URL:** `http://localhost:3000/api`
-**Authentication:** None for this POC.
+**Authentication:** NextAuth session cookie (`next-auth.session-token` or `__Secure-next-auth.session-token` in production)
 
 ---
+
+### Authentication Overview
+
+All API requests must include a valid NextAuth session cookie obtained via the `/login` flow. Without a session, the API responds with:
+
+- `401 Unauthorized` — no session cookie or expired session.
+- `403 Forbidden` — authenticated but user lacks required role (e.g., standard user hitting admin endpoint).
+
+Use the following header structure when calling the APIs directly (replace the token value with your session token from a browser login):
+
+```http
+Cookie: next-auth.session-token=eyJhbGciOi...
+```
+
+### Protected API Endpoints
+
+| Endpoint | Methods | Role | Notes |
+| --- | --- | --- | --- |
+| `/api/insights` | GET, POST | Standard user | Responses scoped to the authenticated user's `userId`. |
+| `/api/insights/[id]` | GET, PUT, DELETE | Standard user | Enforces ownership checks before returning or mutating an insight. |
+| `/api/dashboards` | GET, POST | Standard user | Automatically stamps `userId` on create; list only returns owned dashboards. |
+| `/api/dashboards/[id]` | GET, PATCH, DELETE | Standard user | All operations validate the dashboard belongs to the caller. |
+| `/api/ai/funnel` | GET, POST | Standard user | Funnels are filtered by `userId`; creation stores the session's `userId`. |
+| `/api/ai/funnel/[funnelId]` | DELETE | Standard user | Deletes only funnels owned by the caller. |
+| `/api/ai/templates/[id]/publish` | POST | Admin only | Approving templates now requires an admin role. |
+| `/api/ai/templates/[id]/deprecate` | POST | Admin only | Deprecation actions restricted to admins. |
+| `/api/admin/ai-config` | GET | Standard user | Any authenticated user can read provider configuration. |
+| `/api/admin/ai-config` | POST | Admin only | Persisting provider config requires admin privileges. |
+
+#### Example: Authenticated request for user insights
+
+```http
+GET /api/insights HTTP/1.1
+Host: localhost:3000
+Cookie: next-auth.session-token=eyJhbGciOi...
+Accept: application/json
+```
+
+Possible responses:
+
+- `200 OK` – Returns `{ "items": [...] }` containing only insights owned by the session user.
+- `401 Unauthorized` – Missing or invalid session cookie.
+
+#### Example: Admin-only template publication
+
+```http
+POST /api/ai/templates/12/publish HTTP/1.1
+Host: localhost:3000
+Cookie: next-auth.session-token=eyJhbGciOi...  ; must belong to an admin user
+Accept: application/json
+```
+
+Responses:
+
+- `200 OK` – Template approved.
+- `403 Forbidden` – Session user is not an admin.
+- `401 Unauthorized` – Missing session.
 
 ### **1. AssessmentForm Endpoints**
 
