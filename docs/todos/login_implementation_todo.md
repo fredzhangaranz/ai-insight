@@ -766,18 +766,18 @@
 - Manual test: Admin sees Admin Panel link, standard user does not
 - Manual test: Navigate to Profile from user menu
 
-**Status:** pending
+**Status:** in_progress
 
 **Tasks:**
 
-- [ ] Update `app/components/shell/SideNav.tsx` (or main navigation component):
+- [x] Update `app/components/shell/SideNav.tsx` (or main navigation component):
 
   - Add user avatar/name in top-right or header
   - Show username from session: `session.user.name`
   - Show role badge: "Admin" or "User"
   - Dropdown menu with: Profile, Admin Panel (conditional), Logout
 
-- [ ] Implement logout handler:
+- [x] Implement logout handler:
 
   ```typescript
   import { signOut } from "next-auth/react";
@@ -787,7 +787,7 @@
   };
   ```
 
-- [ ] Add SessionProvider to root layout `app/layout.tsx`:
+- [x] Add SessionProvider to root layout `app/layout.tsx`:
 
   ```typescript
   import { SessionProvider } from "next-auth/react";
@@ -803,7 +803,7 @@
   }
   ```
 
-- [ ] Create `lib/hooks/useAuth.ts` custom hook:
+- [x] Create `lib/hooks/useAuth.ts` custom hook:
 
   ```typescript
   import { useSession } from "next-auth/react";
@@ -857,7 +857,7 @@
 - Integration test: Standard user cannot approve template (403)
 - Integration test: Admin can approve template (200)
 
-**Status:** pending
+**Status:** in_progress
 
 **Tasks:**
 

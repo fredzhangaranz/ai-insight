@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { signOut, useSession } from "next-auth/react";
-import { useState } from "react";
+import { signOut } from "next-auth/react";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Sidebar,
   SidebarContent,
@@ -14,7 +14,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -22,8 +21,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { HomeIcon } from "@/components/heroicons";
 import { Squares2x2Icon } from "@/components/heroicons";
 import { ClipboardDocumentIcon } from "@/components/heroicons";
@@ -31,8 +33,7 @@ import { SparklesIcon } from "@/components/heroicons";
 import { UserIcon } from "@/components/heroicons";
 import { DocumentDuplicateIcon } from "@/components/heroicons";
 import { ArrowRightOnRectangleIcon } from "@/components/heroicons";
-import { ChevronDownIcon, CpuChipIcon } from "@/components/heroicons";
-import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const items = [
   {
@@ -69,10 +70,13 @@ const items = [
 
 export function SideNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { state, toggleSidebar } = useSidebar();
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "admin";
-  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const { user, isAdmin } = useAuth();
+
+  const displayName = user?.name || user?.username || "Account";
+
+  const handleLogout = () => signOut({ callbackUrl: "/login" });
 
   const handleSidebarClick = (e: React.MouseEvent) => {
     // Only expand if collapsed and not clicking on a link or trigger
@@ -173,76 +177,53 @@ export function SideNav() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <DropdownMenu
-                    open={adminMenuOpen}
-                    onOpenChange={setAdminMenuOpen}
-                  >
-                    <DropdownMenuTrigger asChild>
-                      <SidebarMenuButton
-                        isActive={
-                          pathname === "/admin" ||
-                          pathname.startsWith("/admin/")
-                        }
-                        tooltip="Admin Panel"
-                        className="w-full"
-                      >
-                        <UserIcon className="w-4 h-4" />
-                        <span>Admin</span>
-                        <ChevronDownIcon className="w-3 h-3 ml-auto" />
-                      </SidebarMenuButton>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      side="right"
-                      align="start"
-                      className="w-48"
-                      sideOffset={8}
+              <SidebarMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={pathname === "/profile"}
+                      tooltip={displayName}
+                      className="justify-start"
                     >
-                      <DropdownMenuItem asChild>
-                        <Link
-                          href="/admin"
-                          className="flex items-center w-full"
-                          onClick={() => setAdminMenuOpen(false)}
-                        >
-                          <CpuChipIcon className="w-4 h-4 mr-2" />
-                          AI Provider Administration
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link
-                          href="/admin/users"
-                          className="flex items-center w-full"
-                          onClick={() => setAdminMenuOpen(false)}
-                        >
-                          <UserIcon className="w-4 h-4 mr-2" />
-                          Manage Users
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </SidebarMenuItem>
-              )}
-              <SidebarMenuItem>
-                <Link href="/profile" className="block w-full">
-                  <SidebarMenuButton
-                    isActive={pathname === "/profile"}
-                    tooltip="Profile"
+                      <UserIcon className="w-4 h-4" />
+                      {state === "expanded" && (
+                        <div className="ml-2 flex-1 min-w-0">
+                          <span className="text-sm font-medium text-slate-900 block truncate max-w-[120px]">
+                            {displayName}
+                          </span>
+                        </div>
+                      )}
+                    </SidebarMenuButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    side="right"
+                    className="w-48"
                   >
-                    <UserIcon className="w-4 h-4" />
-                    <span>Profile</span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => signOut({ callbackUrl: "/login" })}
-                  tooltip="Sign Out"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <ArrowRightOnRectangleIcon className="w-4 h-4" />
-                  <span>Sign Out</span>
-                </SidebarMenuButton>
+                    <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push("/profile")}>
+                      Profile
+                    </DropdownMenuItem>
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/users")}
+                        >
+                          User Management
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push("/admin")}>
+                          AI Providers
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout}>
+                      <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
