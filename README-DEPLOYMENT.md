@@ -193,16 +193,31 @@ If customers use their own AI services:
    AUTH_SYSTEM_ENABLED=true
    ```
 
-3. **Rollout toggle**: Set `AUTH_SYSTEM_ENABLED=false` to temporarily disable authentication if you hit issues during cutover.
+2. **Rollout toggle**: Set `AUTH_SYSTEM_ENABLED=false` to temporarily disable authentication if you hit issues during cutover.
 
-4. **Seed default admin** after running migrations:
+3. **Seed default admin and backfill ownership** after running migrations:
 
    ```bash
    npm run migrate
    npm run seed-admin
+   node scripts/backfill-user-ownership.js
    ```
 
-   Credentials come from the `ADMIN_*` environment variables above. Rotate the password after first login.
+   Credentials come from the `ADMIN_*` environment variables above. Rotate the password after first login. The backfill script assigns any legacy insights, dashboards, or funnels without a `userId` to the first admin user (or the username specified via `BACKFILL_OWNER_USERNAME`). Re-run the script after any manual data imports to keep ownership consistent.
+
+4. **Clean up duplicate dashboards** (optional but recommended):
+
+   ```bash
+   # Preview what will be deleted
+   node scripts/cleanup-duplicate-dashboards.js --dry-run
+
+   # Apply the cleanup
+   node scripts/cleanup-duplicate-dashboards.js
+   ```
+
+   This script removes duplicate "default" dashboards per user, keeping only the oldest one. This prevents inconsistent behavior when loading dashboards.
+
+5. **Rollback safety**: user ownership columns remain nullable by design. If issues arise, you can temporarily disable auth middleware and re-run the backfill once fixed—no schema rollback required.
 
 ### AI Service Configuration
 

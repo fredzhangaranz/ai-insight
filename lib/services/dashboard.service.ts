@@ -39,15 +39,18 @@ type DashboardOwner = {
 function normalizeDashboardRow(row: any): DashboardRecord {
   return {
     ...row,
-    layout: typeof row.layout === "string" ? JSON.parse(row.layout) : row.layout,
-    panels: typeof row.panels === "string" ? JSON.parse(row.panels) : row.panels,
+    layout:
+      typeof row.layout === "string" ? JSON.parse(row.layout) : row.layout,
+    panels:
+      typeof row.panels === "string" ? JSON.parse(row.panels) : row.panels,
   };
 }
 
 export class DashboardService {
   private static instance: DashboardService;
   static getInstance(): DashboardService {
-    if (!DashboardService.instance) DashboardService.instance = new DashboardService();
+    if (!DashboardService.instance)
+      DashboardService.instance = new DashboardService();
     return DashboardService.instance;
   }
 
@@ -55,7 +58,11 @@ export class DashboardService {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const existing = await pool.query(
-      `SELECT id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt" FROM "Dashboards" WHERE name = $1 AND "userId" = $2 LIMIT 1`,
+      `SELECT id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt" 
+       FROM "Dashboards" 
+       WHERE name = $1 AND "userId" = $2 
+       ORDER BY "createdAt" ASC 
+       LIMIT 1`,
       ["default", owner.id]
     );
     if (existing.rows[0]) return normalizeDashboardRow(existing.rows[0]);
@@ -97,11 +104,16 @@ export class DashboardService {
     if (!insight) {
       throw new Error("InsightNotFound");
     }
-    const next = { ...current, panels: { ...current.panels, panels: [...current.panels.panels] } } as any;
+    const next = {
+      ...current,
+      panels: { ...current.panels, panels: [...current.panels.panels] },
+    } as any;
     const panel = next.panels.panels.find((p: any) => p.id === panelId);
     if (!panel) throw new Error("PanelNotFound");
     panel.insightId = insightId;
-    const updated = await this.update(current.id, owner, { panels: next.panels });
+    const updated = await this.update(current.id, owner, {
+      panels: next.panels,
+    });
     if (!updated) {
       throw new Error("DashboardNotFound");
     }
@@ -143,7 +155,10 @@ export class DashboardService {
     return normalizeDashboardRow(res.rows[0]);
   }
 
-  async get(id: number, owner: DashboardOwner): Promise<DashboardRecord | null> {
+  async get(
+    id: number,
+    owner: DashboardOwner
+  ): Promise<DashboardRecord | null> {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const res = await pool.query(

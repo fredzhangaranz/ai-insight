@@ -927,13 +927,11 @@
 - Verify createdBy mapping works correctly
 - Test rollback: can revert to nullable userId without data loss
 
-**Status:** pending
+**Status:** in_progress
 
 **Tasks:**
 
-- [ ] Choose migration strategy (based on existing data):
-
-**Option A:** Assign all orphaned data to admin user:
+- [x] Choose migration strategy (Option A — assign all orphaned data to admin user):
 
 ```sql
 UPDATE "SavedInsights"
@@ -957,16 +955,16 @@ INSERT INTO "Users" (username, email, "passwordHash", "fullName", role, "isActiv
 VALUES ('legacy', 'legacy@system', 'disabled', 'Legacy Data Owner', 'standard_user', FALSE);
 ```
 
-- [ ] Create migration script `scripts/backfill-user-ownership.js`:
+- [x] Create migration script `scripts/backfill-user-ownership.js`:
 
   - Implement chosen strategy
   - Log how many records updated per table
   - Verify no NULL userId remain
   - Idempotent: safe to run multiple times
 
-- [ ] Add to deployment checklist: run backfill script after migrations
+- [x] Add to deployment checklist: run backfill script after migrations
 
-- [ ] Document rollback: keep userId nullable until backfill verified successful
+- [x] Document rollback: keep userId nullable until backfill verified successful
 
 - [ ] Test on staging environment before production
 
