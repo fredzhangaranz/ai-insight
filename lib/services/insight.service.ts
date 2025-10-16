@@ -21,6 +21,7 @@ export interface SavedInsight {
   tags?: string[] | null;
   isActive: boolean;
   createdBy?: string | null;
+  userId: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,6 +41,11 @@ export interface CreateInsightInput {
 }
 
 export interface UpdateInsightInput extends Partial<CreateInsightInput> {}
+
+type InsightOwner = {
+  id: number;
+  username?: string | null;
+};
 
 function ensureApiEnabled() {
   if (process.env.CHART_INSIGHTS_API_ENABLED !== "true") {
@@ -118,12 +124,13 @@ export class InsightService {
     formId?: string;
     search?: string;
     activeOnly?: boolean;
+    userId: number;
   }): Promise<SavedInsight[]> {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
-    const conds: string[] = [];
-    const values: any[] = [];
-    let i = 1;
+    const conds: string[] = ['"userId" = $1'];
+    const values: any[] = [params.userId];
+    let i = 2;
     if (params.activeOnly !== false) conds.push(`"isActive" = TRUE`);
     if (params.scope) {
       conds.push(`scope = $${i++}`);
@@ -139,29 +146,39 @@ export class InsightService {
       i++;
     }
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
-    const sql = `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" ${where} ORDER BY "updatedAt" DESC LIMIT 100`;
+    const sql = `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt" FROM "SavedInsights" ${where} ORDER BY "updatedAt" DESC LIMIT 100`;
     const res = await pool.query(sql, values);
     return res.rows as any;
   }
 
-  async getById(id: number): Promise<SavedInsight | null> {
+  async getById(id: number, ownerId?: number): Promise<SavedInsight | null> {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
+    const values: any[] = [id];
+    let where = `id = $1`;
+    if (typeof ownerId === "number") {
+      values.push(ownerId);
+      where += ` AND "userId" = $2`;
+    }
     const res = await pool.query(
-      `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt" FROM "SavedInsights" WHERE id = $1`,
-      [id]
+      `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt" FROM "SavedInsights" WHERE ${where}`,
+      values
     );
     return res.rows[0] || null;
   }
 
-  async create(input: CreateInsightInput): Promise<SavedInsight> {
+  async create(
+    input: CreateInsightInput,
+    owner: InsightOwner
+  ): Promise<SavedInsight> {
     ensureApiEnabled();
     validateCreate(input);
     const pool = await getInsightGenDbPool();
+    const createdBy = input.createdBy ?? owner.username ?? null;
     const res = await pool.query(
-      `INSERT INTO "SavedInsights" (name, question, scope, "assessmentFormVersionFk", sql, "chartType", "chartMapping", "chartOptions", description, tags, "createdBy")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
+      `INSERT INTO "SavedInsights" (name, question, scope, "assessmentFormVersionFk", sql, "chartType", "chartMapping", "chartOptions", description, tags, "createdBy", "userId")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt"`,
       [
         input.name,
         input.question,
@@ -175,7 +192,8 @@ export class InsightService {
         input.chartOptions ? JSON.stringify(input.chartOptions) : null,
         input.description || null,
         input.tags ? JSON.stringify(input.tags) : null,
-        input.createdBy || null,
+        createdBy,
+        owner.id,
       ]
     );
     return res.rows[0] as any;
@@ -183,7 +201,8 @@ export class InsightService {
 
   async update(
     id: number,
-    input: UpdateInsightInput
+    input: UpdateInsightInput,
+    owner: InsightOwner
   ): Promise<SavedInsight | null> {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
@@ -237,36 +256,40 @@ export class InsightService {
       fields.push(`tags = $${i++}`);
       values.push(input.tags ? JSON.stringify(input.tags) : null);
     }
-    if (input.createdBy !== undefined) {
-      fields.push(`"createdBy" = $${i++}`);
-      values.push(input.createdBy);
+    if (fields.length === 0) {
+      return await this.getById(id, owner.id);
     }
-    if (!fields.length) return await this.getById(id);
+    fields.push(`"updatedAt" = NOW()`);
     values.push(id);
+    values.push(owner.id);
     const res = await pool.query(
       `UPDATE "SavedInsights" SET ${fields.join(
         ", "
-      )} WHERE id = $${i} RETURNING id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "createdAt", "updatedAt"`,
+      )} WHERE id = $${i} AND "userId" = $${i + 1} RETURNING id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt"`,
       values
     );
     return res.rows[0] || null;
   }
 
-  async softDelete(id: number): Promise<void> {
+  async softDelete(id: number, ownerId: number): Promise<boolean> {
     ensureApiEnabled();
     const pool = await getInsightGenDbPool();
-    await pool.query(
-      `UPDATE "SavedInsights" SET "isActive" = FALSE WHERE id = $1`,
-      [id]
+    const res = await pool.query(
+      `UPDATE "SavedInsights" SET "isActive" = FALSE WHERE id = $1 AND "userId" = $2`,
+      [id, ownerId]
     );
+    return res.rowCount > 0;
   }
 
-  async execute(id: number): Promise<{
+  async execute(
+    id: number,
+    ownerId: number
+  ): Promise<{
     rows: any[];
     chart: { chartType: ChartType; data: any };
   } | null> {
     ensureApiEnabled();
-    const insight = await this.getById(id);
+    const insight = await this.getById(id, ownerId);
     if (!insight || !insight.isActive) return null;
     const sqlText = validateAndFixQuery(insight.sql);
     const pool = await getSilhouetteDbPool();

@@ -6,32 +6,25 @@ import type { LineChartDataPoint } from "@/lib/chart-contracts";
 import { vi } from "vitest";
 
 // Mock the ResponsiveContainer since it doesn't work well in tests
-vi.mock("recharts", () => {
-  const OriginalModule = vi.importActual("recharts");
+vi.mock("recharts", async () => {
+  const actual = await vi.importActual<typeof import("recharts")>("recharts");
+
+  const stub = (testId: string) =>
+    function Stub({ children }: { children?: React.ReactNode }) {
+      return <div data-testid={testId}>{children}</div>;
+    };
+
   return {
-    ...OriginalModule,
-    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-      <div>{children}</div>
-    ),
-    LineChart: ({ children, ...props }: any) => (
-      <div data-testid="recharts-line-chart" {...props}>
-        {children}
-      </div>
-    ),
-    Line: ({ ...props }: any) => <div data-testid="recharts-line" {...props} />,
-    XAxis: ({ ...props }: any) => (
-      <div data-testid="recharts-x-axis" {...props} />
-    ),
-    YAxis: ({ ...props }: any) => (
-      <div data-testid="recharts-y-axis" {...props} />
-    ),
-    CartesianGrid: ({ ...props }: any) => (
-      <div data-testid="recharts-cartesian-grid" {...props} />
-    ),
-    Tooltip: ({ ...props }: any) => (
-      <div data-testid="recharts-tooltip" {...props} />
-    ),
-    Area: ({ ...props }: any) => <div data-testid="recharts-area" {...props} />,
+    ...actual,
+    ResponsiveContainer: stub("recharts-responsive-container"),
+    LineChart: stub("recharts-line-chart"),
+    Line: stub("recharts-line"),
+    XAxis: stub("recharts-x-axis"),
+    YAxis: stub("recharts-y-axis"),
+    CartesianGrid: stub("recharts-cartesian-grid"),
+    Tooltip: stub("recharts-tooltip"),
+    Legend: stub("recharts-legend"),
+    Area: stub("recharts-area"),
   };
 });
 

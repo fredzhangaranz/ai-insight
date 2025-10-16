@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as sql from "mssql";
 import { getSilhouetteDbPool } from "@/lib/db";
 import { markTemplateUsageOutcome } from "@/lib/services/template-usage.service";
+import { requireAuth } from "@/lib/middleware/auth-middleware";
 import {
   withErrorHandling,
   createErrorResponse,
@@ -56,9 +57,21 @@ function validateAndFixQuery(sql: string): string {
   return sql;
 }
 
+function parseSessionUserId(userId: string): number | null {
+  const parsed = Number.parseInt(userId, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 async function executeQueryHandler(
   request: NextRequest
 ): Promise<NextResponse> {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const userId = parseSessionUserId(authResult.user.id);
+  if (userId === null) {
+    return createErrorResponse.badRequest("Invalid user id in session");
+  }
   // 1. Read and validate the request body
   const body = await request.json();
   // Now accepts the query template, an optional parameters object, optional subQuestionId, and templateUsage tracking id
@@ -145,7 +158,7 @@ async function executeQueryHandler(
       const { updateSubQuestionStatus } = await import(
         "@/lib/services/funnel-storage.service"
       );
-      await updateSubQuestionStatus(Number(subQuestionId), "completed");
+      await updateSubQuestionStatus(Number(subQuestionId), "completed", userId);
       console.log(`Updated sub-question ${subQuestionId} status to completed`);
     } catch (statusUpdateError) {
       console.error("Failed to update sub-question status:", statusUpdateError);

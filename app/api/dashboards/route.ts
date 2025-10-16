@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandling, createErrorResponse } from "@/app/api/error-handler";
 import { requireAuth } from "@/lib/middleware/auth-middleware";
-import { insightService } from "@/lib/services/insight.service";
+import { dashboardService } from "@/lib/services/dashboard.service";
 
 function parseSessionUserId(userId: string): number | null {
   const parsed = Number.parseInt(userId, 10);
@@ -9,9 +9,6 @@ function parseSessionUserId(userId: string): number | null {
 }
 
 export const GET = withErrorHandling(async (req: NextRequest) => {
-  if (process.env.CHART_INSIGHTS_API_ENABLED !== "true") {
-    return createErrorResponse.forbidden("Chart Insights API is disabled");
-  }
   const authResult = await requireAuth(req);
   if (authResult instanceof NextResponse) return authResult;
 
@@ -19,24 +16,16 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   if (userId === null) {
     return createErrorResponse.badRequest("Invalid user id in session");
   }
-  const { searchParams } = new URL(req.url);
-  const scope = searchParams.get("scope") as any;
-  const formId = searchParams.get("formId") || undefined;
-  const search = searchParams.get("search") || undefined;
-  const list = await insightService.list({
-    scope,
-    formId,
-    search,
-    activeOnly: true,
-    userId,
+
+  const dashboards = await dashboardService.list({
+    id: userId,
+    username: authResult.user.username || authResult.user.name || null,
   });
-  return NextResponse.json({ items: list });
+
+  return NextResponse.json({ dashboards });
 });
 
 export const POST = withErrorHandling(async (req: NextRequest) => {
-  if (process.env.CHART_INSIGHTS_API_ENABLED !== "true") {
-    return createErrorResponse.forbidden("Chart Insights API is disabled");
-  }
   const authResult = await requireAuth(req);
   if (authResult instanceof NextResponse) return authResult;
 
@@ -46,12 +35,19 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   }
 
   const body = await req.json();
-  const created = await insightService.create(
+  const { name, layout, panels } = body ?? {};
+
+  if (!name || typeof name !== "string") {
+    return createErrorResponse.badRequest("name is required");
+  }
+
+  const dashboard = await dashboardService.create(
     {
-      ...body,
-      createdBy: authResult.user.username || authResult.user.name || body?.createdBy,
+      id: userId,
+      username: authResult.user.username || authResult.user.name || null,
     },
-    { id: userId, username: authResult.user.username || authResult.user.name }
+    { name, layout, panels }
   );
-  return NextResponse.json(created, { status: 201 });
+
+  return NextResponse.json(dashboard, { status: 201 });
 });

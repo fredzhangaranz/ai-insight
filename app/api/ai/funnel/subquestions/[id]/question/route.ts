@@ -1,46 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withErrorHandling, createErrorResponse } from "@/app/api/error-handler";
+import { requireAuth } from "@/lib/middleware/auth-middleware";
 import { updateSubQuestionText } from "@/lib/services/funnel-storage.service";
 
+function parseSessionUserId(userId: string): number | null {
+  const parsed = Number.parseInt(userId, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 // PUT /api/ai/funnel/subquestions/[id]/question - Update sub-question text
-export async function PUT(
+export const PUT = withErrorHandling(async (
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
-  try {
-    const subQuestionId = parseInt(params.id);
-    if (isNaN(subQuestionId)) {
-      return NextResponse.json(
-        { error: "Invalid sub-question ID" },
-        { status: 400 }
-      );
-    }
+) => {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
 
-    const body = await request.json();
-    const { questionText } = body;
+  const subQuestionId = Number.parseInt(params.id, 10);
+  if (Number.isNaN(subQuestionId)) {
+    return createErrorResponse.badRequest("Invalid sub-question ID");
+  }
 
-    if (!questionText || typeof questionText !== "string") {
-      return NextResponse.json(
-        { error: "questionText is required and must be a string" },
-        { status: 400 }
-      );
-    }
+  const body = await request.json();
+  const { questionText } = body;
 
-    console.log(
-      `Updating sub-question ${subQuestionId} with new text:`,
-      questionText
-    );
-
-    await updateSubQuestionText(subQuestionId, questionText);
-
-    return NextResponse.json({
-      success: true,
-      message: "Sub-question updated successfully",
-    });
-  } catch (err: any) {
-    console.error("Sub-question update error:", err);
-    return NextResponse.json(
-      { error: err.message || "Failed to update sub-question" },
-      { status: 500 }
+  if (!questionText || typeof questionText !== "string") {
+    return createErrorResponse.badRequest(
+      "questionText is required and must be a string"
     );
   }
-}
+
+  const userId = parseSessionUserId(authResult.user.id);
+  if (userId === null) {
+    return createErrorResponse.badRequest("Invalid user id in session");
+  }
+
+  await updateSubQuestionText(subQuestionId, questionText, userId);
+
+  return NextResponse.json({
+    success: true,
+    message: "Sub-question updated successfully",
+  });
+});

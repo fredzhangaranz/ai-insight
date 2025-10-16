@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
+import { requireAdmin } from "@/lib/middleware/auth-middleware";
 import {
   deprecateTemplate,
   TemplateServiceError,
@@ -12,12 +13,15 @@ function parseTemplateId(id: string): number | null {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   if (!isTemplateSystemEnabled()) {
     return NextResponse.json({ message: "Not Found" }, { status: 404 });
   }
+
+  const authResult = await requireAdmin(req);
+  if (authResult instanceof NextResponse) return authResult;
 
   const templateId = parseTemplateId(params.id);
   if (templateId === null) {

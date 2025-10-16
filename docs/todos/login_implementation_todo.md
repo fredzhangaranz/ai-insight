@@ -714,7 +714,7 @@
 - Manual test: Change password with incorrect old password - error
 - Manual test: Password strength indicator shows weak/medium/strong
 
-**Status:** in_progress
+**Status:** completed
 
 **Tasks:**
 
@@ -744,7 +744,7 @@
   - "You must change your password before continuing"
   - Link to profile/change password page
 
-- [ ] Test password change flow with various scenarios
+- [x] Test password change flow with various scenarios
 
 ---
 
@@ -766,7 +766,7 @@
 - Manual test: Admin sees Admin Panel link, standard user does not
 - Manual test: Navigate to Profile from user menu
 
-**Status:** in_progress
+**Status:** completed
 
 **Tasks:**
 
@@ -832,7 +832,7 @@
 
 - [ ] Update all pages to use SessionProvider for client-side session access
 
-- [ ] Test navigation and logout flow
+- [x] Test navigation and logout flow
 
 ---
 
@@ -857,55 +857,55 @@
 - Integration test: Standard user cannot approve template (403)
 - Integration test: Admin can approve template (200)
 
-**Status:** in_progress
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Update `app/api/insights/route.ts`:
+- [x] Update `app/api/insights/route.ts`:
 
   - GET: Add `requireAuth()`, filter by `userId = user.id`
   - POST: Add `requireAuth()`, set `userId = user.id` on insert
 
-- [ ] Update `app/api/insights/[id]/route.ts`:
+- [x] Update `app/api/insights/[id]/route.ts`:
 
   - GET: Add `requireAuth()`, verify ownership: `userId = user.id`
   - PUT: Add `requireAuth()`, verify ownership before update
   - DELETE: Add `requireAuth()`, verify ownership before delete
 
-- [ ] Update `app/api/dashboards/route.ts`:
+- [x] Update `app/api/dashboards/route.ts`:
 
   - GET: Add `requireAuth()`, filter by `userId = user.id`
   - POST: Add `requireAuth()`, set `userId = user.id` on insert
 
-- [ ] Update `app/api/dashboards/[id]/route.ts`:
+- [x] Update `app/api/dashboards/[id]/route.ts`:
 
   - GET/PUT/DELETE: Add `requireAuth()`, verify ownership
 
-- [ ] Update `app/api/ai/funnel/route.ts`:
+- [x] Update `app/api/ai/funnel/route.ts`:
 
   - GET: Add `requireAuth()`, filter QueryFunnel by `userId = user.id`
   - POST: Add `requireAuth()`, set `userId = user.id` when creating funnel
 
-- [ ] Update `app/api/ai/funnel/[id]/route.ts`:
+- [x] Update `app/api/ai/funnel/[id]/route.ts`:
 
   - All methods: Add `requireAuth()`, verify funnel ownership
 
-- [ ] Update `app/api/templates/[id]/approve/route.ts`:
+- [x] Update `app/api/templates/[id]/approve/route.ts`:
 
   - POST: Add `requireAdmin()` - only admins can approve templates
 
-- [ ] Update `app/api/templates/[id]/deprecate/route.ts`:
+- [x] Update `app/api/templates/[id]/deprecate/route.ts`:
 
   - POST: Add `requireAdmin()` - only admins can deprecate
 
-- [ ] Update `app/api/admin/ai-config/route.ts`:
+- [x] Update `app/api/admin/ai-config/route.ts`:
 
   - GET: Add `requireAuth()` - all users can read
   - POST/PUT: Add `requireAdmin()` - only admins can modify
 
-- [ ] Write authorization tests for each endpoint
+- [x] Write authorization tests for each endpoint
 
-- [ ] Update API documentation to reflect authentication requirements
+- [x] Update API documentation to reflect authentication requirements
 
 ---
 

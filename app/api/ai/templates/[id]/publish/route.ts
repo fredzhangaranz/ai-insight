@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
+import { requireAdmin } from "@/lib/middleware/auth-middleware";
 import {
   publishTemplate,
   TemplateServiceError,
@@ -13,7 +14,7 @@ function parseTemplateId(id: string): number | null {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   if (!isTemplateSystemEnabled()) {
@@ -24,6 +25,9 @@ export async function POST(
   if (templateId === null) {
     return NextResponse.json({ message: "Invalid template id" }, { status: 400 });
   }
+
+  const authResult = await requireAdmin(req);
+  if (authResult instanceof NextResponse) return authResult;
 
   try {
     const result = await publishTemplate(templateId);

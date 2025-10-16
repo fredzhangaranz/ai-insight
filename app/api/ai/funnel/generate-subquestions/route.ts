@@ -4,10 +4,19 @@ import {
   withErrorHandling,
   createErrorResponse,
 } from "@/app/api/error-handler";
+import { requireAuth } from "@/lib/middleware/auth-middleware";
+
+function parseSessionUserId(userId: string): number | null {
+  const parsed = Number.parseInt(userId, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
 async function generateSubQuestionsHandler(
   request: NextRequest
 ): Promise<NextResponse> {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+
   const body = await request.json();
   const {
     originalQuestion,
@@ -43,6 +52,10 @@ async function generateSubQuestionsHandler(
   }
 
   try {
+    const userId = parseSessionUserId(authResult.user.id);
+    if (userId === null) {
+      return createErrorResponse.badRequest("Invalid user id in session");
+    }
     console.log(
       `Getting or generating sub-questions for: "${originalQuestion}" using model ${modelId} (scope=${scope})`
     );
@@ -53,7 +66,11 @@ async function generateSubQuestionsHandler(
       formDefinition,
       databaseSchemaContext,
       modelId,
-      scope
+      scope,
+      {
+        id: userId,
+        username: authResult.user.username || authResult.user.name || null,
+      }
     );
 
     console.log(

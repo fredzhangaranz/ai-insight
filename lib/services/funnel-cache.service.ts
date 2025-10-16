@@ -23,8 +23,12 @@ export async function getOrGenerateSubQuestions(
   formDefinition?: any,
   databaseSchemaContext?: any,
   modelId: string = DEFAULT_AI_MODEL_ID,
-  scope: InsightScope = "form"
+  scope: InsightScope = "form",
+  owner?: { id: number; username?: string | null }
 ): Promise<CachedSubQuestionResult> {
+  if (!owner) {
+    throw new Error("User context is required to generate sub-questions");
+  }
   const cacheKey =
     scope === "schema"
       ? SCHEMA_SCOPE_SENTINEL
@@ -41,7 +45,11 @@ export async function getOrGenerateSubQuestions(
   // to store the modelId with the funnel, which is beyond the scope of this refactor.
 
   // First, check if we already have a funnel with this exact question
-  const existingFunnel = await findFunnelByQuestion(cacheKey, originalQuestion);
+  const existingFunnel = await findFunnelByQuestion(
+    cacheKey,
+    originalQuestion,
+    owner.id
+  );
 
   if (existingFunnel) {
     console.log(
@@ -49,7 +57,10 @@ export async function getOrGenerateSubQuestions(
     );
 
     // Get the cached sub-questions
-    const cachedSubQuestions = await getSubQuestions(Number(existingFunnel.id));
+    const cachedSubQuestions = await getSubQuestions(
+      Number(existingFunnel.id),
+      owner.id
+    );
 
     // Transform database records to frontend SubQuestion format
     const transformedSubQuestions: SubQuestion[] = cachedSubQuestions.map(
@@ -94,6 +105,8 @@ export async function getOrGenerateSubQuestions(
   const newFunnel = await createFunnel({
     assessmentFormVersionFk: cacheKey,
     originalQuestion,
+    userId: owner.id,
+    createdBy: owner.username ?? null,
   });
 
   // Transform AI response to database format
@@ -106,7 +119,8 @@ export async function getOrGenerateSubQuestions(
   // Store the generated sub-questions
   const storedSubQuestions = await addSubQuestions(
     Number(newFunnel.id),
-    subQuestionsToStore
+    subQuestionsToStore,
+    owner.id
   );
 
   console.log(

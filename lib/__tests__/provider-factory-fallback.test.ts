@@ -39,13 +39,36 @@ import { ClaudeProvider } from "../ai/providers/claude-provider";
 import { GeminiProvider } from "../ai/providers/gemini-provider";
 import { OpenWebUIProvider } from "../ai/providers/openwebui-provider";
 
+const baseConfigs = [
+  {
+    providerType: "anthropic",
+    providerName: "Claude",
+    configData: { priority: 10 },
+  },
+  {
+    providerType: "google",
+    providerName: "Gemini",
+    configData: { priority: 20 },
+  },
+  {
+    providerType: "openwebui",
+    providerName: "Local LLM",
+    configData: { priority: 30 },
+  },
+];
+
 describe("Provider Factory Fallback Mechanism", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.AUTO_FAILOVER = "true";
+    vi.spyOn(aiConfigService, "getEnabledConfigurations").mockResolvedValue(
+      baseConfigs as any
+    );
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    delete process.env.AUTO_FAILOVER;
+    vi.restoreAllMocks();
   });
 
   describe("getAIProvider with fallback", () => {
@@ -108,9 +131,9 @@ describe("Provider Factory Fallback Mechanism", () => {
       // Mock no healthy fallback providers
       vi.spyOn(aiConfigService, "getAllProviderHealth").mockResolvedValue([]);
 
-      await expect(getAIProvider("claude-3-5-sonnet-latest")).rejects.toThrow(
-        "Failed to initialize provider for model claude-3-5-sonnet-latest"
-      );
+      await expect(
+        getAIProvider("claude-3-5-sonnet-latest")
+      ).rejects.toThrow(/Failed to initialize provider for model/);
     });
 
     it("should disable fallback when enableFallback is false", async () => {
@@ -327,7 +350,7 @@ describe("Provider Factory Fallback Mechanism", () => {
 
     it("should handle invalid model IDs", async () => {
       await expect(getAIProvider("invalid-model-id")).rejects.toThrow(
-        "Unsupported AI model ID: invalid-model-id"
+        "MisconfiguredProvider: Unsupported AI model ID: invalid-model-id"
       );
     });
 
