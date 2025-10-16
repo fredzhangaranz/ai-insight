@@ -41,8 +41,31 @@ export const POST = withErrorHandling(async (req: NextRequest, context: RouteCon
     return createErrorResponse.badRequest("Authenticated admin id is invalid.");
   }
 
-  const tempPassword = generateTemporaryPassword();
-  const success = await UserService.resetPassword(userId, tempPassword, performedBy);
+  let requestedPassword: string | undefined;
+  if (req.headers.get("content-type")?.includes("application/json")) {
+    try {
+      const body = await req.json();
+      if (typeof body?.password === "string") {
+        requestedPassword = body.password;
+      }
+    } catch (error) {
+      return createErrorResponse.badRequest("Request body must be valid JSON.");
+    }
+  }
+
+  if (requestedPassword && requestedPassword.length < 8) {
+    return createErrorResponse.badRequest(
+      "Temporary password must be at least 8 characters."
+    );
+  }
+
+  const passwordToApply = requestedPassword || generateTemporaryPassword();
+
+  const success = await UserService.resetPassword(
+    userId,
+    passwordToApply,
+    performedBy
+  );
 
   if (!success) {
     return createErrorResponse.notFound("User not found.");
@@ -50,6 +73,6 @@ export const POST = withErrorHandling(async (req: NextRequest, context: RouteCon
 
   return NextResponse.json({
     userId,
-    temporaryPassword: tempPassword,
+    temporaryPassword: passwordToApply,
   });
 });

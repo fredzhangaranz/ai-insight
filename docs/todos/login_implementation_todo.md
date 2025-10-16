@@ -624,7 +624,7 @@
 
 - [x] Style with Tailwind matching existing app design
 
-- [ ] Test all login scenarios manually
+- [x] Test all login scenarios manually
 
 ---
 
@@ -649,18 +649,18 @@
 - Manual test: Deactivate user, verify they cannot login
 - Manual test: Login as standard user, verify /admin/users redirects or shows 403
 
-**Status:** pending
+**Status:** completed
 
 **Tasks:**
 
-- [ ] Create `lib/components/auth/ProtectedRoute.tsx`:
+- [x] Create `lib/components/auth/ProtectedRoute.tsx`:
 
   - Client-side guard that wraps children and optionally enforces admin role (`requireAdmin`)
   - Redirect unauthenticated users to `/login` and unauthorized users to `/unauthorized`
   - Show loading state while session status is pending
   - Reuse this wrapper across admin-only and sensitive client routes
 
-- [ ] Create `app/admin/users/page.tsx`:
+- [x] Create `app/admin/users/page.tsx`:
 
   - Protected with requireAdmin (use ProtectedRoute HOC or server-side check)
   - Fetch users via GET /api/admin/users
@@ -669,7 +669,7 @@
   - "Create User" button opens dialog/modal
   - Search/filter by username or role
 
-- [ ] Create `components/admin/CreateUserDialog.tsx`:
+- [x] Create `components/admin/CreateUserDialog.tsx`:
 
   - Modal form with fields: username, email, fullName, role (dropdown), initial password
   - Validation: username >= 3 chars, valid email, password requirements
@@ -677,20 +677,20 @@
   - Success: Close dialog, refresh user list
   - Shows "User will be required to change password on first login"
 
-- [ ] Create `components/admin/ResetPasswordDialog.tsx`:
+- [x] Create `components/admin/ResetPasswordDialog.tsx`:
 
   - Modal form with single field: new temporary password
   - Submit: POST /api/admin/users/[id]/reset-password
   - Success: Show confirmation, close dialog
   - Display temporary password for admin to share securely
 
-- [ ] Create `components/admin/UserAuditLogDialog.tsx`:
+- [x] Create `components/admin/UserAuditLogDialog.tsx`:
 
   - Modal showing timeline of user actions: created, password reset, role changed, deactivated
   - Fetch: GET /api/admin/users/[id]/audit-log
   - Display: timestamp, action, performed by (username)
 
-- [ ] Add admin panel link to navigation (conditional on user.role === 'admin')
+- [x] Add admin panel link to navigation (conditional on user.role === 'admin')
 
 - [ ] Test all workflows manually as admin and standard user
 
