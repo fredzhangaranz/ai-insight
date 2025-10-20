@@ -1,112 +1,99 @@
-# Semantic Layer: API Specification
+# Semantic Layer: API Specification (v2.0)
 
-**Version:** 1.0  
-**Last Updated:** 2025-10-12  
-**Base URL:** `http://localhost:3005/api`
+**Version:** 2.0 (Revised Architecture)  
+**Last Updated:** 2025-10-20  
+**Base URL:** `https://{host}/api`
+
+> 🔄 **Major Update:** API surface updated for per-customer Silhouette demo databases, live discovery from `dbo` schema, and demo data generation directly into `dbo.*`.
 
 ---
 
 ## Table of Contents
 
-1. [Customer Management](#customer-management)
-2. [Semantic Layer Operations](#semantic-layer-operations)
-3. [Demo Data Management](#demo-data-management)
-4. [Schema Version Management](#schema-version-management)
-5. [Error Responses](#error-responses)
+1. [Customer Management](#customer-management)  
+   1.1 [Create Customer](#create-customer)  
+   1.2 [List Customers](#list-customers)  
+   1.3 [Get Customer Details](#get-customer-details)  
+   1.4 [Update Customer Metadata](#update-customer-metadata)  
+   1.5 [Deactivate Customer](#deactivate-customer)  
+   1.6 [Test Connection](#test-connection)
+2. [Discovery & Semantic Index](#discovery--semantic-index)  
+   2.1 [Run Discovery](#run-discovery)  
+   2.2 [List Discovery Runs](#list-discovery-runs)  
+   2.3 [Get Semantic Index](#get-semantic-index)  
+   2.4 [Update Field Review Status](#update-field-review-status)
+3. [Context & SQL Operations](#context--sql-operations)  
+   3.1 [Discover Context](#discover-context)  
+   3.2 [Generate SQL (Template Resolution)](#generate-sql-template-resolution)  
+   3.3 [Validate SQL](#validate-sql)
+4. [Demo Data Management](#demo-data-management)  
+   4.1 [Generate Demo Data](#generate-demo-data)  
+   4.2 [Check Generation Status](#check-generation-status)  
+   4.3 [Reset Demo Data](#reset-demo-data)
+5. [Schema Version Management](#schema-version-management)
+6. [Error Responses](#error-responses)
+7. [Authentication & Rate Limiting](#authentication--rate-limiting)
+8. [Notes & Conventions](#notes--conventions)
 
 ---
 
-## Customer Management
+## 1. Customer Management
 
-### Import Customer Forms
+### Create Customer
 
-Import customer form configurations from Silhouette XML exports.
+Register a new customer by storing encrypted connection details and metadata. Replaces v1.0 XML import flow.
 
-**Endpoint:** `POST /api/customers/import-forms`
+**Endpoint:** `POST /api/customers`
 
-**Request:**
+**Request Body:**
 
 ```json
 {
-  "customerName": "St. Mary's Hospital",
-  "customerCode": "STMARYS",
+  "name": "St. Mary's Hospital",
+  "code": "STMARYS",
   "silhouetteVersion": "5.1",
   "deploymentType": "on_prem",
-  "xmlFiles": [
-    {
-      "filename": "wound-assessment-v3.xml",
-      "content": "<base64-encoded-xml>"
-    },
-    {
-      "filename": "treatment-log-v2.xml",
-      "content": "<base64-encoded-xml>"
-    }
-  ],
-  "generateSemantics": true,
-  "generateDemoData": false
+  "connectionString": "Server=demo-sql;Database=SilhouetteDemo;User Id=insightgen;Password=***;",
+  "silhouetteWebUrl": "https://silhouette.stmarys.local",
+  "notes": "Initial onboarding. Forms imported by IT on 2025-10-15."
 }
 ```
 
-**Response (202 Accepted):**
+**Response (201 Created):**
 
 ```json
 {
-  "customerId": "a7f3c8e2-4d5e-4f7a-8b9c-1d2e3f4a5b6c",
-  "customerCode": "STMARYS",
-  "status": "processing",
-  "message": "Import started",
-  "jobId": "import-job-12345",
-  "formsQueued": 2,
-  "estimatedTime": "2-5 minutes"
+  "id": "a7f3c8e2-4d5e-4f7a-8b9c-1d2e3f4a5b6c",
+  "name": "St. Mary's Hospital",
+  "code": "STMARYS",
+  "silhouetteVersion": "5.1",
+  "deploymentType": "on_prem",
+  "connectionStatus": "unknown",
+  "connectionLastVerifiedAt": null,
+  "lastDiscoveredAt": null,
+  "isActive": true,
+  "createdAt": "2025-10-20T10:30:00Z"
 }
 ```
 
-**Response (200 OK - when complete):**
+**Validation:**
 
-```json
-{
-  "customerId": "a7f3c8e2-4d5e-4f7a-8b9c-1d2e3f4a5b6c",
-  "customerCode": "STMARYS",
-  "status": "completed",
-  "formsImported": 2,
-  "fieldsTotal": 247,
-  "semanticsMapped": 212,
-  "semanticsConfidence": 0.89,
-  "forms": [
-    {
-      "formId": "uuid",
-      "formName": "Wound Assessment",
-      "fieldCount": 145,
-      "semanticsMapped": 132,
-      "averageConfidence": 0.91
-    },
-    {
-      "formId": "uuid",
-      "formName": "Treatment Log",
-      "fieldCount": 102,
-      "semanticsMapped": 80,
-      "averageConfidence": 0.86
-    }
-  ],
-  "warnings": [
-    "15 fields could not be mapped with high confidence (review recommended)"
-  ]
-}
-```
+- `code` must be uppercase alphanumeric; duplicates rejected (409).
+- `connectionString` encrypted at rest; never returned in responses.
 
 ---
 
 ### List Customers
 
-Retrieve all registered customers.
-
 **Endpoint:** `GET /api/customers`
 
 **Query Parameters:**
 
-- `active` (boolean, optional): Filter by active status
-- `version` (string, optional): Filter by Silhouette version
-- `includeStats` (boolean, default: false): Include form and query statistics
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| `active` | boolean | Filter by active status |
+| `version` | string | Filter by Silhouette version (`5.0`, `6.0`, etc.) |
+| `includeStats` | boolean (default `false`) | Include discovery / validation stats |
 
 **Response (200 OK):**
 
@@ -120,27 +107,19 @@ Retrieve all registered customers.
       "silhouetteVersion": "5.1",
       "deploymentType": "on_prem",
       "isActive": true,
-      "importedAt": "2024-10-01T10:30:00Z",
-      "lastUpdated": "2024-10-05T14:22:00Z",
-      "formCount": 12,
-      "queryCount": 47,
-      "demoDataGenerated": true
-    },
-    {
-      "id": "uuid",
-      "name": "Regional Health",
-      "code": "REGIONAL",
-      "silhouetteVersion": "5.0",
-      "deploymentType": "cloud",
-      "isActive": true,
-      "importedAt": "2024-09-15T09:00:00Z",
-      "lastUpdated": "2024-09-20T16:45:00Z",
-      "formCount": 8,
-      "queryCount": 23,
-      "demoDataGenerated": false
+      "connectionStatus": "ok",
+      "connectionLastVerifiedAt": "2025-10-20T11:05:00Z",
+      "lastDiscoveredAt": "2025-10-20T11:10:32Z",
+      "stats": {
+        "formsDiscovered": 14,
+        "fieldsDiscovered": 327,
+        "avgConfidence": 0.88,
+        "pendingReview": 12,
+        "lastDemoDataGeneratedAt": "2025-10-20T11:25:00Z",
+        "lastValidationPassRate": 0.96
+      }
     }
-  ],
-  "total": 2
+  ]
 }
 ```
 
@@ -148,13 +127,7 @@ Retrieve all registered customers.
 
 ### Get Customer Details
 
-Retrieve detailed information about a specific customer.
-
-**Endpoint:** `GET /api/customers/:code`
-
-**Path Parameters:**
-
-- `code` (string): Customer code (e.g., "STMARYS")
+**Endpoint:** `GET /api/customers/{code}`
 
 **Response (200 OK):**
 
@@ -165,330 +138,108 @@ Retrieve detailed information about a specific customer.
   "code": "STMARYS",
   "silhouetteVersion": "5.1",
   "deploymentType": "on_prem",
-  "region": "North America",
-  "isActive": true,
-  "importedAt": "2024-10-01T10:30:00Z",
-  "lastUpdated": "2024-10-05T14:22:00Z",
-  "schemaVerifiedAt": "2024-10-01T11:15:00Z",
-  "forms": [
-    {
-      "id": "uuid",
-      "name": "Wound Assessment",
-      "version": 3,
-      "fieldCount": 145,
-      "importedAt": "2024-10-01T10:35:00Z",
-      "semanticsMapped": true,
-      "semanticsConfidence": 0.91
-    },
-    {
-      "id": "uuid",
-      "name": "Treatment Log",
-      "version": 2,
-      "fieldCount": 102,
-      "importedAt": "2024-10-01T10:38:00Z",
-      "semanticsMapped": true,
-      "semanticsConfidence": 0.86
+  "silhouetteWebUrl": "https://silhouette.stmarys.local",
+  "connectionStatus": "ok",
+  "connectionLastVerifiedAt": "2025-10-20T11:05:00Z",
+  "lastDiscoveredAt": "2025-10-20T11:10:32Z",
+  "lastDemoDataGeneratedAt": "2025-10-20T11:25:00Z",
+  "notes": "Initial onboarding. Forms imported by IT on 2025-10-15."
+}
+```
+
+---
+
+### Update Customer Metadata
+
+Does not accept raw `connectionString` (use dedicated endpoint below).
+
+**Endpoint:** `PATCH /api/customers/{code}`
+
+**Request Body:**
+
+```json
+{
+  "silhouetteVersion": "5.2",
+  "silhouetteWebUrl": "https://silhouette-v52.stmarys.local",
+  "deploymentType": "on_prem",
+  "notes": "Customer upgraded to Silhouette 5.2 on 2025-11-01."
+}
+```
+
+**Response (200 OK):** Updated customer record.
+
+---
+
+### Deactivate Customer
+
+Soft delete; retains history but hides from standard lists.
+
+**Endpoint:** `DELETE /api/customers/{code}`
+
+**Response (204 No Content)**
+
+---
+
+### Test Connection
+
+Validates encrypted connection string by attempting to connect and checking basic schema existence.
+
+**Endpoint:** `POST /api/customers/{code}/test-connection`
+
+**Request Body (optional override):**
+
+```json
+{
+  "connectionString": "Server=...;Database=...;User Id=...;Password=...;"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "status": "ok",
+  "silhouetteVersionDetected": "5.1",
+  "verifiedAt": "2025-10-20T11:05:03Z",
+  "details": {
+    "dboTablesDetected": 128,
+    "rptTablesDetected": 94
+  }
+}
+```
+
+**Failure Response (503 Service Unavailable):**
+
+```json
+{
+  "status": "failed",
+  "error": {
+    "code": "CONNECTION_FAILED",
+    "message": "Login failed for user 'insightgen'.",
+    "details": {
+      "attemptedAt": "2025-10-20T11:05:03Z"
     }
-  ],
-  "demoData": {
-    "generated": true,
-    "generatedAt": "2024-10-01T12:00:00Z",
-    "patientCount": 100,
-    "woundCount": 187,
-    "assessmentCount": 1543
-  },
-  "queryHistory": {
-    "totalQueries": 47,
-    "validatedQueries": 42,
-    "successRate": 0.89
   }
 }
 ```
 
 ---
 
-### Get Customer Forms
+## 2. Discovery & Semantic Index
 
-Retrieve forms for a specific customer.
+### Run Discovery
 
-**Endpoint:** `GET /api/customers/:code/forms`
+Queries the customer’s `dbo` schema to discover forms (`AttributeSet`), fields (`AttributeType`), and options (`AttributeLookup`). Generates semantic mappings and stores them in the semantic index tables.
 
-**Query Parameters:**
+**Endpoint:** `POST /api/customers/{code}/discover`
 
-- `includeDefinition` (boolean, default: false): Include full form definition JSON
-- `includeSemantics` (boolean, default: false): Include semantic mappings
-
-**Response (200 OK):**
+**Request Body (optional settings):**
 
 ```json
 {
-  "customerCode": "STMARYS",
-  "forms": [
-    {
-      "id": "uuid",
-      "silhouetteFormId": "uuid",
-      "name": "Wound Assessment",
-      "version": 3,
-      "fieldCount": 145,
-      "fieldSummary": {
-        "Etiology": "SingleSelect",
-        "Exudate Amount": "SingleSelect",
-        "Tissue Type": "MultiSelect",
-        "Pain Level": "Numeric"
-      },
-      "importedAt": "2024-10-01T10:35:00Z",
-      "sourceFile": "wound-assessment-v3.xml"
-    }
-  ]
-}
-```
-
----
-
-## Semantic Layer Operations
-
-### Discover Context
-
-Perform agentic context discovery for a user question.
-
-**Endpoint:** `POST /api/semantic/discover-context`
-
-**Request:**
-
-```json
-{
-  "question": "What's the average healing rate for diabetic wounds over the last 6 months?",
-  "customerCode": "STMARYS",
-  "includeIntent": true,
-  "includeRelevantForms": true,
-  "includeTerminologyMapping": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "question": "What's the average healing rate for diabetic wounds over the last 6 months?",
-  "customerCode": "STMARYS",
-  "customerName": "St. Mary's Hospital",
-
-  "intent": {
-    "type": "outcome_analysis",
-    "scope": "patient_cohort",
-    "metrics": ["healing_rate"],
-    "filters": [
-      {
-        "concept": "wound_classification",
-        "value": "diabetic_ulcer"
-      },
-      {
-        "concept": "time_range",
-        "value": "6_months"
-      }
-    ],
-    "confidence": 0.94,
-    "reasoning": "User is asking for a quantitative outcome metric (healing rate) filtered by wound type (diabetic) and time period (6 months)"
-  },
-
-  "relevantForms": [
-    {
-      "formId": "uuid",
-      "formName": "Wound Assessment",
-      "relevanceScore": 0.92,
-      "reason": "Contains etiology field for diabetic wound classification",
-      "requiredFields": [
-        {
-          "fieldName": "Etiology",
-          "semanticConcept": "wound_classification",
-          "confidence": 0.95
-        }
-      ]
-    },
-    {
-      "formId": "uuid",
-      "formName": "Measurement Data",
-      "relevanceScore": 0.88,
-      "reason": "Contains area measurements for calculating healing rate",
-      "requiredTables": ["rpt.Measurement"]
-    }
-  ],
-
-  "terminologyMappings": [
-    {
-      "userTerm": "diabetic wounds",
-      "semanticConcept": "wound_classification:diabetic_ulcer",
-      "customerFieldName": "Etiology",
-      "customerFieldValue": "Diabetic Foot Ulcer",
-      "confidence": 0.98,
-      "formName": "Wound Assessment"
-    },
-    {
-      "userTerm": "healing rate",
-      "semanticConcept": "outcome_metrics:healing_rate",
-      "calculation": "(initial_area - current_area) / days_elapsed",
-      "dataSources": ["rpt.Measurement.area", "rpt.Assessment.date"],
-      "confidence": 1.0
-    },
-    {
-      "userTerm": "last 6 months",
-      "semanticConcept": "time_range",
-      "sqlExpression": "a.date >= DATEADD(month, -6, GETDATE())",
-      "confidence": 1.0
-    }
-  ],
-
-  "joinPaths": [
-    {
-      "path": "Patient → Wound → Assessment → Note",
-      "reason": "Access etiology from assessment notes"
-    },
-    {
-      "path": "Wound → Assessment → Measurement",
-      "reason": "Access area measurements over time"
-    }
-  ],
-
-  "recommendedSubQuestions": [
-    "Identify all diabetic wounds from assessment etiology",
-    "Get measurement history for these wounds in last 6 months",
-    "Calculate healing rate per wound",
-    "Compute average healing rate"
-  ]
-}
-```
-
----
-
-### Map Terminology
-
-Map user terminology to customer-specific field values.
-
-**Endpoint:** `POST /api/semantic/map-terminology`
-
-**Request:**
-
-```json
-{
-  "terms": ["diabetic", "venous ulcer", "compression therapy"],
-  "customerCode": "STMARYS",
-  "conceptTypes": ["wound_classification", "treatment_intervention"]
-}
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "customerCode": "STMARYS",
-  "mappings": [
-    {
-      "inputTerm": "diabetic",
-      "semanticConcept": "wound_classification:diabetic_ulcer",
-      "customerFieldName": "Etiology",
-      "customerFieldValue": "Diabetic Foot Ulcer",
-      "formName": "Wound Assessment",
-      "confidence": 0.98,
-      "alternatives": [
-        {
-          "value": "Diabetes-Related Wound",
-          "confidence": 0.85
-        }
-      ]
-    },
-    {
-      "inputTerm": "venous ulcer",
-      "semanticConcept": "wound_classification:venous_ulcer",
-      "customerFieldName": "Etiology",
-      "customerFieldValue": "Venous Leg Ulcer",
-      "formName": "Wound Assessment",
-      "confidence": 0.96
-    },
-    {
-      "inputTerm": "compression therapy",
-      "semanticConcept": "treatment_intervention:compression_therapy",
-      "customerFieldName": "Treatment Type",
-      "customerFieldValue": "Compression Bandaging",
-      "formName": "Treatment Log",
-      "confidence": 0.92
-    }
-  ],
-  "unmappedTerms": []
-}
-```
-
----
-
-### Search Clinical Ontology
-
-Search for clinical concepts by semantic similarity.
-
-**Endpoint:** `GET /api/semantic/ontology/search`
-
-**Query Parameters:**
-
-- `query` (string, required): Search query
-- `conceptType` (string, optional): Filter by concept type
-- `limit` (integer, default: 10): Maximum results
-
-**Response (200 OK):**
-
-```json
-{
-  "query": "diabetic foot wound",
-  "results": [
-    {
-      "conceptName": "diabetic_ulcer",
-      "canonicalName": "Diabetic Ulcer",
-      "conceptType": "classification",
-      "similarity": 0.94,
-      "synonyms": ["Diabetic Foot Ulcer", "DFU", "Diabetic Wound"],
-      "description": "Ulcers resulting from diabetic complications",
-      "prevalence": 0.35
-    },
-    {
-      "conceptName": "neuropathic_ulcer",
-      "canonicalName": "Neuropathic Ulcer",
-      "conceptType": "classification",
-      "similarity": 0.78,
-      "synonyms": ["Nerve Damage Ulcer"],
-      "description": "Ulcers caused by peripheral neuropathy"
-    }
-  ]
-}
-```
-
----
-
-## Demo Data Management
-
-### Generate Demo Data
-
-Generate synthetic demo data for a customer.
-
-**Endpoint:** `POST /api/demo-data/generate`
-
-**Request:**
-
-```json
-{
-  "customerCode": "STMARYS",
-  "config": {
-    "patientCount": 100,
-    "woundsPerPatient": {
-      "min": 1,
-      "max": 3
-    },
-    "assessmentsPerWound": {
-      "min": 5,
-      "max": 15
-    },
-    "timeRange": {
-      "start": "2023-01-01",
-      "end": "2024-12-31"
-    }
-  },
-  "replaceExisting": false
+  "force": false,
+  "maxForms": 100,
+  "confidenceThreshold": 0.7
 }
 ```
 
@@ -496,73 +247,216 @@ Generate synthetic demo data for a customer.
 
 ```json
 {
-  "customerCode": "STMARYS",
-  "status": "generating",
-  "jobId": "demo-gen-67890",
-  "estimatedTime": "3-7 minutes",
-  "message": "Demo data generation started"
+  "discoveryRunId": "34c9d849-8b33-4a3a-9d6d-14c7fad31087",
+  "status": "running",
+  "message": "Discovery started. This may take 1-3 minutes."
 }
 ```
 
-**Response (200 OK - when complete):**
+**Completion Response (via polling discovery runs):**
 
 ```json
 {
-  "customerCode": "STMARYS",
-  "status": "completed",
-  "statistics": {
-    "patientsGenerated": 100,
-    "woundsGenerated": 187,
-    "assessmentsGenerated": 1543,
-    "notesGenerated": 38122,
-    "measurementsGenerated": 1543,
-    "attributeTypesGenerated": 247
-  },
-  "timeRange": {
-    "start": "2023-01-01T00:00:00Z",
-    "end": "2024-12-31T23:59:59Z"
-  },
-  "generatedAt": "2024-10-12T15:30:00Z",
-  "generationTime": "4m 32s"
+  "discoveryRunId": "34c9d849-8b33-4a3a-9d6d-14c7fad31087",
+  "status": "succeeded",
+  "formsDiscovered": 14,
+  "fieldsDiscovered": 327,
+  "avgConfidence": 0.88,
+  "warnings": [
+    "12 fields flagged for review (confidence < 0.7)"
+  ],
+  "completedAt": "2025-10-20T11:10:32Z"
 }
 ```
 
 ---
 
-### Get Demo Data Statistics
+### List Discovery Runs
 
-Retrieve statistics about customer's demo data.
+**Endpoint:** `GET /api/customers/{code}/discover/runs`
 
-**Endpoint:** `GET /api/demo-data/:customerCode/stats`
+**Query Parameters:**
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| `limit` | integer (default 10) | Number of runs to return |
+| `status` | string | Filter by `running`, `succeeded`, `failed` |
 
 **Response (200 OK):**
 
 ```json
 {
-  "customerCode": "STMARYS",
-  "customerName": "St. Mary's Hospital",
-  "generated": true,
-  "statistics": {
-    "patients": 100,
-    "wounds": 187,
-    "assessments": 1543,
-    "notes": 38122,
-    "measurements": 1543,
-    "attributeTypes": 247
-  },
-  "timeRange": {
-    "start": "2023-01-01T00:00:00Z",
-    "end": "2024-12-31T23:59:59Z"
-  },
-  "generatedAt": "2024-10-12T15:30:00Z",
-  "lastValidated": "2024-10-12T16:00:00Z",
-  "integrity": {
-    "valid": true,
-    "checks": {
-      "missingCustomerCodes": 0,
-      "orphanedRecords": 0,
-      "invalidDates": 0
+  "runs": [
+    {
+      "id": "34c9d849-8b33-4a3a-9d6d-14c7fad31087",
+      "status": "succeeded",
+      "startedAt": "2025-10-20T11:09:01Z",
+      "completedAt": "2025-10-20T11:10:32Z",
+      "formsDiscovered": 14,
+      "fieldsDiscovered": 327,
+      "avgConfidence": 0.88,
+      "warnings": ["12 fields flagged for review"]
     }
+  ]
+}
+```
+
+---
+
+### Get Semantic Index
+
+Retrieve discovered forms and fields with semantic mappings for a customer.
+
+**Endpoint:** `GET /api/customers/{code}/semantic-index`
+
+**Query Parameters:**
+
+| Name | Type | Description |
+| ---- | ---- | ----------- |
+| `includeOptions` | boolean (default `false`) | Include field option mappings |
+| `minConfidence` | number | Filter fields >= confidence |
+| `reviewRequired` | boolean | Only fields flagged for manual review |
+
+**Response (200 OK):**
+
+```json
+{
+  "forms": [
+    {
+      "formId": "ff4328e1-7f74-46e6-b8a2-6a2b7d69e3f5",
+      "formName": "Wound Assessment",
+      "formType": "wound",
+      "discoveredAt": "2025-10-20T11:10:32Z",
+      "fieldCount": 145,
+      "averageConfidence": 0.91,
+      "fields": [
+        {
+          "fieldId": "90db2fd4-0cdd-43cf-84d9-9a95b3b9cbc4",
+          "fieldName": "Etiology",
+          "dataType": "select",
+          "semanticConcept": "wound_classification",
+          "semanticCategory": null,
+          "confidence": 0.95,
+          "isReviewRequired": false,
+          "options": [
+            {
+              "value": "Diabetic Foot Ulcer",
+              "semanticCategory": "diabetic_ulcer",
+              "confidence": 0.98
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### Update Field Review Status
+
+Mark a field as reviewed (manual override) or attach notes.
+
+**Endpoint:** `PATCH /api/customers/{code}/semantic-index/fields/{fieldId}`
+
+**Request Body:**
+
+```json
+{
+  "isReviewRequired": false,
+  "reviewNote": "Confirmed with consultant: acceptable mapping."
+}
+```
+
+**Response (200 OK):** Updated field record.
+
+---
+
+## 3. Context & SQL Operations
+
+### Discover Context
+
+Given a natural language question, returns intent classification, relevant forms/fields, and terminology mappings using the semantic index.
+
+**Endpoint:** `POST /api/customers/{code}/context/discover`
+
+**Request Body:**
+
+```json
+{
+  "question": "What is the average healing rate for diabetic wounds in the last 6 months?",
+  "timeRange": {
+    "unit": "months",
+    "value": 6
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "intent": {
+    "type": "outcome_analysis",
+    "scope": "patient_cohort",
+    "metrics": ["healing_rate"],
+    "filters": [
+      {
+        "concept": "wound_classification",
+        "value": "diabetic_ulcer",
+        "fieldName": "Etiology",
+        "fieldValue": "Diabetic Foot Ulcer",
+        "confidence": 0.97
+      }
+    ]
+  },
+  "forms": [
+    {
+      "formName": "Wound Assessment",
+      "reason": "Contains wound classification and measurement fields",
+      "confidence": 0.89
+    }
+  ],
+  "joinPaths": [
+    "dbo.Patient -> dbo.Wound -> dbo.Assessment -> dbo.Measurement"
+  ]
+}
+```
+
+---
+
+### Generate SQL (Template Resolution)
+
+Resolve a semantic template into customer-specific SQL using the context.
+
+**Endpoint:** `POST /api/customers/{code}/sql/generate`
+
+**Request Body:**
+
+```json
+{
+  "templateName": "healing_rate_by_etiology",
+  "context": {
+    "intent": "...",
+    "forms": "...",
+    "mappings": "..."
+  },
+  "options": {
+    "includeExplanation": true
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "sql": "SELECT ...",
+  "explanation": "Uses dbo.Note for Etiology mapped to 'Diabetic Foot Ulcer' ...",
+  "placeholdersResolved": {
+    "etiology_field": "Etiology",
+    "diabetic_value": "'Diabetic Foot Ulcer'"
   }
 }
 ```
@@ -571,18 +465,17 @@ Retrieve statistics about customer's demo data.
 
 ### Validate SQL
 
-Validate SQL query against customer's demo data.
+Validates (and optionally executes) SQL against the customer’s Silhouette demo database. Connects to `rpt` schema after Hangfire sync.
 
-**Endpoint:** `POST /api/demo-data/validate-sql`
+**Endpoint:** `POST /api/customers/{code}/sql/validate`
 
-**Request:**
+**Request Body:**
 
 ```json
 {
-  "customerCode": "STMARYS",
-  "sql": "SELECT TOP 10 etiology, COUNT(*) as count FROM rpt.Note n JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id WHERE at.name = 'Etiology' AND n.customerCode = 'STMARYS' GROUP BY etiology ORDER BY count DESC",
+  "sql": "SELECT ...",
   "execute": true,
-  "returnResults": true
+  "maxRows": 20
 }
 ```
 
@@ -590,427 +483,239 @@ Validate SQL query against customer's demo data.
 
 ```json
 {
-  "customerCode": "STMARYS",
-  "isValid": true,
+  "runId": "b99bbf26-56a1-4fd2-b091-e353c0daaf47",
+  "status": "succeeded",
   "validation": {
     "syntaxValid": true,
-    "tablesExist": true,
-    "columnsExist": true,
-    "customerFieldsValid": true,
-    "executionSuccessful": true
+    "tablesValid": true,
+    "columnsValid": true,
+    "semanticConstraintsValid": true
   },
   "execution": {
-    "rowCount": 10,
-    "executionTime": 45,
-    "results": [
+    "rowCount": 124,
+    "durationMs": 482,
+    "sample": [
       {
-        "etiology": "Diabetic Foot Ulcer",
-        "count": 532
-      },
-      {
-        "etiology": "Venous Leg Ulcer",
-        "count": 398
-      },
-      {
-        "etiology": "Pressure Injury - Stage 2",
-        "count": 287
+        "Etiology": "Diabetic Foot Ulcer",
+        "AverageHealingRate": 0.84
       }
     ]
-  },
-  "warnings": [],
-  "suggestions": [
-    "Consider adding index on rpt.Note.customerCode for better performance"
-  ]
+  }
 }
 ```
 
-**Response (400 Bad Request - validation failed):**
+**Failure Example (400 Bad Request):**
 
 ```json
 {
-  "customerCode": "STMARYS",
-  "isValid": false,
+  "runId": "b99bbf26-56a1-4fd2-b091-e353c0daaf47",
+  "status": "failed",
   "validation": {
     "syntaxValid": true,
-    "tablesExist": true,
-    "columnsExist": false,
+    "tablesValid": false,
     "errors": [
-      {
-        "type": "column_not_found",
-        "message": "Column 'rpt.Note.etiologyValue' does not exist",
-        "suggestion": "Did you mean 'rpt.Note.value'?"
-      }
+      "Table 'rpt.Measurement' not found for customer version 5.0."
     ]
-  },
-  "execution": null
-}
-```
-
----
-
-### Cleanup Demo Data
-
-Remove demo data for a customer.
-
-**Endpoint:** `DELETE /api/demo-data/:customerCode`
-
-**Response (200 OK):**
-
-```json
-{
-  "customerCode": "STMARYS",
-  "status": "deleted",
-  "recordsDeleted": {
-    "patients": 100,
-    "wounds": 187,
-    "assessments": 1543,
-    "notes": 38122,
-    "measurements": 1543,
-    "attributeTypes": 247
-  },
-  "message": "Demo data cleaned up successfully"
-}
-```
-
----
-
-## Schema Version Management
-
-### List Schema Versions
-
-Get all registered Silhouette schema versions.
-
-**Endpoint:** `GET /api/schema-versions`
-
-**Query Parameters:**
-
-- `supported` (boolean, optional): Filter by support status
-- `latest` (boolean, optional): Get only latest version
-
-**Response (200 OK):**
-
-```json
-{
-  "versions": [
-    {
-      "version": "6.0",
-      "majorVersion": 6,
-      "minorVersion": 0,
-      "releasedAt": "2025-01-15",
-      "isLatest": true,
-      "isSupported": true,
-      "breakingChanges": ["assessmentTypeVersionFk renamed to formVersionFk"],
-      "customerCount": 0
-    },
-    {
-      "version": "5.1",
-      "majorVersion": 5,
-      "minorVersion": 1,
-      "releasedAt": "2024-06-01",
-      "isLatest": false,
-      "isSupported": true,
-      "breakingChanges": [],
-      "customerCount": 3
-    },
-    {
-      "version": "5.0",
-      "majorVersion": 5,
-      "minorVersion": 0,
-      "releasedAt": "2023-01-15",
-      "isLatest": false,
-      "isSupported": true,
-      "breakingChanges": [],
-      "customerCount": 5
-    }
-  ]
-}
-```
-
----
-
-### Get Schema Version Details
-
-Get detailed schema information for a specific version.
-
-**Endpoint:** `GET /api/schema-versions/:version`
-
-**Response (200 OK):**
-
-```json
-{
-  "version": "5.1",
-  "majorVersion": 5,
-  "minorVersion": 1,
-  "releasedAt": "2024-06-01",
-  "endOfSupport": "2026-06-01",
-  "isLatest": false,
-  "isSupported": true,
-  "changelog": "Added statusFk and auditTrailJson columns to rpt.Assessment",
-  "breakingChanges": [],
-  "migrationNotes": "New columns are nullable, no data migration required",
-  "customerCount": 3,
-  "customers": ["STMARYS", "REGIONAL", "METRO"],
-  "schemaDefinition": {
-    "tables": {
-      "rpt.Assessment": {
-        "columns": {
-          "date": {
-            "type": "datetimeoffset",
-            "nullable": false
-          },
-          "assessmentTypeVersionFk": {
-            "type": "uniqueidentifier",
-            "nullable": false
-          },
-          "statusFk": {
-            "type": "uniqueidentifier",
-            "nullable": true,
-            "addedInVersion": "5.1"
-          }
-        }
-      }
-    }
   }
 }
 ```
 
 ---
 
-### Detect Schema Changes
+## 4. Demo Data Management
 
-Analyze schema changes between versions.
+### Generate Demo Data
 
-**Endpoint:** `POST /api/schema-versions/detect-changes`
+Creates synthetic data directly in `dbo.Patient`, `dbo.Wound`, `dbo.Assessment`, `dbo.Note`, `dbo.Measurement`. Waits for Hangfire sync unless `async` specified.
 
-**Request:**
+**Endpoint:** `POST /api/customers/{code}/demo-data/generate`
+
+**Request Body:**
 
 ```json
 {
-  "fromVersion": "5.0",
-  "toVersion": "5.1",
-  "connectionString": "Server=...;Database=...;(optional for live detection)"
+  "patientCount": 25,
+  "timeRangeWeeks": 12,
+  "waitForHangfire": true,
+  "forceRegenerate": false
 }
 ```
 
-**Response (200 OK):**
+**Response (202 Accepted):**
 
 ```json
 {
-  "fromVersion": "5.0",
-  "toVersion": "5.1",
-  "changesDetected": true,
-  "summary": {
-    "tablesAdded": 0,
-    "tablesRemoved": 0,
-    "tablesModified": 1,
-    "columnsAdded": 2,
-    "columnsRemoved": 0,
-    "columnsRenamed": 0
+  "generationId": "2c9b9105-7a5c-47f0-98ad-9452f42f2ea7",
+  "status": "running",
+  "message": "Demo data generation started. Watching Hangfire sync."
+}
+```
+
+**Completion Payload (GET status):**
+
+```json
+{
+  "generationId": "2c9b9105-7a5c-47f0-98ad-9452f42f2ea7",
+  "status": "succeeded",
+  "dboInserted": {
+    "Patient": 25,
+    "Wound": 58,
+    "Assessment": 612,
+    "Note": 7320,
+    "Measurement": 2448
   },
+  "hangfireSync": {
+    "jobId": "42",
+    "completedAt": "2025-10-20T11:25:00Z",
+    "durationSeconds": 290
+  },
+  "verifiedInSilhouette": true
+}
+```
+
+---
+
+### Check Generation Status
+
+**Endpoint:** `GET /api/customers/{code}/demo-data/generations/{generationId}`
+
+**Response (200 OK):** same as completion payload above.
+
+---
+
+### Reset Demo Data
+
+Truncates generated demo data for the customer (both `dbo` and corresponding `rpt` records via Hangfire sync).
+
+**Endpoint:** `POST /api/customers/{code}/demo-data/reset`
+
+**Response (202 Accepted):**
+
+```json
+{
+  "resetId": "e5a1b8b0-5d4d-4d05-bc90-0580a60de1cf",
+  "status": "running",
+  "message": "Cleaning generated data and triggering Hangfire re-sync."
+}
+```
+
+---
+
+## 5. Schema Version Management
+
+### Register Silhouette Version
+
+**Endpoint:** `POST /api/schema/versions`
+
+```json
+{
+  "version": "6.0",
+  "major": 6,
+  "minor": 0,
+  "releasedAt": "2025-04-01T00:00:00Z",
+  "notes": "Customer-provided upgrade pack.",
   "changes": [
     {
-      "type": "column_add",
-      "table": "rpt.Assessment",
-      "column": "statusFk",
-      "dataType": "uniqueidentifier",
-      "nullable": true,
-      "isBreaking": false
-    },
-    {
-      "type": "column_add",
-      "table": "rpt.Assessment",
-      "column": "auditTrailJson",
-      "dataType": "nvarchar(max)",
-      "nullable": true,
-      "isBreaking": false
+      "type": "column_rename",
+      "from": "rpt.Assessment.statusFk",
+      "to": "rpt.Assessment.stateFk",
+      "description": "Silhouette 6.0 rename."
     }
-  ],
-  "migrationRequired": false,
-  "recommendedActions": [
-    "Update demo database schema",
-    "Regenerate demo data for affected customers",
-    "Test existing queries for compatibility"
   ]
 }
 ```
 
----
+**Response (201 Created)**: Version metadata stored; change log aids generator/validator.
 
-### Get Schema Mappings
+### Map Customer to New Version
 
-Get column/table mappings between schema versions.
-
-**Endpoint:** `GET /api/schema-versions/mappings`
-
-**Query Parameters:**
-
-- `fromVersion` (string, required)
-- `toVersion` (string, required)
-
-**Response (200 OK):**
+**Endpoint:** `POST /api/customers/{code}/schema/upgrade`
 
 ```json
 {
-  "fromVersion": "5.0",
-  "toVersion": "6.0",
-  "mappings": [
-    {
-      "type": "column_rename",
-      "oldReference": "rpt.Assessment.assessmentTypeVersionFk",
-      "newReference": "rpt.Assessment.formVersionFk",
-      "isBreaking": true,
-      "notes": "Column renamed for clarity"
-    }
-  ],
-  "breakingChangeCount": 1,
-  "requiresDataMigration": false
+  "targetVersion": "6.0",
+  "notes": "Upgrade verified in staging. Running discovery + demo data regeneration."
+}
+```
+
+**Response (202 Accepted):**
+
+```json
+{
+  "upgradeRunId": "0cbedf67-1234-4ae7-9d8a-925b20b33855",
+  "status": "pending",
+  "message": "Schema upgrade recorded. Please rerun discovery and validation."
 }
 ```
 
 ---
 
-## Error Responses
+## 6. Error Responses
 
-### Standard Error Format
-
-All errors follow this format:
+Consistent envelope for all error responses.
 
 ```json
 {
   "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "details": {},
-    "timestamp": "2024-10-12T10:30:00Z",
-    "requestId": "req-12345"
+    "code": "CUSTOMER_NOT_FOUND",
+    "message": "Customer with code 'INVALID' not found.",
+    "details": {
+      "customerCode": "INVALID"
+    },
+    "traceId": "req-1234567890abcdef"
   }
 }
 ```
 
 ### Common Error Codes
 
-#### 400 Bad Request
-
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid request parameters",
-    "details": {
-      "customerCode": "Required field missing"
-    }
-  }
-}
-```
-
-#### 404 Not Found
-
-```json
-{
-  "error": {
-    "code": "CUSTOMER_NOT_FOUND",
-    "message": "Customer with code 'INVALID' not found",
-    "details": {
-      "customerCode": "INVALID"
-    }
-  }
-}
-```
-
-#### 409 Conflict
-
-```json
-{
-  "error": {
-    "code": "CUSTOMER_EXISTS",
-    "message": "Customer with code 'STMARYS' already exists",
-    "details": {
-      "existingCustomerId": "uuid",
-      "suggestion": "Use PUT to update existing customer"
-    }
-  }
-}
-```
-
-#### 500 Internal Server Error
-
-```json
-{
-  "error": {
-    "code": "INTERNAL_ERROR",
-    "message": "An unexpected error occurred",
-    "details": {
-      "errorId": "err-67890"
-    }
-  }
-}
-```
-
-#### 503 Service Unavailable
-
-```json
-{
-  "error": {
-    "code": "SERVICE_UNAVAILABLE",
-    "message": "Demo database connection failed",
-    "details": {
-      "service": "demo-database",
-      "retryAfter": 30
-    }
-  }
-}
-```
+| HTTP Status | Code | Description |
+| ----------- | ---- | ----------- |
+| 400 | `VALIDATION_ERROR` | Invalid request payload |
+| 401 | `UNAUTHENTICATED` | Missing/invalid credentials |
+| 403 | `UNAUTHORIZED` | Lacking required role (admin vs consultant) |
+| 404 | `CUSTOMER_NOT_FOUND`, `RESOURCE_NOT_FOUND` | Customer or resource missing |
+| 409 | `CUSTOMER_EXISTS` | Duplicate customer code |
+| 422 | `DISCOVERY_FAILED` | Discovery run failed (details in `error.details`) |
+| 429 | `RATE_LIMITED` | Too many requests |
+| 500 | `INTERNAL_ERROR` | Unexpected server error |
+| 503 | `CONNECTION_FAILED`, `HANGFIRE_TIMEOUT` | External dependency unavailable |
 
 ---
 
-## Authentication
+## 7. Authentication & Rate Limiting
 
-All endpoints require authentication via session cookie or API key.
+- **Authentication:** Bearer token (`Authorization: Bearer <token>`) or session cookie.
+- **Roles:**
+  - `admin`: Can manage customers, connection strings, schema versions.
+  - `consultant`: Access read operations, context discovery, SQL validation.
+  - `developer`: Includes consultant privileges plus template operations.
 
-**Header:**
+**Rate Limits (default):**
 
-```
-Authorization: Bearer <api-key>
-```
+| Endpoint Group | Limit |
+| -------------- | ----- |
+| Customer CRUD | 60 requests/min/user |
+| Discovery & semantic index | 10 requests/hour/customer |
+| Demo data generation/reset | 4 requests/day/customer |
+| SQL validation | 30 requests/min/user (execution limited to 10/minute) |
 
-**Or Session Cookie:**
-
-```
-Cookie: session=<session-id>
-```
-
----
-
-## Rate Limiting
-
-- **Standard endpoints:** 100 requests/minute per user
-- **Data generation endpoints:** 10 requests/hour per customer
-- **Import endpoints:** 5 requests/hour per user
-
-**Rate Limit Headers:**
+Headers:
 
 ```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 42
 X-RateLimit-Reset: 1697112000
 ```
 
 ---
 
-## Webhooks (Future)
+## 8. Notes & Conventions
 
-Future support for webhooks on:
-
-- Customer import completion
-- Demo data generation completion
-- Schema version changes detected
-
----
-
-## Notes
-
-- All timestamps are in ISO 8601 format (UTC)
-- Pagination uses `page` and `limit` query parameters (default: page=1, limit=50)
-- Large responses may be streamed or paginated
-- File uploads limited to 10MB per XML file
-- Demo data generation is asynchronous (use jobId to check status)
+- All timestamps are ISO 8601 UTC (`YYYY-MM-DDTHH:MM:SSZ`).
+- Connection strings supplied in requests are never echoed in responses.
+- Long-running operations (discovery, demo data generation, Hangfire sync waits) return 202 with IDs for polling endpoints.
+- Pagination: `GET` list endpoints accept `page` (default 1) and `pageSize` (default 25, max 200).
+- Validation runs execute against `rpt` schema only after Hangfire sync completes.
+- Demo data generator marks synthetic records via configurable indicators (default `AccessCode` prefix `IG`).
+- Webhooks (planned): discovery completion, demo data generation completion, schema upgrade completion.
