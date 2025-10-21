@@ -212,6 +212,11 @@ export function SideNav() {
                         >
                           User Management
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/customers")}
+                        >
+                          Customers Setup
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => router.push("/admin")}>
                           AI Providers
                         </DropdownMenuItem>

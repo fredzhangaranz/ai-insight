@@ -40,6 +40,7 @@ const migrations = [
   "011_create_template_catalog.sql",
   "012_create_users_table.sql",
   "013_add_user_ownership.sql",
+  "014_semantic_foundation.sql",
 ];
 
 async function runMigrations() {
