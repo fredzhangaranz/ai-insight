@@ -6,6 +6,7 @@
 **Status:** In Progress
 
 > 🔄 Reflects revised architecture described in:
+>
 > - `docs/design/semantic_layer/semantic_layer_design.md`
 > - `docs/design/semantic_layer/database_schema.md`
 > - `docs/design/semantic_layer/api_specification.md`
@@ -35,16 +36,16 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
 
 ## Phase Overview (Reference: `semantic_layer_design.md`, Section 12)
 
-| Phase | Weeks | Goal | Primary Deliverable |
-| ----- | ----- | ---- | ------------------- |
-| 1 | 1-2 | Customer foundation | Encrypted registry, connection testing, discovery endpoint scaffold |
-| 2 | 3-4 | Clinical ontology | Ontology loader, embeddings, semantic search API |
-| 3 | 5-6 | Semantic indexing | Field/option mapping, review UI & API |
-| 4 | 7-10 | Demo data generation | Generators for `dbo.*`, Hangfire sync management, reset tooling |
-| 5 | 11-13 | Context discovery | Intent classifier, context bundle API, join planner |
-| 6 | 14-15 | SQL validation | Validator service, execution harness, reporting |
-| 7 | 16 | Integration | Funnel/template integration, customer-aware UX |
-| 8 | 17-18 | Schema versioning | Version registry, diff tooling, upgrade workflow |
+| Phase | Weeks | Goal                 | Primary Deliverable                                                 |
+| ----- | ----- | -------------------- | ------------------------------------------------------------------- |
+| 1     | 1-2   | Customer foundation  | Encrypted registry, connection testing, discovery endpoint scaffold |
+| 2     | 3-4   | Clinical ontology    | Ontology loader, embeddings, semantic search API                    |
+| 3     | 5-6   | Semantic indexing    | Field/option mapping, review UI & API                               |
+| 4     | 7-10  | Demo data generation | Generators for `dbo.*`, Hangfire sync management, reset tooling     |
+| 5     | 11-13 | Context discovery    | Intent classifier, context bundle API, join planner                 |
+| 6     | 14-15 | SQL validation       | Validator service, execution harness, reporting                     |
+| 7     | 16    | Integration          | Funnel/template integration, customer-aware UX                      |
+| 8     | 17-18 | Schema versioning    | Version registry, diff tooling, upgrade workflow                    |
 
 ---
 
@@ -57,20 +58,24 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
 ### Tasks
 
 1. **Database migrations**
+
    - Add `Customer`, `CustomerDiscoveryRun`, `SemanticIndex` scaffolding tables (PostgreSQL).
    - Ensure pgcrypto/vector extensions enabled where required.
    - File: `database/migrations/2025XXXX_semantic_foundation.sql`.
 
 2. **Encryption service**
+
    - Implement AES-256 encryption/decryption utilities for connection strings (`lib/services/security/connection_encryption.ts`).
    - Add env config validation (`config/security.ts`).
 
 3. **Customer management API**
+
    - `POST /api/customers`, `GET /api/customers`, `GET /api/customers/{code}`, `PATCH`, `DELETE`.
    - Test connection endpoint `POST /api/customers/{code}/test-connection`.
    - Persist connection status metadata.
 
 4. **Admin UI updates**
+
    - Customer list/detail screens per `workflows_and_ui.md`.
    - Connection tab with status + “Test Connection” button.
 
@@ -88,21 +93,80 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
 
 ## Phase 2 – Clinical Ontology (Weeks 3-4)
 
-**Goal:** Load universal concepts and expose semantic search.
+**Goal:** Load universal concepts, expose semantic search, and provide admin UI for clinical specialist to manage ontology.
 
-**References:** `semantic_layer_design.md` (§7.1), `database_schema.md` (ClinicalOntology), `api_specification.md` (§2.3).
+**References:** `semantic_layer_design.md` (§7.1), `database_schema.md` (ClinicalOntology), `api_specification.md` (§2.3), `workflows_and_ui.md` (§6).
 
 ### Tasks
 
-1. Validate & load initial ontology (`clinical_ontology.yaml`) into PostgreSQL with embeddings (`lib/jobs/ontology_loader.ts`).
-2. Implement semantic search API `GET /api/ontology/search`.
-3. Add admin CLI `npm run ontology:load`.
-4. Monitoring dashboard for ontology stats (count, last loaded, deprecated concepts).
+1. **Database migration: ClinicalOntology table + pgvector extension**
+
+   - Enable `pgvector` extension in PostgreSQL.
+   - Create `ClinicalOntology` table with embedding column (VECTOR(1536)).
+   - Create `ivfflat` index for fast semantic search.
+   - File: `database/migrations/015_clinical_ontology_schema.sql`.
+   - Ensure migration runs before ontology loader job.
+
+2. **Ontology loader job** (`lib/jobs/ontology_loader.ts`)
+
+   - Parse initial ontology from `clinical_ontology.yaml`.
+   - Generate embeddings via OpenAI embeddings API (`text-embedding-3-small`).
+   - Batch upsert into `ClinicalOntology` table with deduplication by (concept_name, concept_type).
+   - Log success/error counts per concept type.
+   - Callable via CLI: `npm run ontology:load`.
+
+3. **Semantic search API** (`POST /api/ontology/search` or `GET /api/ontology/search?query=...`)
+
+   - Accept user query (natural language).
+   - Generate query embedding via OpenAI API.
+   - Search PostgreSQL using cosine similarity on `embedding` column.
+   - Return top N results with similarity scores.
+   - Detailed spec in `api_specification.md` (§2.3).
+
+4. **Admin UI: Ontology management page** (`app/admin/ontology/page.tsx`)
+
+   - List all concepts in table view (name, type, aliases count, deprecated flag).
+   - Search/filter by concept name, type, or deprecated status.
+   - [+ Add Concept] button → modal form:
+     - Fields: `concept_name`, `canonical_name`, `concept_type` (select), `description`, `aliases[]` (array input), `metadata` (JSONB).
+     - On save: generate embedding via OpenAI, POST to API, refresh list.
+   - Click row to edit (prefilled form, same workflow).
+   - [Deprecate] button (toggle `is_deprecated` flag).
+   - Audit trail: show last editor + timestamp (optional: recent activity sidebar).
+   - Bulk actions: deprecate multiple, export filtered results as YAML.
+
+5. **Admin APIs for ontology CRUD** (`app/api/admin/ontology/...`)
+
+   - `GET /api/admin/ontology/concepts?type=...&deprecated=...` – list with filters.
+   - `POST /api/admin/ontology/concepts` – create new concept (auto-generate embedding).
+   - `PATCH /api/admin/ontology/concepts/{id}` – update (regenerate embedding if name/description change).
+   - `DELETE /api/admin/ontology/concepts/{id}` – soft delete (set `is_deprecated=true`).
+   - All endpoints require admin role; log mutations to audit table.
+
+6. **Monitoring dashboard for ontology stats** (`app/admin/ontology/stats` or integrate into admin home)
+
+   - Total concepts by type (pie chart or table).
+   - Deprecated concepts count.
+   - Last ontology load timestamp + status (success/failed).
+   - Embedding generation time distribution (avg, p95).
+   - Refresh button to trigger `npm run ontology:load` from UI.
+
+7. **CLI utilities**
+   - `npm run ontology:load` – load from `clinical_ontology.yaml`.
+   - `npm run ontology:export` – export current DB state to YAML (for version control).
+   - `npm run ontology:validate` – check for orphaned concepts, deprecated count, etc.
 
 ### Exit criteria
 
-- Ontology persisted with embeddings; semantic search returns expected results.
-- Documentation/training for updating ontology in future.
+- ✅ `ClinicalOntology` table created with pgvector index; migration runs cleanly.
+- ✅ Initial ontology (from `clinical_ontology.yaml`) loaded into PostgreSQL with embeddings.
+- ✅ Semantic search API returns expected results for canonical queries (test with "diabetic wounds", "healing rate", etc.).
+- ✅ Admin UI allows clinical specialist to add/edit/deprecate concepts without touching code or YAML.
+- ✅ On concept save: embedding auto-generated via OpenAI; stored in DB; search results updated immediately.
+- ✅ Audit trail shows who changed what, when (for compliance).
+- ✅ CLI commands (`load`, `export`, `validate`) work reliably.
+- ✅ Monitoring dashboard reflects current state; refresh on manual trigger.
+- ✅ Documentation updated: how to maintain ontology, add new concepts, deprecate old ones.
 
 ---
 
@@ -276,13 +340,13 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
 
 ## Risks & Mitigations
 
-| Risk | Impact | Mitigation |
-| ---- | ------ | ---------- |
-| Hangfire sync latency/failure | Blocks validation, confusing UX | Timeout with retry, surfaced status, manual trigger option |
-| Connection string leaks | Security incident | AES-256 encryption, audit logs, strict RBAC, credential rotation |
-| Low-confidence mappings | Incorrect SQL generation | Review workflow, consultant feedback loop, ontology refinements |
-| Schema drift | Queries break post-upgrade | Schema diff tooling, upgrade runbook, regression suite |
-| Performance under load | Slow UX | Monitor, optimize SQL/vector queries, caching where needed |
+| Risk                          | Impact                          | Mitigation                                                       |
+| ----------------------------- | ------------------------------- | ---------------------------------------------------------------- |
+| Hangfire sync latency/failure | Blocks validation, confusing UX | Timeout with retry, surfaced status, manual trigger option       |
+| Connection string leaks       | Security incident               | AES-256 encryption, audit logs, strict RBAC, credential rotation |
+| Low-confidence mappings       | Incorrect SQL generation        | Review workflow, consultant feedback loop, ontology refinements  |
+| Schema drift                  | Queries break post-upgrade      | Schema diff tooling, upgrade runbook, regression suite           |
+| Performance under load        | Slow UX                         | Monitor, optimize SQL/vector queries, caching where needed       |
 
 ---
 

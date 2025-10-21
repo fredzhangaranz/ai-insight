@@ -7,6 +7,7 @@ import { AIModelProvider } from "@/lib/context/AIModelContext";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SideNav } from "@/app/components/shell/SideNav";
 import { MustChangePasswordBanner } from "@/app/components/profile/MustChangePasswordBanner";
+import { Toaster } from "@/components/ui/toaster";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -57,6 +58,7 @@ export function Providers({ children }: ProvidersProps) {
     <SessionProvider>
       <AIModelProvider>
         <AppContent>{children}</AppContent>
+        <Toaster />
       </AIModelProvider>
     </SessionProvider>
   );

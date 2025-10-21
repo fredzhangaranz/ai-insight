@@ -131,6 +131,8 @@ If customers use their own AI services:
 
 **Best for**: Complete deployment with database
 
+**IMPORTANT**: This deployment now includes PostgreSQL with vector extension support for semantic features.
+
 1. **Create production environment file**:
 
    ```bash
@@ -155,8 +157,20 @@ If customers use their own AI services:
    ```
 
 3. **Deploy with docker-compose**:
+
    ```bash
    docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+4. **Enable vector extension** (required for semantic features):
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml exec db psql -U user -d insight_gen_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+   ```
+
+5. **Run migrations**:
+   ```bash
+   docker-compose -f docker-compose.prod.yml exec app node scripts/run-migrations.js
    ```
 
 ## Environment Configuration
@@ -165,6 +179,195 @@ If customers use their own AI services:
 
 - `DATABASE_URL`: Connection string to Silhouette database
 - `NODE_ENV`: Set to `production`
+
+## PostgreSQL Vector Extension Upgrade
+
+**IMPORTANT**: The application now requires the PostgreSQL `vector` extension for semantic features. Follow these steps to safely upgrade your production database.
+
+### Pre-Upgrade Checklist
+
+1. **Backup your database** (CRITICAL):
+
+   ```bash
+   # Create full database backup
+   pg_dump -h your-db-host -U your-username -d your-database > backup_before_vector_upgrade.sql
+
+   # Verify backup size (should be substantial)
+   ls -lh backup_before_vector_upgrade.sql
+   ```
+
+2. **Test the upgrade in a staging environment** first
+3. **Schedule maintenance window** for production upgrade
+4. **Verify current database version**:
+   ```bash
+   docker exec your-db-container psql -U your-username -d your-database -c "SELECT version();"
+   ```
+
+### Production Upgrade Steps
+
+#### Option A: Docker Compose Deployment (Recommended)
+
+If you're using the provided `docker-compose.prod.yml`:
+
+1. **Stop the application**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml down
+   ```
+
+2. **Update docker-compose.prod.yml** to use pgvector image:
+
+   ```yaml
+   # Change this line in docker-compose.prod.yml
+   db:
+     image: pgvector/pgvector:pg15 # Changed from postgres:15-alpine
+   ```
+
+3. **Start the database with new image**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d db
+   ```
+
+4. **Wait for database to be ready** (30-60 seconds):
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml logs -f db
+   ```
+
+5. **Enable vector extension**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml exec db psql -U your-username -d your-database -c "CREATE EXTENSION IF NOT EXISTS vector;"
+   ```
+
+6. **Verify data integrity**:
+
+   ```bash
+   # Check that all tables are present
+   docker-compose -f docker-compose.prod.yml exec db psql -U your-username -d your-database -c "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
+
+   # Check vector extension is available
+   docker-compose -f docker-compose.prod.yml exec db psql -U your-username -d your-database -c "SELECT extname FROM pg_extension WHERE extname = 'vector';"
+   ```
+
+7. **Run migrations**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml exec app node scripts/run-migrations.js
+   ```
+
+8. **Start the full application**:
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+#### Option B: Standalone Database Upgrade
+
+If you're using an external PostgreSQL database:
+
+1. **Backup your database** (as shown above)
+
+2. **Upgrade your PostgreSQL server** to include pgvector:
+
+   - **Ubuntu/Debian**: `sudo apt-get install postgresql-15-pgvector`
+   - **CentOS/RHEL**: `sudo yum install pgvector_15`
+   - **Docker**: Switch to `pgvector/pgvector:pg15` image
+   - **Cloud providers**: Check if pgvector is available in your region
+
+3. **Enable the extension**:
+
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+
+4. **Run application migrations**:
+   ```bash
+   node scripts/run-migrations.js
+   ```
+
+### Rollback Procedure
+
+If issues occur after the upgrade:
+
+1. **Stop the application**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml down
+   ```
+
+2. **Restore from backup**:
+
+   ```bash
+   # Drop the current database (CAREFUL!)
+   docker-compose -f docker-compose.prod.yml exec db psql -U your-username -d your-database -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+   # Restore from backup
+   docker-compose -f docker-compose.prod.yml exec -T db psql -U your-username -d your-database < backup_before_vector_upgrade.sql
+   ```
+
+3. **Revert docker-compose.prod.yml**:
+
+   ```yaml
+   db:
+     image: postgres:15-alpine # Revert to original
+   ```
+
+4. **Restart with original image**:
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+### Verification Steps
+
+After successful upgrade, verify:
+
+1. **Vector extension is working**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml exec db psql -U your-username -d your-database -c "SELECT '[1,2,3]'::vector;"
+   ```
+
+2. **ClinicalOntology table exists**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml exec db psql -U your-username -d your-database -c "\\d \"ClinicalOntology\""
+   ```
+
+3. **Application starts successfully**:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml logs app
+   ```
+
+4. **All existing data is accessible**:
+   - Check that dashboards, insights, and users are still accessible
+   - Verify no data loss occurred
+
+### Troubleshooting Vector Extension
+
+**Issue**: `extension "vector" is not available`
+
+**Solution**: Ensure you're using the pgvector image:
+
+```bash
+# Check current image
+docker-compose -f docker-compose.prod.yml images
+
+# Should show: pgvector/pgvector:pg15
+```
+
+**Issue**: Migration fails with vector errors
+
+**Solution**: The migration includes fallback logic, but for full functionality, ensure vector extension is available.
+
+**Issue**: Performance degradation
+
+**Solution**: Vector operations are CPU-intensive. Monitor resource usage and consider:
+
+- Increasing database memory allocation
+- Optimizing vector index parameters
+- Using connection pooling
 
 ### Authentication & Session
 

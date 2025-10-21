@@ -33,3 +33,4 @@ next-env.d.ts
 .cursor-doc.md
 AGENTS.md
 .DS_Store
+backup_before_upgrade.sql

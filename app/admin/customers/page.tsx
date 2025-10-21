@@ -6,6 +6,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   LinkIcon,
+  MagnifyingGlassIcon,
   PlusIcon,
   SignalIcon,
 } from "@heroicons/react/24/outline";
@@ -31,7 +32,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 import {
   CreateCustomerDialog,
@@ -71,6 +72,17 @@ type AdminCustomer = {
 
 type CustomersResponse = {
   customers: AdminCustomer[];
+};
+
+type DiscoveryPreviewResponse = {
+  status: string;
+  formsDiscovered: number;
+  forms: Array<{
+    attributeSetKey: string;
+    name: string;
+    description: string | null;
+    type: number;
+  }>;
 };
 
 async function apiRequest<T>(
@@ -154,6 +166,9 @@ function CustomersPageContent() {
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [testingConnectionCode, setTestingConnectionCode] = useState<
+    string | null
+  >(null);
+  const [runningDiscoveryCode, setRunningDiscoveryCode] = useState<
     string | null
   >(null);
 
@@ -253,6 +268,46 @@ function CustomersPageContent() {
       });
     } finally {
       setTestingConnectionCode(null);
+    }
+  };
+
+  const handleRunDiscovery = async (customer: AdminCustomer) => {
+    setRunningDiscoveryCode(customer.code);
+    try {
+      const result = await apiRequest<DiscoveryPreviewResponse>(
+        `/api/admin/customers/${customer.code}/discovery`,
+        {
+          method: "POST",
+        }
+      );
+
+      const sampleNames = result.forms
+        .slice(0, 3)
+        .map((form) => form.name)
+        .filter(Boolean);
+
+      toast({
+        title: "Discovery completed",
+        description:
+          sampleNames.length > 0
+            ? `Retrieved ${
+                result.formsDiscovered
+              } forms. Examples: ${sampleNames.join(", ")}${
+                result.formsDiscovered > sampleNames.length ? "…" : ""
+              }`
+            : `Retrieved ${result.formsDiscovered} forms.`,
+      });
+
+      await refreshCustomers();
+    } catch (error: any) {
+      toast({
+        title: "Discovery failed",
+        description:
+          error?.message ?? "Unexpected error running discovery preview.",
+        variant: "destructive",
+      });
+    } finally {
+      setRunningDiscoveryCode(null);
     }
   };
 
@@ -496,6 +551,16 @@ function CustomersPageContent() {
                           {testingConnectionCode === customer.code
                             ? "Testing..."
                             : "Test Connection"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleRunDiscovery(customer)}
+                          disabled={runningDiscoveryCode === customer.code}
+                        >
+                          <MagnifyingGlassIcon className="h-4 w-4 mr-1" />
+                          {runningDiscoveryCode === customer.code
+                            ? "Discovering..."
+                            : "Run Discovery"}
                         </Button>
                         {customer.isActive ? (
                           <Button
