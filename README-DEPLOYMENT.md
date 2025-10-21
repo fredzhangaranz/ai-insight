@@ -169,9 +169,18 @@ If customers use their own AI services:
    ```
 
 5. **Run migrations**:
+
    ```bash
    docker-compose -f docker-compose.prod.yml exec app node scripts/run-migrations.js
    ```
+
+6. **Load clinical ontology** (required for semantic search):
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml exec app npm run ontology:load
+   ```
+
+   This generates embeddings for all clinical concepts using the Gemini embedding model. **Note**: Requires valid Google Cloud credentials configured via `GOOGLE_CLOUD_PROJECT` and `GOOGLE_APPLICATION_CREDENTIALS`.
 
 ## Environment Configuration
 
@@ -282,9 +291,18 @@ If you're using an external PostgreSQL database:
    ```
 
 4. **Run application migrations**:
+
    ```bash
    node scripts/run-migrations.js
    ```
+
+5. **Load clinical ontology** (if using semantic features):
+
+   ```bash
+   npm run ontology:load
+   ```
+
+   Requires Google Cloud Project ID and credentials to be configured.
 
 ### Rollback Procedure
 
@@ -440,6 +458,15 @@ GOOGLE_CLOUD_PROJECT=your-google-project-id
 GOOGLE_CLOUD_LOCATION=us-central1  # Optional, defaults to us-central1
 GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/google-credentials.json
 ```
+
+**Gemini Embeddings** (required for semantic features):
+
+The application uses Google's `gemini-embedding-001` model to generate embeddings for clinical concepts. This enables semantic search and concept matching.
+
+- **Dimensions**: 3072 (state-of-the-art embeddings)
+- **Languages**: 100+ languages supported
+- **Setup**: Automatically configured when Google Vertex AI credentials are provided
+- **Loading**: Run `npm run ontology:load` after deployment to generate embeddings for clinical concepts
 
 **File structure for Google credentials:**
 
