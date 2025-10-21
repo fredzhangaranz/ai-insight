@@ -63,6 +63,13 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
    - Ensure pgcrypto/vector extensions enabled where required.
    - File: `database/migrations/2025XXXX_semantic_foundation.sql`.
 
+   **Status:** ✅ **COMPLETED**
+
+   - File: `database/migration/014_semantic_foundation.sql` (created)
+   - pgvector extension enabled
+   - `Customer`, `CustomerDiscoveryRun`, `SemanticIndex` tables created
+   - pgcrypto extension enabled for encryption
+
 2. **Encryption service**
 
    - Implement AES-256 encryption/decryption utilities for connection strings (`lib/services/security/connection_encryption.ts`).
@@ -97,6 +104,8 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
 
 **References:** `semantic_layer_design.md` (§7.1), `database_schema.md` (ClinicalOntology), `api_specification.md` (§2.3), `workflows_and_ui.md` (§6).
 
+**Status:** 🟡 IN PROGRESS (Tasks 1-3 ✅ Complete, Tasks 4-7 ⏳ Pending)
+
 ### Tasks
 
 1. **Database migration: ClinicalOntology table + pgvector extension**
@@ -107,6 +116,15 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
    - File: `database/migrations/015_clinical_ontology_schema.sql`.
    - Ensure migration runs before ontology loader job.
 
+   **Status:** ✅ **COMPLETED**
+
+   - File: `database/migration/015_clinical_ontology_schema.sql` (created & tested)
+   - pgvector extension enabled
+   - `ClinicalOntology` table created with 3072-dimensional embedding column (gemini-embedding-001)
+   - Includes: aliases, metadata (JSONB), is_deprecated flag, audit timestamps
+   - Note: No ivfflat index (3072 dimensions exceed ivfflat's 2000-dimension limit)
+   - Migration consolidation: merged 5 intermediate migrations into single clean migration
+
 2. **Ontology loader job** (`lib/jobs/ontology_loader.ts`)
 
    - Parse initial ontology from `clinical_ontology.yaml`.
@@ -115,13 +133,36 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
    - Log success/error counts per concept type.
    - Callable via CLI: `npm run ontology:load`.
 
+   **Status:** ✅ **COMPLETED**
+
+   - File: `lib/jobs/ontology_loader.ts` (created & tested)
+   - File: `lib/services/embeddings/gemini-embedding.ts` (Google Gemini embedding service)
+   - File: `scripts/ontology-loader.js` (CLI script)
+   - Parses clinical ontology from `clinical_ontology.yaml` (25 concepts loaded successfully)
+   - Embeddings generated via Google Gemini `gemini-embedding-001` model (3072 dimensions)
+   - Note: Using Gemini instead of OpenAI per user preference (cost & capability)
+   - Batch upsert with deduplication by (concept_name, concept_type)
+   - Idempotent: ON CONFLICT DO UPDATE strategy
+   - Supports batch processing (default: 5 concurrent embeddings)
+   - Audit logging: OntologyLoaderRun table tracks status, counts, timestamps
+   - Callable via CLI: `npm run ontology:load` ✅ TESTED & WORKING
+   - All 25 concepts loaded with 3072-dimensional embeddings
+
 3. **Semantic search API** (`POST /api/ontology/search` or `GET /api/ontology/search?query=...`)
 
    - Accept user query (natural language).
-   - Generate query embedding via OpenAI API.
+   - Generate query embedding via Google Gemini API (`gemini-embedding-001`, 3072 dimensions).
    - Search PostgreSQL using cosine similarity on `embedding` column.
    - Return top N results with similarity scores.
    - Detailed spec in `api_specification.md` (§2.3).
+
+   **Status:** ✅ **COMPLETED**
+
+   - File: `app/api/ontology/search/route.ts` (GET + POST handlers with auth guard)
+   - File: `lib/services/ontology-search.service.ts` (Gemini embeddings + pgvector cosine search)
+   - Filters: `limit`, `conceptType`, `includeDeprecated`, `minScore` (sanitised + clamped)
+   - Response includes similarity scores (0-1) and metadata; whitespace normalised before embedding
+   - Tests: `lib/services/__tests__/ontology-search.service.test.ts`, `app/api/ontology/search/__tests__/route.test.ts`
 
 4. **Admin UI: Ontology management page** (`app/admin/ontology/page.tsx`)
 
@@ -161,12 +202,14 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
 - ✅ `ClinicalOntology` table created with pgvector index; migration runs cleanly.
 - ✅ Initial ontology (from `clinical_ontology.yaml`) loaded into PostgreSQL with embeddings.
 - ✅ Semantic search API returns expected results for canonical queries (test with "diabetic wounds", "healing rate", etc.).
-- ✅ Admin UI allows clinical specialist to add/edit/deprecate concepts without touching code or YAML.
-- ✅ On concept save: embedding auto-generated via OpenAI; stored in DB; search results updated immediately.
-- ✅ Audit trail shows who changed what, when (for compliance).
-- ✅ CLI commands (`load`, `export`, `validate`) work reliably.
-- ✅ Monitoring dashboard reflects current state; refresh on manual trigger.
-- ✅ Documentation updated: how to maintain ontology, add new concepts, deprecate old ones.
+- ⏳ Admin UI allows clinical specialist to add/edit/deprecate concepts without touching code or YAML.
+- ⏳ On concept save: embedding auto-generated via OpenAI; stored in DB; search results updated immediately.
+- ⏳ Audit trail shows who changed what, when (for compliance).
+- ⏳ CLI commands (`load`, `export`, `validate`) work reliably.
+- ⏳ Monitoring dashboard reflects current state; refresh on manual trigger.
+- ⏳ Documentation updated: how to maintain ontology, add new concepts, deprecate old ones.
+
+**Progress:** 3 of 7 tasks completed (43%). Tasks 1-3 (Schema, Loader, Search API) ✅ DONE. Remaining: Admin UI, Admin APIs, Monitoring, CLI utilities.
 
 ---
 
