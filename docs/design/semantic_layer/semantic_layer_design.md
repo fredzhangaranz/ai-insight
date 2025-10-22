@@ -1170,6 +1170,800 @@ Patient → Wound → Assessment → Note (for etiology)
              Assessment → Measurement (for area)
 ```
 
+#### 7.3.5 Multi-Form Query Resolution (NEW)
+
+**Problem:** A single question often requires data from multiple forms across different tables. How does the system know which forms to join and how to filter them correctly?
+
+**Example Scenario:**
+
+```
+Consultant Question:
+"What's the average healing rate for diabetic wounds with high infection status?"
+
+Concepts Involved:
+- "healing rate" → outcome_metrics
+- "diabetic wounds" → wound_classification:diabetic_ulcer
+- "infection status" → infection_status
+
+These might be spread across 3 different forms:
+- Form A: "Wound Assessment" (has diabetic_ulcer classification)
+- Form B: "Healing Progress" (has healing_rate measurements)
+- Form C: "Infection Log" (has infection_status field)
+```
+
+**How Phase 3 Semantic Index Enables This:**
+
+**Step 1: Query SemanticIndex to Find Relevant Forms**
+
+```sql
+-- Find all forms containing our required concepts
+SELECT DISTINCT si.*, sif.semantic_concept, sif.field_name
+FROM "SemanticIndex" si
+JOIN "SemanticIndexField" sif ON si.id = sif.semantic_index_id
+WHERE si.customer_id = 'STMARYS'
+  AND sif.semantic_concept IN ('wound_classification', 'outcome_metrics', 'infection_status')
+  AND sif.confidence > 0.70;
+
+-- Results:
+┌─────────────────────────────────────────────────────────────┐
+│ SemanticIndex                                               │
+├─────────────────────────────────────────────────────────────┤
+│ Form: Wound Assessment                                      │
+│  ├─ Field: Etiology → wound_classification (0.95)           │
+│  └─ Field: Baseline Area → outcome_metrics (0.88)           │
+│                                                             │
+│ Form: Assessment Series                                     │
+│  ├─ Field: Area (cm²) → outcome_metrics (0.92)              │
+│  ├─ Field: Date → temporal_context (0.99)                  │
+│  └─ Field: Infection Present → infection_status (0.91)     │
+│                                                             │
+│ Form: Clinical Notes                                        │
+│  └─ Field: Assessment Notes → clinical_observation (0.78)  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Step 2: Build Form-Field Lookup Map**
+
+```typescript
+// Phase 5 (Context Discovery) uses SemanticIndex to build:
+const formFieldMap = {
+  "Wound Assessment": {
+    formId: "form-uuid-1",
+    semanticConcept: "wound_classification",
+    fieldName: "Etiology",
+    fieldId: "attr-uuid-1",
+    dataType: "SingleSelectList",
+    confidence: 0.95,
+    filterValue: "Diabetic Foot Ulcer", // Mapped from user term "diabetic"
+  },
+  "Assessment Series": {
+    formId: "form-uuid-2",
+    semanticConcept: "outcome_metrics",
+    fieldName: "Area (cm²)",
+    fieldId: "attr-uuid-2",
+    dataType: "Decimal",
+    confidence: 0.92,
+    aggregation: "AVG", // For healing rate calculation
+  },
+  "Assessment Series": {
+    formId: "form-uuid-2",
+    semanticConcept: "infection_status",
+    fieldName: "Infection Present",
+    fieldId: "attr-uuid-3",
+    dataType: "SingleSelectList",
+    confidence: 0.91,
+    filterValue: "Yes", // Mapped from user term "high infection"
+  },
+};
+```
+
+**Step 3: Determine Physical Join Paths**
+
+```
+The system uses Silhouette schema knowledge:
+
+Question needs:
+1. Filter by diabetic_ulcer (Wound Assessment form)
+2. Measure healing_rate (Assessment Series form)
+3. Filter by infection_status (Assessment Series form)
+
+SemanticIndex tells us:
+- "Wound Assessment" is AttributeSet ID: A1
+- "Assessment Series" is AttributeSet ID: A2
+
+Both are linked to the same AssessmentTypeVersion (Wound tracking assessment)
+
+Physical tables in Silhouette:
+- dbo.Note (stores form field values from Wound Assessment)
+- dbo.Measurement (stores measurement values from Assessment Series)
+
+Required join path:
+┌──────────────┐
+│ dbo.Patient  │
+└──────────────┘
+       ↑
+       │ patientFk
+       │
+┌──────────────┐
+│ dbo.Wound    │
+└──────────────┘
+       ↑
+       │ woundFk
+       │
+┌──────────────────┐       ┌──────────────────┐
+│ dbo.Assessment   │───────│ dbo.Measurement  │
+│ (Series)         │ pk=id │ (healing area)   │
+└──────────────────┘       └──────────────────┘
+       ↑
+       │ assessmentFk
+       │
+┌──────────────┐
+│ dbo.Note     │ (infection status)
+└──────────────┘
+```
+
+**Step 4: Generate SQL with Proper Form Filtering**
+
+```sql
+-- Notice: Uses SemanticIndex to know how to filter by FORM
+SELECT
+  -- Wound Classification (from Wound Assessment form)
+  n_etiology.value AS Etiology,
+
+  -- Healing Rate (from Assessment Series form)
+  AVG(m_area.value) AS AvgHealingRate,
+
+  -- Infection Status (from Assessment Series form, same table)
+  n_infection.value AS InfectionStatus,
+
+  COUNT(DISTINCT a.id) AS AssessmentCount
+FROM
+  rpt.Patient p
+  INNER JOIN rpt.Wound w ON p.id = w.patientFk
+  INNER JOIN rpt.Assessment a ON w.id = a.woundFk
+
+  -- Join for Wound Assessment form (etiology field)
+  LEFT JOIN rpt.Note n_etiology
+    ON a.id = n_etiology.assessmentFk
+    AND n_etiology.attributeTypeFk = 'A1' -- Etiology field ID
+
+  -- Join for Assessment Series form (area measurement)
+  LEFT JOIN rpt.Measurement m_area
+    ON a.id = m_area.assessmentFk
+    AND m_area.measurementTypeId = 'M1' -- Healing area measurement ID
+
+  -- Join for Assessment Series form (infection status)
+  LEFT JOIN rpt.Note n_infection
+    ON a.id = n_infection.assessmentFk
+    AND n_infection.attributeTypeFk = 'A3' -- Infection status field ID
+
+WHERE
+  -- Filter by form field value (from Wound Assessment)
+  n_etiology.value = 'Diabetic Foot Ulcer'
+
+  -- Filter by form field value (from Assessment Series)
+  AND n_infection.value = 'Yes'
+
+GROUP BY
+  n_etiology.value,
+  n_infection.value
+ORDER BY
+  AvgHealingRate DESC;
+```
+
+**How SemanticIndex Made This Possible:**
+
+| Without Phase 3                            | With Phase 3                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| Consultant doesn't know which fields exist | Query SemanticIndex: know all 3 fields exist                         |
+| Consultant doesn't know field IDs          | SemanticIndex stores `attribute_type_id` for each field              |
+| Consultant doesn't know data types         | SemanticIndex stores `data_type` (e.g., "Decimal")                   |
+| Consultant doesn't know join logic         | SemanticIndex groups fields by form; know to join Note + Measurement |
+| Can't map user term "diabetic"             | SemanticIndex stores options mapping: "DFU" → "diabetic_ulcer"       |
+| Manual effort, error-prone                 | Automatic, deterministic, auditable                                  |
+
+**Step 5: Return to Consultant as Context**
+
+```json
+{
+  "intent": "outcome_analysis",
+  "scope": "patient_cohort",
+  "concepts_found": [
+    {
+      "user_term": "diabetic wounds",
+      "semantic_concept": "wound_classification:diabetic_ulcer",
+      "form_name": "Wound Assessment",
+      "field_name": "Etiology",
+      "confidence": 0.95,
+      "customer_value": "Diabetic Foot Ulcer"
+    },
+    {
+      "user_term": "healing rate",
+      "semantic_concept": "outcome_metrics:healing_rate",
+      "form_name": "Assessment Series",
+      "field_name": "Area (cm²)",
+      "confidence": 0.92,
+      "aggregation": "AVG",
+      "unit": "cm²"
+    },
+    {
+      "user_term": "high infection",
+      "semantic_concept": "infection_status",
+      "form_name": "Assessment Series",
+      "field_name": "Infection Present",
+      "confidence": 0.91,
+      "customer_value": "Yes"
+    }
+  ],
+  "forms_required": ["Wound Assessment", "Assessment Series"],
+  "join_path": [
+    "Patient → Wound → Assessment",
+    "Assessment → Note (Etiology filter)",
+    "Assessment → Measurement (Area)",
+    "Assessment → Note (Infection filter)"
+  ],
+  "validation_status": "ready",
+  "warnings": []
+}
+```
+
+---
+
+## 7.4 Complete Multi-Form Resolution Architecture
+
+### 7.4.1 End-to-End Data Flow
+
+This diagram shows how data flows from customer question to validated SQL across all components:
+
+```
+PHASE 1: Customer Registry (Setup)
+┌─────────────────────────────────────────┐
+│ PostgreSQL: Customer Table              │
+├─────────────────────────────────────────┤
+│ • customer_id: "STMARYS"                │
+│ • db_connection_encrypted: "***"        │
+│ • silhouette_version: "5.1"             │
+└─────────────────────────────────────────┘
+                    ↓
+           Decrypted (in memory)
+                    ↓
+┌─────────────────────────────────────────┐
+│ Customer's MS SQL Server                │
+│ (Demo Database)                         │
+├─────────────────────────────────────────┤
+│ dbo.AttributeSet                        │
+│ dbo.AttributeType                       │
+│ dbo.AttributeLookup                     │
+│ dbo.AssessmentTypeVersion               │
+└─────────────────────────────────────────┘
+                    ↑
+           YOUR ROUTE.TS QUERIES THIS!
+           (Pulls raw form definitions)
+                    ↓
+
+PHASE 2: Clinical Ontology (Universal Knowledge)
+┌─────────────────────────────────────────────────┐
+│ PostgreSQL: ClinicalOntology Table              │
+├─────────────────────────────────────────────────┤
+│ • concept_name: "wound_classification"          │
+│ • canonical_name: "Wound Classification"        │
+│ • embedding: [0.12, -0.45, 0.78, ...] (3072d)  │
+│ • categories: diabetic_ulcer, venous_ulcer, ... │
+└─────────────────────────────────────────────────┘
+                    ↑
+           Loaded from clinical_ontology.yaml
+                    ↓
+
+PHASE 3: Semantic Indexing (Customer-Specific Mapping)
+┌──────────────────────────────────────────────────────────┐
+│ PostgreSQL: SemanticIndex* Tables (Per Customer)         │
+├──────────────────────────────────────────────────────────┤
+│ SemanticIndex                                            │
+│  • customer_id: "STMARYS"                               │
+│  • form_name: "Wound Assessment"                         │
+│  • avg_confidence: 0.87                                 │
+│                    ↓                                     │
+│ SemanticIndexField (Many per form)                      │
+│  • field_name: "Etiology"                               │
+│  • semantic_concept: "wound_classification"             │
+│  • confidence: 0.95                                     │
+│                    ↓                                     │
+│ SemanticIndexOption (Many per field)                    │
+│  • option_value: "Diabetic Foot Ulcer"                 │
+│  • semantic_category: "diabetic_ulcer"                 │
+│  • confidence: 0.98                                     │
+└──────────────────────────────────────────────────────────┘
+                    ↑
+        Built by Phase 3 Discovery Process:
+        1. Query customer forms (your route.ts)
+        2. Generate embeddings for field names
+        3. Search ClinicalOntology
+        4. Calculate confidence
+        5. Store mappings
+                    ↓
+
+PHASE 5: Context Discovery (Given a Question)
+┌──────────────────────────────────────────────────────────────┐
+│ Consultant Question:                                         │
+│ "Average healing rate for diabetic wounds with infection?"   │
+└──────────────────────────────────────────────────────────────┘
+                    ↓
+┌──────────────────────────────────────────────────────────────┐
+│ Step 1: Intent Classification (LLM)                          │
+├──────────────────────────────────────────────────────────────┤
+│ Question → LLM Prompt with Ontology → JSON Intent             │
+│ {                                                            │
+│   type: "outcome_analysis",                                  │
+│   metrics: ["healing_rate", "infection_status"],             │
+│   filters: [{concept: "wound_classification", ...}]          │
+│ }                                                            │
+└──────────────────────────────────────────────────────────────┘
+                    ↓
+┌──────────────────────────────────────────────────────────────┐
+│ Step 2: Query SemanticIndex (Phase 3 output)                │
+├──────────────────────────────────────────────────────────────┤
+│ SELECT sif.*, si.form_name                                  │
+│ FROM SemanticIndexField sif                                 │
+│ JOIN SemanticIndex si ON sif.semantic_index_id = si.id      │
+│ WHERE customer_id = 'STMARYS'                               │
+│   AND semantic_concept IN (...)                             │
+│   AND confidence > 0.70;                                    │
+│                                                             │
+│ Results: Know which forms have the fields we need!          │
+│ • "Etiology" in "Wound Assessment" (0.95)                  │
+│ • "Area (cm²)" in "Assessment Series" (0.92)               │
+│ • "Infection Present" in "Assessment Series" (0.91)        │
+└──────────────────────────────────────────────────────────────┘
+
+                    ↓
+
+┌──────────────────────────────────────────────────────────────┐
+│ Step 3: Build Form-Field Mapping                             │
+├──────────────────────────────────────────────────────────────┤
+│ formFieldMap = {                                             │
+│   "Wound Assessment": {                                      │
+│     fieldName: "Etiology",                                   │
+│     fieldId: "attr-123",                                     │
+│     dataType: "SingleSelectList",                            │
+│     filterValue: "Diabetic Foot Ulcer"                      │
+│   },                                                         │
+│   "Assessment Series": {                                     │
+│     fieldName: "Area (cm²)",                                 │
+│     fieldId: "attr-456",                                     │
+│     dataType: "Decimal",                                     │
+│     aggregation: "AVG"                                       │
+│   },                                                         │
+│   ...                                                        │
+│ }                                                            │
+│                                                             │
+│ This map knows:                                              │
+│ - Which Silhouette field IDs to use                          │
+│ - Which customer values to filter by                         │
+│ - What aggregations apply                                    │
+│ - Data types and join logic                                  │
+└──────────────────────────────────────────────────────────────┘
+
+                    ↓
+
+┌──────────────────────────────────────────────────────────────┐
+│ Step 4: Plan Join Paths                                      │
+├──────────────────────────────────────────────────────────────┤
+│ From SemanticIndex, know:                                    │
+│ - Forms map to AttributeSets (A1, A2)                        │
+│ - Both linked to same AssessmentTypeVersion                  │
+│ - Data stored in dbo.Note (field values)                     │
+│ - Data stored in dbo.Measurement (measurements)              │
+│                                                             │
+│ Build join path:                                             │
+│ Patient                                                     │
+│   → Wound (patientFk)                                        │
+│   → Assessment (woundFk)                                     │
+│     → Note (assessmentFk) [for Wound Assessment fields]     │
+│     → Measurement [for measurements]                         │
+└──────────────────────────────────────────────────────────────┘
+
+                    ↓
+
+PHASE 6: SQL Generation & Validation
+┌──────────────────────────────────────────────────────────────┐
+│ Step 5: Generate SQL with Form-Aware Filtering               │
+├──────────────────────────────────────────────────────────────┤
+│ SELECT                                                       │
+│   n_etiology.value AS Etiology,         ← From form "A"      │
+│   AVG(m.value) AS AvgHealingRate,       ← From form "B"      │
+│   n_infection.value AS InfectionStatus  ← From form "B"      │
+│ FROM rpt.Patient p                                           │
+│ INNER JOIN rpt.Wound w ON p.id = w.patientFk               │
+│ INNER JOIN rpt.Assessment a ON w.id = a.woundFk            │
+│                                                             │
+│ -- Form A: Wound Assessment                                 │
+│ LEFT JOIN rpt.Note n_etiology                               │
+│   ON a.id = n_etiology.assessmentFk                         │
+│   AND n_etiology.attributeTypeFk = 'attr-123'  ← From SeI   │
+│                                                             │
+│ -- Form B: Assessment Series (measurement)                  │
+│ LEFT JOIN rpt.Measurement m                                 │
+│   ON a.id = m.assessmentFk                                 │
+│   AND m.measurementTypeId = 'meas-456'  ← From SeI         │
+│                                                             │
+│ -- Form B: Assessment Series (infection)                    │
+│ LEFT JOIN rpt.Note n_infection                              │
+│   ON a.id = n_infection.assessmentFk                        │
+│   AND n_infection.attributeTypeFk = 'attr-789'  ← From SeI   │
+│                                                             │
+│ WHERE                                                        │
+│   n_etiology.value = 'Diabetic Foot Ulcer'  ← Mapped value  │
+│   AND n_infection.value = 'Yes'             ← Mapped value  │
+│ GROUP BY ...                                                │
+└──────────────────────────────────────────────────────────────┘
+
+                    ↓
+
+┌──────────────────────────────────────────────────────────────┐
+│ Step 6: Validate Against Demo Data                           │
+├──────────────────────────────────────────────────────────────┤
+│ Execute against Customer Demo Database (Phase 4 data):       │
+│ 1. Syntax check (T-SQL parser)                               │
+│ 2. Table/column validation (against rpt schema)              │
+│ 3. Semantic validation (field mappings exist)                │
+│ 4. Sample execution (capture first 20 rows)                  │
+│                                                             │
+│ Result:                                                      │
+│ ✅ PASSED                                                     │
+│ • 287 rows returned                                          │
+│ • Sample data captured                                       │
+│ • Validated in Silhouette UI                                 │
+└──────────────────────────────────────────────────────────────┘
+
+                    ↓
+
+┌──────────────────────────────────────────────────────────────┐
+│ Step 7: Return to Consultant                                 │
+├──────────────────────────────────────────────────────────────┤
+│ SQL is ready for delivery!                                   │
+│ • Context panel shows how mapping resolved                   │
+│ • Sample results displayed                                   │
+│ • Validation report attached                                 │
+│ • Can download delivery package                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 7.4.2 Key Insight: Why SemanticIndex is Critical
+
+**Without SemanticIndex (imagine if we skipped Phase 3):**
+
+```
+Question: "healing rate for diabetic wounds?"
+  ↓
+Where are these fields?  ❌ Don't know
+  ↓
+What are the field IDs?  ❌ Don't know
+  ↓
+Which tables store them? ❌ Don't know
+  ↓
+How do we join tables?   ❌ Don't know
+  ↓
+What's the customer value for "diabetic"?  ❌ Don't know
+  ↓
+⛔ BLOCKED: Cannot generate SQL
+```
+
+**With SemanticIndex (Phase 3 complete):**
+
+```
+Question: "healing rate for diabetic wounds?"
+  ↓
+Query SemanticIndex  ✅ Know all fields exist
+  ↓
+Extract field IDs from SemanticIndexField  ✅ Know attr-123, attr-456
+  ↓
+Extract form grouping  ✅ Know which tables to join
+  ↓
+Extract option mappings  ✅ Know "DFU" → "Diabetic Foot Ulcer"
+  ↓
+Build SQL with correct joins and filters  ✅ Deterministic
+  ↓
+Validate against demo data  ✅ Execute and verify
+  ↓
+✅ READY FOR DELIVERY
+```
+
+### 7.4.3 Confidence Scoring Enables Escalation
+
+The Phase 3 semantic indexing process captures confidence for every mapping:
+
+```
+High Confidence (> 0.85)
+┌─────────────────────────────────────────┐
+│ Field: "Healing Rate"                   │
+│ Concept: "outcome_metrics"              │
+│ Confidence: 0.96                        │
+│ ✅ AUTO-ACCEPTED                         │
+│ → Used directly in SQL generation       │
+└─────────────────────────────────────────┘
+
+Medium Confidence (0.70 - 0.85)
+┌─────────────────────────────────────────┐
+│ Field: "Wound Cause"                    │
+│ Concept: "wound_classification"         │
+│ Confidence: 0.78                        │
+│ ⚠️  ACCEPTED WITH FLAG                   │
+│ → Used in SQL but flagged in context    │
+│ → Consultant sees low confidence warning│
+└─────────────────────────────────────────┘
+
+Low Confidence (< 0.70)
+┌─────────────────────────────────────────┐
+│ Field: "XYZ Comments"                   │
+│ Concept: "clinical_observation" (?)     │
+│ Confidence: 0.52                        │
+│ ❌ REQUIRES REVIEW                      │
+│ → Flagged in mapping review queue       │
+│ → Admin must manually verify or adjust  │
+│ → Not used in SQL until resolved        │
+└─────────────────────────────────────────┘
+```
+
+This confidence scoring:
+
+- **Automates routine cases** (high confidence)
+- **Surfaces edge cases** (low confidence)
+- **Enables audit trail** (every decision tracked)
+- **Improves over time** (feedback refines ontology)
+
+---
+
+## 7.4 Cross-Domain Semantic Discovery (NEW)
+
+**Purpose:** Enable resolution of queries that span multiple data domains—form fields, non-form tables, and entity relationships.
+
+### 7.4.1 Problem: Form-Centric Queries vs. Real-World Questions
+
+**Form-Centric Question (Previous Design):**
+
+```
+"Average healing rate for diabetic wounds?"
+→ Needs: wound_classification (form) + outcome_metrics (form)
+→ Solution: Query SemanticIndexField only
+```
+
+**Real-World Mixed-Domain Question:**
+
+```
+"How many patients in AML Clinic Unit with >3 diabetic wound assessments?"
+→ Needs:
+  - organizational_unit (non-form: rpt.Unit.name)
+  - patient_cohort (non-form: rpt.Patient)
+  - diabetic classification (form: Wound Assessment.Etiology)
+  - assessment count (entity relationship: Patient → Wound → Assessment)
+→ Solution: Query SemanticIndexField + SemanticIndexNonForm + SemanticIndexRelationship
+```
+
+### 7.4.2 Three New Semantic Index Tables
+
+**Table 1: SemanticIndexNonForm** (Non-Form Table Metadata)
+
+Maps static rpt.\* schema columns to semantic concepts:
+
+```typescript
+{
+  table_name: "rpt.Patient",
+  column_name: "unitFk",
+  semantic_concept: "organizational_unit",
+  semantic_category: "clinic_unit",
+  confidence: 0.98,
+  is_filterable: true,
+  is_joinable: true
+}
+```
+
+**Why it matters:** SQL generator knows which rpt columns are available, their data types, and what they semantically mean.
+
+**Table 2: SemanticIndexNonFormValue** (Non-Form Value Mappings)
+
+Maps actual field values to semantic categories:
+
+```typescript
+{
+  value_text: "AML Clinic Unit",
+  semantic_category: "leukemia_clinic",
+  confidence: 0.98
+}
+```
+
+**Why it matters:** When consultant says "AML Clinic", system knows to filter on rpt.Unit.name = "AML Clinic Unit".
+
+**Table 3: SemanticIndexRelationship** (Entity Relationships)
+
+Documents how entities relate:
+
+```typescript
+{
+  source_table: "rpt.Patient",
+  target_table: "rpt.Unit",
+  fk_column_name: "unitFk",
+  relationship_type: "N:1",
+  semantic_relationship: "belongs_to"
+}
+```
+
+**Why it matters:** SQL generator knows Patient.unitFk references Unit, so it can build correct JOIN conditions.
+
+### 7.4.3 Cross-Domain Context Discovery Process
+
+**Given question:** "How many patients in AML Clinic Unit with >3 diabetic wound assessments?"
+
+**Step 1: Intent Classification**
+
+```json
+{
+  "intent": "cohort_analysis",
+  "entities": [
+    {
+      "type": "organizational_unit",
+      "user_term": "AML Clinic Unit",
+      "domain": "non_form"
+    },
+    {
+      "type": "wound_classification",
+      "user_term": "diabetic",
+      "domain": "form"
+    },
+    {
+      "type": "assessment_count",
+      "user_term": ">3 assessments",
+      "domain": "entity_relationship"
+    }
+  ]
+}
+```
+
+**Step 2: Query All Three Indexes**
+
+```sql
+-- 2a. Find non-form organizational unit metadata
+SELECT table_name, column_name, semantic_concept
+FROM "SemanticIndexNonForm"
+WHERE customer_id = 'STMARYS'
+  AND semantic_concept = 'organizational_unit'
+  AND is_filterable = true;
+-- Result: rpt.Unit.name is filterable on organizational_unit
+
+-- 2b. Find organizational unit value mappings
+SELECT value_text, semantic_category, confidence
+FROM "SemanticIndexNonFormValue"
+WHERE semantic_category LIKE '%clinic%'
+  AND confidence > 0.90;
+-- Result: "AML Clinic Unit" → leukemia_clinic (0.98)
+
+-- 2c. Find form field mapping for diabetic
+SELECT si.form_name, sif.field_name, sio.option_value
+FROM "SemanticIndex" si
+JOIN "SemanticIndexField" sif ON si.id = sif.semantic_index_id
+JOIN "SemanticIndexOption" sio ON sif.id = sio.semantic_index_field_id
+WHERE customer_id = 'STMARYS'
+  AND sif.semantic_concept = 'wound_classification'
+  AND sio.semantic_category = 'diabetic_ulcer';
+-- Result: Wound Assessment.Etiology = "Diabetic Foot Ulcer"
+
+-- 2d. Find entity relationships for counting
+SELECT *
+FROM "SemanticIndexRelationship"
+WHERE source_table IN ('rpt.Patient', 'rpt.Wound')
+  AND relationship_type LIKE '%:N';
+-- Result: Patient (1) → Wound (N), Wound (1) → Assessment (N)
+```
+
+**Step 3: Build Multi-Domain Join Path**
+
+```
+rpt.Patient
+  │
+  ├─ (FK: unitFk) → rpt.Unit
+  │  WHERE Unit.name = 'AML Clinic Unit'  [Non-form value mapping]
+  │
+  ├─ (FK: id = Wound.patientFk) → rpt.Wound
+  │
+  └─ (FK: id = Assessment.woundFk) → rpt.Assessment
+       │
+       └─ (assessmentFk) → rpt.Note
+            WHERE Note.attributeTypeFk = 'attr-123'      [Form field ID]
+            AND Note.value = 'Diabetic Foot Ulcer'       [Form option value]
+```
+
+**Step 4: Generate SQL with All Domains**
+
+```sql
+SELECT
+  u.name AS ClinicUnit,
+  COUNT(DISTINCT p.id) AS PatientCount,
+  AVG(assessment_count) AS AvgAssessmentsPerPatient
+
+FROM rpt.Patient p
+INNER JOIN rpt.Unit u ON p.unitFk = u.id
+  AND u.name = 'AML Clinic Unit'  ← From SemanticIndexNonFormValue
+
+INNER JOIN rpt.Wound w ON p.id = w.patientFk
+INNER JOIN rpt.Assessment a ON w.id = a.woundFk
+
+LEFT JOIN rpt.Note n ON a.id = n.assessmentFk
+  AND n.attributeTypeFk = 'attr-uuid-123'  ← From SemanticIndexField
+  AND n.value = 'Diabetic Foot Ulcer'       ← From SemanticIndexOption
+
+WHERE w.isDeleted = 0
+  AND a.isDeleted = 0
+  AND n.value IS NOT NULL
+
+GROUP BY p.id, u.name
+HAVING COUNT(DISTINCT a.id) > 3
+
+ORDER BY AvgAssessmentsPerPatient DESC;
+```
+
+### 7.4.4 Discovery Process for Non-Form Metadata
+
+**Current Phase 3 (Form-Only):**
+
+1. Query dbo.AttributeType (form fields)
+2. Generate embeddings
+3. Map to ClinicalOntology
+4. Store in SemanticIndexField
+
+**Extended Phase 3 (Form + Non-Form + Relationships):**
+
+**Part 1: Form Discovery** (unchanged)
+
+```
+Query dbo.AttributeType
+  → SemanticIndexField
+```
+
+**Part 2: Non-Form Discovery** (NEW)
+
+```
+Query rpt schema structure:
+  1. Connect to customer's Silhouette database
+  2. Run: SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = 'rpt'
+  3. For each column:
+     a. Generate embedding from column_name + TABLE_NAME context
+     b. Search ClinicalOntology for semantic concept
+     c. Calculate confidence
+     d. Store in SemanticIndexNonForm
+  4. Mark high-confidence as is_filterable/is_joinable
+```
+
+**Part 3: Relationship Discovery** (NEW)
+
+```
+Query FK relationships:
+  1. Run: SELECT CONSTRAINT_NAME, TABLE_NAME, COLUMN_NAME,
+           REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+          FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+          WHERE REFERENCED_TABLE_NAME IS NOT NULL
+          AND TABLE_SCHEMA = 'rpt'
+  2. For each FK:
+     a. Extract source_table, target_table, fk_column_name
+     b. Determine cardinality (1:N, N:1)
+     c. Calculate confidence (100% for explicit FKs)
+     d. Store in SemanticIndexRelationship
+```
+
+**Part 4: Non-Form Value Discovery** (NEW)
+
+```
+Query column values (for filterable columns):
+  1. For each is_filterable=true column in SemanticIndexNonForm:
+     a. Run: SELECT DISTINCT column_name FROM table_name
+             WHERE isDeleted = 0 LIMIT 50
+     b. For each distinct value:
+        - Generate embedding
+        - Search ClinicalOntology for category match
+        - Store in SemanticIndexNonFormValue
+  2. This enables phrase like "AML Clinic Unit" → semantic mapping
+```
+
 ---
 
 ## 8. Demo Data Generation
@@ -1409,9 +2203,7 @@ for (const assessment of assessments) {
   const patient = patientsById.get(assessment.patientFk)!;
 
   for (const attrType of attributeTypes) {
-    const mapping = semanticMappings.find(
-      (m) => m.fieldName === attrType.name
-    );
+    const mapping = semanticMappings.find((m) => m.fieldName === attrType.name);
 
     const value = mapping
       ? selectRealisticValue(mapping, wound, patient, assessment.assessmentDate)
@@ -1508,10 +2300,7 @@ function generateWoundProgressionTimeline(
   for (let week = 0; week < assessmentCount; week++) {
     const healedRatio = Math.min(1, (healingRate * week) / initialArea);
     const noise = randomBetween(0.9, 1.1);
-    const currentArea = Math.max(
-      0,
-      initialArea * (1 - healedRatio) * noise
-    );
+    const currentArea = Math.max(0, initialArea * (1 - healedRatio) * noise);
 
     stages.push({
       area: roundTo(currentArea, 2),
@@ -1579,9 +2368,7 @@ function selectRealisticValue(
         option.semanticCategory?.includes(wound.etiology)
       );
       return randomChoice(
-        (targetedOptions.length ? targetedOptions : options).map(
-          (o) => o.value
-        )
+        (targetedOptions.length ? targetedOptions : options).map((o) => o.value)
       );
 
     case "infection_status":

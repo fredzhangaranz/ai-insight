@@ -155,6 +155,133 @@ CREATE INDEX idx_semantic_field_concept ON "SemanticIndexField"(semantic_concept
 CREATE INDEX idx_semantic_field_review ON "SemanticIndexField"(is_review_required) WHERE is_review_required = true;
 ```
 
+### 1.3.1 Non-Form Table Metadata (NEW: For Cross-Domain Queries)
+
+**Purpose:** Index static rpt.\* schema columns for use in non-form-centric queries (e.g., "Patients in AML Unit", "Wounds by anatomical location").
+
+```sql
+CREATE TABLE "SemanticIndexNonForm" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
+
+  -- Physical location in rpt schema
+  table_name VARCHAR(255) NOT NULL,  -- rpt.Patient, rpt.Unit, rpt.Wound, rpt.Assessment
+  column_name VARCHAR(255) NOT NULL,
+  data_type VARCHAR(50),              -- int, varchar, datetime, uuid, etc.
+
+  -- Semantic mapping
+  semantic_concept VARCHAR(255),      -- organizational_unit, patient_demographics, temporal_context
+  semantic_category VARCHAR(255),     -- clinic, hospital, age, date_range
+  is_filterable BOOLEAN DEFAULT true, -- Can be used in WHERE clauses
+  is_joinable BOOLEAN DEFAULT true,   -- Can be used in JOINs (has FK relationships)
+
+  -- Metadata
+  confidence NUMERIC(5,2),            -- 0-1: how confident the mapping is
+  is_review_required BOOLEAN DEFAULT false,
+  review_note TEXT,
+
+  discovered_at TIMESTAMPTZ NOT NULL,
+  discovery_run_id UUID REFERENCES "CustomerDiscoveryRun"(id),
+
+  metadata JSONB DEFAULT '{}',        -- storage_format, sample_values, value_range, etc.
+
+  UNIQUE (customer_id, table_name, column_name)
+);
+
+CREATE INDEX idx_nonform_customer_concept ON "SemanticIndexNonForm"(customer_id, semantic_concept);
+CREATE INDEX idx_nonform_table_name ON "SemanticIndexNonForm"(table_name);
+```
+
+**Example Data:**
+
+```
+customer_id | table_name | column_name | semantic_concept      | semantic_category | confidence
+------------|------------|-------------|----------------------|-------------------|------------
+STMARYS-id  | rpt.Patient| unitFk      | organizational_unit   | clinic_unit       | 0.98
+STMARYS-id  | rpt.Unit   | name        | organizational_unit   | unit_name         | 0.99
+STMARYS-id  | rpt.Patient| dateOfBirth | patient_demographics  | age               | 0.99
+STMARYS-id  | rpt.Wound  | baselineDate| temporal_context      | wound_start_date  | 0.97
+STMARYS-id  | rpt.Assessment| assessmentDate| temporal_context | assessment_date   | 0.99
+```
+
+### 1.3.2 Non-Form Value Mappings (NEW: For Terminology Mapping)
+
+**Purpose:** Map customer-specific values in non-form fields to semantic concepts (e.g., "AML Clinic Unit" → clinic concept).
+
+```sql
+CREATE TABLE "SemanticIndexNonFormValue" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  semantic_index_nonform_id UUID NOT NULL REFERENCES "SemanticIndexNonForm"(id) ON DELETE CASCADE,
+
+  -- The actual value from the database
+  value_text VARCHAR(500),            -- e.g., "AML Clinic Unit", "St. Mary's Clinic"
+  value_code VARCHAR(100),            -- e.g., "AML", "SM" (if available)
+
+  -- Semantic mapping
+  semantic_category VARCHAR(255),     -- e.g., "diabetic_clinic", "primary_care"
+  confidence NUMERIC(5,2),
+
+  metadata JSONB DEFAULT '{}'         -- sample_count, frequency, etc.
+);
+
+CREATE INDEX idx_nonform_value_concept ON "SemanticIndexNonFormValue"(semantic_category);
+```
+
+**Example:**
+
+```
+Column: rpt.Unit.name
+├─ Value: "AML Clinic Unit" → semantic_category: "leukemia_clinic" (confidence: 0.98)
+├─ Value: "Diabetes Center" → semantic_category: "diabetes_clinic" (confidence: 0.99)
+└─ Value: "General Surgery" → semantic_category: "surgical_unit" (confidence: 0.95)
+```
+
+### 1.3.3 Entity Relationships (NEW: For Cross-Table Navigation)
+
+**Purpose:** Document how entities relate across tables for multi-domain joins (e.g., Patient → Unit, Wound → Assessment).
+
+```sql
+CREATE TABLE "SemanticIndexRelationship" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
+
+  -- Source entity
+  source_table VARCHAR(255) NOT NULL, -- rpt.Patient
+  source_column VARCHAR(255) NOT NULL,-- id
+
+  -- Target entity
+  target_table VARCHAR(255) NOT NULL, -- rpt.Unit
+  target_column VARCHAR(255) NOT NULL,-- id
+
+  -- Relationship metadata
+  fk_column_name VARCHAR(255),        -- Patient.unitFk (the joining column)
+  relationship_type VARCHAR(50),      -- one_to_many, many_to_one, one_to_one
+  cardinality VARCHAR(50),            -- 1:N, N:1, 1:1
+
+  -- Semantic meaning
+  semantic_relationship VARCHAR(255), -- "belongs_to", "has_many", "linked_via"
+
+  confidence NUMERIC(5,2),
+  discovered_at TIMESTAMPTZ NOT NULL,
+  discovery_run_id UUID REFERENCES "CustomerDiscoveryRun"(id),
+
+  metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX idx_relationship_source ON "SemanticIndexRelationship"(source_table);
+CREATE INDEX idx_relationship_target ON "SemanticIndexRelationship"(target_table);
+```
+
+**Example:**
+
+```
+source_table | source_column | target_table | fk_column_name | relationship_type
+-------------|---------------|--------------|----------------|------------------
+rpt.Patient  | id            | rpt.Unit     | unitFk         | N:1 (many patients per unit)
+rpt.Wound    | id            | rpt.Patient  | patientFk      | N:1 (many wounds per patient)
+rpt.Assessment| id           | rpt.Wound    | woundFk        | N:1 (many assessments per wound)
+```
+
 ### Clinical Ontology
 
 Stored as canonical concepts with vector embeddings for semantic search (unchanged from v1.0, but reiterated for completeness).

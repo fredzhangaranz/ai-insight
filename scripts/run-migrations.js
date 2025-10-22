@@ -42,6 +42,7 @@ const migrations = [
   "013_add_user_ownership.sql",
   "014_semantic_foundation.sql",
   "015_clinical_ontology_schema.sql",
+  "016_ontology_audit_log.sql",
 ];
 
 async function runMigrations() {

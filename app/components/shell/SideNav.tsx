@@ -220,6 +220,11 @@ export function SideNav() {
                         <DropdownMenuItem onClick={() => router.push("/admin")}>
                           AI Providers
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/ontology")}
+                        >
+                          Manage Ontology
+                        </DropdownMenuItem>
                       </>
                     )}
                     <DropdownMenuSeparator />
