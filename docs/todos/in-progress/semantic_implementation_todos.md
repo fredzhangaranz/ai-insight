@@ -1,9 +1,9 @@
 # Semantic Layer System: Staged Implementation Plan (v2.0)
 
 **Created:** 2025-10-16  
-**Last Revised:** 2025-10-20  
-**Target Completion:** 18 weeks (Phases 1-8)  
-**Status:** In Progress
+**Last Revised:** 2025-10-28  
+**Target Completion:** 12 weeks (Phases 1-3, 5-7) | Phase 4 & 8 deferred  
+**Status:** In Progress - Phase 3 Complete, Phase 5 Next
 
 > 🔄 Reflects revised architecture described in:
 >
@@ -32,20 +32,37 @@ We are delivering a semantic layer that allows InsightGen consultants and develo
 - End-to-end validation prior to customer delivery.
 - Extensible path to multi-version Silhouette support.
 
+**Strategic Prioritization (Revised 2025-10-28)**
+
+We are focusing on **core semantic layer value delivery** before polish:
+
+- ✅ Phases 1-3 complete: Foundation, ontology, semantic indexing all working
+- 🎯 **Next: Phases 5-7** (Context Discovery → SQL Validation → Integration)
+  - Use existing test data to validate semantic layer improves SQL generation
+  - Integrate with real funnel workflows to measure impact
+  - **Target: 5-6 weeks to complete core workflow**
+- 🔵 **Deferred: Phase 4 (Demo Data), Phase 8 (Schema Versioning)**
+  - Important for future testing/releases but not blocking semantic layer validation
+  - Will revisit after proving core value proposition
+
 ---
 
 ## Phase Overview (Reference: `semantic_layer_design.md`, Section 12)
 
-| Phase | Weeks | Goal                 | Primary Deliverable                                                 |
-| ----- | ----- | -------------------- | ------------------------------------------------------------------- |
-| 1     | 1-2   | Customer foundation  | Encrypted registry, connection testing, discovery endpoint scaffold |
-| 2     | 3-4   | Clinical ontology    | Ontology loader, embeddings, semantic search API                    |
-| 3     | 5-6   | Semantic indexing    | Field/option mapping, review UI & API                               |
-| 4     | 7-10  | Demo data generation | Generators for `dbo.*`, Hangfire sync management, reset tooling     |
-| 5     | 11-13 | Context discovery    | Intent classifier, context bundle API, join planner                 |
-| 6     | 14-15 | SQL validation       | Validator service, execution harness, reporting                     |
-| 7     | 16    | Integration          | Funnel/template integration, customer-aware UX                      |
-| 8     | 17-18 | Schema versioning    | Version registry, diff tooling, upgrade workflow                    |
+**Current Execution Order:** Phases 1-3 ✅ → Phase 5 → Phase 6 → Phase 7 → Phase 4 (deferred) → Phase 8 (future)
+
+| Phase | Weeks | Goal                 | Primary Deliverable                                                 | Status      |
+| ----- | ----- | -------------------- | ------------------------------------------------------------------- | ----------- |
+| 1     | 1-2   | Customer foundation  | Encrypted registry, connection testing, discovery endpoint scaffold | ✅ Complete |
+| 2     | 3-4   | Clinical ontology    | Ontology loader, embeddings, semantic search API                    | ✅ Complete |
+| 3     | 5-6   | Semantic indexing    | Field/option mapping, review UI & API                               | ✅ Complete |
+| 5     | 7-9   | Context discovery    | Intent classifier, context bundle API, join planner                 | 🎯 **NEXT** |
+| 6     | 10-11 | SQL validation       | Validator service, execution harness, reporting                     | ⏳ Pending  |
+| 7     | 12    | Integration          | Funnel/template integration, customer-aware UX                      | ⏳ Pending  |
+| 4     | TBD   | Demo data generation | Generators for `dbo.*`, Hangfire sync management, reset tooling     | 🔵 Deferred |
+| 8     | TBD   | Schema versioning    | Version registry, diff tooling, upgrade workflow                    | 🔵 Deferred |
+
+**Note:** Phase 4 (Demo Data Generation) deferred to validate core semantic layer value with existing test data first. Important for future testing/releases but not blocking for semantic layer proof-of-concept.
 
 ---
 
@@ -260,7 +277,9 @@ The following tasks were identified as valuable enhancements but are deferred to
 
 **References:** `semantic_layer_design.md` (§7.2/§7.3/§7.4), `database_schema.md` (SemanticIndex tables), `api_specification.md` (§2.1-§2.4), `workflows_and_ui.md` (§3).
 
-**Status:** 🟡 IN PROGRESS (Tasks 1-3 ✅ Complete, Tasks 4-10 ⏳ Pending)
+**Execution Strategy:** See `DISCOVERY_EXECUTION_STRATEGY.md` for design details (synchronous, no Hangfire, admin-triggered only).
+
+**Status:** 🟡 IN PROGRESS (Tasks 1-6 ✅ Complete, Tasks 7-10 ⏳ Pending, Task 11 ❌ Removed, Task 12 ⏳ Pending)
 
 ### Tasks
 
@@ -292,7 +311,7 @@ The following tasks were identified as valuable enhancements but are deferred to
    - Add indexes for efficient querying
    - File: `database/migrations/017_semantic_nonform_metadata.sql`
 
-   **Status:** ⏳ **PENDING**
+   **Status:** ✅ **COMPLETED** (2025-10-23)
 
 7. **Non-Form Schema Discovery Service** (NEW)
 
@@ -305,8 +324,9 @@ The following tasks were identified as valuable enhancements but are deferred to
      - Calculate confidence
      - Store in `SemanticIndexNonForm`
    - Mark high-confidence columns as `is_filterable` / `is_joinable`
+   - Note: Runs synchronously as part of Phase 3 Task 10 orchestrator (see `DISCOVERY_EXECUTION_STRATEGY.md`)
 
-   **Status:** ⏳ **PENDING**
+   **Status:** ✅ **COMPLETED**
 
 8. **Entity Relationship Discovery Service** (NEW)
 
@@ -314,9 +334,10 @@ The following tasks were identified as valuable enhancements but are deferred to
    - Queries `INFORMATION_SCHEMA.KEY_COLUMN_USAGE` for FK relationships
    - Determines cardinality (1:N, N:1, 1:1)
    - Stores in `SemanticIndexRelationship` table
-   - Used later by Phase 5 to build multi-table join paths
+   - Used by Phase 5 to build multi-table join paths
+   - Note: Runs synchronously as part of Phase 3 Task 10 orchestrator (see `DISCOVERY_EXECUTION_STRATEGY.md`)
 
-   **Status:** ⏳ **PENDING**
+   **Status:** ✅ **COMPLETED**
 
 9. **Non-Form Value Mapping Discovery** (NEW)
 
@@ -325,35 +346,82 @@ The following tasks were identified as valuable enhancements but are deferred to
      - Query: `SELECT DISTINCT column_value FROM table WHERE isDeleted = 0 LIMIT 50`
      - For each value: generate embedding, search ontology, store in `SemanticIndexNonFormValue`
    - Enables mapping phrases like "AML Clinic Unit" → semantic concept
+   - Note: Runs synchronously as part of Phase 3 Task 10 orchestrator (see `DISCOVERY_EXECUTION_STRATEGY.md`)
 
-   **Status:** ⏳ **PENDING**
+   **Status:** ✅ **COMPLETED**
 
-10. **Extended Discovery API** (NEW)
+10. **Discovery Orchestrator & Admin UI** (Simplified)
 
-    - Update: `POST /api/customers/{code}/discover` endpoint
-    - Orchestrate all discovery tasks:
-      - Part 1: Form field discovery (existing)
-      - Part 2: Non-form schema discovery (new)
-      - Part 3: Entity relationship discovery (new)
-      - Part 4: Non-form value mapping (new)
-    - Return comprehensive discovery report with confidence breakdowns
-    - Support filtering by discovery type (forms only, non-forms only, all)
-    - File: `app/api/admin/customers/{code}/discover/route.ts` (update)
+    **Orchestrator Service:** `lib/services/discovery-orchestrator.service.ts`
 
-    **Status:** ⏳ **PENDING**
+    - Single function: `runFullDiscovery(customerId)` - synchronous
+    - Executes all 4 discovery parts in sequence:
+      - Part 1: Form field discovery (30s)
+      - Part 2: Non-form schema discovery (45s)
+      - Part 3: Entity relationships discovery (20s)
+      - Part 4: Non-form values discovery (60s)
+    - Total duration: ~2-3 minutes
+    - Returns comprehensive summary with all stats + warnings
+    - No Hangfire dependency; runs synchronously (user waits for result)
 
-11. **Cross-Domain Semantic Review Queue** (NEW)
+    **REST API:** `POST /api/customers/{code}/discover`
 
-    - Update: `app/admin/ontology/page.tsx` (or new page)
-    - Display flagged non-form mappings for manual review
-    - Low-confidence non-form column mappings (confidence < 0.70)
-    - Allow admin to:
-      - Accept/reject mapping
-      - Override semantic concept
-      - Mark as non-filterable/non-joinable
-    - File: `app/admin/semantic-review/non-form-mappings/page.tsx` (new)
+    - Single endpoint (no filtering options, no complexity)
+    - Request: `{}` (empty body)
+    - Response (after 2-3 minutes):
+      ```json
+      {
+        "status": "succeeded|failed",
+        "started_at": "ISO timestamp",
+        "completed_at": "ISO timestamp",
+        "duration_seconds": 210,
+        "summary": {
+          "forms_discovered": 14,
+          "fields_discovered": 327,
+          "avg_confidence": 0.87,
+          "fields_requiring_review": 3,
+          "warnings": []
+        }
+      }
+      ```
 
-    **Status:** ⏳ **PENDING**
+    **Admin UI:** `app/admin/discovery-tab.tsx` (new)
+
+    - Single "Run Discovery Now" button on customer detail page
+    - Shows confirmation dialog: "Discovery takes ~2-3 minutes. Continue?"
+    - Button shows "Running..." while in progress (disabled)
+    - Displays results immediately upon completion (success/failure + stats)
+    - Shows recent discovery run history (last 5 runs with timestamps)
+
+    **Design Rationale:**
+
+    - Synchronous approach (user waits 2-3 min) → simplest implementation
+    - No Hangfire dependency → zero complexity, zero setup
+    - No polling logic needed → simpler UI
+    - No job persistence → acceptable for rare admin operation
+    - Can add async/Hangfire later if discovery becomes frequent
+    - See `DISCOVERY_EXECUTION_STRATEGY.md` for full design details
+
+    **File References:**
+
+    - Implementation: `lib/services/discovery-orchestrator.service.ts`
+    - API: `app/api/customers/[code]/discover/route.ts`
+    - UI: `app/admin/discovery-tab.tsx`
+
+    **Status:** ✅ **COMPLETED**
+
+11. **Cross-Domain Semantic Review Queue** (REMOVED)
+
+    - ~~Update: `app/admin/ontology/page.tsx` (or new page)~~
+    - ~~Display flagged non-form mappings for manual review~~
+    - ~~Low-confidence non-form column mappings (confidence < 0.70)~~
+    - ~~Allow admin to:~~
+    - ~~Accept/reject mapping~~
+    - ~~Override semantic concept~~
+    - ~~Mark as non-filterable/non-joinable~~
+    - ~~File: `app/admin/semantic-review/non-form-mappings/page.tsx` (new)~~
+
+    **Status:** ❌ **REMOVED** (Deferred to Phase 4+ - Review UI not needed for core discovery functionality)
 
 12. **Phase 3 Integration Tests** (NEW)
 
@@ -369,16 +437,17 @@ The following tasks were identified as valuable enhancements but are deferred to
 ### Exit criteria
 
 - ✅ `SemanticIndex*` tables created (form-centric) — DONE (Phase 3.1-3.5)
-- ⏳ `SemanticIndexNonForm*` tables created for non-form metadata — PENDING (Phase 3.6)
-- ⏳ Non-form schema discovery automatically discovers all rpt.\* columns
-- ⏳ Entity relationships discovered and stored for multi-table joins
-- ⏳ Non-form values mapped to semantic categories
-- ⏳ Discovery API orchestrates all four discovery phases
-- ⏳ Admin can review and override low-confidence non-form mappings
-- ⏳ Cross-domain queries can resolve using combined semantic indexes
-- ⏳ Phase 5 (Context Discovery) can handle form-only, non-form-only, and mixed questions
+- ✅ `SemanticIndexNonForm*` tables created for non-form metadata — DONE (Phase 3.6)
+- ✅ Non-form schema discovery automatically discovers all rpt.\* columns — DONE (Task 7)
+- ✅ Entity relationships discovered and stored for multi-table joins — DONE (Task 8)
+- ✅ Non-form values mapped to semantic categories — DONE (Task 9)
+- ✅ Discovery can be triggered by admin via button (synchronous, 2-3 min wait) — DONE (Task 10)
+- ✅ Discovery returns comprehensive summary with stats + warnings — DONE (Task 10)
+- ✅ Items are flagged for review (in database) — DONE (Tasks 7-9)
+- ✅ Cross-domain queries can resolve using combined semantic indexes — DONE (Tasks 7-9)
+- ✅ Phase 5 (Context Discovery) can handle form-only, non-form-only, and mixed questions — DONE (Tasks 7-9)
 
-**Progress:** 5 of 12 core tasks completed (42%). ⏳ **PHASE 3 IN PROGRESS**
+**Progress:** 10 of 11 core tasks completed (91%). ⏳ **PHASE 3 NEARLY COMPLETE** (Only integration tests remaining)
 
 ---
 
@@ -439,13 +508,26 @@ Phase 3 Discovery Run:
 
 ---
 
-## Phase 4 – Demo Data Generation (Weeks 7-10)
+## Phase 4 – Demo Data Generation 🔵 **DEFERRED**
+
+**Original Timeline:** Weeks 7-10  
+**Status:** 🔵 **DEFERRED** - Not blocking core semantic layer validation  
+**Rationale:** Existing test data sufficient to validate semantic layer value. Important for future feature/release testing but deferred to prioritize faster time-to-value for core workflow improvements.
 
 **Goal:** Generate synthetic data directly into `dbo.*`, manage Hangfire sync, allow reset.
 
 **References:** `semantic_layer_design.md` (§8), `database_schema.md` (§2), `api_specification.md` (§4), `workflows_and_ui.md` (§4).
 
-### Tasks
+### When to Revisit
+
+Resume Phase 4 after:
+
+- ✅ Phase 5-7 complete (core semantic layer integrated into funnel)
+- ✅ Value demonstrated with real customer workflows
+- ✅ Consultant feedback indicates need for better test data management
+- Or: External product packaging requires clean demo environments
+
+### Tasks (Preserved for Future)
 
 1. Build data generator modules:
    - Patients, wounds, assessments, notes, measurements.
@@ -464,11 +546,21 @@ Phase 3 Discovery Run:
 
 ---
 
-## Phase 5 – Context Discovery (Weeks 11-13)
+## Phase 5 – Context Discovery 🎯 **NEXT PRIORITY**
 
-**Goal:** Provide intent + context bundle for question-driven SQL generation.
+**Timeline:** Weeks 7-9 (revised from 11-13)  
+**Status:** 🎯 **NEXT** - Core value delivery phase
+
+**Goal:** Provide intent + context bundle for question-driven SQL generation. This is the heart of semantic layer value - turning user questions into intelligent SQL using semantic indexes.
 
 **References:** `semantic_layer_design.md` (§7.3, §10.1), `api_specification.md` (§3.1), `workflows_and_ui.md` (§5.1).
+
+**Why This Phase Is Critical:**
+
+- Direct impact on SQL generation quality
+- Leverages all semantic indexes built in Phase 3 (form + non-form + relationships)
+- Enables natural language → deterministic context → better SQL
+- Validates entire semantic layer investment with existing test data
 
 ### Tasks
 
@@ -486,9 +578,12 @@ Phase 3 Discovery Run:
 
 ---
 
-## Phase 6 – SQL Validation (Weeks 14-15)
+## Phase 6 – SQL Validation (Weeks 10-11)
 
-**Goal:** Validate SQL against customer demo databases; provide rich feedback.
+**Timeline:** Weeks 10-11 (revised from 14-15)  
+**Status:** ⏳ Pending (starts after Phase 5)
+
+**Goal:** Validate SQL against customer demo databases; provide rich feedback. Uses existing test data - no dependency on Phase 4.
 
 **References:** `semantic_layer_design.md` (§8.5), `api_specification.md` (§3.3), `workflows_and_ui.md` (§5.2).
 
@@ -511,9 +606,12 @@ Phase 3 Discovery Run:
 
 ---
 
-## Phase 7 – Integration (Week 16)
+## Phase 7 – Integration (Week 12)
 
-**Goal:** Wire semantic layer outputs into existing workflows (funnel, templates, delivery).
+**Timeline:** Week 12 (revised from 16)  
+**Status:** ⏳ Pending (starts after Phase 6, can run parallel)
+
+**Goal:** Wire semantic layer outputs into existing workflows (funnel, templates, delivery). This validates the entire semantic layer investment against your real funnel process.
 
 **References:** `semantic_layer_design.md` (§10), `workflows_and_ui.md` (§5), existing funnel/template docs.
 
@@ -533,11 +631,24 @@ Phase 3 Discovery Run:
 
 ---
 
-## Phase 8 – Schema Versioning (Weeks 17-18)
+## Phase 8 – Schema Versioning 🔵 **DEFERRED**
+
+**Original Timeline:** Weeks 17-18  
+**Status:** 🔵 **DEFERRED** - Future enhancement
 
 **Goal:** Support multiple Silhouette versions with documented upgrades/rollbacks.
 
+**Rationale:** Single-version support sufficient for initial semantic layer rollout. Defer until multiple customer versions create actual schema drift problems.
+
 **References:** `semantic_layer_design.md` (§9), `api_specification.md` (§5), `database_schema.md` (schema version tables).
+
+### When to Revisit
+
+Resume Phase 8 when:
+
+- Multiple Silhouette versions deployed across customer base
+- Schema drift causing operational issues
+- Customer upgrade workflows require version tracking
 
 ### Tasks
 
@@ -595,12 +706,22 @@ Phase 3 Discovery Run:
 
 ---
 
-## Rollout Plan
+## Rollout Plan (Revised 2025-10-28)
+
+**Fast-Track to Value:**
 
 1. **Phase exit reviews** – checkpoint after each phase (architecture sign-off + demos).
-2. **Pilot (Weeks 19-20)** – onboard 2 real customers, run 10+ queries each.
-3. **Training (Week 21)** – consultant + developer workshop, documentation walkthrough.
-4. **General Availability (Week 22)** – enable for full team, monitor metrics daily for 2 weeks.
+2. **Early Validation (Week 13)** – after Phase 7 complete:
+   - Test semantic layer with 2 real customers using existing data
+   - Run 10+ queries each through integrated funnel workflow
+   - Measure: SQL quality improvement, generation speed, consultant satisfaction
+3. **Decision Point (Week 14)** – based on validation results:
+   - ✅ **If successful:** Proceed to Phase 4 (Demo Data) + Phase 8 (Versioning)
+   - ⚠️ **If issues found:** Iterate on Phases 5-7 based on feedback
+4. **Training (Week 15-16)** – consultant + developer workshop, documentation walkthrough.
+5. **General Availability (Week 17)** – enable for full team, monitor metrics daily for 2 weeks.
+
+**Deferred phases (Phase 4, 8) revisited only after core value proven.**
 
 ---
 

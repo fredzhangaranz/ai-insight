@@ -74,17 +74,6 @@ type CustomersResponse = {
   customers: AdminCustomer[];
 };
 
-type DiscoveryPreviewResponse = {
-  status: string;
-  formsDiscovered: number;
-  forms: Array<{
-    attributeSetKey: string;
-    name: string;
-    description: string | null;
-    type: number;
-  }>;
-};
-
 async function apiRequest<T>(
   input: RequestInfo,
   init?: RequestInit
@@ -166,9 +155,6 @@ function CustomersPageContent() {
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [testingConnectionCode, setTestingConnectionCode] = useState<
-    string | null
-  >(null);
-  const [runningDiscoveryCode, setRunningDiscoveryCode] = useState<
     string | null
   >(null);
 
@@ -271,44 +257,8 @@ function CustomersPageContent() {
     }
   };
 
-  const handleRunDiscovery = async (customer: AdminCustomer) => {
-    setRunningDiscoveryCode(customer.code);
-    try {
-      const result = await apiRequest<DiscoveryPreviewResponse>(
-        `/api/admin/customers/${customer.code}/discovery`,
-        {
-          method: "POST",
-        }
-      );
-
-      const sampleNames = result.forms
-        .slice(0, 3)
-        .map((form) => form.name)
-        .filter(Boolean);
-
-      toast({
-        title: "Discovery completed",
-        description:
-          sampleNames.length > 0
-            ? `Retrieved ${
-                result.formsDiscovered
-              } forms. Examples: ${sampleNames.join(", ")}${
-                result.formsDiscovered > sampleNames.length ? "…" : ""
-              }`
-            : `Retrieved ${result.formsDiscovered} forms.`,
-      });
-
-      await refreshCustomers();
-    } catch (error: any) {
-      toast({
-        title: "Discovery failed",
-        description:
-          error?.message ?? "Unexpected error running discovery preview.",
-        variant: "destructive",
-      });
-    } finally {
-      setRunningDiscoveryCode(null);
-    }
+  const handleRunDiscovery = (customer: AdminCustomer) => {
+    router.push(`/admin/customers/${customer.code}/discovery`);
   };
 
   const handleDeactivate = async (customer: AdminCustomer) => {
@@ -555,12 +505,9 @@ function CustomersPageContent() {
                         <Button
                           size="sm"
                           onClick={() => handleRunDiscovery(customer)}
-                          disabled={runningDiscoveryCode === customer.code}
                         >
                           <MagnifyingGlassIcon className="h-4 w-4 mr-1" />
-                          {runningDiscoveryCode === customer.code
-                            ? "Discovering..."
-                            : "Run Discovery"}
+                          Run Discovery
                         </Button>
                         {customer.isActive ? (
                           <Button

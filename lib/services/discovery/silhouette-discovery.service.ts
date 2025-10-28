@@ -13,13 +13,13 @@ export type AttributeSetRecord = {
  * Fetch published Silhouette attribute sets (forms) for customer discovery.
  * See docs/design/semantic_layer/semantic_layer_design.md §6.3.
  */
-export async function fetchAttributeSets(connectionString: string): Promise<AttributeSetRecord[]> {
+export async function fetchAttributeSets(
+  connectionString: string
+): Promise<AttributeSetRecord[]> {
   const pool = await getSqlServerPool(connectionString);
 
-  const result = await pool
-    .request()
-    .query<AttributeSetRecord>(
-      `SELECT
+  const result = await pool.request().query<AttributeSetRecord>(
+    `SELECT
          attributeSetKey,
          name,
          description,
@@ -27,7 +27,7 @@ export async function fetchAttributeSets(connectionString: string): Promise<Attr
        FROM dbo.AttributeSet
        WHERE isDeleted = 0
        ORDER BY name ASC`
-    );
+  );
 
   return result.recordset.map((row) => ({
     attributeSetKey: row.attributeSetKey,
@@ -40,7 +40,14 @@ export async function fetchAttributeSets(connectionString: string): Promise<Attr
 export async function fetchAttributeTypeSummary(
   connectionString: string,
   attributeSetKey: string
-): Promise<Array<{ id: string; name: string; dataType: number; variableName: string | null }>> {
+): Promise<
+  Array<{
+    id: string;
+    name: string;
+    dataType: number;
+    variableName: string | null;
+  }>
+> {
   const pool = await getSqlServerPool(connectionString);
 
   const result = await pool
@@ -55,7 +62,7 @@ export async function fetchAttributeTypeSummary(
        FROM dbo.AttributeType at
        WHERE at.isDeleted = 0
          AND at.attributeSetFk = @attributeSetKey
-       ORDER BY at.displayOrder`
+       ORDER BY at.orderIndex`
     );
 
   return result.recordset.map((row) => ({

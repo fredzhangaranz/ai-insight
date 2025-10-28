@@ -43,6 +43,10 @@ const migrations = [
   "014_semantic_foundation.sql",
   "015_clinical_ontology_schema.sql",
   "016_ontology_audit_log.sql",
+  "017_semantic_nonform_metadata.sql",
+  "018_semantic_field_unique_constraint.sql",
+  "019_discovery_logging.sql",
+  "020_semantic_index_option_unique_constraint.sql",
 ];
 
 async function runMigrations() {
