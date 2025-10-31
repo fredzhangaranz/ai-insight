@@ -47,6 +47,7 @@ const migrations = [
   "018_semantic_field_unique_constraint.sql",
   "019_discovery_logging.sql",
   "020_semantic_index_option_unique_constraint.sql",
+  "021_context_discovery_audit.sql",
 ];
 
 async function runMigrations() {
