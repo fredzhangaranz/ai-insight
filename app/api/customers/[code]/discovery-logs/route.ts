@@ -45,34 +45,34 @@ export const GET = withErrorHandling(
       WHERE c.code = $1
     `;
 
-    const params: (string | number)[] = [customerCode.toUpperCase()];
+    const queryParams: (string | number)[] = [customerCode.toUpperCase()];
     let paramCount = 2;
 
     // Filter by specific run if provided
     if (runId) {
       query += ` AND dr.id = $${paramCount}`;
-      params.push(runId);
+      queryParams.push(runId);
       paramCount++;
     }
 
     // Filter by level if provided
     if (level) {
       query += ` AND dl.level = $${paramCount}`;
-      params.push(level);
+      queryParams.push(level);
       paramCount++;
     }
 
     // Filter by stage if provided
     if (stage) {
       query += ` AND dl.stage = $${paramCount}`;
-      params.push(stage);
+      queryParams.push(stage);
       paramCount++;
     }
 
     query += ` ORDER BY dl.logged_at DESC LIMIT $${paramCount}`;
-    params.push(limit);
+    queryParams.push(limit);
 
-    const result = await pool.query(query, params);
+    const result = await pool.query(query, queryParams);
 
     // Compute summary statistics
     const summary = {

@@ -136,3 +136,26 @@ export function useErrorHandler() {
     withErrorHandling: ErrorHandler.withErrorHandling,
   };
 }
+
+// Export withErrorHandling as a higher-order function for Next.js API routes
+export function withErrorHandling<T extends any[], R>(
+  handler: (...args: T) => Promise<R>
+) {
+  return async (...args: T): Promise<R> => {
+    try {
+      return await handler(...args);
+    } catch (error: any) {
+      console.error("API route error:", error);
+      // Return error response
+      const apiError = ErrorHandler.createError(
+        error.message || "Internal server error",
+        error.statusCode || 500,
+        error.details
+      );
+      return new Response(JSON.stringify(apiError), {
+        status: apiError.statusCode,
+        headers: { "Content-Type": "application/json" },
+      }) as any;
+    }
+  };
+}

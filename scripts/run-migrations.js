@@ -48,6 +48,8 @@ const migrations = [
   "019_discovery_logging.sql",
   "020_semantic_index_option_unique_constraint.sql",
   "021_context_discovery_audit.sql",
+  "022_add_customer_to_saved_insights.sql",
+  "023_create_query_history.sql",
 ];
 
 async function runMigrations() {

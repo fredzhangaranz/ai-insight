@@ -1,22 +1,25 @@
 # Phase 7: Semantic Layer UI Redesign - Implementation Guide (Core + Chart)
 
-**Version:** 2.0 (Updated with existing infrastructure)
-**Last Updated:** 2025-10-31
+**Version:** 3.0 (Consolidated with Phase 7.5)
+**Last Updated:** 2025-11-03
 **Status:** Ready for Implementation
-**Timeline:** 8 weeks (Weeks 10-17)
+**Timeline:** 11 weeks total (Weeks 10-20)
 
 ---
 
 ## Document Overview
 
-This guide provides step-by-step implementation for Phase 7 (Unified UI & Integration) focusing on **Core functionality + Chart Builder**. Conversation threading and advanced template wizard are deferred to Phase 7.5.
+This guide provides step-by-step implementation for Phase 7 (Unified UI & Integration) including **Core functionality, Chart Builder, and Post-MVP Enhancements**. This document consolidates what was previously split between Phase 7 and Phase 7.5.
 
-**Key Changes from v1.0:**
-- ✅ Reuse existing `ChartConfigurationDialog.tsx`
-- ✅ Integrate with existing `/templates` management
-- ✅ Enhance existing `SavedInsights` schema
-- 🎯 Focus: Core semantic layer + Chart builder
-- ⏭️ Defer: Conversation threading, Template wizard (Phase 7.5)
+**Key Changes from v2.0:**
+
+- ✅ Consolidated Phase 7.5 content into this document
+- ✅ Phases 7A-7D: Core semantic layer + Chart builder (Weeks 10-17)
+- ✅ Phases 7E-7H: Post-MVP enhancements (Weeks 18-20)
+  - Conversation Threading (7E)
+  - Smart Template Wizard (7F)
+  - Advanced Follow-ups (7G)
+  - Dashboard Integration (7H)
 
 **Design Reference:** `docs/design/semantic_layer/semantic_layer_UI_design.md`
 
@@ -24,13 +27,22 @@ This guide provides step-by-step implementation for Phase 7 (Unified UI & Integr
 
 ## Table of Contents
 
+### Core Implementation (Weeks 10-17)
 1. [Architecture Overview](#architecture-overview)
 2. [Phase 7A: Unified Entry (Weeks 10-11)](#phase-7a-unified-entry-weeks-10-11)
 3. [Phase 7B: Semantic Integration (Weeks 12-13)](#phase-7b-semantic-integration-weeks-12-13)
 4. [Phase 7C: Auto-Funnel (Weeks 14-15)](#phase-7c-auto-funnel-weeks-14-15)
 5. [Phase 7D: Chart Integration (Weeks 16-17)](#phase-7d-chart-integration-weeks-16-17)
-6. [Testing Strategy](#testing-strategy)
-7. [Success Metrics](#success-metrics)
+
+### Post-MVP Enhancements (Weeks 18-20)
+6. [Phase 7E: Conversation Threading (Week 18)](#phase-7e-conversation-threading-week-18)
+7. [Phase 7F: Smart Template Wizard (Week 19)](#phase-7f-smart-template-wizard-week-19)
+8. [Phase 7G: Advanced Follow-ups (Week 19)](#phase-7g-advanced-follow-ups-week-19)
+9. [Phase 7H: Dashboard Integration (Week 20)](#phase-7h-dashboard-integration-week-20)
+
+### Testing & Metrics
+10. [Testing Strategy](#testing-strategy)
+11. [Success Metrics](#success-metrics)
 
 ---
 
@@ -39,11 +51,13 @@ This guide provides step-by-step implementation for Phase 7 (Unified UI & Integr
 ### The Vision
 
 Transform from:
+
 ```
 User → Choose mode → Select form → Ask question → Complex UI
 ```
 
 To:
+
 ```
 User → Select customer → Ask question → Get answer → Optional actions (Chart/Save/Template)
 ```
@@ -89,7 +103,7 @@ app/
 │       ├── CustomerSelector.tsx    (NEW)
 │       ├── QuestionInput.tsx       (NEW)
 │       ├── SuggestedQuestions.tsx  (NEW)
-│       ├── RecentQuestions.tsx     (NEW)
+│       ├── QueryHistory.tsx        (NEW: displays query history)
 │       ├── ThinkingStream.tsx      (NEW)
 │       ├── InsightResults.tsx      (NEW)
 │       │   ├── ActionsPanel.tsx    (NEW: Chart/Save/Template/Export)
@@ -129,12 +143,19 @@ lib/services/
 
 **Need:** Add `customer_id` to support multi-customer insights
 
-**File:** `database/migration/018_add_customer_to_saved_insights.sql`
+**File:** `database/migration/022_add_customer_to_saved_insights.sql`
 
 ```sql
--- Add customer_id to SavedInsights for multi-customer support
+-- Migration 022: Add customer support and semantic scope to SavedInsights
+-- Purpose: Enable multi-customer insights and semantic layer integration
+-- Dependencies: 014_semantic_foundation.sql (Customer table)
+-- Note: Migration numbers 018-021 already exist (semantic layer foundation)
+
+BEGIN;
+
+-- Add customer foreign key (UUID, following semantic layer pattern)
 ALTER TABLE "SavedInsights"
-ADD COLUMN "customerId" VARCHAR(50) NULL;
+ADD COLUMN "customerId" UUID NULL REFERENCES "Customer"(id) ON DELETE SET NULL;
 
 -- Add index for customer filtering
 CREATE INDEX IF NOT EXISTS idx_saved_insights_customer
@@ -148,23 +169,109 @@ ALTER TABLE "SavedInsights"
 ADD CONSTRAINT "SavedInsights_scope_check"
 CHECK (scope IN ('form', 'schema', 'semantic'));
 
--- Add semantic context for debugging (optional)
+-- Add semantic context for debugging (optional JSONB field)
 ALTER TABLE "SavedInsights"
 ADD COLUMN "semanticContext" JSONB NULL;
 
-COMMENT ON COLUMN "SavedInsights"."customerId" IS 'Customer code for multi-tenant support';
-COMMENT ON COLUMN "SavedInsights"."semanticContext" IS 'Semantic discovery context for review';
+-- Add comments for clarity
+COMMENT ON COLUMN "SavedInsights"."customerId" IS 'Customer UUID for multi-tenant support (semantic layer)';
+COMMENT ON COLUMN "SavedInsights"."semanticContext" IS 'Semantic discovery context for debugging and review';
+
+COMMIT;
 ```
 
 **Run migration:**
+
 ```bash
 npm run migrate
 ```
 
 **Exit Criteria:**
+
 - [x] Migration runs successfully
 - [x] SavedInsights supports customerId
 - [x] Scope includes 'semantic' option
+
+---
+
+### Database Migration: Create QueryHistory Table (Day 1)
+
+**Need:** Separate table for auto-saved query history (ephemeral) vs manually saved insights (permanent)
+
+**File:** `database/migration/023_create_query_history.sql`
+
+```sql
+-- Migration 023: Create QueryHistory table
+-- Purpose: Store auto-saved query history (ephemeral, all questions asked)
+-- Dependencies: 014_semantic_foundation.sql (Customer), 012_create_users_table.sql (Users)
+-- Note: This is separate from SavedInsights (manually curated insights)
+
+BEGIN;
+
+-- Create query history table for auto-saved questions
+CREATE TABLE IF NOT EXISTS "QueryHistory" (
+  "id" SERIAL PRIMARY KEY,
+  "customerId" UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
+  "userId" INTEGER NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
+  "question" TEXT NOT NULL,
+  "sql" TEXT NOT NULL,
+  "mode" VARCHAR(20) NOT NULL CHECK ("mode" IN ('template', 'direct', 'funnel')),
+  "resultCount" INTEGER DEFAULT 0,
+  "semanticContext" JSONB NULL,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for efficient lookups
+CREATE INDEX IF NOT EXISTS idx_query_history_user_customer
+ON "QueryHistory" ("userId", "customerId", "createdAt" DESC);
+
+CREATE INDEX IF NOT EXISTS idx_query_history_customer_recent
+ON "QueryHistory" ("customerId", "createdAt" DESC);
+
+-- Cleanup old queries (optional: keep last 30 days)
+CREATE OR REPLACE FUNCTION cleanup_old_query_history()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM "QueryHistory"
+  WHERE "createdAt" < NOW() - INTERVAL '30 days';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Comments for clarity
+COMMENT ON TABLE "QueryHistory" IS 'Auto-saved query history (ephemeral, all questions asked)';
+COMMENT ON COLUMN "QueryHistory"."customerId" IS 'Customer UUID (FK to Customer table)';
+COMMENT ON COLUMN "QueryHistory"."userId" IS 'User ID (FK to Users table)';
+COMMENT ON COLUMN "QueryHistory"."mode" IS 'Query execution mode: template, direct, or funnel';
+
+COMMIT;
+```
+
+**Run migration:**
+
+```bash
+npm run migrate
+```
+
+**Exit Criteria:**
+
+- [x] Migration runs successfully
+- [x] QueryHistory table created
+- [x] Indexes created for efficient queries
+- [x] Cleanup function available for maintenance
+
+**Architecture Decision:**
+
+**QueryHistory** (ephemeral, auto-saved)
+- ALL queries asked by users
+- Auto-saved after each ask
+- 30-day retention (cleanup)
+- For re-running queries
+
+**SavedInsights** (permanent, manual)
+- Only manually saved queries
+- User-curated knowledge
+- No retention limit
+- For important insights
 
 ---
 
@@ -206,10 +313,7 @@ export default function InsightsPage() {
       </header>
 
       <div className="space-y-6">
-        <CustomerSelector
-          value={customerId}
-          onChange={setCustomerId}
-        />
+        <CustomerSelector value={customerId} onChange={setCustomerId} />
 
         <QuestionInput
           value={question}
@@ -220,10 +324,7 @@ export default function InsightsPage() {
         />
 
         {customerId && !result && (
-          <SuggestedQuestions
-            customerId={customerId}
-            onSelect={setQuestion}
-          />
+          <SuggestedQuestions customerId={customerId} onSelect={setQuestion} />
         )}
 
         {error && (
@@ -285,7 +386,7 @@ export function useInsights() {
       const response = await fetch("/api/insights/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, customerId })
+        body: JSON.stringify({ question, customerId }),
       });
 
       if (!response.ok) {
@@ -311,6 +412,7 @@ export function useInsights() {
 ```
 
 **Exit Criteria:**
+
 - [x] New `/insights` page loads
 - [x] Customer selector functional
 - [x] Question input works
@@ -375,7 +477,9 @@ export function CustomerSelector({ value, onChange }: CustomerSelectorProps) {
       <Label htmlFor="customer">Customer</Label>
       <Select value={value} onValueChange={onChange} disabled={loading}>
         <SelectTrigger id="customer" className="w-full max-w-md">
-          <SelectValue placeholder={loading ? "Loading..." : "Select a customer..."} />
+          <SelectValue
+            placeholder={loading ? "Loading..." : "Select a customer..."}
+          />
         </SelectTrigger>
         <SelectContent>
           {customers.map((customer) => (
@@ -423,6 +527,7 @@ export async function GET(req: NextRequest) {
 ```
 
 **Exit Criteria:**
+
 - [x] Fetches active customers from database
 - [x] Dropdown renders correctly
 - [x] Selection updates state
@@ -459,7 +564,7 @@ export function QuestionInput({
   onSubmit,
   disabled = false,
   isLoading = false,
-  placeholder = "Ask a question about your data..."
+  placeholder = "Ask a question about your data...",
 }: QuestionInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -529,7 +634,13 @@ export function QuestionInput({
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, CheckCircle, Loader2, XCircle } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CheckCircle,
+  Loader2,
+  XCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ThinkingStep {
@@ -547,20 +658,22 @@ interface ThinkingStreamProps {
 
 export function ThinkingStream({
   steps,
-  collapsed: initialCollapsed = true
+  collapsed: initialCollapsed = true,
 }: ThinkingStreamProps) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
 
   const totalTime = steps.reduce((sum, s) => sum + (s.duration || 0), 0);
-  const hasError = steps.some(s => s.status === "error");
+  const hasError = steps.some((s) => s.status === "error");
 
   if (steps.length === 0) return null;
 
   return (
-    <div className={cn(
-      "rounded-lg border bg-gray-50 p-4",
-      hasError && "border-red-200 bg-red-50"
-    )}>
+    <div
+      className={cn(
+        "rounded-lg border bg-gray-50 p-4",
+        hasError && "border-red-200 bg-red-50"
+      )}
+    >
       <button
         onClick={() => setCollapsed(!collapsed)}
         className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900"
@@ -594,7 +707,7 @@ function ThinkingStepItem({ step }: { step: ThinkingStep }) {
     pending: Loader2,
     running: Loader2,
     complete: CheckCircle,
-    error: XCircle
+    error: XCircle,
   }[step.status];
 
   return (
@@ -605,7 +718,8 @@ function ThinkingStepItem({ step }: { step: ThinkingStep }) {
           step.status === "running" && "animate-spin",
           step.status === "complete" && "text-green-600",
           step.status === "error" && "text-red-600",
-          (step.status === "pending" || step.status === "running") && "text-blue-600"
+          (step.status === "pending" || step.status === "running") &&
+            "text-blue-600"
         )}
       />
       <span className="flex-1">{step.message}</span>
@@ -620,6 +734,7 @@ function ThinkingStepItem({ step }: { step: ThinkingStep }) {
 ```
 
 **Exit Criteria:**
+
 - [x] Textarea auto-resizes
 - [x] Ctrl+Enter submits
 - [x] Loading states work
@@ -628,7 +743,7 @@ function ThinkingStepItem({ step }: { step: ThinkingStep }) {
 
 ---
 
-### Task 4: Suggested & Recent Questions (Day 6)
+### Task 4: Suggested Questions & Query History (Day 6)
 
 **File:** `app/insights/components/SuggestedQuestions.tsx`
 
@@ -649,12 +764,12 @@ const defaultSuggestions = [
   "What is the average healing rate for diabetic wounds?",
   "Show infection trends by wound type",
   "Compare patient outcomes across clinics",
-  "List patients with >5 assessments in the last month"
+  "List patients with >5 assessments in the last month",
 ];
 
 export function SuggestedQuestions({
   customerId,
-  onSelect
+  onSelect,
 }: SuggestedQuestionsProps) {
   if (!customerId) return null;
 
@@ -708,7 +823,7 @@ interface RecentQuestionsProps {
 
 export function RecentQuestions({
   customerId,
-  onSelect
+  onSelect,
 }: RecentQuestionsProps) {
   const [questions, setQuestions] = useState<RecentQuestion[]>([]);
 
@@ -776,6 +891,7 @@ function formatTimestamp(date: Date): string {
 ```
 
 **Exit Criteria:**
+
 - [x] Suggested questions display
 - [x] Recent questions fetch from API
 - [x] Click fills question input
@@ -785,16 +901,89 @@ function formatTimestamp(date: Date): string {
 
 ### Phase 7A Exit Criteria Checklist
 
-- [ ] Database migration adds customerId to SavedInsights
-- [ ] New `/insights` page loads without errors
-- [ ] Customer selector fetches and displays
-- [ ] Question input works with auto-resize
-- [ ] Suggested questions populate
-- [ ] Recent questions fetch and display
-- [ ] Thinking stream shows steps
-- [ ] All styling uses shadcn/ui
-- [ ] Mobile responsive
-- [ ] No TypeScript errors
+**STATUS: ✅ 100% COMPLETE - Option A Implemented**
+
+- [x] Database migration adds customerId to SavedInsights
+- [x] New `/insights/new` page loads without errors
+- [x] Customer selector fetches and displays
+- [x] Question input works with auto-resize
+- [x] Suggested questions populate
+- [x] Query history fetch and display ✅ **FIXED: QueryHistory table implemented**
+- [x] Thinking stream shows steps
+- [x] All styling uses shadcn/ui
+- [x] Mobile responsive
+- [x] No TypeScript errors
+
+**✅ SOLUTION IMPLEMENTED: QueryHistory Table (Auto-save queries)**
+
+**What was implemented:**
+
+1. **Created QueryHistory table** (`database/migration/023_create_query_history.sql`)
+   - Stores ALL queries asked (ephemeral, auto-saved)
+   - Separate from SavedInsights (manually curated)
+   - Includes: question, SQL, mode, resultCount, semanticContext
+   - Auto-cleanup function (30-day retention)
+
+2. **Created /api/insights/history** (renamed from /api/insights/recent)
+   - **POST**: Save query to QueryHistory (auto-save after asking)
+   - **GET**: Fetch query history for user + customer
+   - Returns last 10 queries, most recent first
+
+3. **Enhanced useInsights hook** (`lib/hooks/useInsights.ts`)
+   - Auto-saves to QueryHistory after successful ask
+   - Non-blocking (failures don't affect main flow)
+   - Stores mode, resultCount, and semanticContext
+
+4. **Created QueryHistory component** (renamed from RecentQuestions)
+   - Displays query history from QueryHistory table
+   - Shows timestamp, record count, and mode
+   - Click to re-run a previous query
+
+**How it works:**
+
+```
+User asks question
+  ↓
+POST /api/insights/ask returns results
+  ↓
+UI displays results
+  ↓
+Auto-save to QueryHistory table (background)
+  ↓
+Query history fetched on next render
+  ↓
+User sees question in "Query History" section ✅
+```
+
+**Architecture - Query vs Insight:**
+
+```
+QueryHistory table (ephemeral)
+  - ALL queries asked
+  - Auto-saved immediately
+  - 30-day retention
+  - For re-running queries
+
+SavedInsights table (permanent)
+  - Manually saved queries
+  - User-curated knowledge
+  - No auto-save
+  - For important insights
+```
+
+**Benefits:**
+
+- ✅ Clear separation: queries (temporary) vs insights (permanent)
+- ✅ Query history works immediately
+- ✅ Users can re-run past queries easily
+- ✅ No clutter in SavedInsights table
+- ✅ Non-breaking (history save failures are logged, not thrown)
+
+**Phase 7D Enhancement Plan:**
+
+- SaveInsightDialog allows users to manually save valuable queries as insights
+- Users can add names, descriptions, and tags
+- Saved insights appear in /insights (saved insights page)
 
 ---
 
@@ -804,15 +993,15 @@ function formatTimestamp(date: Date): string {
 
 ### Task 5: Template Matching Service (Day 1-2)
 
-*[Implementation same as previous version - uses existing template catalog]*
+_[Implementation same as previous version - uses existing template catalog]_
 
 ### Task 6: Complexity Detection Service (Day 2)
 
-*[Implementation same as previous version]*
+_[Implementation same as previous version]_
 
 ### Task 7: Three-Mode Orchestrator API (Day 3-5)
 
-*[Implementation same as previous version - main orchestrator with template/direct/funnel routing]*
+_[Implementation same as previous version - main orchestrator with template/direct/funnel routing]_
 
 ### Task 8: Results Display with Actions Panel (Day 6-8)
 
@@ -850,7 +1039,7 @@ interface InsightResultsProps {
 export function InsightResults({
   result,
   customerId,
-  onRefine
+  onRefine,
 }: InsightResultsProps) {
   return (
     <div className="space-y-6">
@@ -903,7 +1092,7 @@ import {
   Save,
   FileText,
   Download,
-  MessageSquare
+  MessageSquare,
 } from "lucide-react";
 import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
 import { SaveInsightDialog } from "./SaveInsightDialog";
@@ -918,7 +1107,7 @@ interface ActionsPanelProps {
 export function ActionsPanel({
   result,
   customerId,
-  onRefine
+  onRefine,
 }: ActionsPanelProps) {
   const [showChartBuilder, setShowChartBuilder] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -965,11 +1154,7 @@ export function ActionsPanel({
             Export Data
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onRefine("")}
-          >
+          <Button variant="outline" size="sm" onClick={() => onRefine("")}>
             <MessageSquare className="mr-2 h-4 w-4" />
             Ask Follow-up
           </Button>
@@ -1002,9 +1187,9 @@ export function ActionsPanel({
 function exportCSV(results: { rows: any[]; columns: string[] }) {
   const csv = [
     results.columns.join(","),
-    ...results.rows.map(row =>
-      results.columns.map(col => JSON.stringify(row[col])).join(",")
-    )
+    ...results.rows.map((row) =>
+      results.columns.map((col) => JSON.stringify(row[col])).join(",")
+    ),
   ].join("\n");
 
   const blob = new Blob([csv], { type: "text/csv" });
@@ -1017,6 +1202,7 @@ function exportCSV(results: { rows: any[]; columns: string[] }) {
 ```
 
 **Exit Criteria:**
+
 - [x] Actions panel shows all buttons
 - [x] Chart button opens existing ChartConfigurationDialog
 - [x] Save button opens new SaveInsightDialog
@@ -1038,7 +1224,7 @@ function exportCSV(results: { rows: any[]; columns: string[] }) {
 
 ## Phase 7C: Auto-Funnel (Weeks 14-15)
 
-*[Implementation same as previous version - funnel generator, vertical layout, auto-execution]*
+_[Implementation same as previous version - funnel generator, vertical layout, auto-execution]_
 
 **Additional:** Add per-step save actions
 
@@ -1047,31 +1233,29 @@ function exportCSV(results: { rows: any[]; columns: string[] }) {
 ```typescript
 // In FunnelStepCard.tsx, add mini-actions per step:
 
-{expanded && (
-  <div className="step-details">
-    {/* ... existing thinking/SQL display ... */}
+{
+  expanded && (
+    <div className="step-details">
+      {/* ... existing thinking/SQL display ... */}
 
-    <div className="flex gap-2 mt-4">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => saveStepAsInsight(step)}
-      >
-        <Save className="mr-2 h-4 w-4" />
-        Save this step
-      </Button>
+      <div className="flex gap-2 mt-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => saveStepAsInsight(step)}
+        >
+          <Save className="mr-2 h-4 w-4" />
+          Save this step
+        </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => editStep(step)}
-      >
-        <Edit className="mr-2 h-4 w-4" />
-        Edit question
-      </Button>
+        <Button variant="outline" size="sm" onClick={() => editStep(step)}>
+          <Edit className="mr-2 h-4 w-4" />
+          Edit question
+        </Button>
+      </div>
     </div>
-  </div>
-)}
+  );
+}
 ```
 
 ---
@@ -1121,7 +1305,7 @@ export function SaveInsightDialog({
   onClose,
   result,
   customerId,
-  chartConfig
+  chartConfig,
 }: SaveInsightDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -1137,7 +1321,7 @@ export function SaveInsightDialog({
       toast({
         title: "Name required",
         description: "Please provide a name for this insight",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -1157,10 +1341,13 @@ export function SaveInsightDialog({
           chartType: chartConfig?.chartType || "table",
           chartMapping: chartConfig?.chartMapping || {},
           scope: "semantic", // New scope for semantic layer insights
-          tags: tags.split(",").map(t => t.trim()).filter(Boolean),
+          tags: tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
           semanticContext: includeContext ? result.context : null,
-          results: result.results.rows.slice(0, 100) // Save first 100 rows
-        })
+          results: result.results.rows.slice(0, 100), // Save first 100 rows
+        }),
       });
 
       if (!response.ok) {
@@ -1171,7 +1358,7 @@ export function SaveInsightDialog({
 
       toast({
         title: "Insight saved",
-        description: `"${name}" has been saved successfully`
+        description: `"${name}" has been saved successfully`,
       });
 
       onClose();
@@ -1184,7 +1371,7 @@ export function SaveInsightDialog({
       toast({
         title: "Save failed",
         description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setSaving(false);
@@ -1289,13 +1476,13 @@ export async function POST(req: NextRequest) {
     name,
     description,
     question,
-    customerId,
+    customerId, // UUID string
     sql,
     chartType,
     chartMapping,
     scope,
     tags,
-    semanticContext
+    semanticContext,
   } = await req.json();
 
   try {
@@ -1306,6 +1493,7 @@ export async function POST(req: NextRequest) {
         question,
         scope,
         "customerId",
+        "userId",
         sql,
         "chartType",
         "chartMapping",
@@ -1314,27 +1502,28 @@ export async function POST(req: NextRequest) {
         "semanticContext",
         "createdBy"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id
     `,
       [
         name,
         question,
         scope || "semantic",
-        customerId,
+        customerId, // UUID string, cast in query
+        session.user.id, // INTEGER userId (from Users table)
         sql,
         chartType,
         JSON.stringify(chartMapping),
         description,
         JSON.stringify(tags || []),
         semanticContext ? JSON.stringify(semanticContext) : null,
-        session.user.email
+        session.user.email,
       ]
     );
 
     return NextResponse.json({
       id: result.rows[0].id,
-      message: "Insight saved successfully"
+      message: "Insight saved successfully",
     });
   } catch (error) {
     console.error("Failed to save insight:", error);
@@ -1347,6 +1536,7 @@ export async function POST(req: NextRequest) {
 ```
 
 **Exit Criteria:**
+
 - [x] Dialog opens from ActionsPanel
 - [x] All fields save to database
 - [x] Uses existing SavedInsights schema
@@ -1362,12 +1552,19 @@ export async function POST(req: NextRequest) {
 ```typescript
 // app/insights/components/ActionsPanel.tsx (Enhanced)
 
-export function ActionsPanel({ result, customerId, onRefine }: ActionsPanelProps) {
+export function ActionsPanel({
+  result,
+  customerId,
+  onRefine,
+}: ActionsPanelProps) {
   const [showChartBuilder, setShowChartBuilder] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [chartConfig, setChartConfig] = useState<any>(null);
 
-  const handleChartSave = (config: { chartType: string; chartMapping: Record<string, string> }) => {
+  const handleChartSave = (config: {
+    chartType: string;
+    chartMapping: Record<string, string>;
+  }) => {
     setChartConfig(config);
     setShowChartBuilder(false);
     setShowSaveDialog(true); // Auto-open save dialog after chart config
@@ -1407,6 +1604,7 @@ export function ActionsPanel({ result, customerId, onRefine }: ActionsPanelProps
 ```
 
 **Exit Criteria:**
+
 - [x] Chart builder opens from actions
 - [x] Reuses existing ChartConfigurationDialog
 - [x] Flows to SaveInsightDialog
@@ -1422,12 +1620,15 @@ export function ActionsPanel({ result, customerId, onRefine }: ActionsPanelProps
 ```typescript
 // lib/utils/export.ts
 
-export function exportToCSV(results: { rows: any[]; columns: string[] }, filename: string) {
+export function exportToCSV(
+  results: { rows: any[]; columns: string[] },
+  filename: string
+) {
   const csv = [
     results.columns.join(","),
-    ...results.rows.map(row =>
-      results.columns.map(col => JSON.stringify(row[col] ?? "")).join(",")
-    )
+    ...results.rows.map((row) =>
+      results.columns.map((col) => JSON.stringify(row[col] ?? "")).join(",")
+    ),
   ].join("\n");
 
   downloadFile(csv, `${filename}.csv`, "text/csv");
@@ -1462,8 +1663,8 @@ function downloadFile(content: string, filename: string, type: string) {
       sql: result.sql,
       question: result.question,
       // Optionally pre-fill from semantic context
-      intent: result.context?.intent.type
-    }
+      intent: result.context?.intent.type,
+    },
   }}
 >
   <Button variant="outline" size="sm">
@@ -1474,6 +1675,7 @@ function downloadFile(content: string, filename: string, type: string) {
 ```
 
 **Exit Criteria:**
+
 - [x] CSV export works
 - [x] JSON export works
 - [x] Template link passes data
@@ -1498,11 +1700,13 @@ function downloadFile(content: string, filename: string, type: string) {
 ### Unit Tests
 
 **Coverage targets:**
+
 - Services: 80%+
 - Components: 70%+
 - Utilities: 90%+
 
 **Key test files:**
+
 ```
 lib/services/__tests__/
 ├── template-matcher.service.test.ts
@@ -1519,6 +1723,7 @@ app/insights/components/__tests__/
 ### Integration Tests
 
 **Test scenarios:**
+
 1. Template mode: Question → Template match → SQL → Results → Chart → Save
 2. Direct mode: Question → Context discovery → SQL → Results → Save
 3. Funnel mode: Question → Funnel generation → Auto-execution → Results → Save step
@@ -1526,6 +1731,7 @@ app/insights/components/__tests__/
 ### E2E Tests
 
 **User flows:**
+
 1. New user: Select customer → Ask question → See results → Create chart → Save
 2. Power user: Ask question → View semantic mappings → Edit SQL → Save
 3. Funnel user: Complex question → View steps → Save individual step
@@ -1537,22 +1743,22 @@ app/insights/components/__tests__/
 
 ### User Experience Metrics
 
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Time to first insight | < 10s | From question submit to results |
-| User satisfaction (NPS) | > 8.0 | Post-interaction survey |
-| Question success rate | > 85% | Valid results / total queries |
-| Template match rate | > 60% | Queries using templates |
-| Chart creation rate | > 30% | Charts created / total queries |
+| Metric                  | Target | Measurement                     |
+| ----------------------- | ------ | ------------------------------- |
+| Time to first insight   | < 10s  | From question submit to results |
+| User satisfaction (NPS) | > 8.0  | Post-interaction survey         |
+| Question success rate   | > 85%  | Valid results / total queries   |
+| Template match rate     | > 60%  | Queries using templates         |
+| Chart creation rate     | > 30%  | Charts created / total queries  |
 
 ### Technical Performance Metrics
 
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Template mode latency | < 1s (p95) | API response time |
-| Direct mode latency | < 5s (p95) | API response time |
-| Funnel mode latency | < 15s (p95) | Total execution time |
-| Save insight time | < 2s | Database insert time |
+| Metric                | Target      | Measurement          |
+| --------------------- | ----------- | -------------------- |
+| Template mode latency | < 1s (p95)  | API response time    |
+| Direct mode latency   | < 5s (p95)  | API response time    |
+| Funnel mode latency   | < 15s (p95) | Total execution time |
+| Save insight time     | < 2s        | Database insert time |
 
 ---
 
@@ -1561,45 +1767,402 @@ app/insights/components/__tests__/
 ### From Current System
 
 **Update routes:**
+
 - [x] Keep `/insights/[id]` (view saved insight)
 - [x] Remove `/insights/new` (replaced by `/insights`)
 - [x] Keep `/funnel-test` for testing
 
 **Reuse components:**
+
 - [x] ChartConfigurationDialog
 - [x] ResultsDisplay
 - [x] Template editor
 
 **Update database:**
+
 - [x] Add customerId to SavedInsights
 - [x] Add 'semantic' scope option
 
 ---
 
-## Phase 7.5 Deferred Features
+---
 
-The following features are deferred to Phase 7.5 (documented separately):
+# Post-MVP Enhancements (Weeks 18-20)
 
-1. **Conversation Threading** - ChatGPT-style Q&A history with context
-2. **Smart Template Wizard** - Auto-detect placeholders from semantic context
-3. **Advanced Follow-ups** - Context-aware question suggestions
-4. **Dashboard Integration** - Direct save to dashboard builder
+These features transform the semantic layer from a single-query tool into a conversational intelligence platform.
 
-See: `docs/todos/in-progress/phase-7.5-post_mvp_enhancements.md`
+**What Post-MVP Enhancements Add:**
+- 💬 ChatGPT-style conversation threading with context carryover
+- 🪄 Smart template wizard that auto-detects placeholders
+- 🎯 Context-aware follow-up question suggestions
+- 📊 Dashboard integration for saving insights
+
+**Prerequisites:**
+- ✅ Phase 7A-7D complete (unified UI, three-mode orchestrator, chart integration)
+- ✅ SavedInsights schema enhanced with customerId and semanticContext
+- ✅ ChartConfigurationDialog integrated
+- ✅ Template management working
+
+**Design Philosophy:**
+- Build on Phase 7's "results-as-hub" model
+- Add conversational depth without complexity overhead
+- Enable power users without overwhelming casual users
+- Maintain sub-5s response times for most interactions
+
+---
+
+## Phase 7E: Conversation Threading (Week 18)
+
+**Goal:** Enable ChatGPT-style conversation with context carryover between questions.
+
+### Database Migration: Conversation Tables (Day 1)
+
+**File:** `database/migration/024_create_conversation_tables.sql`
+
+```sql
+-- Migration 024: Create conversation threading tables
+-- Purpose: Support ChatGPT-style conversation with context carryover
+-- Dependencies: 014_semantic_foundation.sql (Customer), 012_create_users_table.sql (Users)
+-- Note: Migration 023 is QueryHistory table (auto-saved queries)
+
+BEGIN;
+
+-- Create conversation threads table
+CREATE TABLE IF NOT EXISTS "ConversationThreads" (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "customerId" UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
+  "userId" INTEGER NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
+  "title" TEXT,
+  "contextCache" JSONB DEFAULT '{}',
+  "isActive" BOOLEAN DEFAULT true,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create conversation messages table
+CREATE TABLE IF NOT EXISTS "ConversationMessages" (
+  "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "threadId" UUID NOT NULL REFERENCES "ConversationThreads"("id") ON DELETE CASCADE,
+  "role" VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant')),
+  "content" TEXT NOT NULL,
+  "metadata" JSONB DEFAULT '{}',
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for efficient lookups
+CREATE INDEX IF NOT EXISTS idx_conversation_threads_user_customer
+ON "ConversationThreads" ("userId", "customerId", "isActive");
+
+CREATE INDEX IF NOT EXISTS idx_conversation_threads_active
+ON "ConversationThreads" ("isActive", "updatedAt") WHERE "isActive" = true;
+
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_thread
+ON "ConversationMessages" ("threadId", "createdAt");
+
+-- Auto-update updatedAt on thread when messages added
+CREATE OR REPLACE FUNCTION update_conversation_thread_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE "ConversationThreads"
+  SET "updatedAt" = NOW()
+  WHERE "id" = NEW."threadId";
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_thread_timestamp
+AFTER INSERT ON "ConversationMessages"
+FOR EACH ROW
+EXECUTE FUNCTION update_conversation_thread_timestamp();
+
+-- Comments for clarity
+COMMENT ON TABLE "ConversationThreads" IS 'Conversation threads for semantic layer Q&A (Phase 7E)';
+COMMENT ON TABLE "ConversationMessages" IS 'Individual messages within conversation threads';
+COMMENT ON COLUMN "ConversationThreads"."customerId" IS 'Customer UUID (FK to Customer table)';
+COMMENT ON COLUMN "ConversationThreads"."userId" IS 'User ID (FK to Users table)';
+COMMENT ON COLUMN "ConversationThreads"."contextCache" IS 'Shared entities, date ranges, etc. for context carryover';
+
+COMMIT;
+```
+
+**Run migration:**
+```bash
+npm run migrate
+```
+
+**Exit Criteria:**
+- [ ] Migration runs successfully
+- [ ] ConversationThreads table created
+- [ ] ConversationMessages table created
+- [ ] Indexes created
+- [ ] Trigger updates thread timestamp
+
+---
+
+### Task 1: Conversation Service (Day 2)
+
+**File:** `lib/services/conversation.service.ts`
+
+See Phase 7.5 document lines 266-489 for full implementation.
+
+**Key methods:**
+- `createThread(customerId, userId, initialQuestion)` - Create new conversation
+- `getActiveThread(customerId, userId)` - Get active thread for user
+- `addMessage(threadId, role, content, metadata)` - Add message to thread
+- `getThreadMessages(threadId, limit)` - Get thread messages
+- `updateContextCache(threadId, context)` - Update context
+- `buildContext(threadId, maxMessages)` - Build conversation context
+
+**Exit Criteria:**
+- [ ] Service creates threads
+- [ ] Messages save to database
+- [ ] Context cache updates
+- [ ] Thread retrieval works
+- [ ] Build context from history
+
+---
+
+### Task 2: Conversation Hook (Day 3)
+
+**File:** `lib/hooks/useConversation.ts`
+
+See Phase 7.5 document lines 502-659 for full implementation.
+
+**Key features:**
+- Manages conversation state (messages, threadId)
+- Optimistic UI updates
+- Thread persistence and resumption
+- Error handling
+
+**Exit Criteria:**
+- [ ] Hook manages conversation state
+- [ ] Optimistic UI updates
+- [ ] Error handling works
+- [ ] Thread persistence
+
+---
+
+### Task 3: Conversation UI Components (Day 4-5)
+
+**Files:**
+- `app/insights/components/ConversationThread.tsx` - Message history display
+- `app/insights/components/ConversationMessage.tsx` - Single Q&A pair
+- `app/insights/page.tsx` - Enhanced for conversation mode
+- `app/api/insights/conversation/route.ts` - API endpoint
+
+See Phase 7.5 document lines 670-1027 for full implementation.
+
+**Exit Criteria:**
+- [ ] Conversation thread displays messages
+- [ ] User/assistant messages styled differently
+- [ ] Auto-scroll to latest message
+- [ ] API persists conversation
+- [ ] Context passed to orchestrator
+- [ ] "New Conversation" button works
+
+---
+
+### Phase 7E Exit Criteria Checklist
+
+- [ ] Database migration creates conversation tables
+- [ ] ConversationService creates and manages threads
+- [ ] useConversation hook manages state
+- [ ] ConversationThread component renders messages
+- [ ] Messages persist to database
+- [ ] Context carryover works for follow-ups
+- [ ] New conversation resets state
+- [ ] Mobile responsive
+
+---
+
+## Phase 7F: Smart Template Wizard (Week 19)
+
+**Goal:** Auto-detect placeholders from semantic context and create templates with guided wizard.
+
+### Task 4: Placeholder Detection Service (Day 1-2)
+
+**File:** `lib/services/placeholder-detector.service.ts`
+
+See Phase 7.5 document lines 1057-1345 for full implementation.
+
+**Key features:**
+- Detects date ranges from SQL
+- Detects entity filters
+- Detects metric thresholds
+- Detects WHERE clause filters
+- Generates template SQL with {{placeholders}}
+- Confidence scoring
+
+**Exit Criteria:**
+- [ ] Detects date ranges
+- [ ] Detects entities
+- [ ] Detects metrics
+- [ ] Detects filters
+- [ ] Generates template SQL
+- [ ] Confidence scoring works
+
+---
+
+### Task 5: Template Wizard Component (Day 3-4)
+
+**Files:**
+- `app/insights/components/TemplateWizard.tsx` - 3-step wizard dialog
+- `app/insights/components/WizardStepDetect.tsx` - Auto-detect placeholders
+- `app/insights/components/WizardStepConfigure.tsx` - Configure placeholders
+- `app/insights/components/WizardStepPreview.tsx` - Preview & save
+
+See Phase 7.5 document lines 1358-1830 for full implementation.
+
+**Exit Criteria:**
+- [ ] Wizard opens from actions
+- [ ] Step 1 detects placeholders
+- [ ] Step 2 configures placeholders
+- [ ] Step 3 previews template
+- [ ] Save creates template
+
+---
+
+### Task 6: Update ActionsPanel with Wizard (Day 5)
+
+**File:** `app/insights/components/ActionsPanel.tsx` (Enhanced)
+
+Add "Save as Template" button that opens TemplateWizard.
+
+See Phase 7.5 document lines 1842-1883 for implementation.
+
+**Exit Criteria:**
+- [ ] Template wizard button in actions panel
+- [ ] Wizard integrates with existing flow
+- [ ] Templates saved to database
+
+---
+
+### Phase 7F Exit Criteria Checklist
+
+- [ ] PlaceholderDetector service works
+- [ ] Template wizard opens
+- [ ] 3-step flow completes
+- [ ] Placeholders auto-detected
+- [ ] Templates saved with placeholders
+- [ ] Integration with existing template system
+
+---
+
+## Phase 7G: Advanced Follow-ups (Week 19)
+
+**Goal:** Generate context-aware follow-up question suggestions based on current results.
+
+### Task 7: Follow-up Generator Service (Day 1)
+
+**File:** `lib/services/follow-up-generator.service.ts`
+
+See Phase 7.5 document lines 1907-2083 for full implementation.
+
+**Key features:**
+- Drill-down suggestions (aggregate → details)
+- Comparison suggestions (time-based, entity-based)
+- Trend suggestions (over time)
+- Related entity suggestions
+
+**Exit Criteria:**
+- [ ] Generates drill-down suggestions
+- [ ] Generates comparison suggestions
+- [ ] Generates trend suggestions
+- [ ] Generates related entity suggestions
+- [ ] Confidence scoring works
+
+---
+
+### Task 8: Follow-up Suggestions Component (Day 2)
+
+**Files:**
+- `app/insights/components/FollowUpSuggestions.tsx` - Display suggestions
+- `app/api/insights/follow-ups/route.ts` - Generate suggestions API
+
+See Phase 7.5 document lines 2095-2263 for full implementation.
+
+**Exit Criteria:**
+- [ ] Suggestions generate from results
+- [ ] Intent icons display
+- [ ] Click fills question input
+- [ ] API integrates with generator service
+
+---
+
+### Phase 7G Exit Criteria Checklist
+
+- [ ] Follow-up generator service works
+- [ ] Suggestions display after results
+- [ ] Intent-based categorization
+- [ ] Click triggers new question
+- [ ] Context-aware suggestions
+
+---
+
+## Phase 7H: Dashboard Integration (Week 20)
+
+**Goal:** Enable saving insights directly to dashboards (if dashboard builder exists).
+
+**Note:** This phase is conditional on existence of dashboard builder. If no dashboard builder exists, defer this phase.
+
+### Task 9: Dashboard Save Dialog (Day 1-2)
+
+**File:** `app/insights/components/DashboardSaveDialog.tsx`
+
+See Phase 7.5 document lines 2289-2462 for full implementation.
+
+**Key features:**
+- Fetches available dashboards
+- Saves insight as dashboard widget
+- Includes chart configuration
+- Error handling
+
+**Exit Criteria:**
+- [ ] Fetches available dashboards
+- [ ] Saves widget to dashboard
+- [ ] Includes chart config
+- [ ] Error handling works
+
+---
+
+### Task 10: Update ActionsPanel with Dashboard (Day 3)
+
+**File:** `app/insights/components/ActionsPanel.tsx` (Final enhancement)
+
+Add "Add to Dashboard" button that opens DashboardSaveDialog.
+
+See Phase 7.5 document lines 2474-2515 for implementation.
+
+**Exit Criteria:**
+- [ ] Dashboard button in actions
+- [ ] Dialog integrates smoothly
+- [ ] Widget saves to dashboard
+
+---
+
+### Phase 7H Exit Criteria Checklist
+
+- [ ] Dashboard save dialog works
+- [ ] Fetches available dashboards
+- [ ] Saves insights as dashboard widgets
+- [ ] Chart config included
+- [ ] Integration with existing dashboard system (if available)
 
 ---
 
 ## Document History
 
-| Version | Date | Changes | Author |
-|---------|------|---------|--------|
-| 1.0 | 2025-10-31 | Initial version | InsightGen Team |
-| 2.0 | 2025-10-31 | Updated with existing infrastructure | InsightGen Team |
+| Version | Date       | Changes                                                      | Author          |
+| ------- | ---------- | ------------------------------------------------------------ | --------------- |
+| 1.0     | 2025-10-31 | Initial version                                              | InsightGen Team |
+| 2.0     | 2025-10-31 | Updated with existing infrastructure                         | InsightGen Team |
+| 3.0     | 2025-11-03 | Consolidated with Phase 7.5 (added Phases 7E-7H)             | InsightGen Team |
 
 ---
 
 **Next Steps:**
-- Review updated implementation plan with team
-- Begin Phase 7A (Weeks 10-11)
+
+- ✅ Phase 7A complete (Unified Entry UI)
+- Continue with Phase 7B (Semantic Integration)
 - Set up tracking for success metrics
-- Prepare Phase 7.5 roadmap
+- Plan rollout schedule for Weeks 18-20 enhancements
