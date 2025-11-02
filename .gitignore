@@ -34,3 +34,5 @@ next-env.d.ts
 AGENTS.md
 .DS_Store
 backup_before_upgrade.sql
+CODING_STANDARDS.md
+.claude/

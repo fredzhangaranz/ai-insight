@@ -2712,6 +2712,97 @@ const sqlB = resolveTemplate(template, "CUSTOMER_B");
 // WHERE WoundCause = 'DFU'
 ```
 
+### 10.4 Unified UI Integration (Phase 7)
+
+**Goal:** Transform InsightGen into "ChatGPT for Healthcare Data" - a conversational interface with progressive disclosure.
+
+**Design Philosophy:**
+- **Answer-first, not SQL-first:** Users want answers, not queries
+- **Trust through transparency:** Show thinking process (ChatGPT-style)
+- **Graceful complexity:** Simple by default, powerful when needed
+
+**Three-Mode Integration:**
+
+```
+User Question
+    ↓
+┌───────────────────────────────┐
+│ Template Matching (fastest)   │
+│ Confidence > 90%?             │
+└───────────────────────────────┘
+    ↓ Yes (60% of cases)
+  Use template → Results (< 1s)
+
+    ↓ No
+┌───────────────────────────────┐
+│ Semantic Discovery             │
+│ Context API analyzes question │
+│ Complexity score?              │
+└───────────────────────────────┘
+    ↓ Simple (30% of cases)
+  Direct SQL → Results (2-5s)
+
+    ↓ Complex (10% of cases)
+┌───────────────────────────────┐
+│ Auto-Funnel                    │
+│ Break into sub-questions       │
+│ Run steps automatically        │
+└───────────────────────────────┘
+    ↓
+  Combined SQL → Results (5-15s)
+```
+
+**Key UI Changes:**
+
+1. **Single Entry Point**
+   - Remove "Form-Specific" vs "Database Insight" choice
+   - Add customer selector (supports multi-customer)
+   - Single question input (ChatGPT-like)
+
+2. **Thinking Stream (ChatGPT-style)**
+   - Show real-time processing steps
+   - Collapsible by default (clean)
+   - Expandable for power users
+
+3. **Progressive Disclosure**
+   - **Simple case:** Question → Thinking → Results
+   - **Complex case:** Question → Auto-Funnel (vertical steps) → Results
+   - **Power user:** All semantic mappings, SQL, joins on-demand
+
+4. **Auto-Funnel Pattern**
+   - Triggered automatically when complexity score ≥ 3
+   - Vertical step layout (not horizontal scroll)
+   - Auto-mode execution (runs without user input)
+   - Manual override available
+
+**UI Component Architecture:**
+
+```
+app/insights/page.tsx (New unified page)
+├── CustomerSelector
+├── QuestionInput
+├── ThinkingStream (Always visible)
+└── InsightResults (Mode-based rendering)
+    ├── TemplateResult (mode === "template")
+    ├── DirectResult (mode === "direct")
+    │   ├── SemanticMappingsPanel (expandable)
+    │   ├── SQLViewer (expandable)
+    │   └── ResultsDisplay
+    └── FunnelResult (mode === "funnel")
+        ├── FunnelSteps (vertical layout)
+        └── ResultsDisplay
+```
+
+**Success Metrics:**
+- 90% of queries complete without user intervention
+- < 5s response time (p95) for direct mode
+- Template match rate > 60%
+- User satisfaction > 8.0 NPS
+
+**Detailed Design:** See `docs/design/semantic_layer/semantic_layer_UI_design.md`
+
+**Implementation Plan:** See `docs/todos/in-progress/phase-7-semantic_layer_ui_redesign_todos.md`
+
 ---
 
 ## 11. Technology Stack

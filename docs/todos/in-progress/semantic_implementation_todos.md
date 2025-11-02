@@ -625,28 +625,80 @@ Resume Phase 4 after:
 
 ---
 
-## Phase 7 – Integration (Week 12)
+## Phase 7 – Unified UI & Integration (Weeks 10-17) 🎯 **NEXT PRIORITY**
 
-**Timeline:** Week 12 (revised from 16)  
-**Status:** ⏳ Pending (starts after Phase 6, can run parallel)
+**Timeline:** Weeks 10-17 (8 weeks, revised architecture)
+**Status:** 🎯 **NEXT** - Ready to start (Phase 5 complete, Phase 6 deferred)
 
-**Goal:** Wire semantic layer outputs into existing workflows (funnel, templates, delivery). This validates the entire semantic layer investment against your real funnel process.
+**Goal:** Transform InsightGen into "ChatGPT for Healthcare Data"—a unified conversational interface that seamlessly integrates semantic layer, template system, and funnel logic with progressive disclosure UX.
 
-**References:** `semantic_layer_design.md` (§10), `workflows_and_ui.md` (§5), existing funnel/template docs.
+**Strategic Decision:** Skip to Phase 7 (defer Phase 6 SQL validation) to prove end-to-end semantic layer value faster. Manual validation during integration will inform Phase 6 requirements.
 
-### Tasks
+**References:**
+- `semantic_layer_UI_design.md` (complete UI specification)
+- `semantic_layer_design.md` (§10)
+- `workflows_and_ui.md` (§5)
+- existing funnel: `ai_query_improvement_todo.md`
+- template system: `docs/design/templating_system/`
 
-1. Funnel prompt builder injects semantic context (forms, mappings).
-2. Template engine resolves semantic placeholders (e.g., `{wound_classification}`).
-3. Question-to-SQL workspace updates (customer switcher, context panel).
-4. Delivery package generation (SQL + validation JSON + context summary).
-5. Smoke tests for two customers end-to-end.
+### Core Innovation: Progressive Disclosure
 
-### Exit criteria
+**Three-Mode Integration:**
+1. **Template Mode (60% of queries):** Instant results using pre-built templates
+2. **Direct Mode (30% of queries):** Semantic layer generates SQL directly
+3. **Auto-Funnel Mode (10% of queries):** Complex questions trigger step-by-step breakdown
 
-- Consultants can generate validated SQL using existing UI with minimal friction.
-- Template library aware of semantics; manual overrides stored.
-- Delivery pipeline exports complete package.
+**UI Philosophy:**
+- Simple by default (ChatGPT-like interface)
+- Complexity hidden until needed (progressive disclosure)
+- Thinking process visible (builds trust)
+- Power user controls on-demand
+
+### High-Level Tasks
+
+**Phase 7A: Unified Entry (Weeks 10-11)**
+1. Create single `/insights/page.tsx` (replace dual-mode entry)
+2. Remove form/database mode selection
+3. Add customer selector
+4. Implement question input with suggestions
+5. Mock thinking stream (hardcoded)
+6. Route to existing backend (prove UI works)
+
+**Phase 7B: Semantic Integration (Weeks 12-13)**
+1. Connect to context discovery API (Phase 5)
+2. Real thinking stream from backend
+3. Template matching + indicators
+4. Direct SQL generation for simple cases
+5. Semantic mappings panel (expandable)
+
+**Phase 7C: Auto-Funnel (Weeks 14-15)**
+1. Complexity detection algorithm
+2. Auto-generate funnel steps
+3. Vertical step layout (replace horizontal scroll)
+4. Auto-mode execution
+5. Manual override controls
+
+**Phase 7D: Polish & Streaming (Weeks 16-17)**
+1. Server-Sent Events for real-time updates
+2. Chart visualizations
+3. Template library management UI
+4. Export/save capabilities
+5. Performance optimization
+
+### Exit Criteria
+
+- ✅ Single unified interface (no form/database choice)
+- ✅ 90% of queries complete without user intervention
+- ✅ Thinking process visible for all modes
+- ✅ Auto-funnel triggers for complex queries
+- ✅ < 5s response time (p95) for direct mode
+- ✅ Template match rate > 60%
+- ✅ End-to-end validation with 2 real customers
+- ✅ User satisfaction score > 8.0
+
+### Detailed Implementation Plan
+
+See: `docs/todos/in-progress/phase-7-semantic_layer_ui_redesign_todos.md` for step-by-step tasks.
 
 ---
 
