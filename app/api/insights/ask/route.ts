@@ -1,10 +1,11 @@
 // app/api/insights/ask/route.ts
-// Phase 7A: Mock endpoint for UI testing
-// This will be replaced with the full orchestrator in Phase 7B
+// Phase 7B: Three-Mode Orchestrator Integration
+// Routes questions through Template → Direct Semantic → Auto-Funnel
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { ThreeModeOrchestrator } from "@/lib/services/semantic/three-mode-orchestrator.service";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -13,50 +14,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { question, customerId } = await req.json();
+  try {
+    const { question, customerId } = await req.json();
 
-  // Simulate processing delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Mock response for Phase 7A testing
-  const mockResponse = {
-    mode: "direct" as const,
-    question,
-    thinking: [
-      {
-        id: "1",
-        status: "complete" as const,
-        message: "Understanding your question",
-        duration: 200
-      },
-      {
-        id: "2",
-        status: "complete" as const,
-        message: "Discovering semantic context",
-        duration: 500
-      },
-      {
-        id: "3",
-        status: "complete" as const,
-        message: "Generating SQL query",
-        duration: 300
-      }
-    ],
-    sql: "SELECT * FROM Patient LIMIT 10",
-    results: {
-      columns: ["id", "name", "age", "status"],
-      rows: [
-        { id: "1", name: "John Doe", age: 45, status: "Active" },
-        { id: "2", name: "Jane Smith", age: 62, status: "Active" },
-        { id: "3", name: "Bob Johnson", age: 55, status: "Discharged" },
-      ]
-    },
-    context: {
-      intent: { type: "query", confidence: 0.95 },
-      entities: ["Patient"],
-      timeRange: null
+    // Validate inputs
+    if (!question || !question.trim()) {
+      return NextResponse.json(
+        { error: "Question is required" },
+        { status: 400 }
+      );
     }
-  };
 
-  return NextResponse.json(mockResponse);
+    if (!customerId || !customerId.trim()) {
+      return NextResponse.json(
+        { error: "Customer ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Initialize orchestrator and execute
+    const orchestrator = new ThreeModeOrchestrator();
+    const result = await orchestrator.ask(question, customerId);
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("[/api/insights/ask] Error:", error);
+
+    return NextResponse.json(
+      {
+        error: "Failed to process question",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
 }

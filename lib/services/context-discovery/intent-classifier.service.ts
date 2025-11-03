@@ -235,7 +235,7 @@ export class IntentClassifierService {
     Array<{ conceptName: string; conceptType: string }>
   > {
     try {
-      const pool = getInsightGenDbPool();
+      const pool = await getInsightGenDbPool();
       const result = await pool.query(
         `
         SELECT 
@@ -276,8 +276,8 @@ export class IntentClassifierService {
     }
 
     try {
-      const embedder = await getEmbeddingService();
-      const embedding = await embedder.embed(question);
+      const embedder = getEmbeddingService();
+      const embedding = await embedder.generateEmbedding(question);
 
       // Cache the embedding
       this.cache.setEmbedding(question, customerId, embedding);

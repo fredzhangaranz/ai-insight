@@ -10,6 +10,24 @@ export interface ThinkingStep {
   duration?: number;
 }
 
+export interface FunnelStep {
+  id: string;
+  stepNumber: number;
+  title: string;
+  description: string;
+  tables: string[];
+  estimatedRows: number;
+  dependsOn?: string[];
+  sql?: string;
+}
+
+export interface FieldAssumption {
+  intent: string;
+  assumed: string;
+  actual: string | null;
+  confidence: number;
+}
+
 export interface InsightResult {
   mode: "template" | "direct" | "funnel";
   question?: string;
@@ -22,6 +40,13 @@ export interface InsightResult {
   template?: string;
   context?: any;
   funnel?: any;
+  // Phase 7C: Step preview for complex queries
+  requiresPreview?: boolean;
+  stepPreview?: FunnelStep[];
+  complexityScore?: number;
+  executionStrategy?: "auto" | "preview" | "inspect";
+  // Phase 7C: Field assumptions for Inspection Panel
+  assumptions?: FieldAssumption[];
 }
 
 export function useInsights() {

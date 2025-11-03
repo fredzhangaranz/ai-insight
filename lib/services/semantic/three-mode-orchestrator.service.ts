@@ -1,0 +1,400 @@
+// lib/services/semantic/three-mode-orchestrator.service.ts
+// Three-Mode Orchestrator for Phase 7B
+// Routes questions through: Template → Direct Semantic → Auto-Funnel
+
+import { matchTemplate } from "./template-matcher.service";
+import { analyzeComplexity } from "./complexity-detector.service";
+import { ContextDiscoveryService } from "../context-discovery/context-discovery.service";
+import { QueryTemplate } from "../query-template.service";
+import { executeCustomerQuery, validateAndFixQuery } from "./customer-query.service";
+import { generateSQLFromContext } from "./sql-generator.service";
+import { extractAndFillPlaceholders } from "./template-placeholder.service";
+
+export type QueryMode = "template" | "direct" | "funnel";
+
+export interface ThinkingStep {
+  id: string;
+  status: "pending" | "running" | "complete" | "error";
+  message: string;
+  details?: any;
+  duration?: number;
+}
+
+export interface FunnelStep {
+  id: string;
+  stepNumber: number;
+  title: string;
+  description: string;
+  tables: string[];
+  estimatedRows: number;
+  dependsOn?: string[];
+  sql?: string;
+}
+
+export interface FieldAssumption {
+  intent: string;
+  assumed: string;
+  actual: string | null;
+  confidence: number;
+}
+
+export interface OrchestrationResult {
+  mode: QueryMode;
+  question: string;
+  thinking: ThinkingStep[];
+  sql: string;
+  results: {
+    rows: any[];
+    columns: string[];
+  };
+  template?: string;
+  context?: any;
+  funnel?: any;
+  // Phase 7C: Step preview for complex queries
+  requiresPreview?: boolean;
+  stepPreview?: FunnelStep[];
+  complexityScore?: number;
+  executionStrategy?: "auto" | "preview" | "inspect";
+  // Phase 7C: Field assumptions for Inspection Panel
+  assumptions?: FieldAssumption[];
+}
+
+export class ThreeModeOrchestrator {
+  private contextDiscovery: ContextDiscoveryService;
+
+  constructor() {
+    this.contextDiscovery = new ContextDiscoveryService();
+  }
+
+  /**
+   * Main orchestration method
+   * Routes question through three modes in priority order
+   */
+  async ask(question: string, customerId: string): Promise<OrchestrationResult> {
+    const thinking: ThinkingStep[] = [];
+    const startTime = Date.now();
+
+    // Step 1: Try template matching first (fastest path)
+    thinking.push({
+      id: "template_match",
+      status: "running",
+      message: "Checking for matching template...",
+    });
+
+    const templateMatch = await matchTemplate(question, customerId);
+
+    if (templateMatch.matched && templateMatch.template) {
+      thinking[0].status = "complete";
+      thinking[0].duration = Date.now() - startTime;
+      thinking[0].details = {
+        templateName: templateMatch.template.name,
+        confidence: templateMatch.confidence,
+        matchedKeywords: templateMatch.matchedKeywords,
+      };
+
+      return await this.executeTemplate(
+        question,
+        customerId,
+        templateMatch.template,
+        thinking
+      );
+    } else {
+      thinking[0].status = "complete";
+      thinking[0].message = "No template match found, using semantic discovery";
+      thinking[0].duration = Date.now() - startTime;
+    }
+
+    // Step 2: Analyze complexity to choose between Direct and Funnel
+    thinking.push({
+      id: "complexity_check",
+      status: "running",
+      message: "Analyzing question complexity...",
+    });
+
+    const complexityStart = Date.now();
+    const complexity = analyzeComplexity(question);
+    thinking[1].status = "complete";
+    thinking[1].duration = Date.now() - complexityStart;
+    thinking[1].details = {
+      complexity: complexity.complexity,
+      score: complexity.score,
+      strategy: complexity.strategy,
+      reasons: complexity.reasons,
+    };
+
+    // Route based on complexity level
+    if (complexity.complexity === "simple") {
+      thinking[1].message = `Simple query detected (${complexity.score}/10), using direct semantic mode`;
+      return await this.executeDirect(question, customerId, thinking);
+    } else if (complexity.complexity === "medium") {
+      // Medium complexity: For now, use direct mode (Task 10 will add preview)
+      thinking[1].message = `Medium complexity query (${complexity.score}/10), using direct semantic mode`;
+      return await this.executeDirect(question, customerId, thinking);
+    } else {
+      // Complex: Use funnel mode
+      thinking[1].message = `Complex query detected (${complexity.score}/10), using funnel mode`;
+      return await this.executeFunnel(question, customerId, thinking);
+    }
+  }
+
+  /**
+   * Mode 1: Execute using template
+   */
+  private async executeTemplate(
+    question: string,
+    customerId: string,
+    template: QueryTemplate,
+    thinking: ThinkingStep[]
+  ): Promise<OrchestrationResult> {
+    thinking.push({
+      id: "template_execute",
+      status: "running",
+      message: `Executing template: ${template.name}`,
+    });
+
+    const startTime = Date.now();
+
+    try {
+      // Extract placeholder values and fill template SQL
+      const placeholderResult = await extractAndFillPlaceholders(question, template);
+
+      thinking[thinking.length - 1].details = {
+        placeholders: placeholderResult.values,
+        confidence: placeholderResult.confidence,
+      };
+
+      // Execute filled SQL against customer database
+      const fixedSQL = validateAndFixQuery(placeholderResult.filledSQL);
+      const results = await executeCustomerQuery(customerId, fixedSQL);
+
+      thinking[thinking.length - 1].status = "complete";
+      thinking[thinking.length - 1].duration = Date.now() - startTime;
+
+      return {
+        mode: "template",
+        question,
+        thinking,
+        sql: placeholderResult.filledSQL,
+        template: template.name,
+        results: {
+          columns: results.columns,
+          rows: results.rows,
+        },
+      };
+    } catch (error) {
+      thinking[thinking.length - 1].status = "error";
+      thinking[thinking.length - 1].message = `Template execution failed: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`;
+      throw error;
+    }
+  }
+
+  /**
+   * Mode 2: Execute using direct semantic discovery
+   */
+  private async executeDirect(
+    question: string,
+    customerId: string,
+    thinking: ThinkingStep[]
+  ): Promise<OrchestrationResult> {
+    // Step 2.1: Context Discovery
+    thinking.push({
+      id: "context_discovery",
+      status: "running",
+      message: "Discovering semantic context...",
+    });
+
+    const discoveryStart = Date.now();
+
+    try {
+      let context;
+      try {
+        context = await this.contextDiscovery.discoverContext({
+          customerId,
+          question,
+          userId: 1, // TODO: Get from session
+        });
+      } catch (discoveryError) {
+        // If context discovery fails or times out, create a minimal context
+        // This allows the query to proceed with basic SQL generation
+        thinking[thinking.length - 1].status = "complete";
+        thinking[thinking.length - 1].message = "Context discovery failed, using fallback";
+        thinking[thinking.length - 1].duration = Date.now() - discoveryStart;
+        thinking[thinking.length - 1].details = {
+          error: discoveryError instanceof Error ? discoveryError.message : "Unknown error",
+          fallback: true,
+        };
+        
+        // Create minimal fallback context
+        context = {
+          intent: {
+            type: "query",
+            confidence: 0.5,
+            scope: "general",
+            metrics: [],
+            filters: [],
+          },
+          forms: [],
+          fields: [],
+          joinPaths: [],
+        };
+      }
+
+      thinking[thinking.length - 1].status = "complete";
+      thinking[thinking.length - 1].duration = Date.now() - discoveryStart;
+      thinking[thinking.length - 1].details = {
+        formsFound: context.forms?.length || 0,
+        fieldsFound: context.fields?.length || 0,
+        joinPaths: context.joinPaths?.length || 0,
+      };
+
+      // Step 2.2: Generate SQL
+      thinking.push({
+        id: "sql_generation",
+        status: "running",
+        message: "Generating SQL query...",
+      });
+
+      const sqlStart = Date.now();
+      const { sql, executionPlan, assumptions } = await this.generateSQL(
+        context,
+        customerId
+      );
+
+      thinking[thinking.length - 1].status = "complete";
+      thinking[thinking.length - 1].duration = Date.now() - sqlStart;
+      thinking[thinking.length - 1].details = {
+        assumptions: assumptions?.length || 0,
+      };
+
+      // Step 2.3: Execute SQL
+      thinking.push({
+        id: "execute_query",
+        status: "running",
+        message: "Executing query...",
+      });
+
+      const executeStart = Date.now();
+      let results;
+      try {
+        results = await this.executeSQL(sql, customerId);
+      } catch (executeError) {
+        // If SQL execution fails, return graceful fallback
+        // This handles cases where generated SQL has invalid columns
+        thinking[thinking.length - 1].status = "error";
+        thinking[thinking.length - 1].message = `Query execution failed: ${
+          executeError instanceof Error ? executeError.message : "Unknown error"
+        }. Using mock results.`;
+        thinking[thinking.length - 1].duration = Date.now() - executeStart;
+
+        // Return empty results to allow UI to show error
+        results = {
+          columns: [],
+          rows: [],
+        };
+      }
+
+      if (thinking[thinking.length - 1].status !== "error") {
+        thinking[thinking.length - 1].status = "complete";
+      }
+      thinking[thinking.length - 1].duration = Date.now() - executeStart;
+      thinking[thinking.length - 1].details = {
+        rowCount: results?.rows?.length || 0,
+      };
+
+      return {
+        mode: "direct",
+        question,
+        thinking,
+        sql,
+        results,
+        context: {
+          intent: context.intent,
+          forms: context.forms?.map((f: any) => f.formName) || [],
+          fields: context.fields?.map((f: any) => f.fieldName) || [],
+          joinPaths: context.joinPaths || [],
+        },
+        assumptions, // Include field assumptions for Inspection Panel
+      };
+    } catch (error) {
+      thinking[thinking.length - 1].status = "error";
+      thinking[thinking.length - 1].message = `Direct semantic execution failed: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`;
+      throw error;
+    }
+  }
+
+  /**
+   * Mode 3: Execute using auto-funnel (multi-step)
+   */
+  private async executeFunnel(
+    question: string,
+    customerId: string,
+    thinking: ThinkingStep[]
+  ): Promise<OrchestrationResult> {
+    thinking.push({
+      id: "funnel_decompose",
+      status: "running",
+      message: "Breaking down complex question into steps...",
+    });
+
+    const startTime = Date.now();
+
+    try {
+      // TODO: Implement funnel decomposition
+      // TODO: Execute each step sequentially
+      // TODO: Combine results
+      // For now, fall back to direct mode
+
+      thinking[thinking.length - 1].status = "complete";
+      thinking[thinking.length - 1].message =
+        "Funnel mode not fully implemented, using direct mode";
+      thinking[thinking.length - 1].duration = Date.now() - startTime;
+
+      return await this.executeDirect(question, customerId, thinking);
+    } catch (error) {
+      thinking[thinking.length - 1].status = "error";
+      thinking[thinking.length - 1].message = `Funnel execution failed: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`;
+      throw error;
+    }
+  }
+
+  /**
+   * Generate SQL from context bundle
+   */
+  private async generateSQL(
+    context: any,
+    customerId: string
+  ): Promise<{
+    sql: string;
+    executionPlan: any;
+    assumptions?: any[];
+  }> {
+    // Use SQL generator service to create query from context bundle
+    // Pass customerId for schema-aware generation
+    const result = await generateSQLFromContext(context, customerId);
+    return {
+      sql: result.sql,
+      executionPlan: result.executionPlan,
+      assumptions: result.assumptions,
+    };
+  }
+
+  /**
+   * Execute SQL against customer database
+   */
+  private async executeSQL(
+    sql: string,
+    customerId: string
+  ): Promise<{ rows: any[]; columns: string[] }> {
+    // Validate and fix the SQL query for SQL Server compatibility
+    const fixedSql = validateAndFixQuery(sql);
+
+    // Execute against customer's database
+    return await executeCustomerQuery(customerId, fixedSql);
+  }
+}

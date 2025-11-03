@@ -22,6 +22,14 @@ export default function NewInsightPage() {
     await ask(question, customerId);
   };
 
+  const handleRerun = async (newSql: string, newQuestion: string) => {
+    // Re-run the query with the refined SQL
+    // For now, we re-execute the original ask with the new question
+    // TODO: In the future, we can add a direct SQL execution endpoint
+    setQuestion(newQuestion);
+    await ask(newQuestion, customerId);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -78,6 +86,7 @@ export default function NewInsightPage() {
               result={result}
               customerId={customerId}
               onRefine={setQuestion}
+              onRerun={handleRerun}
             />
           )}
 

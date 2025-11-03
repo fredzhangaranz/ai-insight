@@ -61,6 +61,21 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
   }>;
 
   /**
+   * Public method for general LLM completion (used by intent classifier, etc.)
+   * @param options System prompt, user message, and optional parameters
+   * @returns The model's response text
+   */
+  public async complete(options: {
+    system: string;
+    userMessage: string;
+    maxTokens?: number;
+    temperature?: number;
+  }): Promise<string> {
+    const result = await this._executeModel(options.system, options.userMessage);
+    return result.responseText;
+  }
+
+  /**
    * Retrieves the database schema context, loading from a file if not provided.
    */
   protected getDatabaseSchemaContext(providedContext?: string): string {

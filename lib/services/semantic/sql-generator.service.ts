@@ -1,0 +1,504 @@
+// lib/services/semantic/sql-generator.service.ts
+// SQL Generator for Phase 7B/7C - Generates SQL from semantic context bundle
+// Phase 7C: Added schema-aware generation with fuzzy field matching
+
+import type {
+  ContextBundle,
+  FormInContext,
+  TerminologyMapping,
+  JoinPath,
+  IntentFilter,
+} from "../context-discovery/types";
+import {
+  getTableSchema,
+  fuzzyMatchColumn,
+  findDateColumns,
+  findPrimaryKeyColumn,
+  type TableSchema,
+} from "./schema-discovery.service";
+
+export interface FieldAssumption {
+  intent: string; // What we wanted (e.g., "date field for filtering")
+  assumed: string; // What we assumed (e.g., "CreatedDate")
+  actual: string | null; // What we actually used (e.g., "AssessmentDate")
+  confidence: number; // How confident are we (0-1)
+}
+
+export interface SQLGenerationResult {
+  sql: string;
+  executionPlan: {
+    tables: string[];
+    fields: string[];
+    filters: string[];
+    joins: string[];
+    aggregations: string[];
+  };
+  confidence: number;
+  assumptions: FieldAssumption[]; // Track assumptions for Inspection Panel
+}
+
+/**
+ * Generate SQL query from semantic context bundle
+ * Now schema-aware with fuzzy field matching
+ */
+export async function generateSQLFromContext(
+  context: ContextBundle,
+  customerId?: string
+): Promise<SQLGenerationResult> {
+  const { intent, forms, terminology, joinPaths } = context;
+  const assumptions: FieldAssumption[] = [];
+
+  // 1. Determine primary table(s)
+  const tables = determineTables(forms, joinPaths);
+
+  if (tables.length === 0) {
+    // Fallback to Patient table if no tables found
+    tables.push("rpt.Patient");
+  }
+
+  // 2. Get actual schema for these tables (if customerId provided)
+  let tableSchemas: TableSchema[] = [];
+  if (customerId) {
+    try {
+      tableSchemas = await getTableSchema(customerId, tables);
+    } catch (error) {
+      console.warn(`[SQLGenerator] Failed to get schema, using fallback:`, error);
+    }
+  }
+
+  // 3. Build SELECT clause from intent metrics and form fields
+  const { fields: selectFields, assumptions: selectAssumptions } = buildSelectClause(
+    intent.metrics,
+    forms,
+    tables[0],
+    tableSchemas[0]
+  );
+  assumptions.push(...selectAssumptions);
+
+  // 4. Build FROM clause with primary table
+  const fromClause = `FROM ${tables[0]}`;
+
+  // 5. Build JOIN clauses if multiple tables
+  const joinClauses = buildJoinClauses(joinPaths, tables);
+
+  // 6. Build WHERE clause from intent filters and terminology
+  const { clauses: whereClauses, assumptions: whereAssumptions } = buildWhereClause(
+    intent.filters,
+    terminology,
+    intent.timeRange,
+    tableSchemas[0]
+  );
+  assumptions.push(...whereAssumptions);
+
+  // 7. Build aggregation clauses if needed
+  const aggregationClauses = buildAggregationClauses(intent.type, intent.scope);
+
+  // 8. Assemble final SQL
+  let sql = `SELECT ${selectFields.join(", ")}\n${fromClause}`;
+
+  if (joinClauses.length > 0) {
+    sql += "\n" + joinClauses.join("\n");
+  }
+
+  if (whereClauses.length > 0) {
+    sql += "\nWHERE " + whereClauses.join(" AND ");
+  }
+
+  if (aggregationClauses.groupBy) {
+    sql += "\n" + aggregationClauses.groupBy;
+  }
+
+  if (aggregationClauses.orderBy) {
+    sql += "\n" + aggregationClauses.orderBy;
+  }
+
+  // Add TOP clause for SQL Server (limit results)
+  if (!sql.includes("TOP ") && !sql.includes("GROUP BY")) {
+    sql = sql.replace("SELECT ", "SELECT TOP 1000 ");
+  }
+
+  return {
+    sql,
+    executionPlan: {
+      tables,
+      fields: selectFields,
+      filters: whereClauses,
+      joins: joinClauses,
+      aggregations: aggregationClauses.groupBy
+        ? [aggregationClauses.groupBy]
+        : [],
+    },
+    confidence: context.overallConfidence,
+    assumptions,
+  };
+}
+
+/**
+ * Determine which tables to use from forms and join paths
+ */
+function determineTables(forms: FormInContext[], joinPaths: JoinPath[]): string[] {
+  const tables = new Set<string>();
+
+  // If we have join paths, use those tables
+  if (joinPaths.length > 0) {
+    const preferredPath = joinPaths.find((p) => p.isPreferred) || joinPaths[0];
+    preferredPath.tables.forEach((t) => tables.add(t));
+    return Array.from(tables);
+  }
+
+  // Otherwise, infer from form names
+  // Map common form names to table names
+  const formToTableMap: Record<string, string> = {
+    patient: "rpt.Patient",
+    wound: "rpt.Wound",
+    assessment: "rpt.Assessment",
+    measurement: "rpt.Measurement",
+    note: "rpt.Note",
+  };
+
+  for (const form of forms) {
+    const formKey = form.formName.toLowerCase();
+    for (const [key, table] of Object.entries(formToTableMap)) {
+      if (formKey.includes(key)) {
+        tables.add(table);
+        break;
+      }
+    }
+  }
+
+  return Array.from(tables);
+}
+
+/**
+ * Build SELECT clause from metrics and form fields
+ * Now uses schema-aware fuzzy matching
+ */
+function buildSelectClause(
+  metrics: string[],
+  forms: FormInContext[],
+  primaryTable: string,
+  schema?: TableSchema
+): { fields: string[]; assumptions: FieldAssumption[] } {
+  const fields = new Set<string>();
+  const assumptions: FieldAssumption[] = [];
+
+  // If no specific metrics, select all
+  if (metrics.length === 0 || metrics.includes("*")) {
+    fields.add("*");
+    return { fields: Array.from(fields), assumptions };
+  }
+
+  // If schema available, use it for fuzzy matching
+  const availableColumns = schema?.columns || [];
+
+  // Map metrics to actual field names
+  const metricToFieldMap: Record<string, string[]> = {
+    patient: ["PatientId", "FirstName", "LastName", "DateOfBirth", "Status"],
+    patients: ["PatientId", "FirstName", "LastName", "DateOfBirth", "Status"],
+    count: ["COUNT(*) as RecordCount"],
+    total: ["COUNT(*) as Total"],
+    wound: ["WoundId", "WoundType", "Status"],
+    wounds: ["WoundId", "WoundType", "Status"],
+    assessment: ["AssessmentId", "AssessmentDate", "Status"],
+    assessments: ["AssessmentId", "AssessmentDate", "Status"],
+  };
+
+  for (const metric of metrics) {
+    const metricLower = metric.toLowerCase();
+
+    // Check if it's a known metric
+    if (metricToFieldMap[metricLower]) {
+      const mappedFields = metricToFieldMap[metricLower];
+
+      for (const field of mappedFields) {
+        // Skip aggregations
+        if (field.includes("COUNT") || field.includes("SUM")) {
+          fields.add(field);
+          continue;
+        }
+
+        // Use fuzzy matching if schema available
+        if (availableColumns.length > 0) {
+          const actualField = fuzzyMatchColumn(field, availableColumns);
+          if (actualField) {
+            fields.add(actualField);
+            if (actualField !== field) {
+              assumptions.push({
+                intent: `Select ${metric} data`,
+                assumed: field,
+                actual: actualField,
+                confidence: 0.8,
+              });
+            }
+          } else {
+            // No match found in schema
+            assumptions.push({
+              intent: `Select ${metric} data`,
+              assumed: field,
+              actual: null,
+              confidence: 0.3,
+            });
+          }
+        } else {
+          fields.add(field);
+        }
+      }
+    } else {
+      // Try to find matching field in forms or schema
+      let found = false;
+
+      for (const form of forms) {
+        const matchingField = form.fields.find(
+          (f) =>
+            f.fieldName.toLowerCase().includes(metricLower) ||
+            f.semanticConcept.toLowerCase().includes(metricLower)
+        );
+        if (matchingField) {
+          fields.add(matchingField.fieldName);
+          found = true;
+          break;
+        }
+      }
+
+      // If no match in forms, try fuzzy matching in schema
+      if (!found && availableColumns.length > 0) {
+        const actualField = fuzzyMatchColumn(metric, availableColumns);
+        if (actualField) {
+          fields.add(actualField);
+          assumptions.push({
+            intent: `Select ${metric}`,
+            assumed: metric,
+            actual: actualField,
+            confidence: 0.7,
+          });
+          found = true;
+        }
+      }
+
+      // If still no match, add the metric as-is (might work)
+      if (!found) {
+        fields.add(metric);
+        assumptions.push({
+          intent: `Select ${metric}`,
+          assumed: metric,
+          actual: null,
+          confidence: 0.4,
+        });
+      }
+    }
+  }
+
+  // If no fields found, default to *
+  if (fields.size === 0) {
+    fields.add("*");
+  }
+
+  return { fields: Array.from(fields), assumptions };
+}
+
+/**
+ * Build JOIN clauses from join paths
+ */
+function buildJoinClauses(joinPaths: JoinPath[], tables: string[]): string[] {
+  if (joinPaths.length === 0 || tables.length <= 1) {
+    return [];
+  }
+
+  const preferredPath = joinPaths.find((p) => p.isPreferred) || joinPaths[0];
+  const joinClauses: string[] = [];
+
+  for (const join of preferredPath.joins) {
+    const joinType = join.cardinality.includes("N") ? "LEFT JOIN" : "INNER JOIN";
+    joinClauses.push(`${joinType} ${join.rightTable} ON ${join.condition}`);
+  }
+
+  return joinClauses;
+}
+
+/**
+ * Build WHERE clause from intent filters and terminology
+ * Now uses schema-aware fuzzy matching for field names
+ */
+function buildWhereClause(
+  filters: IntentFilter[],
+  terminology: TerminologyMapping[],
+  timeRange: { unit: string; value: number } | undefined,
+  schema?: TableSchema
+): { clauses: string[]; assumptions: FieldAssumption[] } {
+  const whereClauses: string[] = [];
+  const assumptions: FieldAssumption[] = [];
+  const availableColumns = schema?.columns || [];
+
+  // Add terminology-based filters
+  for (const term of terminology) {
+    const fieldValue = term.fieldValue;
+    let fieldName = term.fieldName;
+
+    // Try fuzzy matching for field name
+    if (availableColumns.length > 0) {
+      const actualField = fuzzyMatchColumn(fieldName, availableColumns);
+      if (actualField && actualField !== fieldName) {
+        assumptions.push({
+          intent: `Filter by ${term.userTerm}`,
+          assumed: fieldName,
+          actual: actualField,
+          confidence: 0.8,
+        });
+        fieldName = actualField;
+      }
+    }
+
+    // Handle different data types
+    if (
+      fieldValue.toLowerCase() === "true" ||
+      fieldValue.toLowerCase() === "false"
+    ) {
+      whereClauses.push(`${fieldName} = ${fieldValue.toUpperCase()}`);
+    } else if (!isNaN(Number(fieldValue))) {
+      whereClauses.push(`${fieldName} = ${fieldValue}`);
+    } else {
+      whereClauses.push(`${fieldName} = '${fieldValue}'`);
+    }
+  }
+
+  // Add intent-based filters
+  for (const filter of filters) {
+    if (filter.value) {
+      // Find matching terminology
+      const matchingTerm = terminology.find(
+        (t) => t.userTerm === filter.userTerm || t.semanticConcept === filter.concept
+      );
+
+      if (matchingTerm) {
+        // Already added via terminology
+        continue;
+      }
+
+      // Infer field name from concept
+      let fieldName = inferFieldNameFromConcept(filter.concept);
+
+      // Try fuzzy matching
+      if (availableColumns.length > 0) {
+        const actualField = fuzzyMatchColumn(fieldName, availableColumns);
+        if (actualField) {
+          if (actualField !== fieldName) {
+            assumptions.push({
+              intent: `Filter by ${filter.concept}`,
+              assumed: fieldName,
+              actual: actualField,
+              confidence: 0.7,
+            });
+          }
+          fieldName = actualField;
+        } else {
+          assumptions.push({
+            intent: `Filter by ${filter.concept}`,
+            assumed: fieldName,
+            actual: null,
+            confidence: 0.3,
+          });
+        }
+      }
+
+      whereClauses.push(`${fieldName} = '${filter.value}'`);
+    }
+  }
+
+  // Add time range filter
+  if (timeRange) {
+    let dateField = "CreatedDate"; // Default assumption
+
+    // Try to find actual date field using schema
+    if (availableColumns.length > 0) {
+      const dateColumns = findDateColumns(availableColumns);
+
+      if (dateColumns.length > 0) {
+        // Prefer fields with "Date" or "Created" in name
+        const preferredDateField =
+          dateColumns.find((col) =>
+            col.toLowerCase().includes("assessmentdate")
+          ) ||
+          dateColumns.find((col) => col.toLowerCase().includes("date")) ||
+          dateColumns[0];
+
+        if (preferredDateField && preferredDateField !== dateField) {
+          assumptions.push({
+            intent: "Time range filtering",
+            assumed: dateField,
+            actual: preferredDateField,
+            confidence: 0.8,
+          });
+          dateField = preferredDateField;
+        }
+      } else {
+        // No date columns found
+        assumptions.push({
+          intent: "Time range filtering",
+          assumed: dateField,
+          actual: null,
+          confidence: 0.2,
+        });
+      }
+    }
+
+    whereClauses.push(
+      `${dateField} >= DATEADD(${timeRange.unit.toUpperCase()}, -${
+        timeRange.value
+      }, GETDATE())`
+    );
+  }
+
+  return { clauses: whereClauses, assumptions };
+}
+
+/**
+ * Build aggregation clauses based on intent type and scope
+ */
+function buildAggregationClauses(
+  intentType: string,
+  scope: string
+): {
+  groupBy?: string;
+  orderBy?: string;
+} {
+  const result: { groupBy?: string; orderBy?: string } = {};
+
+  // Aggregate scope requires grouping
+  if (scope === "aggregate") {
+    // Common aggregation patterns
+    if (intentType === "trend_analysis") {
+      result.groupBy = "GROUP BY DATEPART(MONTH, CreatedDate), DATEPART(YEAR, CreatedDate)";
+      result.orderBy = "ORDER BY DATEPART(YEAR, CreatedDate), DATEPART(MONTH, CreatedDate)";
+    } else if (intentType === "cohort_comparison") {
+      result.groupBy = "GROUP BY Status";
+      result.orderBy = "ORDER BY COUNT(*) DESC";
+    } else if (intentType === "outcome_analysis") {
+      result.groupBy = "GROUP BY WoundType";
+      result.orderBy = "ORDER BY COUNT(*) DESC";
+    }
+  } else {
+    // Default ordering for non-aggregated queries
+    result.orderBy = "ORDER BY CreatedDate DESC";
+  }
+
+  return result;
+}
+
+/**
+ * Infer field name from semantic concept
+ */
+function inferFieldNameFromConcept(concept: string): string {
+  const conceptToFieldMap: Record<string, string> = {
+    patient_status: "Status",
+    wound_type: "WoundType",
+    wound_classification: "Classification",
+    assessment_status: "AssessmentStatus",
+    city: "City",
+    state: "State",
+    age: "Age",
+    gender: "Gender",
+  };
+
+  const conceptLower = concept.toLowerCase().replace(/\s+/g, "_");
+  return conceptToFieldMap[conceptLower] || concept;
+}

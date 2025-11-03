@@ -290,8 +290,8 @@ export class SemanticSearcherService {
     }
 
     try {
-      const embedder = await getEmbeddingService();
-      const embedding = await embedder.embed(concept);
+      const embedder = getEmbeddingService();
+      const embedding = await embedder.generateEmbedding(concept);
 
       // Cache it
       this.cache.setEmbedding(concept, embedding);
@@ -317,7 +317,7 @@ export class SemanticSearcherService {
     concepts: string[],
     minConfidence: number
   ): Promise<SemanticSearchResult[]> {
-    const pool = getInsightGenDbPool();
+    const pool = await getInsightGenDbPool();
 
     try {
       // Query form fields with similarity to any concept
@@ -383,7 +383,7 @@ export class SemanticSearcherService {
     concepts: string[],
     minConfidence: number
   ): Promise<SemanticSearchResult[]> {
-    const pool = getInsightGenDbPool();
+    const pool = await getInsightGenDbPool();
 
     try {
       // Query non-form columns with confidence >= minConfidence

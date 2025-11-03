@@ -40,6 +40,7 @@ export type CustomerSummary = {
   silhouetteVersion: string;
   silhouetteWebUrl: string | null;
   connectionMasked: string;
+  dbConnectionEncrypted?: string; // Encrypted connection string (only included when needed)
   connectionStatus: string;
   connectionLastVerifiedAt: string | null;
   connectionError?: string | null;
@@ -105,7 +106,8 @@ function getDb(): Promise<Pool> {
 
 function mapCustomerRow(
   row: CustomerRow,
-  stats?: CustomerSummary["stats"]
+  stats?: CustomerSummary["stats"],
+  includeEncryptedConnection = false
 ): CustomerSummary {
   return {
     id: row.id,
@@ -115,6 +117,7 @@ function mapCustomerRow(
     silhouetteVersion: row.silhouette_version,
     silhouetteWebUrl: row.silhouette_web_url,
     connectionMasked: maskStoredConnectionString(row.db_connection_encrypted),
+    dbConnectionEncrypted: includeEncryptedConnection ? row.db_connection_encrypted : undefined,
     connectionStatus: row.connection_status ?? "unknown",
     connectionLastVerifiedAt: row.connection_last_verified_at,
     connectionError: row.connection_error,
@@ -141,6 +144,20 @@ async function fetchCustomerByCode(
      WHERE code = $1
      LIMIT 1`,
     [code]
+  );
+  return result.rows[0] ?? null;
+}
+
+async function fetchCustomerById(
+  pool: Pool,
+  id: string
+): Promise<CustomerRow | null> {
+  const result = await pool.query<CustomerRow>(
+    `SELECT *
+     FROM "Customer"
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    [id]
   );
   return result.rows[0] ?? null;
 }
@@ -250,6 +267,51 @@ export async function getCustomer(
   }
 
   return mapCustomerRow(row, stats);
+}
+
+/**
+ * Get customer by UUID (id)
+ */
+export async function getCustomerById(
+  id: string,
+  includeStats = false,
+  includeEncryptedConnection = false
+): Promise<CustomerSummary | null> {
+  const pool = await getDb();
+  const row = await fetchCustomerById(pool, id);
+  if (!row) return null;
+
+  let stats: CustomerSummary["stats"] | undefined;
+  if (includeStats) {
+    const statsResult = await pool.query<{
+      forms_discovered: number | null;
+      fields_discovered: number | null;
+      avg_confidence: number | null;
+      last_completed_at: string | null;
+    }>(
+      `SELECT
+         forms_discovered,
+         fields_discovered,
+         avg_confidence,
+         completed_at AS last_completed_at
+       FROM "CustomerDiscoveryRun"
+       WHERE customer_id = $1
+       ORDER BY started_at DESC
+       LIMIT 1`,
+      [row.id]
+    );
+    const statRow = statsResult.rows[0];
+    if (statRow) {
+      stats = {
+        formsDiscovered: statRow.forms_discovered,
+        fieldsDiscovered: statRow.fields_discovered,
+        avgConfidence: statRow.avg_confidence,
+        lastDiscoveryRunAt: statRow.last_completed_at,
+      };
+    }
+  }
+
+  return mapCustomerRow(row, stats, includeEncryptedConnection);
 }
 
 export async function createCustomer(

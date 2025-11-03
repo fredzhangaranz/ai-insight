@@ -28,6 +28,7 @@ This guide provides step-by-step implementation for Phase 7 (Unified UI & Integr
 ## Table of Contents
 
 ### Core Implementation (Weeks 10-17)
+
 1. [Architecture Overview](#architecture-overview)
 2. [Phase 7A: Unified Entry (Weeks 10-11)](#phase-7a-unified-entry-weeks-10-11)
 3. [Phase 7B: Semantic Integration (Weeks 12-13)](#phase-7b-semantic-integration-weeks-12-13)
@@ -35,12 +36,14 @@ This guide provides step-by-step implementation for Phase 7 (Unified UI & Integr
 5. [Phase 7D: Chart Integration (Weeks 16-17)](#phase-7d-chart-integration-weeks-16-17)
 
 ### Post-MVP Enhancements (Weeks 18-20)
+
 6. [Phase 7E: Conversation Threading (Week 18)](#phase-7e-conversation-threading-week-18)
 7. [Phase 7F: Smart Template Wizard (Week 19)](#phase-7f-smart-template-wizard-week-19)
 8. [Phase 7G: Advanced Follow-ups (Week 19)](#phase-7g-advanced-follow-ups-week-19)
 9. [Phase 7H: Dashboard Integration (Week 20)](#phase-7h-dashboard-integration-week-20)
 
 ### Testing & Metrics
+
 10. [Testing Strategy](#testing-strategy)
 11. [Success Metrics](#success-metrics)
 
@@ -262,12 +265,14 @@ npm run migrate
 **Architecture Decision:**
 
 **QueryHistory** (ephemeral, auto-saved)
+
 - ALL queries asked by users
 - Auto-saved after each ask
 - 30-day retention (cleanup)
 - For re-running queries
 
 **SavedInsights** (permanent, manual)
+
 - Only manually saved queries
 - User-curated knowledge
 - No retention limit
@@ -919,17 +924,20 @@ function formatTimestamp(date: Date): string {
 **What was implemented:**
 
 1. **Created QueryHistory table** (`database/migration/023_create_query_history.sql`)
+
    - Stores ALL queries asked (ephemeral, auto-saved)
    - Separate from SavedInsights (manually curated)
    - Includes: question, SQL, mode, resultCount, semanticContext
    - Auto-cleanup function (30-day retention)
 
 2. **Created /api/insights/history** (renamed from /api/insights/recent)
+
    - **POST**: Save query to QueryHistory (auto-save after asking)
    - **GET**: Fetch query history for user + customer
    - Returns last 10 queries, most recent first
 
 3. **Enhanced useInsights hook** (`lib/hooks/useInsights.ts`)
+
    - Auto-saves to QueryHistory after successful ask
    - Non-blocking (failures don't affect main flow)
    - Stores mode, resultCount, and semanticContext
@@ -1222,41 +1230,822 @@ function exportCSV(results: { rows: any[]; columns: string[] }) {
 
 ---
 
-## Phase 7C: Auto-Funnel (Weeks 14-15)
+---
 
-_[Implementation same as previous version - funnel generator, vertical layout, auto-execution]_
+# Workflow Philosophy: Progressive Disclosure + Conversational Refinement
 
-**Additional:** Add per-step save actions
+**Added:** 2025-11-03
+**Status:** Design Complete, Ready for Implementation
 
-**File Enhancement:** `app/insights/components/FunnelStepCard.tsx`
+## The Core Problem
+
+Traditional approaches force users into two extremes:
+
+**Manual Funnel (Too Much Control):**
+
+- ❌ User approves every step
+- ❌ Too many clicks, breaks flow
+- ❌ Requires understanding of decomposition
+- ✅ But: User has full control
+
+**Auto-Funnel (Too Little Control):**
+
+- ✅ Fast, automatic execution
+- ✅ Simple user experience
+- ❌ But: Black box, no intervention
+- ❌ If one step wrong, whole query fails
+
+## Our Solution: Three Levels of Engagement
+
+### **Level 1: Auto Mode (Default - 80% of queries)**
+
+User asks → System auto-executes → Results appear → User is happy → Done
+
+**UI:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Results (150 records)                   [Showing data] │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [Table with patient data...]                    │ │
+│ │ ID | Name      | Age | City     | Status       │ │
+│ │ 1  | John Doe  | 45  | Auckland | Active       │ │
+│ │ 2  | Jane Smith| 62  | Auckland | Active       │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ ▼ How I got this (click to expand)                  │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [Save] [Chart] [Export] [Refine] [Ask Follow-up]│ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+### **Level 2: Inspection Mode (User validates)**
+
+User clicks "How I got this" or sees unexpected results
+
+**UI (Expanded):**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ▲ How I got this answer                             │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [Understanding] [SQL] [Tables/Fields] [Context]  │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ What I understood:                                   │
+│ • You want: Patients                                │
+│ • Filtered by: Status = 'Active'                    │
+│ • Filtered by: City = 'Auckland'                    │
+│                                                       │
+│ SQL I generated:                                     │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ SELECT * FROM rpt.Patient                        │ │
+│ │ WHERE Status = 'Active'                          │ │
+│ │   AND City = 'Auckland'                          │ │
+│ │ LIMIT 1000                                       │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ Tables/Fields I used:                                │
+│ • rpt.Patient (150 matching records)                │
+│   ├─ Status field (for 'active' filter)            │
+│   └─ City field (for 'Auckland' filter)            │
+│                                                       │
+│ ⚠️ My assumptions:                                   │
+│ • "Active" means Status = 'Active'                  │
+│   [Challenge this]                                   │
+│ • "Auckland" matches City field exactly             │
+│   [Challenge this]                                   │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ 💬 Ask me about this query                       │ │
+│ │                                                   │ │
+│ │ Quick questions:                                  │ │
+│ │ • Why did you use Status = 'Active'?             │ │
+│ │ • Show me alternative interpretations            │ │
+│ │ • Include inactive patients too                  │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ [Re-run] [Edit SQL Directly] [Deep Dive Into Steps] │
+└─────────────────────────────────────────────────────┘
+```
+
+**Conversational Refinement Example:**
+
+```
+User types: "Why did you use Status = 'Active'?"
+
+AI responds:
+┌─────────────────────────────────────────────────────┐
+│ I interpreted "active patients" as patients with    │
+│ Status = 'Active'.                                   │
+│                                                       │
+│ Did you mean something else? I see these            │
+│ alternatives in the schema:                          │
+│                                                       │
+│ • HasActiveWounds = true?                           │
+│ • LastVisitDate within last 90 days?                │
+│ • Currently enrolled in treatment?                  │
+│                                                       │
+│ Or describe what "active" means to you:             │
+│ [Text input box]                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**After user clarifies:**
+
+```
+User types: "I meant has active wounds"
+
+AI responds:
+┌─────────────────────────────────────────────────────┐
+│ ✓ Got it! I'll regenerate using HasActiveWounds.   │
+│                                                       │
+│ Here's what I changed:                              │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ - WHERE Status = 'Active'                        │ │
+│ │ + WHERE HasActiveWounds = true                   │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ This will likely return different results           │
+│ (focusing on wound status, not patient status).     │
+│                                                       │
+│ [▶ Re-run with this change] [Keep editing]          │
+└─────────────────────────────────────────────────────┘
+```
+
+### **Level 3: Deep Dive Mode (Complex queries)**
+
+For complex questions, show step preview BEFORE executing
+
+**UI (Complex Question Detected):**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ⚠️ This is a complex query (complexity: 8/10)       │
+│                                                       │
+│ I'll break it down into 4 steps. Here's my plan:    │
+│                                                       │
+│ ▼ Step 1: Get diabetic patients over 60             │
+│   │ Tables: Patient, PatientCondition               │
+│   │ Estimated: ~500 patients                        │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ ▼ Step 2: Get wounds for these patients             │
+│   │ Tables: Wound                                    │
+│   │ Estimated: ~1,200 wounds                        │
+│   │ Depends on: Step 1 results                      │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ ▼ Step 3: Filter Auckland + calculate healing       │
+│   │ Tables: Wound, Address                          │
+│   │ Estimated: ~800 wounds                          │
+│   │ Depends on: Step 2 results                      │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ ▼ Step 4: Group by type and average                 │
+│   │ Aggregation: AVG(healing_days)                  │
+│   │ Estimated: 3-5 groups                           │
+│   │ Depends on: Step 3 results                      │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ Total estimated time: ~8-12 seconds                 │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [▶ Run All Steps] [🔍 Inspect Each Step]        │ │
+│ │ [👣 Step Through Manually]                       │ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+**Interactive Step Inspection:**
+
+```
+User clicks [🔍 Inspect Each Step] → Step 1 expands:
+
+┌─────────────────────────────────────────────────────┐
+│ Step 1: Get diabetic patients over 60               │
+│                                                       │
+│ My interpretation:                                   │
+│ • "Diabetic" = PatientCondition.Name = 'Diabetes'   │
+│ • "Over 60" = Patient.Age > 60                      │
+│                                                       │
+│ SQL:                                                 │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ SELECT p.PatientId, p.Name, p.Age               │ │
+│ │ FROM rpt.Patient p                               │ │
+│ │ JOIN rpt.PatientCondition pc                     │ │
+│ │   ON p.PatientId = pc.PatientId                  │ │
+│ │ WHERE pc.ConditionName = 'Diabetes'              │ │
+│ │   AND p.Age > 60                                 │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ ⚠️ Assumptions:                                      │
+│ • Using exact match 'Diabetes' (not 'Pre-Diabetes') │
+│   [Include pre-diabetes too]                        │
+│ • Age is current age, not age at wound occurrence   │
+│   [Challenge this]                                   │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ 💬 Questions or corrections?                     │ │
+│ │ [Text input box]                                  │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ [✓ Approve] [✏️ Edit SQL] [🗑️ Skip Step] [▶ Test]  │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Handling Empty Results
+
+**Smart Empty State:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ⚠️ No results found (0 records)                     │
+│                                                       │
+│ This could mean:                                     │
+│ • There really is no matching data ✓                │
+│ • My filters were too strict                        │
+│ • I used the wrong table/field                      │
+│ • The data exists but under different names         │
+│                                                       │
+│ Let me help you troubleshoot:                        │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [🔍 Check if data exists]                        │ │
+│ │ Verify if there's ANY matching data in database  │ │
+│ │                                                   │ │
+│ │ [🔧 Broaden filters]                             │ │
+│ │ Try removing some restrictions                   │ │
+│ │                                                   │ │
+│ │ [📋 Show me the SQL]                             │ │
+│ │ Review the query I generated                     │ │
+│ │                                                   │ │
+│ │ [🔄 Start over with guidance]                    │ │
+│ │ Let me ask clarifying questions                  │ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+**"Check if data exists" flow:**
+
+```
+User clicks [🔍 Check if data exists]
+
+AI investigates:
+┌─────────────────────────────────────────────────────┐
+│ 🔍 Data Existence Check                             │
+│                                                       │
+│ Let me check each filter separately...              │
+│                                                       │
+│ ✓ Found 2,500 patients in rpt.Patient              │
+│ ✓ Found 450 with Status = 'Active'                 │
+│ ✓ Found 800 in City = 'Auckland'                   │
+│ ✗ Found 0 that match BOTH filters                   │
+│                                                       │
+│ The issue: No patients are both Active AND in       │
+│ Auckland.                                            │
+│                                                       │
+│ Here's the breakdown:                                │
+│ • Auckland patients: Mostly 'Inactive' status       │
+│ • Active patients: Mostly in Wellington/Christchurch│
+│                                                       │
+│ Want to:                                             │
+│ • Remove location filter? (show all Active)         │
+│ • Remove status filter? (show all Auckland)         │
+│ • Check spelling of 'Auckland'?                     │
+│ • See where Active patients are located?            │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Key UI Components Needed
+
+##### **1. Collapsible Inspection Panel**
+
+**Component:** `app/insights/new/components/InspectionPanel.tsx`
+
+**Features:**
+
+- Tabs: Understanding | SQL | Tables/Fields | Context
+- Collapsible by default
+- Persists expansion state in session
+- Syntax highlighting for SQL
+- Interactive schema tree
+
+##### **2. Conversational Refinement Input**
+
+**Component:** `app/insights/new/components/ConversationalRefinement.tsx`
+
+**Features:**
+
+- Context-aware suggestions (based on empty results, complex query, etc.)
+- Quick action buttons
+- Natural language understanding
+- History of refinements in session
+- Diff viewer for SQL changes
+
+##### **3. Step Preview & Approval**
+
+**Component:** `app/insights/new/components/StepPreview.tsx`
+
+**Features:**
+
+- Expandable step cards
+- Interactive approval workflow
+- Preview SQL for each step
+- Test-run individual steps
+- Modify step logic
+- Skip steps
+- Reorder steps
+
+##### **4. Assumption Validation**
+
+**Component:** `app/insights/new/components/AssumptionValidator.tsx`
+
+**Features:**
+
+- Lists all AI assumptions
+- One-click challenge
+- Alternative interpretations
+- Confidence scores
+- Schema evidence
+
+##### **5. Diff Viewer**
+
+**Component:** `app/insights/new/components/SQLDiffViewer.tsx`
+
+**Features:**
+
+- Side-by-side SQL comparison
+- Highlighted changes
+- Explanation of why changed
+- Estimated impact on results
+- Rollback option
+
+##### **6. Smart Empty State**
+
+**Component:** `app/insights/new/components/SmartEmptyState.tsx`
+
+**Features:**
+
+- Automatic data existence check
+- Filter analysis
+- Troubleshooting suggestions
+- Guided refinement
+- Alternative queries
+
+---
+
+### Implementation Tasks
+
+### Task 9: Complexity Thresholds & Routing (Day 1)
+
+**Enhance:** `lib/services/semantic/complexity-detector.service.ts`
+
+Add threshold-based routing logic:
 
 ```typescript
-// In FunnelStepCard.tsx, add mini-actions per step:
+export interface ComplexityThresholds {
+  simple: number; // 0-4: Direct execution
+  medium: number; // 5-7: Preview + auto-execute
+  complex: number; // 8-10: Require inspection
+}
 
-{
-  expanded && (
-    <div className="step-details">
-      {/* ... existing thinking/SQL display ... */}
+export function getExecutionStrategy(
+  analysis: ComplexityAnalysis
+): "auto" | "preview" | "inspect" {
+  const score = analysis.indicators.multiStep
+    ? calculateComplexityScore(analysis)
+    : 0;
 
-      <div className="flex gap-2 mt-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => saveStepAsInsight(step)}
-        >
-          <Save className="mr-2 h-4 w-4" />
-          Save this step
-        </Button>
-
-        <Button variant="outline" size="sm" onClick={() => editStep(step)}>
-          <Edit className="mr-2 h-4 w-4" />
-          Edit question
-        </Button>
-      </div>
-    </div>
-  );
+  if (score <= 4) return "auto";
+  if (score <= 7) return "preview";
+  return "inspect";
 }
 ```
+
+**Exit Criteria:**
+
+- [ ] Complexity scoring returns 0-10 scale
+- [ ] Three execution strategies defined
+- [ ] Threshold configuration externalized
+
+---
+
+## Phase 7C: Progressive Auto-Funnel (Weeks 14-15)
+
+**Goal:** Implement intelligent auto-funnel with three levels of user engagement
+
+### Architecture: Progressive Disclosure + Conversational Refinement
+
+**Status:** Design Complete, Ready for Implementation
+
+#### The Core Problem
+
+Traditional approaches force users into two extremes:
+
+**Manual Funnel (Too Much Control):**
+
+- ❌ User approves every step
+- ❌ Too many clicks, breaks flow
+- ❌ Requires understanding of decomposition
+- ✅ But: User has full control
+
+**Auto-Funnel (Too Little Control):**
+
+- ✅ Fast, automatic execution
+- ✅ Simple user experience
+- ❌ But: Black box, no intervention
+- ❌ If one step wrong, whole query fails
+
+#### Our Solution: Three Levels of Engagement
+
+##### **Level 1: Auto Mode (Default - 80% of queries)**
+
+User asks → System auto-executes → Results appear → User is happy → Done
+
+**UI:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Results (150 records)                   [Showing data] │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [Table with patient data...]                    │ │
+│ │ ID | Name      | Age | City     | Status       │ │
+│ │ 1  | John Doe  | 45  | Auckland | Active       │ │
+│ │ 2  | Jane Smith| 62  | Auckland | Active       │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ ▼ How I got this (click to expand)                  │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [Save] [Chart] [Export] [Refine] [Ask Follow-up]│ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+##### **Level 2: Inspection Mode (User validates)**
+
+User clicks "How I got this" or sees unexpected results
+
+**UI (Expanded):**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ▲ How I got this answer                             │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [Understanding] [SQL] [Tables/Fields] [Context]  │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ What I understood:                                   │
+│ • You want: Patients                                │
+│ • Filtered by: Status = 'Active'                    │
+│ • Filtered by: City = 'Auckland'                    │
+│                                                       │
+│ SQL I generated:                                     │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ SELECT * FROM rpt.Patient                        │ │
+│ │ WHERE Status = 'Active'                          │ │
+│ │   AND City = 'Auckland'                          │ │
+│ │ LIMIT 1000                                       │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ Tables/Fields I used:                                │
+│ • rpt.Patient (150 matching records)                │
+│   ├─ Status field (for 'active' filter)            │
+│   └─ City field (for 'Auckland' filter)            │
+│                                                       │
+│ ⚠️ My assumptions:                                   │
+│ • "Active" means Status = 'Active'                  │
+│   [Challenge this]                                   │
+│ • "Auckland" matches City field exactly             │
+│   [Challenge this]                                   │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ 💬 Ask me about this query                       │ │
+│ │                                                   │ │
+│ │ Quick questions:                                  │ │
+│ │ • Why did you use Status = 'Active'?             │ │
+│ │ • Show me alternative interpretations            │ │
+│ │ • Include inactive patients too                  │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ [Re-run] [Edit SQL Directly] [Deep Dive Into Steps] │
+└─────────────────────────────────────────────────────┘
+```
+
+**Conversational Refinement Example:**
+
+```
+User types: "Why did you use Status = 'Active'?"
+
+AI responds:
+┌─────────────────────────────────────────────────────┐
+│ I interpreted "active patients" as patients with    │
+│ Status = 'Active'.                                   │
+│                                                       │
+│ Did you mean something else? I see these            │
+│ alternatives in the schema:                          │
+│                                                       │
+│ • HasActiveWounds = true?                           │
+│ • LastVisitDate within last 90 days?                │
+│ • Currently enrolled in treatment?                  │
+│                                                       │
+│ Or describe what "active" means to you:             │
+│ [Text input box]                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**After user clarifies:**
+
+```
+User types: "I meant has active wounds"
+
+AI responds:
+┌─────────────────────────────────────────────────────┐
+│ ✓ Got it! I'll regenerate using HasActiveWounds.   │
+│                                                       │
+│ Here's what I changed:                              │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ - WHERE Status = 'Active'                        │ │
+│ │ + WHERE HasActiveWounds = true                   │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ This will likely return different results           │
+│ (focusing on wound status, not patient status).     │
+│                                                       │
+│ [▶ Re-run with this change] [Keep editing]          │
+└─────────────────────────────────────────────────────┘
+```
+
+##### **Level 3: Deep Dive Mode (Complex queries)**
+
+For complex questions, show step preview BEFORE executing
+
+**UI (Complex Question Detected):**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ⚠️ This is a complex query (complexity: 8/10)       │
+│                                                       │
+│ I'll break it down into 4 steps. Here's my plan:    │
+│                                                       │
+│ ▼ Step 1: Get diabetic patients over 60             │
+│   │ Tables: Patient, PatientCondition               │
+│   │ Estimated: ~500 patients                        │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ ▼ Step 2: Get wounds for these patients             │
+│   │ Tables: Wound                                    │
+│   │ Estimated: ~1,200 wounds                        │
+│   │ Depends on: Step 1 results                      │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ ▼ Step 3: Filter Auckland + calculate healing       │
+│   │ Tables: Wound, Address                          │
+│   │ Estimated: ~800 wounds                          │
+│   │ Depends on: Step 2 results                      │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ ▼ Step 4: Group by type and average                 │
+│   │ Aggregation: AVG(healing_days)                  │
+│   │ Estimated: 3-5 groups                           │
+│   │ Depends on: Step 3 results                      │
+│   │ [Preview SQL] [Modify]                          │
+│   └─────────────────────────────────────────────────│
+│                                                       │
+│ Total estimated time: ~8-12 seconds                 │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [▶ Run All Steps] [🔍 Inspect Each Step]        │ │
+│ │ [👣 Step Through Manually]                       │ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+**Interactive Step Inspection:**
+
+```
+User clicks [🔍 Inspect Each Step] → Step 1 expands:
+
+┌─────────────────────────────────────────────────────┐
+│ Step 1: Get diabetic patients over 60               │
+│                                                       │
+│ My interpretation:                                   │
+│ • "Diabetic" = PatientCondition.Name = 'Diabetes'   │
+│ • "Over 60" = Patient.Age > 60                      │
+│                                                       │
+│ SQL:                                                 │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ SELECT p.PatientId, p.Name, p.Age               │ │
+│ │ FROM rpt.Patient p                               │ │
+│ │ JOIN rpt.PatientCondition pc                     │ │
+│ │   ON p.PatientId = pc.PatientId                  │ │
+│ │ WHERE pc.ConditionName = 'Diabetes'              │ │
+│ │   AND p.Age > 60                                 │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ ⚠️ Assumptions:                                      │
+│ • Using exact match 'Diabetes' (not 'Pre-Diabetes') │
+│   [Include pre-diabetes too]                        │
+│ • Age is current age, not age at wound occurrence   │
+│   [Challenge this]                                   │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ 💬 Questions or corrections?                     │ │
+│ │ [Text input box]                                  │ │
+│ └─────────────────────────────────────────────────┘ │
+│                                                       │
+│ [✓ Approve] [✏️ Edit SQL] [🗑️ Skip Step] [▶ Test]  │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Handling Empty Results
+
+**Smart Empty State:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ⚠️ No results found (0 records)                     │
+│                                                       │
+│ This could mean:                                     │
+│ • There really is no matching data ✓                │
+│ • My filters were too strict                        │
+│ • I used the wrong table/field                      │
+│ • The data exists but under different names         │
+│                                                       │
+│ Let me help you troubleshoot:                        │
+│                                                       │
+│ ┌─────────────────────────────────────────────────┐ │
+│ │ [🔍 Check if data exists]                        │ │
+│ │ Verify if there's ANY matching data in database  │ │
+│ │                                                   │ │
+│ │ [🔧 Broaden filters]                             │ │
+│ │ Try removing some restrictions                   │ │
+│ │                                                   │ │
+│ │ [📋 Show me the SQL]                             │ │
+│ │ Review the query I generated                     │ │
+│ │                                                   │ │
+│ │ [🔄 Start over with guidance]                    │ │
+│ │ Let me ask clarifying questions                  │ │
+│ └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+**"Check if data exists" flow:**
+
+```
+User clicks [🔍 Check if data exists]
+
+AI investigates:
+┌─────────────────────────────────────────────────────┐
+│ 🔍 Data Existence Check                             │
+│                                                       │
+│ Let me check each filter separately...              │
+│                                                       │
+│ ✓ Found 2,500 patients in rpt.Patient              │
+│ ✓ Found 450 with Status = 'Active'                 │
+│ ✓ Found 800 in City = 'Auckland'                   │
+│ ✗ Found 0 that match BOTH filters                   │
+│                                                       │
+│ The issue: No patients are both Active AND in       │
+│ Auckland.                                            │
+│                                                       │
+│ Here's the breakdown:                                │
+│ • Auckland patients: Mostly 'Inactive' status       │
+│ • Active patients: Mostly in Wellington/Christchurch│
+│                                                       │
+│ Want to:                                             │
+│ • Remove location filter? (show all Active)         │
+│ • Remove status filter? (show all Auckland)         │
+│ • Check spelling of 'Auckland'?                     │
+│ • See where Active patients are located?            │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Key UI Components Needed
+
+##### **1. Collapsible Inspection Panel**
+
+**Component:** `app/insights/new/components/InspectionPanel.tsx`
+
+**Features:**
+
+- Tabs: Understanding | SQL | Tables/Fields | Context
+- Collapsible by default
+- Persists expansion state in session
+- Syntax highlighting for SQL
+- Interactive schema tree
+
+##### **2. Conversational Refinement Input**
+
+**Component:** `app/insights/new/components/ConversationalRefinement.tsx`
+
+**Features:**
+
+- Context-aware suggestions (based on empty results, complex query, etc.)
+- Quick action buttons
+- Natural language understanding
+- History of refinements in session
+- Diff viewer for SQL changes
+
+##### **3. Step Preview & Approval**
+
+**Component:** `app/insights/new/components/StepPreview.tsx`
+
+**Features:**
+
+- Expandable step cards
+- Interactive approval workflow
+- Preview SQL for each step
+- Test-run individual steps
+- Modify step logic
+- Skip steps
+- Reorder steps
+
+##### **4. Assumption Validation**
+
+**Component:** `app/insights/new/components/AssumptionValidator.tsx`
+
+**Features:**
+
+- Lists all AI assumptions
+- One-click challenge
+- Alternative interpretations
+- Confidence scores
+- Schema evidence
+
+##### **5. Diff Viewer**
+
+**Component:** `app/insights/new/components/SQLDiffViewer.tsx`
+
+**Features:**
+
+- Side-by-side SQL comparison
+- Highlighted changes
+- Explanation of why changed
+- Estimated impact on results
+- Rollback option
+
+##### **6. Smart Empty State**
+
+**Component:** `app/insights/new/components/SmartEmptyState.tsx`
+
+**Features:**
+
+- Automatic data existence check
+- Filter analysis
+- Troubleshooting suggestions
+- Guided refinement
+- Alternative queries
+
+---
+
+### Implementation Tasks
+
+### Task 9: Complexity Thresholds & Routing (Day 1)
+
+**Enhance:** `lib/services/semantic/complexity-detector.service.ts`
+
+Add threshold-based routing logic:
+
+```typescript
+export interface ComplexityThresholds {
+  simple: number; // 0-4: Direct execution
+  medium: number; // 5-7: Preview + auto-execute
+  complex: number; // 8-10: Require inspection
+}
+
+export function getExecutionStrategy(
+  analysis: ComplexityAnalysis
+): "auto" | "preview" | "inspect" {
+  const score = analysis.indicators.multiStep
+    ? calculateComplexityScore(analysis)
+    : 0;
+
+  if (score <= 4) return "auto";
+  if (score <= 7) return "preview";
+  return "inspect";
+}
+```
+
+**Exit Criteria:**
+
+- [ ] Complexity scoring returns 0-10 scale
+- [ ] Three execution strategies defined
+- [ ] Threshold configuration externalized
 
 ---
 
@@ -1792,18 +2581,21 @@ app/insights/components/__tests__/
 These features transform the semantic layer from a single-query tool into a conversational intelligence platform.
 
 **What Post-MVP Enhancements Add:**
+
 - 💬 ChatGPT-style conversation threading with context carryover
 - 🪄 Smart template wizard that auto-detects placeholders
 - 🎯 Context-aware follow-up question suggestions
 - 📊 Dashboard integration for saving insights
 
 **Prerequisites:**
+
 - ✅ Phase 7A-7D complete (unified UI, three-mode orchestrator, chart integration)
 - ✅ SavedInsights schema enhanced with customerId and semanticContext
 - ✅ ChartConfigurationDialog integrated
 - ✅ Template management working
 
 **Design Philosophy:**
+
 - Build on Phase 7's "results-as-hub" model
 - Add conversational depth without complexity overhead
 - Enable power users without overwhelming casual users
@@ -1886,11 +2678,13 @@ COMMIT;
 ```
 
 **Run migration:**
+
 ```bash
 npm run migrate
 ```
 
 **Exit Criteria:**
+
 - [ ] Migration runs successfully
 - [ ] ConversationThreads table created
 - [ ] ConversationMessages table created
@@ -1906,6 +2700,7 @@ npm run migrate
 See Phase 7.5 document lines 266-489 for full implementation.
 
 **Key methods:**
+
 - `createThread(customerId, userId, initialQuestion)` - Create new conversation
 - `getActiveThread(customerId, userId)` - Get active thread for user
 - `addMessage(threadId, role, content, metadata)` - Add message to thread
@@ -1914,6 +2709,7 @@ See Phase 7.5 document lines 266-489 for full implementation.
 - `buildContext(threadId, maxMessages)` - Build conversation context
 
 **Exit Criteria:**
+
 - [ ] Service creates threads
 - [ ] Messages save to database
 - [ ] Context cache updates
@@ -1929,12 +2725,14 @@ See Phase 7.5 document lines 266-489 for full implementation.
 See Phase 7.5 document lines 502-659 for full implementation.
 
 **Key features:**
+
 - Manages conversation state (messages, threadId)
 - Optimistic UI updates
 - Thread persistence and resumption
 - Error handling
 
 **Exit Criteria:**
+
 - [ ] Hook manages conversation state
 - [ ] Optimistic UI updates
 - [ ] Error handling works
@@ -1945,6 +2743,7 @@ See Phase 7.5 document lines 502-659 for full implementation.
 ### Task 3: Conversation UI Components (Day 4-5)
 
 **Files:**
+
 - `app/insights/components/ConversationThread.tsx` - Message history display
 - `app/insights/components/ConversationMessage.tsx` - Single Q&A pair
 - `app/insights/page.tsx` - Enhanced for conversation mode
@@ -1953,6 +2752,7 @@ See Phase 7.5 document lines 502-659 for full implementation.
 See Phase 7.5 document lines 670-1027 for full implementation.
 
 **Exit Criteria:**
+
 - [ ] Conversation thread displays messages
 - [ ] User/assistant messages styled differently
 - [ ] Auto-scroll to latest message
@@ -1986,6 +2786,7 @@ See Phase 7.5 document lines 670-1027 for full implementation.
 See Phase 7.5 document lines 1057-1345 for full implementation.
 
 **Key features:**
+
 - Detects date ranges from SQL
 - Detects entity filters
 - Detects metric thresholds
@@ -1994,6 +2795,7 @@ See Phase 7.5 document lines 1057-1345 for full implementation.
 - Confidence scoring
 
 **Exit Criteria:**
+
 - [ ] Detects date ranges
 - [ ] Detects entities
 - [ ] Detects metrics
@@ -2006,6 +2808,7 @@ See Phase 7.5 document lines 1057-1345 for full implementation.
 ### Task 5: Template Wizard Component (Day 3-4)
 
 **Files:**
+
 - `app/insights/components/TemplateWizard.tsx` - 3-step wizard dialog
 - `app/insights/components/WizardStepDetect.tsx` - Auto-detect placeholders
 - `app/insights/components/WizardStepConfigure.tsx` - Configure placeholders
@@ -2014,6 +2817,7 @@ See Phase 7.5 document lines 1057-1345 for full implementation.
 See Phase 7.5 document lines 1358-1830 for full implementation.
 
 **Exit Criteria:**
+
 - [ ] Wizard opens from actions
 - [ ] Step 1 detects placeholders
 - [ ] Step 2 configures placeholders
@@ -2031,6 +2835,7 @@ Add "Save as Template" button that opens TemplateWizard.
 See Phase 7.5 document lines 1842-1883 for implementation.
 
 **Exit Criteria:**
+
 - [ ] Template wizard button in actions panel
 - [ ] Wizard integrates with existing flow
 - [ ] Templates saved to database
@@ -2059,12 +2864,14 @@ See Phase 7.5 document lines 1842-1883 for implementation.
 See Phase 7.5 document lines 1907-2083 for full implementation.
 
 **Key features:**
+
 - Drill-down suggestions (aggregate → details)
 - Comparison suggestions (time-based, entity-based)
 - Trend suggestions (over time)
 - Related entity suggestions
 
 **Exit Criteria:**
+
 - [ ] Generates drill-down suggestions
 - [ ] Generates comparison suggestions
 - [ ] Generates trend suggestions
@@ -2076,12 +2883,14 @@ See Phase 7.5 document lines 1907-2083 for full implementation.
 ### Task 8: Follow-up Suggestions Component (Day 2)
 
 **Files:**
+
 - `app/insights/components/FollowUpSuggestions.tsx` - Display suggestions
 - `app/api/insights/follow-ups/route.ts` - Generate suggestions API
 
 See Phase 7.5 document lines 2095-2263 for full implementation.
 
 **Exit Criteria:**
+
 - [ ] Suggestions generate from results
 - [ ] Intent icons display
 - [ ] Click fills question input
@@ -2112,12 +2921,14 @@ See Phase 7.5 document lines 2095-2263 for full implementation.
 See Phase 7.5 document lines 2289-2462 for full implementation.
 
 **Key features:**
+
 - Fetches available dashboards
 - Saves insight as dashboard widget
 - Includes chart configuration
 - Error handling
 
 **Exit Criteria:**
+
 - [ ] Fetches available dashboards
 - [ ] Saves widget to dashboard
 - [ ] Includes chart config
@@ -2134,6 +2945,7 @@ Add "Add to Dashboard" button that opens DashboardSaveDialog.
 See Phase 7.5 document lines 2474-2515 for implementation.
 
 **Exit Criteria:**
+
 - [ ] Dashboard button in actions
 - [ ] Dialog integrates smoothly
 - [ ] Widget saves to dashboard
@@ -2152,11 +2964,11 @@ See Phase 7.5 document lines 2474-2515 for implementation.
 
 ## Document History
 
-| Version | Date       | Changes                                                      | Author          |
-| ------- | ---------- | ------------------------------------------------------------ | --------------- |
-| 1.0     | 2025-10-31 | Initial version                                              | InsightGen Team |
-| 2.0     | 2025-10-31 | Updated with existing infrastructure                         | InsightGen Team |
-| 3.0     | 2025-11-03 | Consolidated with Phase 7.5 (added Phases 7E-7H)             | InsightGen Team |
+| Version | Date       | Changes                                          | Author          |
+| ------- | ---------- | ------------------------------------------------ | --------------- |
+| 1.0     | 2025-10-31 | Initial version                                  | InsightGen Team |
+| 2.0     | 2025-10-31 | Updated with existing infrastructure             | InsightGen Team |
+| 3.0     | 2025-11-03 | Consolidated with Phase 7.5 (added Phases 7E-7H) | InsightGen Team |
 
 ---
 
