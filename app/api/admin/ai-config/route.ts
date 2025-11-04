@@ -50,18 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // In development mode, configurations are managed via environment variables
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json(
-        {
-          error:
-            "Configuration changes are disabled in development mode. Please update your .env.local file instead.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // In production mode, use the database service
+    // Use the database service
     const { aiConfigService } = await import(
       "@/lib/services/ai-config.service"
     );

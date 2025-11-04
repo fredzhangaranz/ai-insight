@@ -50,6 +50,7 @@ const migrations = [
   "021_context_discovery_audit.sql",
   "022_add_customer_to_saved_insights.sql",
   "023_create_query_history.sql",
+  "024_fix_ai_config_audit_delete.sql",
 ];
 
 async function runMigrations() {

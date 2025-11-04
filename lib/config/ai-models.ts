@@ -32,14 +32,14 @@ export interface AIModel {
  */
 export const SUPPORTED_AI_MODELS: AIModel[] = [
   {
-    id: "claude-3-5-sonnet-latest",
+    id: "claude-3-5-sonnet-20241022",
     name: "Claude 3.5 Sonnet",
     provider: "Anthropic",
     description:
       "Anthropic's newest, most intelligent model. Excels at complex reasoning and coding.",
   },
   {
-    id: "claude-3-opus-latest",
+    id: "claude-3-opus-20240229",
     name: "Claude 3 Opus",
     provider: "Anthropic",
     description: "Anthropic's most powerful model for highly complex tasks.",
@@ -80,7 +80,7 @@ export const SUPPORTED_AI_MODELS: AIModel[] = [
 /**
  * The default AI model to be used if no selection is made.
  */
-export const DEFAULT_AI_MODEL_ID = "claude-3-5-sonnet-latest";
+export const DEFAULT_AI_MODEL_ID = "claude-3-5-sonnet-20241022";
 
 /**
  * The default AI model object.

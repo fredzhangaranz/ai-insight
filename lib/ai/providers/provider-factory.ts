@@ -99,11 +99,12 @@ export async function findFallbackProvider(
   failedProviderType: string
 ): Promise<{ provider: string; instance: IQueryFunnelProvider } | null> {
   try {
-    // Get enabled configs and health, then order by priority
-    const [configs, healthStatuses] = await Promise.all([
-      aiConfigService.getEnabledConfigurations(),
-      aiConfigService.getAllProviderHealth(),
-    ]);
+    // Get configuration from AIConfigLoader (respects environment)
+    const configLoader = await import("@/lib/config/ai-config-loader").then(m => m.AIConfigLoader.getInstance());
+    const { providers } = await configLoader.getConfiguration();
+    
+    // Get health statuses for all providers
+    const healthStatuses = await aiConfigService.getAllProviderHealth();
     const healthyProviders = healthStatuses.filter((status) => status.isHealthy);
 
     if (healthyProviders.length === 0) {
@@ -113,7 +114,7 @@ export async function findFallbackProvider(
 
     // Create an ordered list of candidate providers by ascending priority
     const priorityOf = (providerType: string, providerName: string) => {
-      const cfg = configs.find(
+      const cfg = providers.find(
         (c) => c.providerType === providerType && c.providerName === providerName
       );
       const defaultPriority =

@@ -302,40 +302,79 @@ export class IntentClassifierService {
     modelId: string | undefined,
     customerId: string
   ): Promise<unknown> {
+    const callStartTime = Date.now();
+    console.log(`[IntentClassifier] 🚀 Starting LLM provider call at ${new Date().toISOString()}`);
+
     // Get model ID (use provided or fall back to admin config)
     let selectedModelId = modelId;
     if (!selectedModelId) {
+      const configStartTime = Date.now();
+      console.log(`[IntentClassifier] 📋 Loading model configuration for customer ${customerId}...`);
+
       try {
+        // Try to get from customer-specific config first
         const adminConfig = await aiConfigService.getConfig(customerId);
-        selectedModelId =
-          adminConfig?.defaultLLMModelId || "claude-3-5-sonnet-latest";
+        if (adminConfig?.defaultLLMModelId) {
+          selectedModelId = adminConfig.defaultLLMModelId;
+        } else {
+          // Fall back to configuration from AIConfigLoader (respects environment)
+          const configLoader = await import("@/lib/config/ai-config-loader").then(m => m.AIConfigLoader.getInstance());
+          const { providers } = await configLoader.getConfiguration();
+
+          const defaultProvider = providers.find((p) => p.isDefault);
+          if (defaultProvider?.configData.modelId) {
+            selectedModelId = defaultProvider.configData.modelId;
+          } else if (providers.length > 0 && providers[0]?.configData.modelId) {
+            selectedModelId = providers[0].configData.modelId;
+          } else {
+            throw new Error("No AI models configured. Please configure providers in Admin > AI Configuration.");
+          }
+        }
+
+        const configDuration = Date.now() - configStartTime;
+        console.log(`[IntentClassifier] ✅ Model config loaded in ${configDuration}ms: ${selectedModelId}`);
       } catch (error) {
-        console.warn(
-          `[IntentClassifier] Failed to get admin config, using default model`
+        const configDuration = Date.now() - configStartTime;
+        console.error(
+          `[IntentClassifier] ❌ Failed to get model config after ${configDuration}ms:`,
+          error
         );
-        selectedModelId = "claude-3-5-sonnet-latest";
+        throw new Error("No AI models configured. Please configure providers in Admin > AI Configuration.");
       }
+    } else {
+      console.log(`[IntentClassifier] 📋 Using provided model ID: ${selectedModelId}`);
     }
 
     // Construct prompts
+    const promptStartTime = Date.now();
     const systemPrompt = INTENT_CLASSIFICATION_SYSTEM_PROMPT;
     const userMessage = constructIntentClassificationPrompt(
       question,
       ontologyConcepts
     );
+    const promptDuration = Date.now() - promptStartTime;
+    console.log(`[IntentClassifier] 📝 Prompts constructed in ${promptDuration}ms`);
 
     // Get LLM provider
+    const providerStartTime = Date.now();
+    console.log(`[IntentClassifier] 🔌 Initializing provider for model: ${selectedModelId}...`);
     const provider = await getAIProvider(selectedModelId);
+    const providerDuration = Date.now() - providerStartTime;
+    console.log(`[IntentClassifier] ✅ Provider initialized in ${providerDuration}ms`);
 
-    // Call with timeout
+    // Call with timeout (30 seconds to account for first-time initialization)
+    const TIMEOUT_MS = 30000;
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(
-        () => reject(new Error("LLM provider timeout (10 seconds)")),
-        10000
+        () => reject(new Error(`LLM provider timeout (${TIMEOUT_MS / 1000} seconds)`)),
+        TIMEOUT_MS
       );
     });
 
     try {
+      const apiCallStartTime = Date.now();
+      console.log(`[IntentClassifier] 🤖 Calling LLM API (timeout: ${TIMEOUT_MS / 1000}s)...`);
+
       const response = await Promise.race([
         provider.complete({
           system: systemPrompt,
@@ -346,14 +385,21 @@ export class IntentClassifierService {
         timeoutPromise,
       ]);
 
+      const apiCallDuration = Date.now() - apiCallStartTime;
+      const totalDuration = Date.now() - callStartTime;
+      console.log(`[IntentClassifier] ✅ LLM API call completed in ${apiCallDuration}ms (total: ${totalDuration}ms)`);
+
       return response;
     } catch (error) {
+      const totalDuration = Date.now() - callStartTime;
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
+
+      console.error(`[IntentClassifier] ❌ LLM provider call failed after ${totalDuration}ms: ${errorMsg}`);
 
       // If timeout, mention retry
       if (errorMsg.includes("timeout")) {
         throw new Error(
-          `LLM provider timeout. Please try again or use a different model.`
+          `LLM provider timeout after ${TIMEOUT_MS / 1000} seconds. Please try again or use a different model.`
         );
       }
 

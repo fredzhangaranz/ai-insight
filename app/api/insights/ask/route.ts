@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { question, customerId } = await req.json();
+    const { question, customerId, modelId } = await req.json();
 
     // Validate inputs
     if (!question || !question.trim()) {
@@ -33,8 +33,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Initialize orchestrator and execute
+    // Pass modelId to orchestrator for intent classification
     const orchestrator = new ThreeModeOrchestrator();
-    const result = await orchestrator.ask(question, customerId);
+    const result = await orchestrator.ask(question, customerId, modelId);
 
     return NextResponse.json(result);
   } catch (error) {

@@ -249,19 +249,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Development Mode Banner */}
-          {process.env.NODE_ENV !== "production" && (
-            <Alert className="mb-6 border-yellow-200 bg-yellow-50">
-              <ExclamationTriangleIcon className="w-4 h-4 text-yellow-600" />
-              <AlertDescription className="text-yellow-800">
-                <strong>Development Mode:</strong> You are viewing
-                configurations loaded from your <code>.env.local</code> file.
-                Changes made here will not persist. To modify configurations,
-                update your environment variables. Validation is available.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {/* Error Alert */}
           {error && (
             <Alert variant="destructive" className="mb-6">

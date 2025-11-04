@@ -271,20 +271,30 @@ export class ContextDiscoveryService {
     logger: ReturnType<typeof createDiscoveryLogger>
   ) {
     try {
+      console.log(
+        `[ContextDiscovery] 🧠 Starting intent classification for question: "${request.question.substring(0, 100)}${request.question.length > 100 ? "..." : ""}"`
+      );
+
       const intentClassifier = getIntentClassifierService();
       const result = await intentClassifier.classifyIntent({
         customerId: request.customerId,
         question: request.question,
         modelId: request.modelId,
       });
+
+      console.log(
+        `[ContextDiscovery] ✅ Intent classified: type=${result.type}, confidence=${result.confidence.toFixed(2)}`
+      );
+
       return result;
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[ContextDiscovery] ❌ Intent classification error: ${errorMsg}`);
+
       logger.error(
         "context_discovery",
         "intent_classifier",
-        `Intent classification failed: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
+        `Intent classification failed: ${errorMsg}`
       );
       throw error;
     }

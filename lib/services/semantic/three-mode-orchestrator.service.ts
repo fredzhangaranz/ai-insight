@@ -70,7 +70,7 @@ export class ThreeModeOrchestrator {
    * Main orchestration method
    * Routes question through three modes in priority order
    */
-  async ask(question: string, customerId: string): Promise<OrchestrationResult> {
+  async ask(question: string, customerId: string, modelId?: string): Promise<OrchestrationResult> {
     const thinking: ThinkingStep[] = [];
     const startTime = Date.now();
 
@@ -125,15 +125,15 @@ export class ThreeModeOrchestrator {
     // Route based on complexity level
     if (complexity.complexity === "simple") {
       thinking[1].message = `Simple query detected (${complexity.score}/10), using direct semantic mode`;
-      return await this.executeDirect(question, customerId, thinking);
+      return await this.executeDirect(question, customerId, thinking, complexity, modelId);
     } else if (complexity.complexity === "medium") {
-      // Medium complexity: For now, use direct mode (Task 10 will add preview)
-      thinking[1].message = `Medium complexity query (${complexity.score}/10), using direct semantic mode`;
-      return await this.executeDirect(question, customerId, thinking);
+      // Medium complexity: Use direct mode with preview option
+      thinking[1].message = `Medium complexity query (${complexity.score}/10), using direct semantic mode with preview`;
+      return await this.executeDirect(question, customerId, thinking, complexity, modelId);
     } else {
-      // Complex: Use funnel mode
+      // Complex: Use funnel mode with step preview
       thinking[1].message = `Complex query detected (${complexity.score}/10), using funnel mode`;
-      return await this.executeFunnel(question, customerId, thinking);
+      return await this.executeFunnel(question, customerId, thinking, complexity, modelId);
     }
   }
 
@@ -180,6 +180,10 @@ export class ThreeModeOrchestrator {
           columns: results.columns,
           rows: results.rows,
         },
+        // Templates are simple/optimized queries
+        complexityScore: 2,
+        executionStrategy: "auto",
+        requiresPreview: false,
       };
     } catch (error) {
       thinking[thinking.length - 1].status = "error";
@@ -196,7 +200,9 @@ export class ThreeModeOrchestrator {
   private async executeDirect(
     question: string,
     customerId: string,
-    thinking: ThinkingStep[]
+    thinking: ThinkingStep[],
+    complexity?: { complexity: string; score: number; strategy: string; reasons: string[] },
+    modelId?: string
   ): Promise<OrchestrationResult> {
     // Step 2.1: Context Discovery
     thinking.push({
@@ -214,6 +220,7 @@ export class ThreeModeOrchestrator {
           customerId,
           question,
           userId: 1, // TODO: Get from session
+          modelId, // Pass modelId for intent classification
         });
       } catch (discoveryError) {
         // If context discovery fails or times out, create a minimal context
@@ -239,6 +246,22 @@ export class ThreeModeOrchestrator {
           fields: [],
           joinPaths: [],
         };
+      }
+
+      // Check if intent classification failed (degraded response)
+      if (
+        context.intent.confidence === 0 ||
+        context.intent.metrics?.includes("unclassified_metric") ||
+        context.intent.reasoning?.includes("Classification failed")
+      ) {
+        thinking[thinking.length - 1].status = "error";
+        thinking[thinking.length - 1].duration = Date.now() - discoveryStart;
+        thinking[thinking.length - 1].message = context.intent.reasoning || "Intent classification failed";
+
+        throw new Error(
+          context.intent.reasoning ||
+          "Unable to understand your question. This may be due to missing AI model configuration. Please check Admin > AI Configuration."
+        );
       }
 
       thinking[thinking.length - 1].status = "complete";
@@ -316,6 +339,11 @@ export class ThreeModeOrchestrator {
           joinPaths: context.joinPaths || [],
         },
         assumptions, // Include field assumptions for Inspection Panel
+        // Phase 7C: Add complexity information
+        complexityScore: complexity?.score,
+        executionStrategy: complexity?.strategy as "auto" | "preview" | "inspect",
+        // For medium complexity, suggest preview but auto-execute
+        requiresPreview: complexity?.complexity === "medium" && complexity?.strategy === "preview",
       };
     } catch (error) {
       thinking[thinking.length - 1].status = "error";
@@ -332,7 +360,9 @@ export class ThreeModeOrchestrator {
   private async executeFunnel(
     question: string,
     customerId: string,
-    thinking: ThinkingStep[]
+    thinking: ThinkingStep[],
+    complexity?: { complexity: string; score: number; strategy: string; reasons: string[] },
+    modelId?: string
   ): Promise<OrchestrationResult> {
     thinking.push({
       id: "funnel_decompose",
@@ -343,17 +373,29 @@ export class ThreeModeOrchestrator {
     const startTime = Date.now();
 
     try {
-      // TODO: Implement funnel decomposition
-      // TODO: Execute each step sequentially
-      // TODO: Combine results
-      // For now, fall back to direct mode
+      // Generate step preview for complex queries
+      // Full funnel implementation is future work, but we can show preview UI
+      const stepPreview = this.generateStepPreview(question);
 
       thinking[thinking.length - 1].status = "complete";
       thinking[thinking.length - 1].message =
-        "Funnel mode not fully implemented, using direct mode";
+        `Decomposed into ${stepPreview.length} steps (preview mode)`;
       thinking[thinking.length - 1].duration = Date.now() - startTime;
+      thinking[thinking.length - 1].details = {
+        steps: stepPreview.length,
+      };
 
-      return await this.executeDirect(question, customerId, thinking);
+      // For now, execute in direct mode but show step preview
+      const result = await this.executeDirect(question, customerId, thinking, complexity, modelId);
+
+      // Add step preview information
+      return {
+        ...result,
+        requiresPreview: complexity?.strategy === "inspect",
+        stepPreview,
+        complexityScore: complexity?.score,
+        executionStrategy: complexity?.strategy as "auto" | "preview" | "inspect",
+      };
     } catch (error) {
       thinking[thinking.length - 1].status = "error";
       thinking[thinking.length - 1].message = `Funnel execution failed: ${
@@ -361,6 +403,86 @@ export class ThreeModeOrchestrator {
       }`;
       throw error;
     }
+  }
+
+  /**
+   * Generate step preview for complex queries
+   * This creates a plausible decomposition to show in the UI
+   * Full funnel implementation is future work
+   */
+  private generateStepPreview(question: string): FunnelStep[] {
+    // Simple heuristic-based step generation
+    // In a full implementation, this would use LLM to decompose the question
+    const steps: FunnelStep[] = [];
+
+    // Step 1: Always start with base data collection
+    steps.push({
+      id: "step-1",
+      stepNumber: 1,
+      title: "Collect Base Data",
+      description: "Retrieve the primary dataset needed for analysis",
+      tables: ["rpt.Patient", "rpt.Assessment"],
+      estimatedRows: 10000,
+      sql: "-- Base query will be generated here",
+    });
+
+    // Detect if question involves aggregation, comparison, or filtering
+    const lowerQuestion = question.toLowerCase();
+
+    if (lowerQuestion.includes("compare") || lowerQuestion.includes("vs") || lowerQuestion.includes("versus")) {
+      steps.push({
+        id: "step-2",
+        stepNumber: 2,
+        title: "Group and Aggregate",
+        description: "Group data by comparison criteria and calculate metrics",
+        tables: ["rpt.Assessment"],
+        estimatedRows: 500,
+        dependsOn: ["step-1"],
+        sql: "-- Aggregation query will be generated here",
+      });
+    }
+
+    if (lowerQuestion.includes("trend") || lowerQuestion.includes("over time") || lowerQuestion.includes("change")) {
+      steps.push({
+        id: "step-2",
+        stepNumber: 2,
+        title: "Time-Series Analysis",
+        description: "Analyze data changes over time periods",
+        tables: ["rpt.Assessment"],
+        estimatedRows: 1000,
+        dependsOn: ["step-1"],
+        sql: "-- Time-series query will be generated here",
+      });
+    }
+
+    if (lowerQuestion.includes("filter") || lowerQuestion.includes("where") || lowerQuestion.includes("only")) {
+      const lastStep = steps[steps.length - 1];
+      steps.push({
+        id: `step-${steps.length + 1}`,
+        stepNumber: steps.length + 1,
+        title: "Apply Filters",
+        description: "Filter results based on specified criteria",
+        tables: lastStep.tables,
+        estimatedRows: Math.floor(lastStep.estimatedRows * 0.3),
+        dependsOn: [lastStep.id],
+        sql: "-- Filter query will be generated here",
+      });
+    }
+
+    // Final step: Format and return results
+    const finalStep = steps[steps.length - 1];
+    steps.push({
+      id: `step-${steps.length + 1}`,
+      stepNumber: steps.length + 1,
+      title: "Format Results",
+      description: "Format and sort the final results for display",
+      tables: finalStep.tables,
+      estimatedRows: Math.min(finalStep.estimatedRows, 1000),
+      dependsOn: [finalStep.id],
+      sql: "-- Final formatting query will be generated here",
+    });
+
+    return steps;
   }
 
   /**

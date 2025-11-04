@@ -81,8 +81,9 @@ ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
 GOOGLE_CLOUD_PROJECT=your-google-project-id
 GOOGLE_CLOUD_LOCATION=us-central1
 
-# Optional: Override default AI model
-AI_MODEL_NAME=claude-3-5-sonnet-latest
+# Optional: Override default AI model names per provider
+ANTHROPIC_DEFAULT_MODEL_NAME=claude-3-5-sonnet-latest
+GOOGLE_DEFAULT_MODEL_NAME=gemini-2.5-pro
 EOF
     ;;
     

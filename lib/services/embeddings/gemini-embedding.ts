@@ -23,22 +23,36 @@ export class GeminiEmbeddingService {
       const configLoader = AIConfigLoader.getInstance();
       const { providers } = await configLoader.getConfiguration();
 
-      const geminiConfig = providers.find((p) => p.providerType === "google");
+      // Find an enabled Google provider
+      const geminiConfig = providers.find(
+        (p) => p.providerType === "google" && p.isEnabled
+      );
 
-      if (!geminiConfig || !geminiConfig.isEnabled) {
+      if (!geminiConfig) {
         throw new Error(
-          "Google Vertex AI is not configured. Please set GOOGLE_CLOUD_PROJECT in environment."
+          "No enabled Google Gemini provider found. Please configure and enable a Google provider in Admin > AI Configuration."
         );
       }
 
       this.projectId = geminiConfig.configData.projectId ?? null;
       this.location = geminiConfig.configData.location || "us-central1";
+      const credentialsPath = geminiConfig.configData.credentialsPath;
 
       if (!this.projectId) {
         throw new Error(
-          "Google Cloud Project ID is missing. Please set GOOGLE_CLOUD_PROJECT environment variable."
+          "Google Cloud Project ID is missing in provider configuration. Please update the provider in Admin > AI Configuration."
         );
       }
+
+      if (!credentialsPath) {
+        throw new Error(
+          "Google Application Credentials path is missing in provider configuration. Please update the provider in Admin > AI Configuration."
+        );
+      }
+
+      // Set credentials path for Google SDK
+      // The Google SDK reads this environment variable for authentication
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
 
       // Initialize GoogleGenAI with Vertex AI configuration
       this.genAI = new GoogleGenAI({

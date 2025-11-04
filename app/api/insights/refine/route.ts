@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import { generateSQLFromContext } from "@/lib/services/semantic/sql-generator.service";
+import { AIConfigLoader } from "@/lib/config/ai-config-loader";
 import { aiConfigService } from "@/lib/services/ai-config.service";
 
 export async function POST(req: NextRequest) {
@@ -43,14 +44,37 @@ export async function POST(req: NextRequest) {
     }
 
     // Get default model for customer
-    let modelId = "claude-3-5-sonnet-latest";
+    let modelId: string;
     try {
       const adminConfig = await aiConfigService.getConfig(customerId);
       if (adminConfig?.defaultLLMModelId) {
         modelId = adminConfig.defaultLLMModelId;
+      } else {
+        // Fall back to configuration from AIConfigLoader (respects environment)
+        const configLoader = AIConfigLoader.getInstance();
+        const { providers } = await configLoader.getConfiguration();
+
+        const defaultProvider = providers.find((p) => p.isDefault);
+        if (defaultProvider?.configData.modelId) {
+          modelId = defaultProvider.configData.modelId;
+        } else if (providers.length > 0 && providers[0]?.configData.modelId) {
+          modelId = providers[0].configData.modelId;
+        } else {
+          throw new Error("No AI models configured");
+        }
       }
     } catch (error) {
-      console.warn("[/api/insights/refine] Failed to get admin config, using default model");
+      console.error(
+        "[/api/insights/refine] Failed to get model config:",
+        error
+      );
+      return NextResponse.json(
+        {
+          error: "No AI models configured",
+          message: "Please configure providers in Admin > AI Configuration.",
+        },
+        { status: 500 }
+      );
     }
 
     // Get AI provider
@@ -90,7 +114,10 @@ export async function POST(req: NextRequest) {
       sqlChanged = newSql !== currentSql;
     } else if (refinementResult.sqlModifications) {
       // Direct SQL modifications (for simple changes)
-      newSql = applyDirectSqlModifications(currentSql, refinementResult.sqlModifications);
+      newSql = applyDirectSqlModifications(
+        currentSql,
+        refinementResult.sqlModifications
+      );
       sqlChanged = newSql !== currentSql;
     }
 
@@ -216,7 +243,9 @@ function parseRefinementResponse(response: string): {
     console.error("[parseRefinementResponse] Failed to parse response:", error);
     // Fallback: treat response as explanation
     return {
-      explanation: response.trim() || "I couldn't process that refinement. Please try rephrasing.",
+      explanation:
+        response.trim() ||
+        "I couldn't process that refinement. Please try rephrasing.",
     };
   }
 }
@@ -237,7 +266,10 @@ function applyDirectSqlModifications(
   switch (modifications.type) {
     case "add_column":
       // Add columns to SELECT clause
-      if (modifications.details?.columns && Array.isArray(modifications.details.columns)) {
+      if (
+        modifications.details?.columns &&
+        Array.isArray(modifications.details.columns)
+      ) {
         const columns = modifications.details.columns.join(", ");
         // Find SELECT clause and append columns
         newSql = newSql.replace(
@@ -269,7 +301,10 @@ function applyDirectSqlModifications(
         } else {
           // Add new WHERE clause before ORDER BY or at end
           if (/ORDER BY/i.test(newSql)) {
-            newSql = newSql.replace(/ORDER BY/i, `WHERE ${condition}\nORDER BY`);
+            newSql = newSql.replace(
+              /ORDER BY/i,
+              `WHERE ${condition}\nORDER BY`
+            );
           } else {
             newSql += `\nWHERE ${condition}`;
           }

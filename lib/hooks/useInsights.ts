@@ -54,7 +54,7 @@ export function useInsights() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const ask = async (question: string, customerId: string) => {
+  const ask = async (question: string, customerId: string, modelId?: string) => {
     setIsLoading(true);
     setError(null);
 
@@ -62,14 +62,16 @@ export function useInsights() {
       const response = await fetch("/api/insights/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, customerId })
+        body: JSON.stringify({ question, customerId, modelId })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
       const data = await response.json();
+
+      if (!response.ok) {
+        // Extract error message from API response if available
+        const errorMessage = data.message || data.error || response.statusText;
+        throw new Error(errorMessage);
+      }
       setResult(data);
 
       // Auto-save to query history (ephemeral storage for all queries)

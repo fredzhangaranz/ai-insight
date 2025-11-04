@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/middleware/auth-middleware";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    // In development mode, configuration updates are disabled
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json(
-        {
-          error:
-            "Configuration updates are disabled in development mode. Please update your .env.local file instead.",
-        },
-        { status: 403 }
-      );
+    // Check authentication and admin authorization
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
     }
 
-    // In production mode, use the database service
+    // Use the database service
     const { aiConfigService } = await import(
       "@/lib/services/ai-config.service"
     );
@@ -46,7 +42,7 @@ export async function PUT(
       configData || {},
       isEnabled ?? true,
       isDefault ?? false,
-      "admin"
+      authResult.user.username || authResult.user.name || "admin"
     );
 
     return NextResponse.json(configuration);
@@ -64,18 +60,13 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    // In development mode, configuration deletions are disabled
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json(
-        {
-          error:
-            "Configuration deletions are disabled in development mode. Please update your .env.local file instead.",
-        },
-        { status: 403 }
-      );
+    // Check authentication and admin authorization
+    const authResult = await requireAdmin(request);
+    if (authResult instanceof NextResponse) {
+      return authResult;
     }
 
-    // In production mode, use the database service
+    // Use the database service
     const { aiConfigService } = await import(
       "@/lib/services/ai-config.service"
     );
@@ -88,22 +79,8 @@ export async function DELETE(
       );
     }
 
-    // Get configuration details first
-    const configurations = await aiConfigService.getAllConfigurations();
-    const config = configurations.find((c) => c.id === id);
-
-    if (!config) {
-      return NextResponse.json(
-        { error: "Configuration not found" },
-        { status: 404 }
-      );
-    }
-
-    const success = await aiConfigService.deleteConfiguration(
-      config.providerType,
-      config.providerName,
-      "admin"
-    );
+    // Delete directly by ID (more reliable than providerType/name matching)
+    const success = await aiConfigService.deleteConfigurationById(id);
 
     if (success) {
       return NextResponse.json({ success: true });
@@ -115,8 +92,19 @@ export async function DELETE(
     }
   } catch (error) {
     console.error("Error deleting AI configuration:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    const errorDetails =
+      error instanceof Error && (error as any).detail
+        ? (error as any).detail
+        : undefined;
+
     return NextResponse.json(
-      { error: "Failed to delete configuration" },
+      {
+        error: "Failed to delete configuration",
+        message: errorMessage,
+        details: errorDetails,
+      },
       { status: 500 }
     );
   }

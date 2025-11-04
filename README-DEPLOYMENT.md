@@ -55,7 +55,7 @@ If customers use their own AI services:
    cat > .env.production << EOF
    DATABASE_URL=your-silhouette-db-connection-string
    ANTHROPIC_API_KEY=sk-ant-api03-your-customer-key-here
-   AI_MODEL_NAME=claude-3-5-sonnet-latest
+   ANTHROPIC_DEFAULT_MODEL_NAME=claude-3-5-sonnet-latest
    EOF
 
    # For Google Vertex AI - place credentials file
@@ -448,7 +448,7 @@ docker-compose -f docker-compose.prod.yml images
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-AI_MODEL_NAME=claude-3-5-sonnet-latest  # Optional, defaults to claude-3-5-sonnet-latest
+ANTHROPIC_DEFAULT_MODEL_NAME=claude-3-5-sonnet-latest  # Optional, defaults to claude-3-5-sonnet-latest
 ```
 
 #### Google Vertex AI

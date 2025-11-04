@@ -13,6 +13,7 @@ export interface AIConfiguration {
     projectId?: string;
     location?: string;
     modelId?: string;
+    credentialsPath?: string; // Path to Google Cloud service account credentials JSON
     timeout?: number;
     priority?: number;
   };
@@ -403,7 +404,26 @@ export class AIConfigService {
   }
 
   /**
-   * Delete a provider configuration
+   * Delete a provider configuration by ID
+   */
+  async deleteConfigurationById(id: number): Promise<boolean> {
+    const pool = await getInsightGenDbPool();
+
+    try {
+      const result = await pool.query(
+        `DELETE FROM "AIConfiguration" WHERE id = $1`,
+        [id]
+      );
+
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error(`Failed to delete configuration by ID ${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a provider configuration by providerType and providerName
    */
   async deleteConfiguration(
     providerType: string,
@@ -412,12 +432,20 @@ export class AIConfigService {
   ): Promise<boolean> {
     const pool = await getInsightGenDbPool();
 
-    const result = await pool.query(
-      `DELETE FROM "AIConfiguration" WHERE "providerType" = $1 AND "providerName" = $2`,
-      [providerType, providerName]
-    );
+    try {
+      const result = await pool.query(
+        `DELETE FROM "AIConfiguration" WHERE "providerType" = $1 AND "providerName" = $2`,
+        [providerType, providerName]
+      );
 
-    return (result.rowCount ?? 0) > 0;
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error(
+        `Failed to delete configuration ${providerType}:${providerName}:`,
+        error
+      );
+      throw error;
+    }
   }
 
   /**
