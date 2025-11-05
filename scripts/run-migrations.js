@@ -51,6 +51,7 @@ const migrations = [
   "022_add_customer_to_saved_insights.sql",
   "023_create_query_history.sql",
   "024_fix_ai_config_audit_delete.sql",
+  "025_remove_nonform_value_table.sql",
 ];
 
 async function runMigrations() {

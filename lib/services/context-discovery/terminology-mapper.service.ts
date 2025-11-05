@@ -1,10 +1,13 @@
 /**
  * Terminology Mapping Service (Phase 5 – Step 3)
  *
- * Maps user-provided terms to canonical field or column values by querying
- * SemanticIndexOption (form option values) and SemanticIndexNonFormValue
- * (non-form column distinct values). Applies normalization, abbreviation
- * expansion, and fuzzy matching to tolerate user typos and phrasing drift.
+ * Maps user-provided terms to canonical field values by querying
+ * SemanticIndexOption (form option definitions). Applies normalization,
+ * abbreviation expansion, and fuzzy matching to tolerate user typos and
+ * phrasing drift.
+ *
+ * PRIVACY-SAFE: Only queries form OPTION definitions, never actual patient/form data.
+ * Previous version queried SemanticIndexNonFormValue (actual data) - now disabled.
  */
 
 import { createHash } from "crypto";
@@ -175,16 +178,19 @@ export class TerminologyMapperService {
         expanded,
         normalized
       );
-      const nonFormCandidates = await this.searchNonFormValues(
-        pool,
-        customerId,
-        expanded,
-        normalized
-      );
+
+      // DISABLED: Privacy violation - searchNonFormValues queried actual patient/form data
+      // Only use form OPTION definitions, not actual data values
+      // const nonFormCandidates = await this.searchNonFormValues(
+      //   pool,
+      //   customerId,
+      //   expanded,
+      //   normalized
+      // );
 
       const candidate = this.pickBestCandidate(
         normalized,
-        [...formCandidates, ...nonFormCandidates],
+        formCandidates, // Only use form options, not actual data
         options
       );
 
@@ -265,6 +271,10 @@ export class TerminologyMapperService {
     }
   }
 
+  // DISABLED: Privacy violation - this method queried actual patient/form data
+  // from SemanticIndexNonFormValue table (now dropped)
+  // Terminology mapping should ONLY use form OPTION definitions, not actual data
+  /*
   private async searchNonFormValues(
     pool: Pool,
     customerId: string,
@@ -328,6 +338,7 @@ export class TerminologyMapperService {
       return [];
     }
   }
+  */
 
   private pickBestCandidate(
     normalizedTerm: string,

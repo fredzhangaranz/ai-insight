@@ -1,3 +1,26 @@
+/**
+ * ⚠️ DISABLED - PRIVACY VIOLATION
+ *
+ * This service queries actual patient/form data from rpt.* tables
+ * and stores it in SemanticIndexNonFormValue, which violates privacy principles.
+ *
+ * The semantic layer should ONLY index:
+ * - Schema structure (INFORMATION_SCHEMA)
+ * - Form definitions (dbo.AttributeType)
+ * - Form option definitions (dbo.AttributeTypeSetVersion)
+ *
+ * It should NEVER index actual patient data or form values.
+ *
+ * Date Disabled: 2025-11-05
+ * Reason: Privacy violation - indexes actual patient/form data
+ * Replacement: Schema-only discovery (see schema-discovery.service.ts)
+ *
+ * CRITICAL PRIVACY VIOLATIONS IN THIS FILE:
+ * - Line 218-269: fetchValueSamples() queries actual data values from rpt.* tables
+ * - Line 253-262: SELECT ... FROM rpt.* queries actual patient/form data
+ * - Line 411: Attempts to INSERT into SemanticIndexNonFormValue (now dropped)
+ */
+
 import * as sql from "mssql";
 import type { Pool } from "pg";
 

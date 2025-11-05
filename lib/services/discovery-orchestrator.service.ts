@@ -7,7 +7,8 @@ import {
 } from "@/lib/services/customer-service";
 import { discoverFormMetadata } from "@/lib/services/form-discovery.service";
 import { discoverNonFormSchema } from "@/lib/services/non-form-schema-discovery.service";
-import { discoverNonFormValues } from "@/lib/services/non-form-value-discovery.service";
+// DISABLED: Privacy violation - indexes actual patient/form data
+// import { discoverNonFormValues } from "@/lib/services/non-form-value-discovery.service";
 import { discoverEntityRelationships } from "@/lib/services/relationship-discovery.service";
 import { closeSqlServerPool } from "@/lib/services/sqlserver/client";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
@@ -153,18 +154,20 @@ async function computeNonFormStats(
     [customerId]
   );
 
-  const valueResult = await pool.query<{ total: number }>(
-    `SELECT COUNT(*)::int AS total
-     FROM "SemanticIndexNonFormValue" nf
-     JOIN "SemanticIndexNonForm" n ON n.id = nf.semantic_index_nonform_id
-     WHERE n.customer_id = $1`,
-    [customerId]
-  );
+  // DISABLED: SemanticIndexNonFormValue table dropped (privacy fix)
+  // This table stored actual patient/form data and violated privacy principles
+  // const valueResult = await pool.query<{ total: number }>(
+  //   `SELECT COUNT(*)::int AS total
+  //    FROM "SemanticIndexNonFormValue" nf
+  //    JOIN "SemanticIndexNonForm" n ON n.id = nf.semantic_index_nonform_id
+  //    WHERE n.customer_id = $1`,
+  //   [customerId]
+  // );
 
   return {
     columnCount: columnResult.rows[0]?.total ?? 0,
     reviewCount: columnResult.rows[0]?.review_count ?? 0,
-    valueCount: valueResult.rows[0]?.total ?? 0,
+    valueCount: 0, // Always 0 - table no longer exists
   };
 }
 
@@ -437,7 +440,11 @@ export async function runFullDiscovery(
       aggregateErrors.push(...relationshipsResult.errors);
     }
 
-    // Stage 4: Non-Form Values Discovery
+    // Stage 4: Non-Form Values Discovery (DISABLED - Privacy Violation)
+    // This stage queried actual patient/form data from rpt.* tables
+    // and stored it in SemanticIndexNonFormValue table.
+    // REMOVED: See privacy-safe-discovery-fix.md
+    /*
     if (stages.nonFormValues) {
       logger.startTimer("non_form_values");
       const nonFormValuesResult = await discoverNonFormValues({
@@ -454,6 +461,7 @@ export async function runFullDiscovery(
       aggregateWarnings.push(...nonFormValuesResult.warnings);
       aggregateErrors.push(...nonFormValuesResult.errors);
     }
+    */
 
     // Stage 5: Summary Statistics
     logger.startTimer("summary");
@@ -651,7 +659,9 @@ export async function runFullDiscoveryWithProgress(
       });
     }
 
-    // Stage 4: Non-Form Values
+    // Stage 4: Non-Form Values (DISABLED - Privacy Violation)
+    // REMOVED: See privacy-safe-discovery-fix.md
+    /*
     if (stages.nonFormValues) {
       sendEvent("stage-start", {
         stage: "non_form_values",
@@ -668,6 +678,7 @@ export async function runFullDiscoveryWithProgress(
         valuesDiscovered: nonFormValuesResult.valuesDiscovered,
       });
     }
+    */
 
     // Stage 5: Computing Summary Statistics
     sendEvent("stage-start", {
