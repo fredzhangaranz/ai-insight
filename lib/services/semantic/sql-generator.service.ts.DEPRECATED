@@ -1,3 +1,13 @@
+/**
+ * DEPRECATED - DO NOT USE
+ *
+ * This file used hard-coded heuristics to generate SQL and has been replaced by
+ * lib/services/semantic/llm-sql-generator.service.ts, which leverages LLM-based
+ * generation with schema context.
+ *
+ * Date Deprecated: 2024-11-24
+ */
+
 // lib/services/semantic/sql-generator.service.ts
 // SQL Generator for Phase 7B/7C - Generates SQL from semantic context bundle
 // Phase 7C: Added schema-aware generation with fuzzy field matching
@@ -16,26 +26,10 @@ import {
   findPrimaryKeyColumn,
   type TableSchema,
 } from "./schema-discovery.service";
-
-export interface FieldAssumption {
-  intent: string; // What we wanted (e.g., "date field for filtering")
-  assumed: string; // What we assumed (e.g., "CreatedDate")
-  actual: string | null; // What we actually used (e.g., "AssessmentDate")
-  confidence: number; // How confident are we (0-1)
-}
-
-export interface SQLGenerationResult {
-  sql: string;
-  executionPlan: {
-    tables: string[];
-    fields: string[];
-    filters: string[];
-    joins: string[];
-    aggregations: string[];
-  };
-  confidence: number;
-  assumptions: FieldAssumption[]; // Track assumptions for Inspection Panel
-}
+import type {
+  FieldAssumption,
+  SQLGenerationResult,
+} from "./sql-generator.types";
 
 /**
  * Generate SQL query from semantic context bundle

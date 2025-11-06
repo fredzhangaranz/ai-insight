@@ -33,6 +33,12 @@ ContextBundle → LLM SQL Generator → database-schema-context.md → LLM → C
         GENERATE_QUERY_PROMPT
 ```
 
+### Implementation Guardrails (new)
+- Always use `context.question` as the user question in prompts; `intent.type` is just a classifier label.
+- Reuse existing prompt helpers (`constructPrompt`, `validateAIResponse`) and schema loaders to avoid drifting contracts.
+- Funnel providers already validate SQL output; prefer composing with them instead of re-implementing JSON parsing/validation logic.
+- Update or remove legacy Anthropic-only helpers (`subquestion-generator.service.ts`, `funnel-query-generator.service.ts`) once the new flow is in place to keep a single source of truth.
+
 ---
 
 ## Tasks
@@ -48,10 +54,15 @@ ContextBundle → LLM SQL Generator → database-schema-context.md → LLM → C
 **Implementation:**
 ```typescript
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
-import { GENERATE_QUERY_PROMPT } from "@/lib/prompts/generate-query.prompt";
-import { readFileSync } from "fs";
-import { join } from "path";
-import type { ContextBundle } from "../context-discovery/types";
+import { loadDatabaseSchemaContext } from "@/lib/ai/schema-context";
+import {
+  GENERATE_QUERY_PROMPT,
+  constructPrompt,
+  validateAIResponse,
+  type AIAnalysisPlan,
+  type PromptContext,
+} from "@/lib/prompts/generate-query.prompt";
+import type { ContextBundle, FormInContext } from "../context-discovery/types";
 import type { SQLGenerationResult, FieldAssumption } from "./sql-generator.service";
 
 /**
@@ -66,18 +77,15 @@ export async function generateSQLWithLLM(
   console.log(`[LLM-SQL-Generator] 🚀 Starting SQL generation with LLM for customer ${customerId}`);
   const startTime = Date.now();
 
-  // 1. Load database schema documentation
-  const schemaContextPath = join(process.cwd(), 'lib', 'database-schema-context.md');
-  const schemaContext = readFileSync(schemaContextPath, 'utf-8');
+  // 1. Load database schema documentation (cached helper)
+  const schemaContext = loadDatabaseSchemaContext();
   console.log(`[LLM-SQL-Generator] 📋 Loaded schema context (${schemaContext.length} chars)`);
 
-  // 2. Build comprehensive prompt
-  const systemPrompt = GENERATE_QUERY_PROMPT;
-
+  // 2. Build comprehensive prompt using existing helper
   const userPrompt = buildUserPrompt(context, schemaContext);
   console.log(`[LLM-SQL-Generator] 📝 Built user prompt (${userPrompt.length} chars)`);
 
-  // 3. Call LLM
+  // 3. Call LLM via provider
   const llmModelId = modelId || "gemini-2.0-flash-exp";
   console.log(`[LLM-SQL-Generator] 🤖 Calling LLM: ${llmModelId}`);
 
@@ -85,7 +93,7 @@ export async function generateSQLWithLLM(
   const apiStartTime = Date.now();
 
   const response = await provider.complete({
-    system: systemPrompt,
+    system: GENERATE_QUERY_PROMPT,
     userMessage: userPrompt,
     maxTokens: 4096,
     temperature: 0.3, // Lower temperature for more consistent SQL
@@ -116,10 +124,16 @@ export async function generateSQLWithLLM(
  * Build user prompt with all context
  */
 function buildUserPrompt(context: ContextBundle, schemaContext: string): string {
-  const { intent, forms, fields, terminology, joinPaths } = context;
+  const { intent, forms, terminology, joinPaths } = context;
 
-  let prompt = `# Question Context\n\n`;
-  prompt += `**User Question:** "${intent.type}"\n\n`;
+  const promptContext: PromptContext = {
+    question: context.question,
+    assessmentFormDefinition: buildAssessmentDefinition(forms),
+  };
+
+  let prompt = constructPrompt(promptContext);
+  prompt += `\n\n# Question Context\n\n`;
+  prompt += `**User Question:** "${context.question}"\n\n`;
   prompt += `**Intent Analysis:**\n`;
   prompt += `- Type: ${intent.type}\n`;
   prompt += `- Scope: ${intent.scope}\n`;
@@ -182,6 +196,25 @@ function buildUserPrompt(context: ContextBundle, schemaContext: string): string 
   return prompt;
 }
 
+function buildAssessmentDefinition(forms: FormInContext[]): Record<string, unknown> {
+  if (!forms || forms.length === 0) {
+    return {};
+  }
+
+  return {
+    forms: forms.map((form) => ({
+      id: form.formId,
+      name: form.formName,
+      fields: form.fields.map((field) => ({
+        id: field.fieldId,
+        name: field.fieldName,
+        concept: field.semanticConcept,
+        dataType: field.dataType,
+      })),
+    })),
+  };
+}
+
 /**
  * Parse and validate LLM response
  */
@@ -195,7 +228,7 @@ function parseAndValidateLLMResponse(response: unknown): {
     throw new Error('LLM response is not a string');
   }
 
-  let parsed: any;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(response);
   } catch (error) {
@@ -203,22 +236,19 @@ function parseAndValidateLLMResponse(response: unknown): {
     throw new Error('LLM response is not valid JSON');
   }
 
-  // Validate required fields
-  if (!parsed.generatedSql || typeof parsed.generatedSql !== 'string') {
-    throw new Error('LLM response missing or invalid generatedSql field');
-  }
-
-  if (!parsed.generatedSql.trim().toUpperCase().startsWith('SELECT')) {
-    throw new Error('Generated SQL must be a SELECT statement');
+  if (!validateAIResponse(parsed)) {
+    throw new Error('LLM response did not match expected analysis plan format');
   }
 
   console.log('[LLM-SQL-Generator] ✅ LLM response validated successfully');
 
+  const plan = parsed as AIAnalysisPlan;
+
   return {
-    explanation: parsed.explanation || 'No explanation provided',
-    generatedSql: parsed.generatedSql,
-    recommendedChartType: parsed.recommendedChartType || 'table',
-    availableMappings: parsed.availableMappings || {},
+    explanation: plan.explanation,
+    generatedSql: plan.generatedSql,
+    recommendedChartType: plan.recommendedChartType,
+    availableMappings: plan.availableMappings,
   };
 }
 
@@ -851,6 +881,13 @@ concatenation. It has been replaced with LLM-based generation.
 - [ ] Integrated into API routes
 - [ ] Performance monitoring in place
 - [ ] Documentation updated
+
+### Phase 5: Legacy Service Cleanup
+
+- [ ] Decide whether `lib/services/subquestion-generator.service.ts` and `lib/services/funnel-query-generator.service.ts` should be removed or wrapped to call the shared provider
+- [ ] Ensure `lib/services/semantic/sql-generator.service.ts` either delegates to the new LLM path or is replaced outright (no duplicate entry points)
+- [ ] Update any consumers to the consolidated helper(s)
+- [ ] Document the final ownership of query generation services
 
 ### Overall Success When:
 - [ ] All test queries generate valid SQL

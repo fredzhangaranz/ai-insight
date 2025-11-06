@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
-import { generateSQLFromContext } from "@/lib/services/semantic/sql-generator.service";
+import { generateSQLWithLLM } from "@/lib/services/semantic/llm-sql-generator.service";
 import { AIConfigLoader } from "@/lib/config/ai-config-loader";
 import { aiConfigService } from "@/lib/services/ai-config.service";
 
@@ -106,9 +106,10 @@ export async function POST(req: NextRequest) {
 
     if (refinementResult.modifiedContext) {
       // Use SQL generator to create new query from modified context
-      const sqlResult = await generateSQLFromContext(
+      const sqlResult = await generateSQLWithLLM(
         refinementResult.modifiedContext,
-        customerId
+        customerId,
+        modelId
       );
       newSql = sqlResult.sql;
       sqlChanged = newSql !== currentSql;

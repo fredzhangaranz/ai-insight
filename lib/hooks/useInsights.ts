@@ -1,6 +1,7 @@
 // lib/hooks/useInsights.ts
 
 import { useState } from "react";
+import type { FieldAssumption } from "@/lib/services/semantic/sql-generator.types";
 
 export interface ThinkingStep {
   id: string;
@@ -19,13 +20,6 @@ export interface FunnelStep {
   estimatedRows: number;
   dependsOn?: string[];
   sql?: string;
-}
-
-export interface FieldAssumption {
-  intent: string;
-  assumed: string;
-  actual: string | null;
-  confidence: number;
 }
 
 export interface InsightResult {

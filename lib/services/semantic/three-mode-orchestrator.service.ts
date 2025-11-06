@@ -7,8 +7,9 @@ import { analyzeComplexity } from "./complexity-detector.service";
 import { ContextDiscoveryService } from "../context-discovery/context-discovery.service";
 import { QueryTemplate } from "../query-template.service";
 import { executeCustomerQuery, validateAndFixQuery } from "./customer-query.service";
-import { generateSQLFromContext } from "./sql-generator.service";
+import { generateSQLWithLLM } from "./llm-sql-generator.service";
 import { extractAndFillPlaceholders } from "./template-placeholder.service";
+import type { FieldAssumption } from "./sql-generator.types";
 
 export type QueryMode = "template" | "direct" | "funnel";
 
@@ -31,12 +32,7 @@ export interface FunnelStep {
   sql?: string;
 }
 
-export interface FieldAssumption {
-  intent: string;
-  assumed: string;
-  actual: string | null;
-  confidence: number;
-}
+export type { FieldAssumption } from "./sql-generator.types";
 
 export interface OrchestrationResult {
   mode: QueryMode;
@@ -280,9 +276,10 @@ export class ThreeModeOrchestrator {
       });
 
       const sqlStart = Date.now();
-      const { sql, executionPlan, assumptions } = await this.generateSQL(
+      const { sql, executionPlan, assumptions } = await generateSQLWithLLM(
         context,
-        customerId
+        customerId,
+        modelId
       );
 
       thinking[thinking.length - 1].status = "complete";
@@ -483,27 +480,6 @@ export class ThreeModeOrchestrator {
     });
 
     return steps;
-  }
-
-  /**
-   * Generate SQL from context bundle
-   */
-  private async generateSQL(
-    context: any,
-    customerId: string
-  ): Promise<{
-    sql: string;
-    executionPlan: any;
-    assumptions?: any[];
-  }> {
-    // Use SQL generator service to create query from context bundle
-    // Pass customerId for schema-aware generation
-    const result = await generateSQLFromContext(context, customerId);
-    return {
-      sql: result.sql,
-      executionPlan: result.executionPlan,
-      assumptions: result.assumptions,
-    };
   }
 
   /**
