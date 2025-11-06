@@ -52,6 +52,7 @@ const migrations = [
   "023_create_query_history.sql",
   "024_fix_ai_config_audit_delete.sql",
   "025_remove_nonform_value_table.sql",
+  "026_add_error_mode_to_query_history.sql",
 ];
 
 async function runMigrations() {

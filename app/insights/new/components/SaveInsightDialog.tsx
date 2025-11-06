@@ -16,12 +16,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { InsightResult } from "@/lib/hooks/useInsights";
+import type { ChartType } from "@/lib/chart-contracts";
 
 interface SaveInsightDialogProps {
   isOpen: boolean;
   onClose: () => void;
   result: InsightResult;
   customerId: string;
+  chartConfig?: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  } | null;
 }
 
 export function SaveInsightDialog({
@@ -29,6 +34,7 @@ export function SaveInsightDialog({
   onClose,
   result,
   customerId,
+  chartConfig,
 }: SaveInsightDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -54,8 +60,8 @@ export function SaveInsightDialog({
           question: result.question,
           customerId,
           sql: result.sql,
-          chartType: "table",
-          chartMapping: {},
+          chartType: chartConfig?.chartType || "table",
+          chartMapping: chartConfig?.chartMapping || {},
           scope: "semantic",
           tags: tags.trim() ? tags.split(",").map((t) => t.trim()) : [],
           semanticContext: result.context || null,
@@ -133,6 +139,18 @@ export function SaveInsightDialog({
               )}
             </div>
           </div>
+
+          {/* Chart type indicator (if chart config provided) */}
+          {chartConfig && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">Chart Type</Label>
+              <div className="text-sm">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 capitalize">
+                  📊 {chartConfig.chartType}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Name input */}
           <div className="space-y-2">

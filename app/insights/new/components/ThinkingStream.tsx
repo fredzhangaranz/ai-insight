@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CheckCircle, Loader2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,48 +17,103 @@ export interface ThinkingStep {
 interface ThinkingStreamProps {
   steps: ThinkingStep[];
   collapsed?: boolean;
+  title?: string;
+  allowCollapse?: boolean;
+  headerActions?: ReactNode;
+  subtitle?: ReactNode;
+  className?: string;
 }
 
 export function ThinkingStream({
   steps,
-  collapsed: initialCollapsed = true
+  collapsed: initialCollapsed = true,
+  title = "How I answered this",
+  allowCollapse = true,
+  headerActions,
+  subtitle,
+  className,
 }: ThinkingStreamProps) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
 
   const totalTime = steps.reduce((sum, s) => sum + (s.duration || 0), 0);
   const hasError = steps.some(s => s.status === "error");
+  const isCollapsible = allowCollapse;
 
   if (steps.length === 0) return null;
 
-  return (
-    <div className={cn(
-      "rounded-lg border bg-gray-50 p-4",
-      hasError && "border-red-200 bg-red-50"
-    )}>
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900"
-      >
-        {collapsed ? (
-          <ChevronRight className="h-4 w-4" />
-        ) : (
-          <ChevronDown className="h-4 w-4" />
-        )}
-        <span>How I answered this</span>
-        {totalTime > 0 && (
-          <span className="text-gray-500">
-            ({(totalTime / 1000).toFixed(1)}s)
-          </span>
-        )}
-      </button>
+  const computedSubtitle =
+    subtitle !== undefined
+      ? subtitle
+      : totalTime > 0
+      ? (
+        <span className="text-gray-500">
+          ({(totalTime / 1000).toFixed(1)}s)
+        </span>
+      )
+      : null;
 
-      {!collapsed && (
-        <div className="mt-4 space-y-2 border-t pt-4">
-          {steps.map((step) => (
-            <ThinkingStepItem key={step.id} step={step} />
-          ))}
-        </div>
+  const containerClasses = cn(
+    "rounded-lg border bg-gray-50 p-4",
+    hasError && "border-red-200 bg-red-50",
+    className
+  );
+
+  const showContent = isCollapsible ? !collapsed : true;
+
+  return (
+    <div className={containerClasses}>
+      <div className="flex items-center justify-between gap-4">
+        {isCollapsible ? (
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="flex items-center gap-2 text-left text-sm font-medium text-gray-700 hover:text-gray-900"
+          >
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+            <span>{title}</span>
+            {computedSubtitle}
+          </button>
+        ) : (
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              {title}
+            </div>
+            {computedSubtitle && (
+              <div className="text-xs text-gray-500 mt-1">
+                {computedSubtitle}
+              </div>
+            )}
+          </div>
+        )}
+        {headerActions}
+      </div>
+
+      {isCollapsible && !collapsed && (
+        <ThinkingStepsList steps={steps} className="border-t pt-4" />
       )}
+
+      {!isCollapsible && showContent && (
+        <ThinkingStepsList steps={steps} className="border-t pt-4" />
+      )}
+    </div>
+  );
+}
+
+function ThinkingStepsList({
+  steps,
+  className,
+}: {
+  steps: ThinkingStep[];
+  className?: string;
+}) {
+  return (
+    <div className={cn("mt-4 space-y-2", className)}>
+      {steps.map((step) => (
+        <ThinkingStepItem key={step.id} step={step} />
+      ))}
     </div>
   );
 }

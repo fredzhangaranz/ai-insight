@@ -12,7 +12,9 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { SaveInsightDialog } from "./SaveInsightDialog";
+import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
 import { InsightResult } from "@/lib/hooks/useInsights";
+import type { ChartType } from "@/lib/chart-contracts";
 
 interface ActionsPanelProps {
   result: InsightResult;
@@ -26,6 +28,11 @@ export function ActionsPanel({
   onRefine,
 }: ActionsPanelProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showChartDialog, setShowChartDialog] = useState(false);
+  const [chartConfig, setChartConfig] = useState<{
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  } | null>(null);
 
   const handleExportCSV = () => {
     if (!result.results || result.results.rows.length === 0) {
@@ -56,6 +63,22 @@ export function ActionsPanel({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleChartSave = (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => {
+    // Save the chart config and open the save insight dialog
+    setChartConfig(config);
+    setShowChartDialog(false);
+    setShowSaveDialog(true);
+  };
+
+  const handleSaveDialogClose = () => {
+    setShowSaveDialog(false);
+    // Reset chart config when save dialog closes
+    setChartConfig(null);
   };
 
   return (
@@ -91,7 +114,12 @@ export function ActionsPanel({
           </Button>
 
           {/* Chart and Template buttons - Phase 7D */}
-          <Button variant="outline" size="sm" disabled title="Coming in Phase 7D">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowChartDialog(true)}
+            disabled={!result.results || result.results.rows.length === 0}
+          >
             <BarChart3 className="mr-2 h-4 w-4" />
             Create Chart
           </Button>
@@ -105,10 +133,25 @@ export function ActionsPanel({
 
       <SaveInsightDialog
         isOpen={showSaveDialog}
-        onClose={() => setShowSaveDialog(false)}
+        onClose={handleSaveDialogClose}
         result={result}
         customerId={customerId}
+        chartConfig={chartConfig}
       />
+
+      {showChartDialog && (
+        <ChartConfigurationDialog
+          isOpen={showChartDialog}
+          onClose={() => setShowChartDialog(false)}
+          queryResults={result.results.rows}
+          chartType="bar"
+          title={result.question || "Query Results"}
+          onSave={handleChartSave}
+          saveButtonText="Continue to Save"
+          allowTypeChange={true}
+          onTypeChange={() => {}}
+        />
+      )}
     </>
   );
 }

@@ -11,13 +11,21 @@ import { SuggestedQuestions } from "./components/SuggestedQuestions";
 import { QueryHistory } from "./components/QueryHistory";
 import { InsightResults } from "./components/InsightResults";
 import { useInsights } from "@/lib/hooks/useInsights";
+import { AnalysisProgressCard } from "./components/AnalysisProgressCard";
 
 export default function NewInsightPage() {
   const [customerId, setCustomerId] = useState<string>("");
   const [question, setQuestion] = useState<string>("");
   const [modelId, setModelId] = useState<string>(""); // Will be set by ModelSelector from config
 
-  const { result, isLoading, error, ask } = useInsights();
+  const {
+    result,
+    isLoading,
+    error,
+    ask,
+    cancelAnalysis,
+    analysis,
+  } = useInsights();
 
   const handleAsk = async () => {
     if (!customerId || !question.trim()) return;
@@ -80,7 +88,35 @@ export default function NewInsightPage() {
             isLoading={isLoading}
           />
 
-          {customerId && !result && (
+          {analysis.status === "running" && (
+            <AnalysisProgressCard
+              status="running"
+              steps={analysis.steps}
+              elapsedMs={analysis.elapsedMs}
+              modelLabel={analysis.model}
+              onCancel={cancelAnalysis}
+            />
+          )}
+
+          {analysis.status === "canceled" && !result && (
+            <AnalysisProgressCard
+              status="canceled"
+              steps={analysis.steps}
+              elapsedMs={analysis.elapsedMs}
+              modelLabel={analysis.model}
+            />
+          )}
+
+          {analysis.status === "error" && !result && (
+            <AnalysisProgressCard
+              status="error"
+              steps={analysis.steps}
+              elapsedMs={analysis.elapsedMs}
+              modelLabel={analysis.model}
+            />
+          )}
+
+          {customerId && !result && analysis.status !== "running" && (
             <SuggestedQuestions
               customerId={customerId}
               onSelect={setQuestion}

@@ -4,13 +4,13 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Clock } from "lucide-react";
+import { Clock, AlertCircle } from "lucide-react";
 
 interface Query {
   id: string;
   question: string;
   createdAt: Date;
-  mode: "template" | "direct" | "funnel";
+  mode: "template" | "direct" | "funnel" | "error";
   recordCount?: number;
 }
 
@@ -63,15 +63,27 @@ export function QueryHistory({
           <Button
             key={q.id}
             variant="ghost"
-            className="w-full justify-start text-left h-auto py-3"
+            className={`w-full justify-start text-left h-auto py-3 ${
+              q.mode === "error" ? "border-l-2 border-red-400" : ""
+            }`}
             onClick={() => onSelect(q)}
           >
-            <div className="space-y-1">
-              <div className="font-medium">{q.question}</div>
-              <div className="text-xs text-gray-500">
-                {formatTimestamp(q.createdAt)} •
-                {q.recordCount && ` ${q.recordCount} records •`}
-                {q.mode === "template" && " Used template"}
+            <div className="flex items-start gap-2 w-full">
+              {q.mode === "error" && (
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+              )}
+              <div className="space-y-1 flex-1">
+                <div className="font-medium">{q.question}</div>
+                <div className="text-xs text-gray-500">
+                  {formatTimestamp(q.createdAt)}
+                  {q.mode === "error" && (
+                    <span className="text-red-500"> • Failed query</span>
+                  )}
+                  {q.mode !== "error" && q.recordCount !== undefined && (
+                    <> • {q.recordCount} records</>
+                  )}
+                  {q.mode === "template" && " • Used template"}
+                </div>
               </div>
             </div>
           </Button>
