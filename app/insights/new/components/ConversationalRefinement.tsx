@@ -203,6 +203,11 @@ export function ConversationalRefinement({
               handleRefine();
             }
           }}
+          autoComplete="off"
+          data-form-type="other"
+          data-1p-ignore
+          data-lpignore="true"
+          spellCheck={false}
         />
         <div className="flex items-center justify-between">
           <span className="text-xs text-blue-600">

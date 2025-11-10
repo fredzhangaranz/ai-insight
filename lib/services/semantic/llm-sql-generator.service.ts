@@ -3,10 +3,10 @@ import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import { loadDatabaseSchemaContext } from "@/lib/ai/schema-context";
 import {
   GENERATE_QUERY_PROMPT,
-  constructPrompt,
-  validateAIResponse,
-  type AIAnalysisPlan,
-  type PromptContext,
+  validateLLMResponse,
+  type LLMResponse,
+  type LLMSQLResponse,
+  type LLMClarificationResponse,
 } from "@/lib/prompts/generate-query.prompt";
 import type {
   ContextBundle,
@@ -15,22 +15,29 @@ import type {
   TerminologyMapping,
 } from "../context-discovery/types";
 import { executeCustomerQuery } from "./customer-query.service";
-import type {
-  FieldAssumption,
-  SQLGenerationResult,
-} from "./sql-generator.types";
 
 const schemaCache = new Map<string, { schema: string; timestamp: number }>();
 const SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Generate SQL using an LLM with full schema context.
+ *
+ * This function supports dual-mode responses:
+ * - SQL generation when LLM is confident
+ * - Clarification requests when question is ambiguous
+ *
+ * @param context - Discovery context bundle
+ * @param customerId - Customer database ID
+ * @param modelId - Optional AI model ID
+ * @param clarifications - Optional user-provided clarifications (for follow-up)
+ * @returns LLM response (SQL or clarification request)
  */
 export async function generateSQLWithLLM(
   context: ContextBundle,
   customerId: string,
-  modelId?: string
-): Promise<SQLGenerationResult> {
+  modelId?: string,
+  clarifications?: Record<string, string>
+): Promise<LLMResponse> {
   if (!context) {
     throw new Error("[LLM-SQL-Generator] context is required");
   }
@@ -41,10 +48,22 @@ export async function generateSQLWithLLM(
   console.log(
     `[LLM-SQL-Generator] 🚀 Starting SQL generation for customer ${customerId}`
   );
+
+  if (clarifications && Object.keys(clarifications).length > 0) {
+    console.log(
+      `[LLM-SQL-Generator] 📝 User provided ${Object.keys(clarifications).length} clarification(s)`
+    );
+  }
+
   const startTime = Date.now();
 
   const schemaDocumentation = safeLoadSchemaDocumentation();
-  const userPrompt = await buildUserPrompt(context, schemaDocumentation, customerId);
+  const userPrompt = await buildUserPrompt(
+    context,
+    schemaDocumentation,
+    customerId,
+    clarifications
+  );
 
   const llmModelId = modelId?.trim() || DEFAULT_AI_MODEL_ID;
   console.log(`[LLM-SQL-Generator] 🤖 Using model: ${llmModelId}`);
@@ -56,29 +75,39 @@ export async function generateSQLWithLLM(
     system: GENERATE_QUERY_PROMPT,
     userMessage: userPrompt,
     maxTokens: 4096,
-    temperature: 0.3,
+    temperature: 0.1, // Lower temperature for more consistent clarification detection
   });
 
   console.log(
     `[LLM-SQL-Generator] ✅ LLM responded in ${Date.now() - apiStart}ms`
   );
 
-  const plan = parseAndValidateLLMResponse(response);
-
-  const executionPlan = extractExecutionPlan(plan.generatedSql);
-  const assumptions = extractAssumptions(plan, context);
+  const llmResponse = parseAndValidateLLMResponse(response);
 
   const totalDuration = Date.now() - startTime;
+
+  // Log response type
+  if (llmResponse.responseType === 'clarification') {
+    console.log(
+      `[LLM-SQL-Generator] 🔍 Requesting clarification (${llmResponse.clarifications.length} question(s))`
+    );
+    console.log(`[LLM-SQL-Generator] Reasoning: ${llmResponse.reasoning}`);
+  } else {
+    console.log(
+      `[LLM-SQL-Generator] ✅ Generated SQL with confidence: ${llmResponse.confidence}`
+    );
+    if (llmResponse.assumptions && llmResponse.assumptions.length > 0) {
+      console.log(
+        `[LLM-SQL-Generator] ⚠️  Made ${llmResponse.assumptions.length} assumption(s)`
+      );
+    }
+  }
+
   console.log(
-    `[LLM-SQL-Generator] ✅ SQL generation finished in ${totalDuration}ms`
+    `[LLM-SQL-Generator] ✅ Completed in ${totalDuration}ms`
   );
 
-  return {
-    sql: plan.generatedSql,
-    executionPlan,
-    confidence: context.overallConfidence ?? 0.75,
-    assumptions,
-  };
+  return llmResponse;
 }
 
 function safeLoadSchemaDocumentation(): string {
@@ -100,22 +129,13 @@ function safeLoadSchemaDocumentation(): string {
 async function buildUserPrompt(
   context: ContextBundle,
   schemaDocumentation: string,
-  customerId: string
+  customerId: string,
+  clarifications?: Record<string, string>
 ): Promise<string> {
-  const promptContext: PromptContext = {
-    question: context.question,
-    assessmentFormDefinition: buildAssessmentDefinition(context.forms || []),
-  };
-
-  let promptBody = constructPrompt(promptContext);
-  if (promptBody.startsWith(GENERATE_QUERY_PROMPT)) {
-    promptBody = promptBody.slice(GENERATE_QUERY_PROMPT.length).trimStart();
-  }
-
-  let prompt = promptBody;
+  let prompt = "";
   const { intent } = context;
 
-  prompt += `\n\n# Question Context\n\n`;
+  prompt += `# Question Context\n\n`;
   prompt += `**User Question:** "${context.question}"\n\n`;
   prompt += `**Intent Analysis:**\n`;
   prompt += `- Type: ${intent.type}\n`;
@@ -144,10 +164,26 @@ async function buildUserPrompt(
     prompt += `(Schema introspection not available; relying on documentation only)\n\n`;
   }
 
+  // NEW: Add clarifications if provided
+  if (clarifications && Object.keys(clarifications).length > 0) {
+    prompt += `# User Clarifications\n\n`;
+    prompt += `The user has provided the following clarifications:\n\n`;
+
+    for (const [clarificationId, sqlConstraint] of Object.entries(clarifications)) {
+      prompt += `- ${clarificationId}: \`${sqlConstraint}\`\n`;
+    }
+
+    prompt += `\n**IMPORTANT:**\n`;
+    prompt += `You MUST incorporate these clarifications as constraints in your SQL query.\n`;
+    prompt += `Since the user has clarified, you should now have high confidence (>0.9).\n`;
+    prompt += `Generate SQL response (responseType: "sql"), NOT another clarification request.\n\n`;
+  }
+
   prompt += `# Instructions\n\n`;
-  prompt += `Generate an MS SQL Server query that answers the user's question.\n`;
-  prompt += `Use the rpt.* reporting schema.\n`;
-  prompt += `Return ONLY the required JSON object defined in the system prompt.\n`;
+  prompt += `Analyze the question and context above.\n`;
+  prompt += `Decide if you need clarification or can generate SQL directly.\n`;
+  prompt += `Use the rpt.* reporting schema for all tables.\n`;
+  prompt += `Return ONLY a valid JSON object matching the format defined in the system prompt.\n`;
 
   return prompt.trim();
 }
@@ -227,27 +263,6 @@ function formatJoinPathsSection(joinPaths: JoinPath[]): string {
   }
   lines.push("");
   return `${lines.join("\n")}\n`;
-}
-
-function buildAssessmentDefinition(
-  forms: FormInContext[]
-): Record<string, unknown> {
-  if (!forms || forms.length === 0) {
-    return {};
-  }
-
-  return {
-    forms: forms.map((form) => ({
-      id: form.formId,
-      name: form.formName,
-      fields: (form.fields || []).map((field) => ({
-        id: field.fieldId,
-        name: field.fieldName,
-        concept: field.semanticConcept,
-        dataType: field.dataType,
-      })),
-    })),
-  };
 }
 
 async function getCustomerSchema(customerId: string): Promise<string> {
@@ -342,9 +357,9 @@ async function getCustomerSchema(customerId: string): Promise<string> {
   return schemaText;
 }
 
-function parseAndValidateLLMResponse(response: unknown): AIAnalysisPlan {
+function parseAndValidateLLMResponse(response: unknown): LLMResponse {
   if (typeof response !== "string") {
-    throw new Error("LLM response was not a string");
+    throw new Error("[LLM-SQL-Generator] LLM response was not a string");
   }
 
   let parsed: unknown;
@@ -353,125 +368,22 @@ function parseAndValidateLLMResponse(response: unknown): AIAnalysisPlan {
   } catch (error) {
     console.error(
       "[LLM-SQL-Generator] ❌ Failed to parse LLM response:",
-      response.slice(0, 200)
+      response.slice(0, 500)
     );
     throw new Error("LLM response was not valid JSON");
   }
 
-  if (!validateAIResponse(parsed)) {
+  if (!validateLLMResponse(parsed)) {
+    console.error(
+      "[LLM-SQL-Generator] ❌ Invalid response format:",
+      JSON.stringify(parsed, null, 2).slice(0, 500)
+    );
     throw new Error(
-      "LLM response did not match the expected query generation format"
+      "LLM response did not match expected format (neither SQL nor clarification)"
     );
   }
 
-  return parsed as AIAnalysisPlan;
-}
-
-function extractExecutionPlan(sql: string): SQLGenerationResult["executionPlan"] {
-  const tables = extractTables(sql);
-  const joins = extractJoinClauses(sql);
-  const fields = extractSelectFields(sql);
-  const filters = extractWhereClauses(sql);
-  const aggregations = extractGroupByClauses(sql);
-
-  return {
-    tables,
-    fields,
-    filters,
-    joins,
-    aggregations,
-  };
-}
-
-function extractTables(sql: string): string[] {
-  const matches = [
-    ...sql.matchAll(/\bFROM\s+([a-zA-Z0-9_.]+)/gi),
-    ...sql.matchAll(/\bJOIN\s+([a-zA-Z0-9_.]+)/gi),
-  ];
-  const tables = matches.map((match) => match[1]);
-  return Array.from(new Set(tables));
-}
-
-function extractSelectFields(sql: string): string[] {
-  const selectMatch = sql.match(
-    /\bSELECT\b\s+(?:DISTINCT\s+)?([\s\S]*?)\bFROM\b/i
-  );
-  if (!selectMatch) {
-    return [];
-  }
-
-  const selectSegment = selectMatch[1];
-  return selectSegment
-    .split(",")
-    .map((segment) => segment.replace(/\s+/g, " ").trim())
-    .filter((segment) => segment.length > 0);
-}
-
-function extractWhereClauses(sql: string): string[] {
-  const whereMatch = sql.match(/\bWHERE\b\s+([\s\S]*?)(?:\bGROUP\b|\bORDER\b|$)/i);
-  if (!whereMatch) {
-    return [];
-  }
-  return whereMatch[1]
-    .split(/\bAND\b/i)
-    .map((segment) => segment.replace(/\s+/g, " ").trim())
-    .filter((segment) => segment.length > 0);
-}
-
-function extractJoinClauses(sql: string): string[] {
-  const joinMatches = [...sql.matchAll(/\bJOIN\b\s+([^\n]+)\n?/gi)];
-  return joinMatches
-    .map((match) => match[0].replace(/\s+/g, " ").trim())
-    .filter((clause) => clause.length > 0);
-}
-
-function extractGroupByClauses(sql: string): string[] {
-  const groupMatch = sql.match(
-    /\bGROUP\s+BY\b\s+([\s\S]*?)(?:\bORDER\b|$)/i
-  );
-  if (!groupMatch) {
-    return [];
-  }
-  return groupMatch[1]
-    .split(",")
-    .map((segment) => segment.replace(/\s+/g, " ").trim())
-    .filter((segment) => segment.length > 0);
-}
-
-function extractAssumptions(
-  plan: AIAnalysisPlan,
-  context: ContextBundle
-): FieldAssumption[] {
-  const assumptions: FieldAssumption[] = [];
-
-  if (!context.forms || context.forms.length === 0) {
-    assumptions.push({
-      intent: "Form context unavailable",
-      assumed: "Relied on schema documentation",
-      actual: "rpt.* tables",
-      confidence: 0.6,
-    });
-  }
-
-  if (!context.joinPaths || context.joinPaths.length === 0) {
-    assumptions.push({
-      intent: "Join paths not provided",
-      assumed: "LLM inferred joins from schema relationships",
-      actual: null,
-      confidence: 0.5,
-    });
-  }
-
-  if (plan.explanation) {
-    assumptions.push({
-      intent: "LLM reasoning",
-      assumed: plan.explanation,
-      actual: null,
-      confidence: context.overallConfidence ?? 0.75,
-    });
-  }
-
-  return assumptions;
+  return parsed as LLMResponse;
 }
 
 export function clearSchemaCache(): void {

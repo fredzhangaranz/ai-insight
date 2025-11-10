@@ -56,6 +56,11 @@ export function QuestionInput({
           disabled={disabled}
           className="min-h-[100px] max-h-[300px] resize-none pr-20"
           rows={3}
+          autoComplete="off"
+          data-form-type="other"
+          data-1p-ignore
+          data-lpignore="true"
+          spellCheck={false}
         />
 
         <Button

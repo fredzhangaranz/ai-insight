@@ -10,8 +10,9 @@ import { executeCustomerQuery, validateAndFixQuery } from "./customer-query.serv
 import { generateSQLWithLLM } from "./llm-sql-generator.service";
 import { extractAndFillPlaceholders } from "./template-placeholder.service";
 import type { FieldAssumption } from "./sql-generator.types";
+import type { ClarificationRequest, Assumption } from "@/lib/prompts/generate-query.prompt";
 
-export type QueryMode = "template" | "direct" | "funnel";
+export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
 export interface ThinkingStep {
   id: string;
@@ -38,21 +39,37 @@ export interface OrchestrationResult {
   mode: QueryMode;
   question: string;
   thinking: ThinkingStep[];
-  sql: string;
-  results: {
+
+  // SQL execution fields (when mode is NOT clarification)
+  sql?: string;
+  results?: {
     rows: any[];
     columns: string[];
   };
+
+  // Clarification fields (when mode IS clarification)
+  requiresClarification?: boolean;
+  clarifications?: ClarificationRequest[];
+  clarificationReasoning?: string;
+  partialContext?: {
+    intent: string;
+    formsIdentified: string[];
+    termsUnderstood: string[];
+  };
+
+  // Existing fields
   template?: string;
   context?: any;
   funnel?: any;
+
   // Phase 7C: Step preview for complex queries
   requiresPreview?: boolean;
   stepPreview?: FunnelStep[];
   complexityScore?: number;
   executionStrategy?: "auto" | "preview" | "inspect";
+
   // Phase 7C: Field assumptions for Inspection Panel
-  assumptions?: FieldAssumption[];
+  assumptions?: FieldAssumption[] | Assumption[];
 }
 
 export class ThreeModeOrchestrator {
@@ -191,6 +208,46 @@ export class ThreeModeOrchestrator {
   }
 
   /**
+   * Re-ask question with user-provided clarifications
+   * This method is called after user responds to clarification requests
+   */
+  async askWithClarifications(
+    originalQuestion: string,
+    customerId: string,
+    clarifications: Record<string, string>,
+    modelId?: string
+  ): Promise<OrchestrationResult> {
+    const thinking: ThinkingStep[] = [];
+
+    thinking.push({
+      id: "apply_clarifications",
+      status: "running",
+      message: "Applying your selections...",
+    });
+
+    const startTime = Date.now();
+    thinking[0].status = "complete";
+    thinking[0].duration = Date.now() - startTime;
+    thinking[0].details = {
+      clarificationsApplied: Object.keys(clarifications).length,
+    };
+
+    // Analyze complexity (same as before)
+    const complexity = analyzeComplexity(originalQuestion);
+
+    // Execute with clarifications - this will pass clarifications to generateSQLWithLLM
+    // which will instruct the LLM to generate SQL (not another clarification)
+    return await this.executeDirect(
+      originalQuestion,
+      customerId,
+      thinking,
+      complexity,
+      modelId,
+      clarifications
+    );
+  }
+
+  /**
    * Mode 2: Execute using direct semantic discovery
    */
   private async executeDirect(
@@ -198,7 +255,8 @@ export class ThreeModeOrchestrator {
     customerId: string,
     thinking: ThinkingStep[],
     complexity?: { complexity: string; score: number; strategy: string; reasons: string[] },
-    modelId?: string
+    modelId?: string,
+    clarifications?: Record<string, string>
   ): Promise<OrchestrationResult> {
     // Step 2.1: Context Discovery
     thinking.push({
@@ -268,7 +326,7 @@ export class ThreeModeOrchestrator {
         joinPaths: context.joinPaths?.length || 0,
       };
 
-      // Step 2.2: Generate SQL
+      // Step 2.2: Generate SQL (or request clarification)
       thinking.push({
         id: "sql_generation",
         status: "running",
@@ -276,16 +334,43 @@ export class ThreeModeOrchestrator {
       });
 
       const sqlStart = Date.now();
-      const { sql, executionPlan, assumptions } = await generateSQLWithLLM(
+      const llmResponse = await generateSQLWithLLM(
         context,
         customerId,
-        modelId
+        modelId,
+        clarifications
       );
+
+      // Check if LLM is requesting clarification
+      if (llmResponse.responseType === 'clarification') {
+        thinking[thinking.length - 1].status = "complete";
+        thinking[thinking.length - 1].duration = Date.now() - sqlStart;
+        thinking[thinking.length - 1].message = "Clarification needed";
+        thinking[thinking.length - 1].details = {
+          clarificationsRequested: llmResponse.clarifications.length,
+        };
+
+        // Return clarification request to user
+        return {
+          mode: "clarification",
+          question,
+          thinking,
+          requiresClarification: true,
+          clarifications: llmResponse.clarifications,
+          clarificationReasoning: llmResponse.reasoning,
+          partialContext: llmResponse.partialContext,
+        };
+      }
+
+      // LLM generated SQL - continue with execution
+      const sql = llmResponse.generatedSql;
+      const assumptions = llmResponse.assumptions || [];
 
       thinking[thinking.length - 1].status = "complete";
       thinking[thinking.length - 1].duration = Date.now() - sqlStart;
       thinking[thinking.length - 1].details = {
-        assumptions: assumptions?.length || 0,
+        confidence: llmResponse.confidence,
+        assumptions: assumptions.length,
       };
 
       // Step 2.3: Execute SQL
@@ -334,6 +419,9 @@ export class ThreeModeOrchestrator {
           forms: context.forms?.map((f: any) => f.formName) || [],
           fields: context.fields?.map((f: any) => f.fieldName) || [],
           joinPaths: context.joinPaths || [],
+          // Phase 7D: Include clarification history and assumptions for query history caching
+          clarificationsProvided: clarifications || null,
+          assumptions: assumptions || null,
         },
         assumptions, // Include field assumptions for Inspection Panel
         // Phase 7C: Add complexity information

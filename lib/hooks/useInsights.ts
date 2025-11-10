@@ -22,15 +22,44 @@ export interface FunnelStep {
   sql?: string;
 }
 
+export interface ClarificationOption {
+  id: string;
+  label: string;
+  description?: string;
+  sqlConstraint: string;
+  isDefault?: boolean;
+}
+
+export interface ClarificationRequest {
+  id: string;
+  ambiguousTerm: string;
+  question: string;
+  options: ClarificationOption[];
+  allowCustom: boolean;
+}
+
 export interface InsightResult {
-  mode: "template" | "direct" | "funnel";
+  mode: "template" | "direct" | "funnel" | "clarification";
   question?: string;
   thinking: ThinkingStep[];
-  sql: string;
-  results: {
+
+  // SQL execution fields (when mode is NOT clarification)
+  sql?: string;
+  results?: {
     rows: any[];
     columns: string[];
   };
+
+  // Clarification fields (when mode IS clarification)
+  requiresClarification?: boolean;
+  clarifications?: ClarificationRequest[];
+  clarificationReasoning?: string;
+  partialContext?: {
+    intent: string;
+    formsIdentified: string[];
+    termsUnderstood: string[];
+  };
+
   template?: string;
   context?: any;
   funnel?: any;
@@ -313,6 +342,94 @@ export function useInsights() {
     }
   };
 
+  const askWithClarifications = async (
+    originalQuestion: string,
+    customerId: string,
+    clarifications: Record<string, string>,
+    modelId?: string
+  ) => {
+    // Cancel any ongoing request before starting a new one
+    abortControllerRef.current?.abort();
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setResult(null);
+    setError(null);
+    setIsLoading(true);
+
+    const modelLabel = resolveModelLabel(modelId);
+    setAnalysisModel(modelLabel);
+    updateAnalysisStatus("running");
+    startElapsedTimer();
+    startProgressSimulation();
+
+    try {
+      const response = await fetch("/api/insights/ask-with-clarifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ originalQuestion, customerId, clarifications, modelId }),
+        signal: controller.signal,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = data.message || data.error || response.statusText;
+        throw new Error(errorMessage);
+      }
+
+      clearProgressSimulation();
+      captureElapsed();
+      stopElapsedTimer();
+      finalizeThinking(data.thinking);
+
+      setResult(data);
+      if (data.modelId) {
+        setAnalysisModel(data.modelId);
+      }
+      updateAnalysisStatus("completed");
+
+      // Auto-save successful query to history
+      try {
+        await fetch("/api/insights/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: originalQuestion,
+            customerId,
+            sql: data.sql,
+            mode: data.mode || "direct",
+            resultCount: data.results?.rows?.length || 0,
+            semanticContext: data.context || null,
+          }),
+        });
+      } catch (historyError) {
+        console.warn("Failed to save to query history:", historyError);
+      }
+    } catch (err) {
+      clearProgressSimulation();
+      captureElapsed();
+      stopElapsedTimer();
+
+      const isAbort = err instanceof Error && err.name === "AbortError";
+
+      if (isAbort) {
+        markRunningStepAsError("Canceled by user");
+        updateAnalysisStatus("canceled");
+        setError(null);
+      } else {
+        const errorObject = err instanceof Error ? err : new Error("Unknown error");
+        markRunningStepAsError(errorObject.message);
+        updateAnalysisStatus("error");
+        setError(errorObject);
+      }
+    } finally {
+      abortControllerRef.current = null;
+      setIsLoading(false);
+    }
+  };
+
   const cancelAnalysis = () => {
     if (analysisStatusRef.current === "running") {
       abortControllerRef.current?.abort();
@@ -330,13 +447,24 @@ export function useInsights() {
     updateAnalysisStatus("idle");
   };
 
+  const loadCachedResult = (cachedResult: InsightResult) => {
+    setResult(cachedResult);
+    setError(null);
+    setAnalysisSteps([]);
+    setAnalysisModel(null);
+    setAnalysisElapsedMs(0);
+    updateAnalysisStatus("completed");
+  };
+
   return {
     result,
     isLoading,
     error,
     ask,
+    askWithClarifications,
     reset,
     cancelAnalysis,
+    loadCachedResult,
     analysis: {
       status: analysisStatusState,
       steps: analysisSteps,

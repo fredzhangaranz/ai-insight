@@ -10,6 +10,7 @@ import { QuestionInput } from "./components/QuestionInput";
 import { SuggestedQuestions } from "./components/SuggestedQuestions";
 import { QueryHistory } from "./components/QueryHistory";
 import { InsightResults } from "./components/InsightResults";
+import { ClarificationPanel } from "./components/ClarificationPanel";
 import { useInsights } from "@/lib/hooks/useInsights";
 import { AnalysisProgressCard } from "./components/AnalysisProgressCard";
 
@@ -23,13 +24,20 @@ export default function NewInsightPage() {
     isLoading,
     error,
     ask,
+    askWithClarifications,
     cancelAnalysis,
     analysis,
+    loadCachedResult,
   } = useInsights();
 
   const handleAsk = async () => {
     if (!customerId || !question.trim()) return;
     await ask(question, customerId, modelId);
+  };
+
+  const handleClarificationSubmit = async (clarifications: Record<string, string>) => {
+    if (!customerId || !result?.question) return;
+    await askWithClarifications(result.question, customerId, clarifications, modelId);
   };
 
   const handleRerun = async (newSql: string, newQuestion: string) => {
@@ -38,6 +46,59 @@ export default function NewInsightPage() {
     // TODO: In the future, we can add a direct SQL execution endpoint
     setQuestion(newQuestion);
     await ask(newQuestion, customerId, modelId);
+  };
+
+  const handleHistorySelect = async (query: any) => {
+    console.log("[handleHistorySelect] Query:", query);
+
+    // Load cached result from history instead of re-executing
+    if (query.mode === "error") {
+      console.log("[handleHistorySelect] Error query, copying question");
+      setQuestion(query.question);
+      return;
+    }
+
+    if (!query.sql || !query.semanticContext) {
+      console.log("[handleHistorySelect] No cached data (sql or context missing), copying question");
+      console.log("[handleHistorySelect] Has sql:", !!query.sql);
+      console.log("[handleHistorySelect] Has semanticContext:", !!query.semanticContext);
+      setQuestion(query.question);
+      return;
+    }
+
+    console.log("[handleHistorySelect] Loading cached result...");
+
+    // Re-execute the cached SQL to get fresh results
+    try {
+      const response = await fetch("/api/insights/execute-cached", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          sql: query.sql,
+          question: query.question,
+          mode: query.mode,
+          semanticContext: query.semanticContext,
+        }),
+      });
+
+      console.log("[handleHistorySelect] Response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[handleHistorySelect] API error:", errorData);
+        setQuestion(query.question);
+        return;
+      }
+
+      const cachedResult = await response.json();
+      console.log("[handleHistorySelect] Loaded cached result:", cachedResult);
+      loadCachedResult(cachedResult);
+      setQuestion(query.question);
+    } catch (err) {
+      console.error("[handleHistorySelect] Exception:", err);
+      setQuestion(query.question);
+    }
   };
 
   return (
@@ -157,7 +218,17 @@ export default function NewInsightPage() {
             </div>
           )}
 
-          {result && (
+          {result && result.mode === "clarification" && result.clarifications && (
+            <ClarificationPanel
+              question={result.question || question}
+              clarifications={result.clarifications}
+              reasoning={result.clarificationReasoning || ""}
+              onSubmit={handleClarificationSubmit}
+              isSubmitting={isLoading}
+            />
+          )}
+
+          {result && result.mode !== "clarification" && (
             <InsightResults
               result={result}
               customerId={customerId}
@@ -169,7 +240,7 @@ export default function NewInsightPage() {
           {customerId && (
             <QueryHistory
               customerId={customerId}
-              onSelect={(q) => setQuestion(q.question)}
+              onSelect={handleHistorySelect}
             />
           )}
         </div>

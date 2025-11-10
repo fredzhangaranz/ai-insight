@@ -12,6 +12,8 @@ interface Query {
   createdAt: Date;
   mode: "template" | "direct" | "funnel" | "error";
   recordCount?: number;
+  sql?: string;
+  semanticContext?: any;
 }
 
 interface QueryHistoryProps {
@@ -56,7 +58,7 @@ export function QueryHistory({
     <div className="mt-8 pt-8 border-t space-y-3">
       <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
         <Clock className="h-4 w-4" />
-        <span>Query History</span>
+        <span>Query History (Click to load cached results)</span>
       </div>
       <div className="space-y-2">
         {queries.map((q) => (
@@ -64,7 +66,7 @@ export function QueryHistory({
             key={q.id}
             variant="ghost"
             className={`w-full justify-start text-left h-auto py-3 ${
-              q.mode === "error" ? "border-l-2 border-red-400" : ""
+              q.mode === "error" ? "border-l-2 border-red-400" : "border-l-2 border-transparent hover:border-blue-400"
             }`}
             onClick={() => onSelect(q)}
           >
@@ -83,6 +85,9 @@ export function QueryHistory({
                     <> • {q.recordCount} records</>
                   )}
                   {q.mode === "template" && " • Used template"}
+                  {q.semanticContext?.clarificationsProvided && (
+                    <span className="text-blue-600"> • Clarified</span>
+                  )}
                 </div>
               </div>
             </div>

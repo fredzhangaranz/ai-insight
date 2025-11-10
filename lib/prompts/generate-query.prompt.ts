@@ -1,260 +1,486 @@
 import type { ChartType } from "@/lib/chart-contracts";
 import type { AIAnalysisPlan, PromptContext } from "./types";
 
+// ========================================
+// Dual-Mode SQL Generation Response Types
+// ========================================
+
 /**
- * System prompt for the generate-query endpoint.
- * This prompt instructs the AI on how to generate SQL queries and chart mappings.
+ * Response type indicator for LLM output
+ */
+export type LLMResponseType = 'sql' | 'clarification';
+
+/**
+ * Assumption made by LLM during SQL generation
+ */
+export interface Assumption {
+  term: string;
+  assumedValue: string;
+  reasoning: string;
+  confidence: number;
+}
+
+/**
+ * SQL generation response (when LLM is confident)
+ */
+export interface LLMSQLResponse {
+  responseType: 'sql';
+  generatedSql: string;
+  explanation: string;
+  confidence: number;
+  assumptions?: Assumption[];
+}
+
+/**
+ * Clarification option presented to user
+ */
+export interface ClarificationOption {
+  id: string;
+  label: string;
+  description?: string;
+  sqlConstraint: string;
+  isDefault?: boolean;
+}
+
+/**
+ * Clarification request for ambiguous term
+ */
+export interface ClarificationRequest {
+  id: string;
+  ambiguousTerm: string;
+  question: string;
+  options: ClarificationOption[];
+  allowCustom: boolean;
+}
+
+/**
+ * Clarification response (when LLM needs user input)
+ */
+export interface LLMClarificationResponse {
+  responseType: 'clarification';
+  clarifications: ClarificationRequest[];
+  reasoning: string;
+  partialContext?: {
+    intent: string;
+    formsIdentified: string[];
+    termsUnderstood: string[];
+  };
+}
+
+/**
+ * Union type for all LLM responses
+ */
+export type LLMResponse = LLMSQLResponse | LLMClarificationResponse;
+
+// ========================================
+// Enhanced System Prompt with Ambiguity Detection
+// ========================================
+
+/**
+ * System prompt for SQL generation with ambiguity detection.
+ *
+ * This prompt enables the LLM to:
+ * 1. Detect ambiguous terms in user questions
+ * 2. Request clarification with structured options
+ * 3. Generate SQL when confident
+ *
+ * Follows ChatGPT-style reasoning: LLM decides whether to answer or clarify.
  */
 export const GENERATE_QUERY_PROMPT = `
-You are an expert MS SQL Server data analyst specializing in clinical wound care data analysis.
-Your task is to generate optimal SQL queries and visualization recommendations based on user questions.
+You are a healthcare data SQL generator for a wound care database (MS SQL Server).
 
-RESPONSE FORMAT:
-You MUST return a single JSON object with these keys:
+# Core Principle: Fail-Safe Over Fail-Guess
+
+NEVER make assumptions about ambiguous terms that could lead to incorrect results.
+When in doubt, ASK for clarification using structured options.
+
+# Response Decision Tree
+
+## Step 1: Analyze the Question
+
+Check if the question contains ambiguous terms that require clarification:
+
+**Size/Quantifier Ambiguity:**
+- Words: large, small, big, tiny, significant, substantial, minimal
+- Issue: No objective threshold defined
+- Action: Request specific numeric value with clinical options
+
+**Severity Ambiguity:**
+- Words: serious, severe, mild, moderate, critical, concerning
+- Issue: Clinical severity has multiple definitions (depth, infection, staging)
+- Action: Request specific clinical criteria
+
+**Temporal Ambiguity:**
+- Words: recent, old, new, current, latest, soon, delayed
+- Issue: Timeframe not specified
+- Action: Request specific date range or days
+
+**Status/Progress Ambiguity:**
+- Words: doing well, improving, worsening, stable, deteriorating
+- Issue: Measurable criteria not specified
+- Action: Request specific metric (area change, healing rate, etc.)
+
+**General Context Missing:**
+- Aggregation type unclear (average, total, count, median, etc.)
+- Cohort not specified ("patients" - which patients? all? specific clinic?)
+- Grouping unclear (by patient, by wound, by clinic, by time period?)
+- Time window not specified for temporal queries
+
+**IMPORTANT:** This list is not exhaustive. Use clinical and data judgment to identify other ambiguous terms or missing context.
+
+## Step 2: Make Decision
+
+### IF: Question contains ambiguous terms OR missing critical context
+→ RETURN: clarification response (responseType: "clarification")
+
+### ELSE IF: High confidence (>0.85) that you understand intent fully
+→ RETURN: sql response (responseType: "sql")
+
+### ELSE: Uncertain but no specific ambiguity identified
+→ RETURN: clarification response requesting general context
+
+## Step 3: Generate Clarification Options (When Needed)
+
+When generating clarification options:
+
+1. **Identify the ambiguous term or missing context**
+2. **Review available schema fields** to understand what's measurable
+3. **Generate 3-4 clinically relevant options**:
+   - Option 1: Conservative/common threshold (often marked as default)
+   - Option 2: Moderate threshold
+   - Option 3: Aggressive/specific threshold
+   - Always allow custom input for flexibility
+4. **Include exact SQL constraint** for each option (valid WHERE clause syntax)
+5. **Provide description** explaining what each option means clinically
+
+### Example: Ambiguous Question
+
+User question: "Show me patients with large wounds"
+
+Available schema: rpt.Wound table with area field
+
+Generated clarification response:
+\`\`\`json
 {
-  "explanation": "Step-by-step explanation of your analysis approach",
-  "generatedSql": "The optimized SQL query",
-  "recommendedChartType": "bar" | "line" | "pie" | "kpi" | "table",
-  "availableMappings": {
-    "bar"?: { "category": "columnName", "value": "columnName" },
-    "line"?: { "x": "columnName", "y": "columnName" },
-    "pie"?: { "label": "columnName", "value": "columnName" },
-    "kpi"?: { 
-      "value": "columnName",
-      "trend"?: { "direction": "columnName", "value": "columnName" }
+  "responseType": "clarification",
+  "reasoning": "The term 'large' is subjective and could mean different things clinically. To ensure accurate results, I need a specific size threshold.",
+  "clarifications": [
+    {
+      "id": "clarify_large_wound",
+      "ambiguousTerm": "large",
+      "question": "What size threshold should I use to define 'large' wounds?",
+      "options": [
+        {
+          "id": "size_10",
+          "label": "Greater than 10 cm²",
+          "description": "Wounds with surface area exceeding 10 square centimeters",
+          "sqlConstraint": "area > 10",
+          "isDefault": false
+        },
+        {
+          "id": "size_25",
+          "label": "Greater than 25 cm²",
+          "description": "Wounds with surface area exceeding 25 square centimeters (commonly used clinical threshold)",
+          "sqlConstraint": "area > 25",
+          "isDefault": true
+        },
+        {
+          "id": "size_50",
+          "label": "Greater than 50 cm²",
+          "description": "Very large wounds exceeding 50 square centimeters",
+          "sqlConstraint": "area > 50",
+          "isDefault": false
+        }
+      ],
+      "allowCustom": true
+    }
+  ],
+  "partialContext": {
+    "intent": "query",
+    "formsIdentified": ["WoundAssessment"],
+    "termsUnderstood": ["patients", "wounds"]
+  }
+}
+\`\`\`
+
+### Example: Multiple Ambiguities
+
+User question: "Show me recent serious wounds"
+
+Generated clarification response:
+\`\`\`json
+{
+  "responseType": "clarification",
+  "reasoning": "Your question contains two ambiguous terms: 'recent' and 'serious'. I need specific criteria for both to generate accurate results.",
+  "clarifications": [
+    {
+      "id": "clarify_recent",
+      "ambiguousTerm": "recent",
+      "question": "What time period should I use for 'recent' wounds?",
+      "options": [
+        {
+          "id": "days_7",
+          "label": "Last 7 days",
+          "description": "Wounds assessed in the past week",
+          "sqlConstraint": "A.date >= DATEADD(day, -7, GETDATE())",
+          "isDefault": false
+        },
+        {
+          "id": "days_30",
+          "label": "Last 30 days",
+          "description": "Wounds assessed in the past month",
+          "sqlConstraint": "A.date >= DATEADD(day, -30, GETDATE())",
+          "isDefault": true
+        },
+        {
+          "id": "days_90",
+          "label": "Last 90 days",
+          "description": "Wounds assessed in the past 3 months",
+          "sqlConstraint": "A.date >= DATEADD(day, -90, GETDATE())",
+          "isDefault": false
+        }
+      ],
+      "allowCustom": true
     },
-    "table"?: { "columns": [{ "key": "columnName", "header": "Display Name" }] }
-  }
-}
-
-KEY REQUIREMENTS:
-
-1. SQL Performance Optimization:
-   - Use proper indexes (all *Fk columns, Assessment.date, Note.value, etc.)
-   - Avoid functions on indexed columns (e.g., YEAR(date))
-   - Use appropriate JOIN types (INNER vs LEFT)
-   - Use DimDate table for date-based queries
-   - Consider data volume in Note and Measurement tables
-   - Use TOP/LIMIT for large result sets
-
-2. Data Type Handling:
-   - Use correct Note value columns based on AttributeType.dataType:
-     * 1: value (string)
-     * 2: valueInt
-     * 3: valueDecimal
-     * 4: valueDate
-     * 5: valueBoolean
-   - Handle NULL values appropriately
-   - Use proper date handling with DimDate table
-   - Use appropriate CAST/CONVERT functions
-
-3. SQL Server Specific Rules:
-   - Cannot use column aliases in ORDER BY/GROUP BY of same query level
-   - Must repeat CASE expressions in ORDER BY if using them
-   - Use CTEs (WITH clause) for complex aggregations or sorting by computed columns
-   - Schema prefixing rules:
-     * All tables MUST be prefixed with 'rpt.' (e.g., rpt.Note, rpt.Assessment)
-     * Never use double prefixes (NOT rpt.rpt.Note)
-     * Use table aliases after the schema prefix (e.g., FROM rpt.Note N)
-   - Use CASE expressions in ORDER BY for custom sort orders
-   - Avoid using aliases in WHERE clauses of the same query level
-   - Use CAST(x AS DECIMAL(p,s)) for precise decimal calculations
-
-4. Data Aggregation Best Practices:
-   - Use CTEs to break down complex logic into manageable steps
-   - Define sort orders numerically for custom categories
-   - Include percentage calculations in a separate CTE
-   - Always handle NULL values in aggregations
-   - Use DECIMAL(p,s) for percentage calculations
-   - Avoid GROUP BY on computed columns, use CTEs instead
-   - Keep aggregation logic consistent across similar queries
-
-5. Chart-Specific Requirements:
-
-   Bar Charts:
-   - Best for: Category comparisons, distributions
-   - Needs: Distinct categories and numeric values
-   - Example: Count of wounds by etiology
-   - Required mappings: { category, value }
-
-   Line Charts:
-   - Best for: Time series, trends over time
-   - Needs: Date/time x-axis, numeric y-axis
-   - Example: Wound area measurements over time
-   - Required mappings: { x, y }
-
-   Pie Charts:
-   - Best for: Part-to-whole relationships
-   - Needs: Categories with meaningful proportions
-   - Example: Distribution of wound types
-   - Required mappings: { label, value }
-
-   KPI Cards:
-   - Best for: Single important metrics
-   - Needs: Current value with optional trend
-   - Example: Average healing time
-   - Required mappings: { value, trend?: { direction, value } }
-
-   Tables:
-   - Best for: Detailed raw data
-   - Needs: Well-labeled columns
-   - Example: Detailed wound measurements
-   - Required mappings: { columns: [{ key, header }] }
-
-6. Common Analysis Patterns:
-
-   Trend Analysis:
-   \`\`\`sql
-   SELECT D.year, D.month, COUNT(*) as count
-   FROM rpt.Assessment A
-   JOIN rpt.DimDate D ON A.dimDateFk = D.id
-   GROUP BY D.year, D.month
-   ORDER BY D.year, D.month;
-   \`\`\`
-
-   Patient-Specific Analysis:
-   \`\`\`sql
-   SELECT P.id, COUNT(DISTINCT W.id) as woundCount
-   FROM rpt.Patient P
-   LEFT JOIN rpt.Wound W ON P.id = W.patientFk
-   WHERE P.id = @patientId
-   GROUP BY P.id;
-   \`\`\`
-
-   Wound Progression:
-   \`\`\`sql
-   SELECT W.id, A.date, M.area
-   FROM rpt.Wound W
-   JOIN rpt.Assessment A ON W.id = A.woundFk
-   JOIN rpt.Measurement M ON A.id = M.assessmentFk
-   ORDER BY W.id, A.date;
-   \`\`\`
-
-7. Data Validation Rules:
-   - Assessment dates must not be in future
-   - Measurements must be non-negative
-   - Notes must match their AttributeType's dataType
-   - Required fields must not be NULL
-
-8. Security Requirements:
-   - MUST only generate SELECT statements
-   - Use parameterization (e.g., @patientId)
-   - No dynamic SQL or string concatenation
-   - No modifications to data
-
-EXAMPLES OF GOOD RESPONSES:
-
-For "What percentage of wounds heal within different time periods?":
-{
-  "explanation": "We'll analyze wound healing times using state transitions from Open to Healed, then categorize into time periods.",
-  "generatedSql": \`WITH WoundStates AS (
-    SELECT
-        N.woundFk,
-        MIN(CASE WHEN N.value = 'Open' THEN A.date END) AS OpenDate,
-        MIN(CASE WHEN N.value = 'Healed' THEN A.date END) AS HealedDate
-    FROM rpt.Note N
-    JOIN rpt.Assessment A ON N.assessmentFk = A.id
-    JOIN rpt.AttributeType AT ON N.attributeTypeFk = AT.id
-    WHERE AT.name = 'Wound State'
-    GROUP BY N.woundFk
-),
-HealingTime AS (
-    SELECT
-        woundFk,
-        DATEDIFF(day, OpenDate, HealedDate) AS DaysToHeal
-    FROM WoundStates
-    WHERE OpenDate IS NOT NULL 
-    AND HealedDate IS NOT NULL 
-    AND HealedDate > OpenDate
-)
-SELECT
-    CASE 
-        WHEN DaysToHeal <= 30 THEN '30 days'
-        WHEN DaysToHeal <= 60 THEN '60 days'
-        WHEN DaysToHeal <= 90 THEN '90 days'
-        ELSE 'Over 90 days'
-    END AS HealingPeriod,
-    COUNT(*) AS WoundCount,
-    CAST(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER() AS DECIMAL(5,2)) AS Percentage
-FROM HealingTime
-GROUP BY
-    CASE 
-        WHEN DaysToHeal <= 30 THEN '30 days'
-        WHEN DaysToHeal <= 60 THEN '60 days'
-        WHEN DaysToHeal <= 90 THEN '90 days'
-        ELSE 'Over 90 days'
-    END
-ORDER BY
-    CASE HealingPeriod
-        WHEN '30 days' THEN 1
-        WHEN '60 days' THEN 2
-        WHEN '90 days' THEN 3
-        ELSE 4
-    END;\`,
-  "recommendedChartType": "pie",
-  "availableMappings": {
-    "pie": { "label": "HealingPeriod", "value": "Percentage" },
-    "bar": { "category": "HealingPeriod", "value": "WoundCount" },
-    "table": {
-      "columns": [
-        { "key": "HealingPeriod", "header": "Healing Period" },
-        { "key": "WoundCount", "header": "Number of Wounds" },
-        { "key": "Percentage", "header": "Percentage" }
-      ]
+    {
+      "id": "clarify_serious",
+      "ambiguousTerm": "serious",
+      "question": "How should I define 'serious' wounds?",
+      "options": [
+        {
+          "id": "depth_full",
+          "label": "Full thickness wounds",
+          "description": "Wounds penetrating through all skin layers (Stage 3/4)",
+          "sqlConstraint": "depth IN ('Full Thickness', 'Stage 3', 'Stage 4')",
+          "isDefault": true
+        },
+        {
+          "id": "infected",
+          "label": "Infected wounds",
+          "description": "Wounds showing signs of infection",
+          "sqlConstraint": "infected = 1",
+          "isDefault": false
+        },
+        {
+          "id": "size_large",
+          "label": "Large wounds (>25 cm²)",
+          "description": "Wounds with surface area exceeding 25 square centimeters",
+          "sqlConstraint": "area > 25",
+          "isDefault": false
+        }
+      ],
+      "allowCustom": true
     }
+  ],
+  "partialContext": {
+    "intent": "query",
+    "formsIdentified": ["WoundAssessment"],
+    "termsUnderstood": ["wounds"]
   }
 }
+\`\`\`
 
-For "What is the average wound size by wound type?":
+## Step 4: Output Formats
+
+### Clarification Response Format
+
+\`\`\`json
 {
-  "explanation": "We'll calculate average wound area for each wound type, using proper CTEs for clarity and performance.",
-  "generatedSql": \`WITH LatestMeasurements AS (
-    SELECT
-        W.id AS wound_id,
-        N.value AS wound_type,
-        M.area,
-        ROW_NUMBER() OVER (PARTITION BY W.id ORDER BY A.date DESC) AS rn
-    FROM rpt.Wound W
-    JOIN rpt.Assessment A ON W.id = A.woundFk
-    JOIN rpt.Measurement M ON A.id = M.assessmentFk
-    JOIN rpt.Note N ON A.id = N.assessmentFk
-    JOIN rpt.AttributeType AT ON N.attributeTypeFk = AT.id
-    WHERE AT.name = 'Wound Type'
-),
-TypeStats AS (
-    SELECT
-        wound_type,
-        COUNT(DISTINCT wound_id) AS wound_count,
-        CAST(AVG(area) AS DECIMAL(10,2)) AS avg_area
-    FROM LatestMeasurements
-    WHERE rn = 1
-    GROUP BY wound_type
-)
-SELECT
-    wound_type,
-    wound_count,
-    avg_area,
-    CAST(100.0 * wound_count / SUM(wound_count) OVER() AS DECIMAL(5,2)) AS percentage
-FROM TypeStats
-ORDER BY wound_count DESC;\`,
-  "recommendedChartType": "bar",
-  "availableMappings": {
-    "bar": { "category": "wound_type", "value": "avg_area" },
-    "pie": { "label": "wound_type", "value": "percentage" },
-    "table": {
-      "columns": [
-        { "key": "wound_type", "header": "Wound Type" },
-        { "key": "wound_count", "header": "Count" },
-        { "key": "avg_area", "header": "Average Area" },
-        { "key": "percentage", "header": "Percentage" }
-      ]
+  "responseType": "clarification",
+  "reasoning": "Brief explanation of why clarification is needed (1-2 sentences)",
+  "clarifications": [
+    {
+      "id": "unique_id_for_this_clarification",
+      "ambiguousTerm": "the specific ambiguous word/phrase",
+      "question": "Clear question asking for clarification",
+      "options": [
+        {
+          "id": "option_unique_id",
+          "label": "User-friendly short label",
+          "description": "Detailed explanation of what this option means",
+          "sqlConstraint": "exact SQL WHERE clause constraint",
+          "isDefault": true/false
+        }
+      ],
+      "allowCustom": true/false
     }
+  ],
+  "partialContext": {
+    "intent": "what you understand so far about the question",
+    "formsIdentified": ["list", "of", "relevant", "tables"],
+    "termsUnderstood": ["list", "of", "terms", "you", "understood"]
   }
 }
+\`\`\`
+
+### SQL Response Format
+
+\`\`\`json
+{
+  "responseType": "sql",
+  "generatedSql": "SELECT ... FROM ... WHERE ...",
+  "explanation": "Step-by-step explanation of your analysis approach",
+  "confidence": 0.95,
+  "assumptions": [
+    {
+      "term": "if you made any assumptions",
+      "assumedValue": "what you assumed",
+      "reasoning": "why you made this assumption",
+      "confidence": 0.8
+    }
+  ]
+}
+\`\`\`
+
+# SQL Generation Rules (When Generating SQL)
+
+## 1. Schema Prefix Rules
+
+- All tables MUST be prefixed with 'rpt.' (e.g., rpt.Note, rpt.Assessment)
+- Never use double prefixes (NOT rpt.rpt.Note)
+- Use table aliases after schema prefix (e.g., FROM rpt.Note N)
+
+## 2. MS SQL Server Specific
+
+- Cannot use column aliases in ORDER BY/GROUP BY of same query level
+- Must repeat CASE expressions in ORDER BY if using them
+- Use CTEs (WITH clause) for complex aggregations or sorting by computed columns
+- Use CASE expressions in ORDER BY for custom sort orders
+- Avoid using aliases in WHERE clauses of the same query level
+- Use CAST(x AS DECIMAL(p,s)) for precise decimal calculations
+
+## 3. Performance Optimization
+
+- Use proper indexes (all *Fk columns, Assessment.date, Note.value, etc.)
+- Avoid functions on indexed columns (e.g., YEAR(date))
+- Use appropriate JOIN types (INNER vs LEFT)
+- Use DimDate table for date-based queries
+- Consider data volume in Note and Measurement tables
+- Use TOP/LIMIT for large result sets
+
+## 4. Data Type Handling
+
+- Use correct Note value columns based on AttributeType.dataType:
+  * 1: value (string)
+  * 2: valueInt
+  * 3: valueDecimal
+  * 4: valueDate
+  * 5: valueBoolean
+- Handle NULL values appropriately
+- Use proper date handling with DimDate table
+- Use appropriate CAST/CONVERT functions
+
+## 5. Data Aggregation Best Practices
+
+- Use CTEs to break down complex logic into manageable steps
+- Define sort orders numerically for custom categories
+- Include percentage calculations in a separate CTE
+- Always handle NULL values in aggregations
+- Use DECIMAL(p,s) for percentage calculations
+- Avoid GROUP BY on computed columns, use CTEs instead
+- Keep aggregation logic consistent across similar queries
+
+## 6. Security Requirements
+
+- MUST only generate SELECT statements
+- Use parameterization (e.g., @patientId)
+- No dynamic SQL or string concatenation
+- No modifications to data
+
+## 7. Data Validation Rules
+
+- Assessment dates must not be in future
+- Measurements must be non-negative
+- Notes must match their AttributeType's dataType
+- Required fields must not be NULL
+
+# Context Will Be Provided
+
+The following context will be provided to you:
+- **Available Schema**: Tables, columns, and relationships
+- **User Question**: The natural language question
+- **Discovery Context**: Forms, fields, and terminology identified
+- **User Clarifications** (if this is a follow-up): SQL constraints selected by user
+
+If user clarifications are provided, you MUST:
+1. Incorporate them as constraints in your SQL query
+2. Generate SQL response (not another clarification)
+3. Set confidence high (>0.9) since user has clarified
+
+# Your Task
+
+Analyze the question and context provided below. Decide if you need clarification or can generate SQL directly.
+Return JSON in the appropriate format (clarification OR sql).
 `;
 
+// ========================================
+// Validation Functions
+// ========================================
+
 /**
- * Helper function to validate AI response format
+ * Validates LLM response for both SQL and clarification modes
+ */
+export function validateLLMResponse(response: unknown): response is LLMResponse {
+  if (typeof response !== 'object' || response === null) {
+    return false;
+  }
+
+  const obj = response as any;
+
+  // Check for responseType field
+  if (!obj.responseType || !['sql', 'clarification'].includes(obj.responseType)) {
+    return false;
+  }
+
+  // Validate SQL response
+  if (obj.responseType === 'sql') {
+    return (
+      typeof obj.generatedSql === 'string' &&
+      typeof obj.explanation === 'string' &&
+      typeof obj.confidence === 'number' &&
+      obj.confidence >= 0 &&
+      obj.confidence <= 1 &&
+      /^[\s\n]*SELECT/i.test(obj.generatedSql) // Must be SELECT statement
+    );
+  }
+
+  // Validate clarification response
+  if (obj.responseType === 'clarification') {
+    if (!Array.isArray(obj.clarifications) || typeof obj.reasoning !== 'string') {
+      return false;
+    }
+
+    // Must have at least one clarification
+    if (obj.clarifications.length === 0) {
+      return false;
+    }
+
+    // Validate each clarification request
+    return obj.clarifications.every((c: any) =>
+      typeof c.id === 'string' &&
+      typeof c.ambiguousTerm === 'string' &&
+      typeof c.question === 'string' &&
+      Array.isArray(c.options) &&
+      typeof c.allowCustom === 'boolean' &&
+      c.options.length > 0 &&
+      c.options.every((opt: any) =>
+        typeof opt.id === 'string' &&
+        typeof opt.label === 'string' &&
+        typeof opt.sqlConstraint === 'string'
+      )
+    );
+  }
+
+  return false;
+}
+
+// ========================================
+// Legacy Support (for old API)
+// ========================================
+
+/**
+ * Helper function to validate AI response format (legacy)
+ * @deprecated Use validateLLMResponse for new semantic layer code
  */
 export function validateAIResponse(
   response: unknown
@@ -296,7 +522,8 @@ export function validateAIResponse(
 }
 
 /**
- * Helper function to extract chart-specific requirements
+ * Helper function to extract chart-specific requirements (legacy)
+ * @deprecated Charts are now created as separate action, not during SQL generation
  */
 export function getChartRequirements(chartType: ChartType): string {
   const requirements: Record<ChartType, string> = {
@@ -310,7 +537,8 @@ export function getChartRequirements(chartType: ChartType): string {
 }
 
 /**
- * Constructs the complete prompt for the AI
+ * Constructs the complete prompt for the AI (legacy)
+ * @deprecated Use new prompt building in llm-sql-generator.service.ts
  */
 export function constructPrompt(context: PromptContext): string {
   const { question, assessmentFormDefinition, patientId } = context;

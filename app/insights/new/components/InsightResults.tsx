@@ -61,6 +61,40 @@ export function InsightResults({
         </div>
       )}
 
+      {/* Show assumptions made by LLM */}
+      {result.assumptions && result.assumptions.length > 0 && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-amber-800 mb-2">
+                I made {result.assumptions.length} assumption{result.assumptions.length > 1 ? "s" : ""}
+              </h4>
+              <ul className="space-y-2">
+                {result.assumptions.map((assumption: any, index: number) => (
+                  <li key={index} className="text-sm text-amber-700">
+                    <span className="font-medium">{assumption.term || "Unknown"}:</span>{" "}
+                    <span>{assumption.assumedValue || assumption.reasoning || "No details available"}</span>
+                    {assumption.confidence !== undefined && (
+                      <span className="ml-2 text-xs text-amber-600">
+                        (confidence: {(assumption.confidence * 100).toFixed(0)}%)
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-amber-600 mt-2">
+                You can use the &quot;Inspection Panel&quot; below to challenge these assumptions if needed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Show Step Preview for complex queries that require inspection */}
       {result.requiresPreview && result.stepPreview && !stepPreviewApproved && (
         <StepPreview

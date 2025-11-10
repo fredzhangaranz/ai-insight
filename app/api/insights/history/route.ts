@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
         question,
         "createdAt",
         mode,
-        "resultCount"
+        "resultCount",
+        sql,
+        "semanticContext"
       FROM "QueryHistory"
       WHERE "userId" = $1 AND "customerId" = $2::uuid
       ORDER BY "createdAt" DESC
@@ -51,6 +53,8 @@ export async function GET(req: NextRequest) {
       createdAt: new Date(row.createdAt),
       mode: row.mode,
       recordCount: row.resultCount,
+      sql: row.sql,
+      semanticContext: row.semanticContext, // JSONB field
     }));
 
     return NextResponse.json(queries);
