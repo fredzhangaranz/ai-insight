@@ -61,6 +61,13 @@ export interface InsightResult {
     termsUnderstood: string[];
   };
 
+  // Error handling - gracefully return errors with thinking steps
+  error?: {
+    message: string;
+    step: string;
+    details?: any;
+  };
+
   template?: string;
   context?: any;
   funnel?: any;
@@ -148,7 +155,6 @@ export function useInsights() {
   };
 
   const clearProgressSimulation = () => {
-    console.log("[clearProgressSimulation] Clearing timeouts:", progressTimeoutsRef.current.length);
     progressTimeoutsRef.current.forEach(clearTimeout);
     progressTimeoutsRef.current = [];
   };
@@ -184,7 +190,6 @@ export function useInsights() {
   const startProgressSimulation = () => {
     clearProgressSimulation();
     const initialSteps = createInitialSteps(true);
-    console.log("[startProgressSimulation] Initial steps:", initialSteps);
     setAnalysisSteps(initialSteps);
 
     let cumulativeDelay = 0;
@@ -193,9 +198,7 @@ export function useInsights() {
       cumulativeDelay += delay;
 
       const timeoutId = setTimeout(() => {
-        console.log(`[progressSimulation] Transition ${fromIndex} → ${toIndex} firing`);
         if (analysisStatusRef.current !== "running") {
-          console.log("[progressSimulation] Status not running, skipping transition");
           return;
         }
 
@@ -206,7 +209,7 @@ export function useInsights() {
             if (step.status === "complete" || step.status === "error") {
               return step;
             }
-            
+
             if (idx === fromIndex && step.status === "running") {
               return { ...step, status: "complete" as const };
             }
@@ -219,7 +222,6 @@ export function useInsights() {
             }
             return step;
           });
-          console.log("[progressSimulation] Updated steps:", updated);
           return updated;
         });
       }, cumulativeDelay);
@@ -229,25 +231,22 @@ export function useInsights() {
   };
 
   const finalizeThinking = (thinkingFromServer?: ThinkingStep[]) => {
-    console.log("[finalizeThinking] Server thinking:", thinkingFromServer);
-    
     setAnalysisSteps((prev) => {
-      // If server provided thinking steps, use them immediately and stop simulation
+      // If server provided thinking steps, use them immediately
       if (Array.isArray(thinkingFromServer) && thinkingFromServer.length > 0) {
-        console.log("[finalizeThinking] Using server steps (authoritative timing)");
-        
-        // Clear simulation immediately when server data arrives
-        clearProgressSimulation();
-        
+        // DON'T clear simulation here - let it complete naturally
+        // The simulation will stop when status changes to "completed"
+        // This allows smooth progress without jarring jumps
+
         // Create a map of server steps by ID for quick lookup
         const serverStepMap = new Map(
           thinkingFromServer.map(step => [step.id, step])
         );
-        
+
         // Merge: use server data when available, otherwise keep current progress
         const merged = prev.map((currentStep) => {
           const serverStep = serverStepMap.get(currentStep.id);
-          
+
           if (serverStep) {
             // Server has this step - use server data (it's authoritative)
             // Preserve subSteps if server doesn't provide them but current step has them
@@ -256,27 +255,29 @@ export function useInsights() {
             }
             return serverStep;
           }
-          
-          // Server doesn't have this step - complete it if it's running
-          if (currentStep.status === "running") {
-            return { ...currentStep, status: "complete" as const };
-          }
-          
-          // Keep current state for pending steps
+
+          // Server doesn't have this step - keep current progress
+          // Don't force-complete pending steps - let simulation handle it
           return currentStep;
         });
-        
+
         // Add any server steps that don't exist in current progress
         const currentIds = new Set(prev.map(s => s.id));
         const newServerSteps = thinkingFromServer.filter(
           step => !currentIds.has(step.id)
         );
-        
+
+        // Clear simulation AFTER merging, so any leftover timeouts are canceled
+        // This prevents ghost animations after server data is authoritative
+        if (typeof window !== 'undefined') {
+          // Use setTimeout to clear after React state update completes
+          setTimeout(() => clearProgressSimulation(), 0);
+        }
+
         return [...merged, ...newServerSteps];
       }
-      
+
       // No server steps - complete all simulated steps
-      console.log("[finalizeThinking] Completing all simulated steps");
       return prev.map((step) => {
         if (step.status === "error") return step;
         if (step.status === "complete") return step;
@@ -345,15 +346,24 @@ export function useInsights() {
       // Immediately use server thinking (it has authoritative timing)
       // This stops simulation and shows actual progress
       finalizeThinking(data.thinking);
-      
+
       captureElapsed();
       stopElapsedTimer();
 
-      setResult(data);
-      if (data.modelId) {
-        setAnalysisModel(data.modelId);
+      // Check if result contains an error (graceful error handling)
+      if (data.error) {
+        // Error occurred but we have thinking steps - show them with error
+        setResult(data);
+        setError(new Error(data.error.message));
+        updateAnalysisStatus("error");
+      } else {
+        // Success - show results
+        setResult(data);
+        if (data.modelId) {
+          setAnalysisModel(data.modelId);
+        }
+        updateAnalysisStatus("completed");
       }
-      updateAnalysisStatus("completed");
 
       // Auto-save successful query to history (best effort)
       try {
@@ -455,17 +465,26 @@ export function useInsights() {
       // Immediately use server thinking (it has authoritative timing)
       // This stops simulation and shows actual progress
       finalizeThinking(data.thinking);
-      
+
       captureElapsed();
       stopElapsedTimer();
 
-      setResult(data);
-      if (data.modelId) {
-        setAnalysisModel(data.modelId);
+      // Check if result contains an error (graceful error handling)
+      if (data.error) {
+        // Error occurred but we have thinking steps - show them with error
+        setResult(data);
+        setError(new Error(data.error.message));
+        updateAnalysisStatus("error");
+      } else {
+        // Success - show results
+        setResult(data);
+        if (data.modelId) {
+          setAnalysisModel(data.modelId);
+        }
+        updateAnalysisStatus("completed");
       }
-      updateAnalysisStatus("completed");
 
-      // Auto-save successful query to history
+      // Auto-save successful query to history (skip if error)
       try {
         await fetch("/api/insights/history", {
           method: "POST",

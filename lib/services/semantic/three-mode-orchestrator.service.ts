@@ -58,6 +58,13 @@ export interface OrchestrationResult {
     termsUnderstood: string[];
   };
 
+  // Error handling - gracefully return errors with thinking steps
+  error?: {
+    message: string;
+    step: string; // Which step failed
+    details?: any;
+  };
+
   // Existing fields
   template?: string;
   context?: any;
@@ -392,12 +399,24 @@ export class ThreeModeOrchestrator {
       ) {
         contextDiscoveryStep.status = "error";
         contextDiscoveryStep.duration = Date.now() - discoveryStart;
-        contextDiscoveryStep.message = context.intent.reasoning || "Intent classification failed";
+        const errorMessage = context.intent.reasoning || "Intent classification failed";
+        contextDiscoveryStep.message = errorMessage;
 
-        throw new Error(
-          context.intent.reasoning ||
-          "Unable to understand your question. This may be due to missing AI model configuration. Please check Admin > AI Configuration."
-        );
+        // Return error gracefully with thinking steps so UI can show progress
+        return {
+          mode: "direct",
+          question,
+          thinking,
+          error: {
+            message: context.intent.reasoning ||
+              "Unable to understand your question. This may be due to missing AI model configuration. Please check Admin > AI Configuration.",
+            step: "context_discovery",
+            details: {
+              confidence: context.intent.confidence,
+              reasoning: context.intent.reasoning,
+            },
+          },
+        };
       }
 
       contextDiscoveryStep.status = "complete";

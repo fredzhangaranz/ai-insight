@@ -49,24 +49,46 @@ export default function NewInsightPage() {
   };
 
   const handleHistorySelect = async (query: any) => {
-    console.log("[handleHistorySelect] Query:", query);
-
     // Load cached result from history instead of re-executing
     if (query.mode === "error") {
-      console.log("[handleHistorySelect] Error query, copying question");
+      // For failed queries, reconstruct the error result so user can see what went wrong
+      const errorMessage = query.semanticContext?.error || "Query execution failed";
+
+      // Create a minimal error result with thinking steps
+      const errorResult = {
+        mode: "direct" as const,
+        question: query.question,
+        thinking: [
+          {
+            id: "load_from_history",
+            status: "complete" as const,
+            message: "Loaded failed query from history",
+            duration: 50,
+          },
+          {
+            id: "previous_error",
+            status: "error" as const,
+            message: errorMessage,
+            duration: 0,
+          },
+        ],
+        error: {
+          message: errorMessage,
+          step: "history",
+          details: query.semanticContext,
+        },
+      };
+
+      loadCachedResult(errorResult);
       setQuestion(query.question);
       return;
     }
 
     if (!query.sql || !query.semanticContext) {
-      console.log("[handleHistorySelect] No cached data (sql or context missing), copying question");
-      console.log("[handleHistorySelect] Has sql:", !!query.sql);
-      console.log("[handleHistorySelect] Has semanticContext:", !!query.semanticContext);
+      // No cached data, just copy the question
       setQuestion(query.question);
       return;
     }
-
-    console.log("[handleHistorySelect] Loading cached result...");
 
     // Re-execute the cached SQL to get fresh results
     try {
@@ -82,21 +104,18 @@ export default function NewInsightPage() {
         }),
       });
 
-      console.log("[handleHistorySelect] Response status:", response.status);
-
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("[handleHistorySelect] API error:", errorData);
+        // Fallback: just copy the question
         setQuestion(query.question);
         return;
       }
 
       const cachedResult = await response.json();
-      console.log("[handleHistorySelect] Loaded cached result:", cachedResult);
       loadCachedResult(cachedResult);
       setQuestion(query.question);
     } catch (err) {
-      console.error("[handleHistorySelect] Exception:", err);
+      console.error("Failed to load cached result:", err);
+      // Fallback: just copy the question
       setQuestion(query.question);
     }
   };
@@ -168,14 +187,14 @@ export default function NewInsightPage() {
             />
           )}
 
-          {analysis.status === "error" && !result && (
+          {(analysis.status === "error" && !result) || (result?.error) ? (
             <AnalysisProgressCard
               status="error"
               steps={analysis.steps}
               elapsedMs={analysis.elapsedMs}
               modelLabel={analysis.model}
             />
-          )}
+          ) : null}
 
           {customerId && !result && analysis.status !== "running" && (
             <SuggestedQuestions
@@ -228,7 +247,7 @@ export default function NewInsightPage() {
             />
           )}
 
-          {result && result.mode !== "clarification" && (
+          {result && result.mode !== "clarification" && !result.error && (
             <InsightResults
               result={result}
               customerId={customerId}

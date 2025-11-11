@@ -37,10 +37,17 @@ export async function POST(req: NextRequest) {
     const orchestrator = new ThreeModeOrchestrator();
     const result = await orchestrator.ask(question, customerId, modelId);
 
+    // If result contains an error, return it with 200 status but include error field
+    // This allows the UI to show thinking steps + error message
+    if (result.error) {
+      console.error("[/api/insights/ask] Orchestration error:", result.error);
+    }
+
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[/api/insights/ask] Error:", error);
+    console.error("[/api/insights/ask] Unexpected error:", error);
 
+    // Unexpected errors (not handled by orchestrator)
     return NextResponse.json(
       {
         error: "Failed to process question",
