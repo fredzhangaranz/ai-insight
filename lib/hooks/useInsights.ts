@@ -9,6 +9,7 @@ export interface ThinkingStep {
   message: string;
   details?: any;
   duration?: number;
+  subSteps?: ThinkingStep[]; // Support for hierarchical sub-steps
 }
 
 export interface FunnelStep {
@@ -78,6 +79,10 @@ const STEP_TEMPLATE: Array<Pick<ThinkingStep, "id" | "message">> = [
     message: "Checking for matching templates…",
   },
   {
+    id: "complexity_check",
+    message: "Analyzing question complexity…",
+  },
+  {
     id: "context_discovery",
     message: "Discovering semantic context…",
   },
@@ -91,10 +96,17 @@ const STEP_TEMPLATE: Array<Pick<ThinkingStep, "id" | "message">> = [
   },
 ];
 
+// Realistic timing based on actual backend performance:
+// - Template match: ~200ms
+// - Complexity check: ~100ms (synchronous)
+// - Context discovery: ~2000ms (2 seconds - includes 5 sub-steps)
+// - SQL generation: ~3000-5000ms (3-5 seconds - LLM call is the longest)
+// - Query execution: ~800ms (fast database query)
 const STEP_TRANSITIONS = [
-  { fromIndex: 0, toIndex: 1, delay: 1200 },
-  { fromIndex: 1, toIndex: 2, delay: 2600 },
-  { fromIndex: 2, toIndex: 3, delay: 4200 },
+  { fromIndex: 0, toIndex: 1, delay: 500 }, // template_match → complexity_check (fast)
+  { fromIndex: 1, toIndex: 2, delay: 800 }, // complexity_check → context_discovery (total: 1300ms)
+  { fromIndex: 2, toIndex: 3, delay: 2500 }, // context_discovery → sql_generation (total: 3800ms, allows 2s for discovery)
+  { fromIndex: 3, toIndex: 4, delay: 4500 }, // sql_generation → execute_query (total: 8300ms, allows 4.5s for SQL generation)
 ];
 
 function createInitialSteps(includeFirstRunning: boolean): ThinkingStep[] {
@@ -136,6 +148,7 @@ export function useInsights() {
   };
 
   const clearProgressSimulation = () => {
+    console.log("[clearProgressSimulation] Clearing timeouts:", progressTimeoutsRef.current.length);
     progressTimeoutsRef.current.forEach(clearTimeout);
     progressTimeoutsRef.current = [];
   };
@@ -170,51 +183,109 @@ export function useInsights() {
 
   const startProgressSimulation = () => {
     clearProgressSimulation();
-    setAnalysisSteps(createInitialSteps(true));
+    const initialSteps = createInitialSteps(true);
+    console.log("[startProgressSimulation] Initial steps:", initialSteps);
+    setAnalysisSteps(initialSteps);
+
+    let cumulativeDelay = 0;
 
     STEP_TRANSITIONS.forEach(({ fromIndex, toIndex, delay }) => {
+      cumulativeDelay += delay;
+
       const timeoutId = setTimeout(() => {
+        console.log(`[progressSimulation] Transition ${fromIndex} → ${toIndex} firing`);
         if (analysisStatusRef.current !== "running") {
+          console.log("[progressSimulation] Status not running, skipping transition");
           return;
         }
 
-        setAnalysisSteps((prev) =>
-          prev.map((step, idx) => {
+        setAnalysisSteps((prev) => {
+          // Create a new array to ensure React detects the change
+          const updated = [...prev].map((step, idx) => {
+            // Don't override steps that are already complete (from server)
+            if (step.status === "complete" || step.status === "error") {
+              return step;
+            }
+            
             if (idx === fromIndex && step.status === "running") {
               return { ...step, status: "complete" as const };
             }
             if (
               idx === toIndex &&
-              prev[fromIndex]?.status === "complete" &&
+              (prev[fromIndex]?.status === "complete" || prev[fromIndex]?.status === "running") &&
               step.status === "pending"
             ) {
               return { ...step, status: "running" as const };
             }
             return step;
-          })
-        );
-      }, delay);
+          });
+          console.log("[progressSimulation] Updated steps:", updated);
+          return updated;
+        });
+      }, cumulativeDelay);
 
       progressTimeoutsRef.current.push(timeoutId);
     });
   };
 
   const finalizeThinking = (thinkingFromServer?: ThinkingStep[]) => {
-    if (Array.isArray(thinkingFromServer) && thinkingFromServer.length > 0) {
-      setAnalysisSteps(thinkingFromServer);
-      return;
-    }
-
-    setAnalysisSteps((prev) =>
-      prev.map((step) => {
+    console.log("[finalizeThinking] Server thinking:", thinkingFromServer);
+    
+    setAnalysisSteps((prev) => {
+      // If server provided thinking steps, use them immediately and stop simulation
+      if (Array.isArray(thinkingFromServer) && thinkingFromServer.length > 0) {
+        console.log("[finalizeThinking] Using server steps (authoritative timing)");
+        
+        // Clear simulation immediately when server data arrives
+        clearProgressSimulation();
+        
+        // Create a map of server steps by ID for quick lookup
+        const serverStepMap = new Map(
+          thinkingFromServer.map(step => [step.id, step])
+        );
+        
+        // Merge: use server data when available, otherwise keep current progress
+        const merged = prev.map((currentStep) => {
+          const serverStep = serverStepMap.get(currentStep.id);
+          
+          if (serverStep) {
+            // Server has this step - use server data (it's authoritative)
+            // Preserve subSteps if server doesn't provide them but current step has them
+            if (currentStep.subSteps && !serverStep.subSteps) {
+              return { ...serverStep, subSteps: currentStep.subSteps };
+            }
+            return serverStep;
+          }
+          
+          // Server doesn't have this step - complete it if it's running
+          if (currentStep.status === "running") {
+            return { ...currentStep, status: "complete" as const };
+          }
+          
+          // Keep current state for pending steps
+          return currentStep;
+        });
+        
+        // Add any server steps that don't exist in current progress
+        const currentIds = new Set(prev.map(s => s.id));
+        const newServerSteps = thinkingFromServer.filter(
+          step => !currentIds.has(step.id)
+        );
+        
+        return [...merged, ...newServerSteps];
+      }
+      
+      // No server steps - complete all simulated steps
+      console.log("[finalizeThinking] Completing all simulated steps");
+      return prev.map((step) => {
         if (step.status === "error") return step;
         if (step.status === "complete") return step;
         if (step.status === "running") {
           return { ...step, status: "complete" as const };
         }
         return { ...step, status: "complete" as const };
-      })
-    );
+      });
+    });
   };
 
   const markRunningStepAsError = (message: string) => {
@@ -271,10 +342,12 @@ export function useInsights() {
         throw new Error(errorMessage);
       }
 
-      clearProgressSimulation();
+      // Immediately use server thinking (it has authoritative timing)
+      // This stops simulation and shows actual progress
+      finalizeThinking(data.thinking);
+      
       captureElapsed();
       stopElapsedTimer();
-      finalizeThinking(data.thinking);
 
       setResult(data);
       if (data.modelId) {
@@ -379,10 +452,12 @@ export function useInsights() {
         throw new Error(errorMessage);
       }
 
-      clearProgressSimulation();
+      // Immediately use server thinking (it has authoritative timing)
+      // This stops simulation and shows actual progress
+      finalizeThinking(data.thinking);
+      
       captureElapsed();
       stopElapsedTimer();
-      finalizeThinking(data.thinking);
 
       setResult(data);
       if (data.modelId) {

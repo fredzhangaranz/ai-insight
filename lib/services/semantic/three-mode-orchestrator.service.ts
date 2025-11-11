@@ -20,6 +20,7 @@ export interface ThinkingStep {
   message: string;
   details?: any;
   duration?: number;
+  subSteps?: ThinkingStep[]; // Support for hierarchical sub-steps
 }
 
 export interface FunnelStep {
@@ -258,31 +259,112 @@ export class ThreeModeOrchestrator {
     modelId?: string,
     clarifications?: Record<string, string>
   ): Promise<OrchestrationResult> {
-    // Step 2.1: Context Discovery
-    thinking.push({
+    // Step 2.1: Context Discovery with sub-steps
+    const contextDiscoveryStep: ThinkingStep = {
       id: "context_discovery",
       status: "running",
       message: "Discovering semantic context...",
-    });
+      subSteps: [
+        {
+          id: "intent_classification",
+          status: "pending",
+          message: "Analyzing question intent...",
+        },
+        {
+          id: "semantic_search",
+          status: "pending",
+          message: "Searching semantic index...",
+        },
+        {
+          id: "terminology_mapping",
+          status: "pending",
+          message: "Mapping user terminology...",
+        },
+        {
+          id: "join_path_planning",
+          status: "pending",
+          message: "Planning database joins...",
+        },
+        {
+          id: "context_assembly",
+          status: "pending",
+          message: "Assembling context...",
+        },
+      ],
+    };
+    thinking.push(contextDiscoveryStep);
 
     const discoveryStart = Date.now();
 
     try {
       let context;
       try {
+        // Mark intent classification as running
+        if (contextDiscoveryStep.subSteps) {
+          contextDiscoveryStep.subSteps[0].status = "running";
+        }
+
         context = await this.contextDiscovery.discoverContext({
           customerId,
           question,
           userId: 1, // TODO: Get from session
           modelId, // Pass modelId for intent classification
         });
+
+        // Populate sub-steps with results
+        if (contextDiscoveryStep.subSteps) {
+          // Intent classification
+          contextDiscoveryStep.subSteps[0].status = "complete";
+          contextDiscoveryStep.subSteps[0].details = {
+            confidence: context.intent?.confidence || 0,
+          };
+          contextDiscoveryStep.message = "Discovering semantic context... (analyzed intent)";
+
+          // Semantic search
+          contextDiscoveryStep.subSteps[1].status = "complete";
+          contextDiscoveryStep.subSteps[1].details = {
+            formsFound: context.forms?.length || 0,
+            fieldsFound: context.fields?.length || 0,
+          };
+          contextDiscoveryStep.message = "Discovering semantic context... (found forms & fields)";
+
+          // Terminology mapping
+          contextDiscoveryStep.subSteps[2].status = "complete";
+          contextDiscoveryStep.subSteps[2].details = {
+            mappingsCount: context.terminology?.length || 0,
+          };
+          contextDiscoveryStep.message = "Discovering semantic context... (mapped terminology)";
+
+          // Join path planning
+          contextDiscoveryStep.subSteps[3].status = "complete";
+          contextDiscoveryStep.subSteps[3].details = {
+            pathsCount: context.joinPaths?.length || 0,
+          };
+          contextDiscoveryStep.message = "Discovering semantic context... (planned joins)";
+
+          // Context assembly
+          contextDiscoveryStep.subSteps[4].status = "complete";
+          contextDiscoveryStep.subSteps[4].details = {
+            confidence: context.overallConfidence || context.intent?.confidence || 0,
+          };
+          contextDiscoveryStep.message = "Discovering semantic context... (complete)";
+        }
       } catch (discoveryError) {
+        // If context discovery fails or times out, mark sub-steps as error
+        if (contextDiscoveryStep.subSteps) {
+          contextDiscoveryStep.subSteps.forEach((subStep) => {
+            if (subStep.status === "running" || subStep.status === "pending") {
+              subStep.status = "error";
+            }
+          });
+        }
+
         // If context discovery fails or times out, create a minimal context
         // This allows the query to proceed with basic SQL generation
-        thinking[thinking.length - 1].status = "complete";
-        thinking[thinking.length - 1].message = "Context discovery failed, using fallback";
-        thinking[thinking.length - 1].duration = Date.now() - discoveryStart;
-        thinking[thinking.length - 1].details = {
+        contextDiscoveryStep.status = "complete";
+        contextDiscoveryStep.message = "Context discovery failed, using fallback";
+        contextDiscoveryStep.duration = Date.now() - discoveryStart;
+        contextDiscoveryStep.details = {
           error: discoveryError instanceof Error ? discoveryError.message : "Unknown error",
           fallback: true,
         };
@@ -308,9 +390,9 @@ export class ThreeModeOrchestrator {
         context.intent.metrics?.includes("unclassified_metric") ||
         context.intent.reasoning?.includes("Classification failed")
       ) {
-        thinking[thinking.length - 1].status = "error";
-        thinking[thinking.length - 1].duration = Date.now() - discoveryStart;
-        thinking[thinking.length - 1].message = context.intent.reasoning || "Intent classification failed";
+        contextDiscoveryStep.status = "error";
+        contextDiscoveryStep.duration = Date.now() - discoveryStart;
+        contextDiscoveryStep.message = context.intent.reasoning || "Intent classification failed";
 
         throw new Error(
           context.intent.reasoning ||
@@ -318,9 +400,9 @@ export class ThreeModeOrchestrator {
         );
       }
 
-      thinking[thinking.length - 1].status = "complete";
-      thinking[thinking.length - 1].duration = Date.now() - discoveryStart;
-      thinking[thinking.length - 1].details = {
+      contextDiscoveryStep.status = "complete";
+      contextDiscoveryStep.duration = Date.now() - discoveryStart;
+      contextDiscoveryStep.details = {
         formsFound: context.forms?.length || 0,
         fieldsFound: context.fields?.length || 0,
         joinPaths: context.joinPaths?.length || 0,
@@ -368,6 +450,9 @@ export class ThreeModeOrchestrator {
 
       thinking[thinking.length - 1].status = "complete";
       thinking[thinking.length - 1].duration = Date.now() - sqlStart;
+      thinking[thinking.length - 1].message = assumptions.length > 0 
+        ? `Generated SQL query (${assumptions.length} assumption${assumptions.length !== 1 ? 's' : ''})`
+        : "Generated SQL query";
       thinking[thinking.length - 1].details = {
         confidence: llmResponse.confidence,
         assumptions: assumptions.length,
@@ -402,6 +487,8 @@ export class ThreeModeOrchestrator {
 
       if (thinking[thinking.length - 1].status !== "error") {
         thinking[thinking.length - 1].status = "complete";
+        const rowCount = results?.rows?.length || 0;
+        thinking[thinking.length - 1].message = `Executed query (${rowCount.toLocaleString()} row${rowCount !== 1 ? 's' : ''})`;
       }
       thinking[thinking.length - 1].duration = Date.now() - executeStart;
       thinking[thinking.length - 1].details = {
