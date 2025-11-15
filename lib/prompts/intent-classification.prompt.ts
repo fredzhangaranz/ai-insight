@@ -67,26 +67,19 @@ Common semantic concepts for wound care:
 
 ## JSON Response Format
 
-You MUST respond with ONLY valid JSON (no markdown, no explanations before or after). The JSON must be parseable by JSON.parse().
+CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations. Start with { and end with }.
 
-{
-  "type": "outcome_analysis|trend_analysis|cohort_comparison|risk_assessment|quality_metrics|operational_metrics",
-  "scope": "patient_cohort|individual_patient|aggregate",
-  "metrics": ["metric1", "metric2"],
-  "filters": [
-    {
-      "concept": "semantic_concept_name",
-      "userTerm": "user's exact phrasing",
-      "value": "optional_resolved_value"
-    }
-  ],
-  "timeRange": {
-    "unit": "days|weeks|months|years",
-    "value": 6
-  },
-  "confidence": 0.85,
-  "reasoning": "Explanation of why this intent was selected"
-}
+JSON must include these fields:
+- type: One of outcome_analysis, trend_analysis, cohort_comparison, risk_assessment, quality_metrics, operational_metrics
+- scope: One of patient_cohort, individual_patient, aggregate
+- metrics: Array of metric names
+- filters: Array of filter objects 
+- timeRange: null or object with unit (days/weeks/months/years) and number value
+- confidence: number between 0.0 and 1.0
+- reasoning: string explanation
+
+For "how many patients" respond with:
+{"type":"outcome_analysis","scope":"aggregate","metrics":["patient_count"],"filters":[],"timeRange":null,"confidence":0.95,"reasoning":"Simple patient count"}
 
 ## Instructions
 
@@ -125,44 +118,21 @@ You MUST respond with ONLY valid JSON (no markdown, no explanations before or af
 
 ## Examples
 
+Example 1 - Simple count (MOST COMMON):
+Input: "How many patients?"
+Output: {"type":"outcome_analysis","scope":"aggregate","metrics":["patient_count"],"filters":[],"timeRange":null,"confidence":0.95,"reasoning":"Simple patient count"}
+
+Example 2 - Complex query:
 Input: "What is the average healing rate for diabetic wounds in the last 6 months?"
-Output:
-{
-  "type": "outcome_analysis",
-  "scope": "patient_cohort",
-  "metrics": ["average_healing_rate"],
-  "filters": [{"concept": "wound_classification", "userTerm": "diabetic wounds", "value": "DFU"}],
-  "timeRange": {"unit": "months", "value": 6},
-  "confidence": 0.95,
-  "reasoning": "User clearly wants outcome metrics (healing rate) for a specific wound type cohort over a defined period"
-}
+Output: {"type":"outcome_analysis","scope":"patient_cohort","metrics":["average_healing_rate"],"filters":[{"concept":"wound_classification","userTerm":"diabetic wounds","value":"DFU"}],"timeRange":{"unit":"months","value":6},"confidence":0.95,"reasoning":"Outcome metrics for specific cohort over defined period"}
 
+Example 3 - Trend analysis:
 Input: "Is wound healing getting faster?"
-Output:
-{
-  "type": "trend_analysis",
-  "scope": "patient_cohort",
-  "metrics": ["healing_rate"],
-  "filters": [],
-  "timeRange": null,
-  "confidence": 0.88,
-  "reasoning": "Question asks about change over time (trend), focused on overall healing improvements"
-}
+Output: {"type":"trend_analysis","scope":"patient_cohort","metrics":["healing_rate"],"filters":[],"timeRange":null,"confidence":0.88,"reasoning":"Trend analysis of healing improvements"}
 
+Example 4 - Comparison:
 Input: "Do diabetic wounds heal faster than arterial wounds?"
-Output:
-{
-  "type": "cohort_comparison",
-  "scope": "patient_cohort",
-  "metrics": ["healing_rate", "closure_time"],
-  "filters": [
-    {"concept": "wound_classification", "userTerm": "diabetic wounds", "value": "DFU"},
-    {"concept": "wound_classification", "userTerm": "arterial wounds", "value": "arterial_ulcer"}
-  ],
-  "timeRange": null,
-  "confidence": 0.92,
-  "reasoning": "Explicit comparison between two wound types with healing metrics"
-}
+Output: {"type":"cohort_comparison","scope":"patient_cohort","metrics":["healing_rate","closure_time"],"filters":[{"concept":"wound_classification","userTerm":"diabetic wounds","value":"DFU"},{"concept":"wound_classification","userTerm":"arterial wounds","value":"arterial_ulcer"}],"timeRange":null,"confidence":0.92,"reasoning":"Explicit comparison between two wound types"}
 `;
 
 /**
@@ -188,7 +158,7 @@ export function constructIntentClassificationPrompt(
     userMessage += `\n`;
   }
 
-  userMessage += `Extract the intent and respond with ONLY valid JSON (no markdown or explanations).`;
+  userMessage += `IMPORTANT: Respond with ONLY valid JSON. Do not include markdown code blocks (no triple backticks). Start with { and end with }. Your entire response must be parseable as JSON.`;
 
   return userMessage;
 }
@@ -314,8 +284,12 @@ export function validateIntentClassificationResponse(response: unknown): {
     }),
     timeRange: result.timeRange
       ? {
-          unit: result.timeRange.unit as "days" | "weeks" | "months" | "years",
-          value: result.timeRange.value as number,
+          unit: (result.timeRange as Record<string, unknown>).unit as
+            | "days"
+            | "weeks"
+            | "months"
+            | "years",
+          value: (result.timeRange as Record<string, unknown>).value as number,
         }
       : undefined,
     confidence: result.confidence as number,

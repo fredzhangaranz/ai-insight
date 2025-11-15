@@ -52,10 +52,34 @@ export const SUPPORTED_AI_MODELS: AIModel[] = [
       "Google's newest and most capable model, with enhanced reasoning and performance.",
   },
   {
-    id: "gemini-1.5-flash-latest",
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    provider: "Google",
+    description: "Google's fastest and most efficient multimodal model for quick analysis.",
+  },
+  {
+    id: "gemini-1.5-pro",
+    name: "Gemini 1.5 Pro",
+    provider: "Google",
+    description: "Google's powerful model for complex reasoning tasks.",
+  },
+  {
+    id: "gemini-1.5-flash",
     name: "Gemini 1.5 Flash",
     provider: "Google",
-    description: "Google's fastest and most cost-effective multimodal model.",
+    description: "Google's fast and cost-effective multimodal model.",
+  },
+  {
+    id: "gemini-1.5-flash-latest",
+    name: "Gemini 1.5 Flash Latest",
+    provider: "Google",
+    description: "Latest version of Google's fastest multimodal model.",
+  },
+  {
+    id: "gemini-2.0-flash-thinking-exp",
+    name: "Gemini 2.0 Flash Thinking",
+    provider: "Google",
+    description: "Google's experimental model with enhanced reasoning capabilities.",
   },
   {
     id: "llama3.2:3b",

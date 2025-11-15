@@ -1,17 +1,19 @@
 // app/api/insights/models/route.ts
-// API endpoint to fetch available AI models from configuration
+// API endpoint to fetch available AI provider families from configuration
+// Returns provider families (one per provider) rather than individual models
+// The ModelRouter will select appropriate simple/complex models within the family
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { AIConfigLoader } from "@/lib/config/ai-config-loader";
-import { aiConfigService } from "@/lib/services/ai-config.service";
+import { getProviderFamily } from "@/lib/config/provider-families";
 
 export interface AvailableModel {
-  id: string; // modelId from configData
-  name: string; // providerName
+  id: string; // complexQueryModelId (used as provider family identifier)
+  name: string; // provider family display name
   provider: string; // providerType
-  description: string; // generated description
+  description: string; // provider family description
   isDefault: boolean;
 }
 
@@ -27,22 +29,30 @@ export async function GET() {
     const configLoader = AIConfigLoader.getInstance();
     const { providers } = await configLoader.getConfiguration();
 
-    // Filter for only enabled providers with modelId
+    // Filter for only enabled providers with dual-model configuration
     const enabledProviders = providers.filter(
-      (config) => config.isEnabled && config.configData.modelId
+      (config) =>
+        config.isEnabled &&
+        config.configData.simpleQueryModelId &&
+        config.configData.complexQueryModelId
     );
 
-    // Map configurations to available models (only enabled providers)
-    const models: AvailableModel[] = enabledProviders.map((config) => ({
-      id: config.configData.modelId!,
-      name: config.providerName,
-      provider: capitalizeProvider(config.providerType),
-      description: generateDescription(
-        config.providerType,
-        config.providerName
-      ),
-      isDefault: config.isDefault,
-    }));
+    // Map configurations to provider families (one per provider)
+    const models: AvailableModel[] = enabledProviders.map((config) => {
+      const providerFamily = getProviderFamily(config.providerType);
+
+      return {
+        // Use complex model ID as the identifier (router will select simple/complex as needed)
+        id: config.configData.complexQueryModelId!,
+        // Use provider family display name
+        name: providerFamily.displayName,
+        // Provider type for categorization
+        provider: capitalizeProvider(config.providerType),
+        // Provider family description
+        description: providerFamily.description,
+        isDefault: config.isDefault,
+      };
+    });
 
     // If no enabled models configured, return empty array
     if (models.length === 0) {
@@ -50,7 +60,7 @@ export async function GET() {
         models: [],
         defaultModelId: null,
         message:
-          "No enabled AI models configured. Please configure and enable providers in Admin > AI Configuration.",
+          "No enabled AI providers configured. Please configure and enable providers in Admin > AI Configuration.",
       });
     }
 
@@ -67,7 +77,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: "Failed to fetch available models",
+        error: "Failed to fetch available provider families",
         message: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
@@ -85,40 +95,4 @@ function capitalizeProvider(providerType: string): string {
     openwebui: "OpenWebUI",
   };
   return mapping[providerType] || providerType;
-}
-
-/**
- * Generate description based on provider type and name
- */
-function generateDescription(
-  providerType: string,
-  providerName: string
-): string {
-  const providerDescriptions: Record<string, string> = {
-    anthropic: "Powerful reasoning and coding capabilities",
-    google: "Fast multimodal processing and analysis",
-    openwebui: "Local model running via Open WebUI",
-  };
-
-  const baseDescription =
-    providerDescriptions[providerType] || "AI model for insights generation";
-
-  // Add specific details based on provider name
-  if (providerName.includes("Sonnet")) {
-    return "Anthropic's newest, most intelligent model. Excels at complex reasoning and coding.";
-  } else if (providerName.includes("Opus")) {
-    return "Anthropic's most powerful model for highly complex tasks.";
-  } else if (providerName.includes("Gemini")) {
-    if (providerName.includes("Flash")) {
-      return "Google's fastest and most cost-effective multimodal model.";
-    } else if (providerName.includes("Pro")) {
-      return "Google's most capable model, with enhanced reasoning and performance.";
-    }
-  } else if (providerName.includes("Llama")) {
-    return `Meta's ${providerName} model running locally via Open WebUI.`;
-  } else if (providerName.includes("Mistral")) {
-    return "Mistral model running locally via Open WebUI.";
-  }
-
-  return baseDescription;
 }

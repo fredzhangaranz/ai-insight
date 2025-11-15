@@ -2,11 +2,15 @@
  * Context Discovery Service (Phase 5 – Main Orchestrator)
  *
  * Orchestrates the complete 5-step Context Discovery pipeline:
- * 1. Intent Classification – Extract metrics, filters, time range from question
- * 2. Semantic Search – Find form fields and columns matching semantic concepts
- * 3. Terminology Mapping – Map user terms to canonical field values
- * 4. Join Path Planning – Build entity relationship graph and plan joins
- * 5. Context Assembly – Combine all results into structured context bundle
+ * 1. Intent Classification – Extract metrics, filters, time range from question (2-5s)
+ * 2. Semantic Search – Find form fields and columns matching semantic concepts (1-2s)
+ * 3. Terminology Mapping – Map user terms to canonical field values (0.5s)
+ * 4. Join Path Planning – Build entity relationship graph and plan joins (0.3s)
+ * 5. Context Assembly – Combine all results into structured context bundle (fast)
+ *
+ * PERFORMANCE OPTIMIZATION (Task 1.1.4):
+ * Steps 2 and 3 run in PARALLEL since they're independent (both depend only on intent).
+ * This saves ~0.5s by overlapping terminology mapping with semantic search.
  *
  * Each step includes timing metrics, confidence scoring, and error handling.
  * All results are logged to database for audit trail and debugging.
@@ -21,6 +25,8 @@ import { getSemanticSearcherService } from "./semantic-searcher.service";
 import { getTerminologyMapperService } from "./terminology-mapper.service";
 import { getJoinPathPlannerService } from "./join-path-planner.service";
 import { getContextAssemblerService } from "./context-assembler.service";
+import { getParallelExecutorService } from "../semantic/parallel-executor.service";
+import { getModelRouterService } from "../semantic/model-router.service";
 import type {
   ContextDiscoveryRequest,
   ContextBundle,
@@ -93,66 +99,80 @@ export class ContextDiscoveryService {
         } (confidence: ${intentResult.confidence.toFixed(2)})`
       );
 
-      // Step 2: Semantic Search
-      logger.startTimer("step2", "context_discovery", "semantic_searcher");
-      const semanticResults = await this.runSemanticSearch(
-        request.customerId,
-        intentResult,
-        logger
-      );
-      const semanticDuration = logger.endTimer(
-        "step2",
+      // Step 2 & 3: Semantic Search + Terminology Mapping (PARALLEL EXECUTION)
+      // These steps both depend on intentResult but are independent of each other
+      // Running them in parallel saves ~0.5s (terminology mapping time)
+      // See: docs/todos/in-progress/performance-optimization-implementation.md Task 1.1.4
+      logger.info(
         "context_discovery",
-        "semantic_searcher",
-        `Found ${semanticResults.length} semantic matches`
+        "orchestrator",
+        "🚀 Starting parallel execution: Semantic Search + Terminology Mapping"
       );
-      const { forms, formFieldsCount } =
-        this.aggregateSemanticResults(semanticResults);
+
+      const parallelStart = Date.now();
+      logger.startTimer("step2_3_parallel", "context_discovery", "parallel_bundle");
+
+      const userTerms = this.extractUserTerms(intentResult);
+      const parallelExecutor = getParallelExecutorService();
+
+      const parallelResult = await parallelExecutor.executeTwo(
+        {
+          name: "semantic_search",
+          fn: () => this.runSemanticSearch(request.customerId, intentResult, logger),
+        },
+        {
+          name: "terminology_mapping",
+          fn: () => this.runTerminologyMapping(request.customerId, userTerms, logger),
+        },
+        {
+          timeout: 15000, // 15s timeout for both tasks
+          throwOnError: true, // Throw if either fails
+          emitTelemetry: true,
+          signal: request.signal, // Pass abort signal for early cancellation (Task 1.1.5)
+        }
+      );
+
+      const [semanticResults, terminology] = parallelResult;
+      const parallelDuration = Date.now() - parallelStart;
+
+      logger.endTimer(
+        "step2_3_parallel",
+        "context_discovery",
+        "parallel_bundle",
+        `Parallel bundle completed in ${parallelDuration}ms`
+      );
+
+      // Aggregate semantic search results
+      const { forms, formFieldsCount } = this.aggregateSemanticResults(semanticResults);
+
+      // Record metrics for both steps
       metrics.semanticSearch = {
-        duration: semanticDuration,
+        duration: parallelDuration, // Both ran in parallel, so use total time
         formsCount: forms.length,
         fieldsCount: formFieldsCount,
       };
+      metrics.terminologyMapping = {
+        duration: parallelDuration, // Both ran in parallel, so use total time
+        mappingsCount: terminology.length,
+      };
+
       stepResults.push({
         step: "semantic_search",
         success: true,
-        duration_ms: semanticDuration,
+        duration_ms: parallelDuration,
         result: { resultsCount: semanticResults.length },
       });
-      logger.info(
-        "context_discovery",
-        "orchestrator",
-        `✅ Semantic Search: ${forms.length} forms, ${formFieldsCount} fields`
-      );
-
-      // Step 3: Terminology Mapping
-      logger.startTimer("step3", "context_discovery", "terminology_mapper");
-      const userTerms = this.extractUserTerms(intentResult);
-      const terminology = await this.runTerminologyMapping(
-        request.customerId,
-        userTerms,
-        logger
-      );
-      const terminologyDuration = logger.endTimer(
-        "step3",
-        "context_discovery",
-        "terminology_mapper",
-        `Mapped ${terminology.length} terms`
-      );
-      metrics.terminologyMapping = {
-        duration: terminologyDuration,
-        mappingsCount: terminology.length,
-      };
       stepResults.push({
         step: "terminology_mapping",
         success: true,
-        duration_ms: terminologyDuration,
+        duration_ms: parallelDuration,
         result: { mappingsCount: terminology.length },
       });
+
       logger.info(
         "context_discovery",
         "orchestrator",
-        `✅ Terminology Mapping: ${terminology.length} mappings`
+        `✅ Parallel Execution Complete: Semantic Search (${forms.length} forms, ${formFieldsCount} fields) + Terminology Mapping (${terminology.length} mappings)`
       );
 
       // Step 4: Join Path Planning
@@ -275,11 +295,27 @@ export class ContextDiscoveryService {
         `[ContextDiscovery] 🧠 Starting intent classification for question: "${request.question.substring(0, 100)}${request.question.length > 100 ? "..." : ""}"`
       );
 
+      // MODEL SELECTION (Task 1.2) - Always use fast tier for intent classification
+      const modelRouter = getModelRouterService();
+      const modelSelection = await modelRouter.selectModel({
+        userSelectedModelId: request.modelId || 'claude-3-5-sonnet-20241022',
+        complexity: 'simple', // Intent classification is always simple
+        taskType: 'intent',
+      });
+
+      console.log(`[ContextDiscovery] 🎯 Model selected for intent classification:`, {
+        selected_model: modelSelection.modelId,
+        user_selected: request.modelId,
+        rationale: modelSelection.rationale,
+        cost_tier: modelSelection.costTier,
+      });
+
       const intentClassifier = getIntentClassifierService();
       const result = await intentClassifier.classifyIntent({
         customerId: request.customerId,
         question: request.question,
-        modelId: request.modelId,
+        modelId: modelSelection.modelId, // Use router-selected model
+        signal: request.signal, // Pass abort signal for early cancellation (Task 1.1.5)
       });
 
       console.log(

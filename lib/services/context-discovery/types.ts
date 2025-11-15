@@ -12,8 +12,10 @@
 export interface ContextDiscoveryRequest {
   customerId: string;
   question: string;
+  userId?: number;  // Optional user ID for audit trail
   timeRange?: TimeRange;
   modelId?: string; // Optional LLM model override (defaults to admin config)
+  signal?: AbortSignal; // Optional abort signal for early cancellation (Task 1.1.5)
 }
 
 /**
@@ -189,6 +191,7 @@ export interface IntentClassificationOptions {
   question: string;
   modelId?: string;
   includedIntentTypes?: IntentType[];
+  signal?: AbortSignal; // Optional abort signal for early cancellation (Task 1.1.5)
 }
 
 /**

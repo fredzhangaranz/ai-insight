@@ -10,6 +10,7 @@ import {
   StarIcon,
 } from "@heroicons/react/24/outline";
 import { AIConfiguration } from "@/lib/services/ai-config.service";
+import { getModelOption } from "@/lib/config/provider-families";
 
 interface ProviderCardProps {
   config: AIConfiguration;
@@ -87,6 +88,22 @@ export function ProviderCard({
             {config.providerType.charAt(0).toUpperCase() +
               config.providerType.slice(1)}
           </p>
+          <div className="mt-1 space-y-1">
+            {config.configData.simpleQueryModelId && (
+              <p className="text-xs text-slate-500">
+                <span className="font-medium">Simple:</span>{" "}
+                {getModelOption(config.configData.simpleQueryModelId)?.name ||
+                  config.configData.simpleQueryModelId}
+              </p>
+            )}
+            {config.configData.complexQueryModelId && (
+              <p className="text-xs text-slate-500">
+                <span className="font-medium">Complex:</span>{" "}
+                {getModelOption(config.configData.complexQueryModelId)?.name ||
+                  config.configData.complexQueryModelId}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

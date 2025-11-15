@@ -1,5 +1,6 @@
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
+import { BaseProvider } from "@/lib/ai/providers/base-provider";
 import { loadDatabaseSchemaContext } from "@/lib/ai/schema-context";
 import {
   GENERATE_QUERY_PROMPT,
@@ -30,14 +31,21 @@ const SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * @param customerId - Customer database ID
  * @param modelId - Optional AI model ID
  * @param clarifications - Optional user-provided clarifications (for follow-up)
+ * @param signal - Optional abort signal for early cancellation (Task 1.1.5)
  * @returns LLM response (SQL or clarification request)
  */
 export async function generateSQLWithLLM(
   context: ContextBundle,
   customerId: string,
   modelId?: string,
-  clarifications?: Record<string, string>
+  clarifications?: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<LLMResponse> {
+  // Check if already aborted before starting expensive operation
+  if (signal?.aborted) {
+    throw new Error("[LLM-SQL-Generator] Operation aborted before starting");
+  }
+
   if (!context) {
     throw new Error("[LLM-SQL-Generator] context is required");
   }
@@ -69,9 +77,12 @@ export async function generateSQLWithLLM(
   console.log(`[LLM-SQL-Generator] 🤖 Using model: ${llmModelId}`);
 
   const provider = await getAIProvider(llmModelId);
+  // Cast to BaseProvider to access complete() method
+  // All providers extend BaseProvider which implements complete()
+  const baseProvider = provider as BaseProvider;
   const apiStart = Date.now();
 
-  const response = await provider.complete({
+  const response = await baseProvider.complete({
     system: GENERATE_QUERY_PROMPT,
     userMessage: userPrompt,
     maxTokens: 4096,

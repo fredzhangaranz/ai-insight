@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
+import { BaseProvider } from "@/lib/ai/providers/base-provider";
 import { generateSQLWithLLM } from "@/lib/services/semantic/llm-sql-generator.service";
 import { AIConfigLoader } from "@/lib/config/ai-config-loader";
 import { aiConfigService } from "@/lib/services/ai-config.service";
@@ -46,22 +47,26 @@ export async function POST(req: NextRequest) {
     // Get default model for customer
     let modelId: string;
     try {
-      const adminConfig = await aiConfigService.getConfig(customerId);
-      if (adminConfig?.defaultLLMModelId) {
-        modelId = adminConfig.defaultLLMModelId;
-      } else {
-        // Fall back to configuration from AIConfigLoader (respects environment)
-        const configLoader = AIConfigLoader.getInstance();
-        const { providers } = await configLoader.getConfiguration();
+      // Get configuration from AIConfigLoader (respects environment)
+      const configLoader = AIConfigLoader.getInstance();
+      const { providers } = await configLoader.getConfiguration();
 
-        const defaultProvider = providers.find((p) => p.isDefault);
-        if (defaultProvider?.configData.modelId) {
-          modelId = defaultProvider.configData.modelId;
-        } else if (providers.length > 0 && providers[0]?.configData.modelId) {
-          modelId = providers[0].configData.modelId;
-        } else {
-          throw new Error("No AI models configured");
-        }
+      const defaultProvider = providers.find((p) => p.isDefault);
+      if (defaultProvider?.configData.complexQueryModelId) {
+        modelId = defaultProvider.configData.complexQueryModelId;
+      } else if (defaultProvider?.configData.modelId) {
+        // Fallback to legacy modelId field
+        modelId = defaultProvider.configData.modelId;
+      } else if (
+        providers.length > 0 &&
+        providers[0]?.configData.complexQueryModelId
+      ) {
+        modelId = providers[0].configData.complexQueryModelId;
+      } else if (providers.length > 0 && providers[0]?.configData.modelId) {
+        // Fallback to legacy modelId field
+        modelId = providers[0].configData.modelId;
+      } else {
+        throw new Error("No AI models configured");
       }
     } catch (error) {
       console.error(
@@ -80,6 +85,10 @@ export async function POST(req: NextRequest) {
     // Get AI provider
     const provider = await getAIProvider(modelId);
 
+    // Cast to BaseProvider to access complete() method
+    // All providers extend BaseProvider which implements complete()
+    const baseProvider = provider as BaseProvider;
+
     // Construct prompt for understanding refinement
     const systemPrompt = buildRefinementSystemPrompt();
     const userMessage = buildRefinementUserMessage(
@@ -90,7 +99,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Call LLM to understand refinement and generate new context/SQL
-    const response = await provider.complete({
+    const response = await baseProvider.complete({
       system: systemPrompt,
       userMessage,
       maxTokens: 2000,
@@ -111,8 +120,21 @@ export async function POST(req: NextRequest) {
         customerId,
         modelId
       );
-      newSql = sqlResult.sql;
-      sqlChanged = newSql !== currentSql;
+      // Check if response is SQL type (not clarification)
+      if (sqlResult.responseType === "sql") {
+        newSql = sqlResult.generatedSql;
+        sqlChanged = newSql !== currentSql;
+      } else {
+        // If clarification is needed, return error
+        return NextResponse.json(
+          {
+            error: "Clarification needed",
+            message: "The refinement requires additional clarification.",
+            clarifications: sqlResult.clarifications,
+          },
+          { status: 400 }
+        );
+      }
     } else if (refinementResult.sqlModifications) {
       // Direct SQL modifications (for simple changes)
       newSql = applyDirectSqlModifications(

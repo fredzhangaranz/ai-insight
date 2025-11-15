@@ -23,8 +23,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { LoadingDots } from "@/app/components/loading-dots";
 import { useLLMConfig } from "@/lib/hooks/use-llm-config";
+import { getProviderFamily } from "@/lib/config/provider-families";
 import {
   PlusIcon,
   PencilIcon,
@@ -71,14 +79,6 @@ const PROVIDER_TEMPLATES: Record<ProviderType, ProviderTemplate> = {
         required: false,
         defaultValue: "https://api.anthropic.com",
       },
-      {
-        key: "modelId",
-        label: "Model ID",
-        type: "text",
-        placeholder: "claude-3-5-sonnet-latest",
-        required: false,
-        defaultValue: "claude-3-5-sonnet-latest",
-      },
     ],
   },
   google: {
@@ -107,14 +107,6 @@ const PROVIDER_TEMPLATES: Record<ProviderType, ProviderTemplate> = {
         required: false,
         defaultValue: "us-central1",
       },
-      {
-        key: "modelId",
-        label: "Model ID",
-        type: "text",
-        placeholder: "gemini-2.5-pro",
-        required: false,
-        defaultValue: "gemini-2.5-pro",
-      },
     ],
   },
   openwebui: {
@@ -133,13 +125,6 @@ const PROVIDER_TEMPLATES: Record<ProviderType, ProviderTemplate> = {
         label: "API Key",
         type: "password",
         placeholder: "your-api-key",
-        required: false,
-      },
-      {
-        key: "modelId",
-        label: "Model ID",
-        type: "text",
-        placeholder: "local-model",
         required: false,
       },
       {
@@ -184,9 +169,15 @@ export default function AIConfigPage() {
   const handleProviderTypeSelect = (providerType: ProviderType) => {
     setSelectedProviderType(providerType);
     const template = PROVIDER_TEMPLATES[providerType];
+    const providerFamily = getProviderFamily(providerType);
 
     // Initialize form with default values
     const initialData: Record<string, string> = {};
+
+    // Set default models from provider family
+    initialData.simpleQueryModelId = providerFamily.defaultSimpleModel;
+    initialData.complexQueryModelId = providerFamily.defaultComplexModel;
+
     template.fields.forEach((field) => {
       if (field.defaultValue) {
         initialData[field.key] = field.defaultValue;
@@ -216,6 +207,14 @@ export default function AIConfigPage() {
     const template = PROVIDER_TEMPLATES[selectedProviderType];
     const errors: Record<string, string> = {};
 
+    // Validate model selections
+    if (!formData.simpleQueryModelId?.trim()) {
+      errors.simpleQueryModelId = "Simple query model is required";
+    }
+    if (!formData.complexQueryModelId?.trim()) {
+      errors.complexQueryModelId = "Complex query model is required";
+    }
+
     template.fields.forEach((field) => {
       if (field.required && !formData[field.key]?.trim()) {
         errors[field.key] = `${field.label} is required`;
@@ -238,6 +237,12 @@ export default function AIConfigPage() {
 
       // Build config data
       const configData: any = {};
+
+      // Add model selections (these are NOT in template.fields)
+      configData.simpleQueryModelId = formData.simpleQueryModelId;
+      configData.complexQueryModelId = formData.complexQueryModelId;
+
+      // Add other provider-specific fields
       template.fields.forEach((field) => {
         if (formData[field.key]) {
           if (field.type === "number") {
@@ -478,6 +483,96 @@ export default function AIConfigPage() {
                         {formErrors.providerName && (
                           <p className="text-sm text-red-600 mt-1">
                             {formErrors.providerName}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Model Selection Dropdowns */}
+                      <div>
+                        <Label htmlFor="simpleQueryModelId">
+                          Simple Query Model
+                          <span className="text-red-500 ml-1">*</span>
+                        </Label>
+                        <p className="text-sm text-slate-600 mb-2">
+                          Used for fast, straightforward queries (intent
+                          classification, simple SQL)
+                        </p>
+                        <Select
+                          value={formData.simpleQueryModelId || ""}
+                          onValueChange={(value) =>
+                            handleInputChange("simpleQueryModelId", value)
+                          }
+                        >
+                          <SelectTrigger
+                            className={
+                              formErrors.simpleQueryModelId
+                                ? "border-red-500"
+                                : ""
+                            }
+                          >
+                            <SelectValue placeholder="Select a model for simple queries" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {selectedProviderType &&
+                              getProviderFamily(
+                                selectedProviderType
+                              ).simpleQueryModels.map((model) => (
+                                <SelectItem key={model.id} value={model.id}>
+                                  {model.name} {model.recommended && "⭐"}
+                                  <span className="text-xs text-slate-500 ml-2">
+                                    {model.description}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {formErrors.simpleQueryModelId && (
+                          <p className="text-sm text-red-600 mt-1">
+                            {formErrors.simpleQueryModelId}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label htmlFor="complexQueryModelId">
+                          Complex Query Model
+                          <span className="text-red-500 ml-1">*</span>
+                        </Label>
+                        <p className="text-sm text-slate-600 mb-2">
+                          Used for complex queries requiring advanced reasoning
+                        </p>
+                        <Select
+                          value={formData.complexQueryModelId || ""}
+                          onValueChange={(value) =>
+                            handleInputChange("complexQueryModelId", value)
+                          }
+                        >
+                          <SelectTrigger
+                            className={
+                              formErrors.complexQueryModelId
+                                ? "border-red-500"
+                                : ""
+                            }
+                          >
+                            <SelectValue placeholder="Select a model for complex queries" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {selectedProviderType &&
+                              getProviderFamily(
+                                selectedProviderType
+                              ).complexQueryModels.map((model) => (
+                                <SelectItem key={model.id} value={model.id}>
+                                  {model.name} {model.recommended && "⭐"}
+                                  <span className="text-xs text-slate-500 ml-2">
+                                    {model.description}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {formErrors.complexQueryModelId && (
+                          <p className="text-sm text-red-600 mt-1">
+                            {formErrors.complexQueryModelId}
                           </p>
                         )}
                       </div>
