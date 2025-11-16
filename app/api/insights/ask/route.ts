@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ThreeModeOrchestrator } from "@/lib/services/semantic/three-mode-orchestrator.service";
 import { getSessionCacheService, type ClarificationSelection } from "@/lib/services/cache/session-cache.service";
+import { MetricsMonitor } from "@/lib/monitoring";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -76,7 +77,9 @@ export async function POST(req: NextRequest) {
     // Initialize orchestrator and execute
     // Pass modelId to orchestrator for model selection
     const orchestrator = new ThreeModeOrchestrator();
+    const orchestrationStart = Date.now();
     const result = await orchestrator.ask(question, customerId, modelId);
+    const totalDurationMs = Date.now() - orchestrationStart;
 
     // If result contains an error, return it with 200 status but include error field
     // This allows the UI to show thinking steps + error message
@@ -108,6 +111,16 @@ export async function POST(req: NextRequest) {
     } else if (result.error) {
       console.log(`[/api/insights/ask] ⏭️ Skipping cache storage (query failed)`);
     }
+
+    const metricsMonitor = MetricsMonitor.getInstance();
+    await metricsMonitor.logQueryPerformanceMetrics({
+      question,
+      customerId,
+      mode: result.mode,
+      totalDurationMs,
+      filterMetrics: result.filterMetrics,
+      clarificationRequested: result.mode === "clarification",
+    });
 
     return NextResponse.json(result);
   } catch (error) {

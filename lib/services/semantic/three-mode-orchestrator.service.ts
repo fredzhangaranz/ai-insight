@@ -12,6 +12,14 @@ import { extractAndFillPlaceholders } from "./template-placeholder.service";
 import { getModelRouterService, type ModelSelectionInput } from "./model-router.service";
 import type { FieldAssumption } from "./sql-generator.types";
 import type { ClarificationRequest, Assumption } from "@/lib/prompts/generate-query.prompt";
+import {
+  collectUnresolvedFilters,
+  buildUnresolvedFilterClarificationId,
+  buildFilterMetricsSummary,
+  type UnresolvedFilterInfo,
+} from "./filter-validator.service";
+import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
+import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -41,6 +49,7 @@ export interface OrchestrationResult {
   mode: QueryMode;
   question: string;
   thinking: ThinkingStep[];
+  filterMetrics?: FilterMetricsSummary;
 
   // SQL execution fields (when mode is NOT clarification)
   sql?: string;
@@ -458,10 +467,18 @@ export class ThreeModeOrchestrator {
             scope: "general",
             metrics: [],
             filters: [],
+            reasoning: "Fallback context",
           },
           forms: [],
-          fields: [],
+          terminology: [],
           joinPaths: [],
+          overallConfidence: 0.5,
+          metadata: {
+            discoveryRunId: "fallback",
+            timestamp: new Date().toISOString(),
+            durationMs: Date.now() - discoveryStart,
+            version: "fallback",
+          },
         };
       }
 
@@ -490,8 +507,44 @@ export class ThreeModeOrchestrator {
               reasoning: context.intent.reasoning,
             },
           },
+          filterMetrics: context.metadata?.filterMetrics,
         };
       }
+
+      const mappedFilters = (context.intent.filters || []) as MappedFilter[];
+      const unresolvedInfos = collectUnresolvedFilters(mappedFilters);
+      const handledFilterIndexes = new Set<number>();
+      const removalClarificationIds = new Set<string>();
+
+      if (clarifications && Object.keys(clarifications).length > 0) {
+        unresolvedInfos.forEach((info) => {
+          const clarId = buildUnresolvedFilterClarificationId(
+            info.filter,
+            info.index
+          );
+          const userSelection = clarifications[clarId];
+          if (userSelection) {
+            handledFilterIndexes.add(info.index);
+            if (userSelection === "__REMOVE_FILTER__") {
+              removalClarificationIds.add(clarId);
+            }
+          }
+        });
+
+        if (handledFilterIndexes.size > 0) {
+          context.intent.filters = mappedFilters
+            .filter((_, idx) => !handledFilterIndexes.has(idx))
+            .map((filter) => ({ ...filter }));
+        }
+      }
+
+      const unresolvedNeedingClarification = unresolvedInfos.filter((info) => {
+        const clarId = buildUnresolvedFilterClarificationId(
+          info.filter,
+          info.index
+        );
+        return !clarifications || !clarifications[clarId];
+      });
 
       contextDiscoveryStep.status = "complete";
       contextDiscoveryStep.duration = Date.now() - discoveryStart;
@@ -499,7 +552,39 @@ export class ThreeModeOrchestrator {
         formsFound: context.forms?.length || 0,
         fieldsFound: context.fields?.length || 0,
         joinPaths: context.joinPaths?.length || 0,
+        unresolvedFilters: unresolvedInfos.length,
       };
+
+      if (unresolvedNeedingClarification.length > 0) {
+        contextDiscoveryStep.message =
+          "Discovering semantic context... (filters unresolved)";
+
+        const unresolvedSummary = buildFilterMetricsSummary(
+          mappedFilters,
+          undefined,
+          unresolvedInfos.length
+        );
+        context.metadata.filterMetrics = unresolvedSummary;
+
+        return {
+          mode: "clarification",
+          question,
+          thinking,
+          requiresClarification: true,
+          clarifications: this.buildUnresolvedClarificationRequests(
+            unresolvedNeedingClarification
+          ),
+          clarificationReasoning: this.buildUnresolvedClarificationReasoning(
+            unresolvedNeedingClarification
+          ),
+          partialContext: {
+            intent: context.intent.type || "query",
+            formsIdentified: context.forms?.map((f) => f.formName) || [],
+            termsUnderstood: [],
+          },
+          filterMetrics: unresolvedSummary,
+        };
+      }
 
       // EXECUTION ORDER STEP 6: Generate SQL (or request clarification)
       // LLM call to convert context into SQL query - this is expensive (3-8s)
@@ -536,6 +621,7 @@ export class ThreeModeOrchestrator {
             message: "Query was canceled",
             step: "sql_generation",
           },
+          filterMetrics: context.metadata?.filterMetrics,
         };
       }
 
@@ -557,11 +643,16 @@ export class ThreeModeOrchestrator {
         cost_tier: modelSelection.costTier,
       });
 
+      const clarificationsForLLM = this.sanitizeClarificationsInput(
+        clarifications,
+        removalClarificationIds
+      );
+
       const llmResponse = await generateSQLWithLLM(
         context,
         customerId,
         modelSelection.modelId, // Use router-selected model instead of user's direct choice
-        clarifications,
+        clarificationsForLLM,
         signal // Pass abort signal for early cancellation (Task 1.1.5)
       );
 
@@ -592,6 +683,7 @@ export class ThreeModeOrchestrator {
           clarifications: llmResponse.clarifications,
           clarificationReasoning: llmResponse.reasoning,
           partialContext: llmResponse.partialContext,
+          filterMetrics: context.metadata?.filterMetrics,
         };
       }
 
@@ -669,6 +761,7 @@ export class ThreeModeOrchestrator {
         executionStrategy: complexity?.strategy as "auto" | "preview" | "inspect",
         // For medium complexity, suggest preview but auto-execute
         requiresPreview: complexity?.complexity === "medium" && complexity?.strategy === "preview",
+        filterMetrics: context.metadata?.filterMetrics,
       };
     } catch (error) {
       thinking[thinking.length - 1].status = "error";
@@ -825,5 +918,73 @@ export class ThreeModeOrchestrator {
 
     // Execute against customer's database
     return await executeCustomerQuery(customerId, fixedSql);
+  }
+
+  private buildUnresolvedClarificationRequests(
+    unresolved: UnresolvedFilterInfo[]
+  ): ClarificationRequest[] {
+    return unresolved.map((info) => {
+      const clarId = buildUnresolvedFilterClarificationId(
+        info.filter,
+        info.index
+      );
+      const phrase =
+        info.filter.userPhrase ||
+        info.filter.field ||
+        `Filter ${info.index + 1}`;
+      const question = `I couldn't map "${phrase}" to a specific semantic field. Which SQL constraint should represent this filter?`;
+
+      return {
+        id: clarId,
+        ambiguousTerm: phrase,
+        question,
+        options: [
+          {
+            id: `${clarId}_remove`,
+            label: "Remove this filter",
+            description: "Proceed without applying this constraint",
+            sqlConstraint: "__REMOVE_FILTER__",
+            isDefault: false,
+          },
+        ],
+        allowCustom: true,
+      };
+    });
+  }
+
+  private buildUnresolvedClarificationReasoning(
+    unresolved: UnresolvedFilterInfo[]
+  ): string {
+    const phrases = unresolved.map(
+      (info) => `"${info.filter.userPhrase || info.filter.field || "filter"}"`
+    );
+    if (phrases.length === 1) {
+      return `I couldn't find a matching database value for ${phrases[0]}. Please clarify or remove this filter.`;
+    }
+    return `I couldn't map the following filters to the database: ${phrases.join(
+      ", "
+    )}. Please clarify or remove them.`;
+  }
+
+  private sanitizeClarificationsInput(
+    clarifications?: Record<string, string>,
+    removalClarifications?: Set<string>
+  ): Record<string, string> | undefined {
+    if (!clarifications) {
+      return undefined;
+    }
+
+    const entries = Object.entries(clarifications).filter(([id, value]) => {
+      if (removalClarifications?.has(id)) {
+        return false;
+      }
+      return value != null && value.trim() !== "";
+    });
+
+    if (entries.length === 0) {
+      return undefined;
+    }
+
+    return Object.fromEntries(entries);
   }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FieldAssumption } from "@/lib/services/semantic/sql-generator.types";
+import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
 
 export interface ThinkingStep {
   id: string;
@@ -43,6 +44,7 @@ export interface InsightResult {
   mode: "template" | "direct" | "funnel" | "clarification";
   question?: string;
   thinking: ThinkingStep[];
+  filterMetrics?: FilterMetricsSummary;
 
   // SQL execution fields (when mode is NOT clarification)
   sql?: string;

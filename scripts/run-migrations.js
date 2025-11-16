@@ -54,6 +54,7 @@ const migrations = [
   "025_remove_nonform_value_table.sql",
   "026_add_error_mode_to_query_history.sql",
   "027_update_ai_config_dual_models.sql",
+  "028_create_query_performance_metrics.sql",
 ];
 
 async function runMigrations() {

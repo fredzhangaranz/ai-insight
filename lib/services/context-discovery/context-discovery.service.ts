@@ -99,6 +99,40 @@ export class ContextDiscoveryService {
         } (confidence: ${intentResult.confidence.toFixed(2)})`
       );
 
+      // Step 1.5: Filter Value Mapping (NEW - Phase 2, Task 2.4)
+      // Map filter values from intent classification using terminology mapper
+      if (intentResult.filters && intentResult.filters.length > 0) {
+        logger.startTimer("step1_5", "context_discovery", "filter_value_mapper");
+        logger.info(
+          "context_discovery",
+          "orchestrator",
+          `🔍 Mapping ${intentResult.filters.length} filter value(s) from semantic database`
+        );
+
+        const terminologyMapper = getTerminologyMapperService();
+        const mappedFilters = await terminologyMapper.mapFilters(
+          intentResult.filters,
+          request.customerId
+        );
+
+        // Replace filters in intentResult with mapped values
+        intentResult.filters = mappedFilters as any; // Type assertion needed due to MappedFilter extending IntentFilter
+
+        const filterDuration = logger.endTimer(
+          "step1_5",
+          "context_discovery",
+          "filter_value_mapper",
+          `Mapped ${mappedFilters.length} filters`
+        );
+
+        const successfulMappings = mappedFilters.filter(f => f.value !== null).length;
+        logger.info(
+          "context_discovery",
+          "orchestrator",
+          `✅ Filter Value Mapping: ${successfulMappings}/${mappedFilters.length} filters successfully mapped`
+        );
+      }
+
       // Step 2 & 3: Semantic Search + Terminology Mapping (PARALLEL EXECUTION)
       // These steps both depend on intentResult but are independent of each other
       // Running them in parallel saves ~0.5s (terminology mapping time)

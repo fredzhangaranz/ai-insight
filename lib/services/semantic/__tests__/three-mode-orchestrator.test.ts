@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ThreeModeOrchestrator } from "../three-mode-orchestrator.service";
 import type { LLMClarificationResponse, LLMSQLResponse } from "@/lib/prompts/generate-query.prompt";
+import { ContextDiscoveryService } from "../../context-discovery/context-discovery.service";
+import { buildUnresolvedFilterClarificationId } from "../filter-validator.service";
 
 // Mock dependencies
 vi.mock("../template-matcher.service", () => ({
@@ -22,7 +24,7 @@ vi.mock("../complexity-detector.service", () => ({
   })),
 }));
 
-vi.mock("../context-discovery/context-discovery.service", () => ({
+vi.mock("../../context-discovery/context-discovery.service", () => ({
   ContextDiscoveryService: vi.fn().mockImplementation(() => ({
     discoverContext: vi.fn(() =>
       Promise.resolve({
@@ -44,6 +46,13 @@ vi.mock("../context-discovery/context-discovery.service", () => ({
         fields: [],
         joinPaths: [],
         terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
       })
     ),
   })),
@@ -64,6 +73,9 @@ vi.mock("../customer-query.service", () => ({
   ),
   validateAndFixQuery: vi.fn((sql: string) => sql),
 }));
+
+const getLatestContextInstance = () =>
+  (ContextDiscoveryService as unknown as vi.Mock).mock.results.at(-1)?.value;
 
 describe("ThreeModeOrchestrator - Clarification Flow", () => {
   let orchestrator: ThreeModeOrchestrator;
@@ -394,6 +406,166 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
         term: "recent",
         assumedValue: "last 30 days",
       });
+    });
+  });
+
+  describe("Unresolved filter clarification flow", () => {
+    const unresolvedFilter = {
+      operator: "equals",
+      userPhrase: "Simple Bandages",
+      field: undefined,
+      value: null,
+    };
+
+    it("should stop before SQL generation when filters remain unresolved", async () => {
+      orchestrator = new ThreeModeOrchestrator();
+      const contextInstance = getLatestContextInstance();
+      expect(contextInstance).toBeDefined();
+      contextInstance.discoverContext.mockResolvedValue({
+        question: "test question",
+        intent: {
+          type: "query",
+          confidence: 0.9,
+          scope: "patient",
+          metrics: ["count"],
+          filters: [unresolvedFilter],
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      const result = await orchestrator.ask("patients with simple bandages", "cust-1");
+
+      expect(result.mode).toBe("clarification");
+      expect(result.clarifications).toHaveLength(1);
+      expect(result.clarifications?.[0].ambiguousTerm).toContain("Simple Bandages");
+      expect(mockGenerateSQLWithLLM).not.toHaveBeenCalled();
+      expect(result.filterMetrics?.unresolvedWarnings).toBe(1);
+      expect(result.filterMetrics?.totalFilters).toBe(1);
+    });
+
+    it("should respect user removal selection for unresolved filters", async () => {
+      orchestrator = new ThreeModeOrchestrator();
+      const contextInstance = getLatestContextInstance();
+      expect(contextInstance).toBeDefined();
+      contextInstance.discoverContext.mockResolvedValue({
+        question: "test question",
+        intent: {
+          type: "query",
+          confidence: 0.9,
+          scope: "patient",
+          metrics: ["count"],
+          filters: [unresolvedFilter],
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      const clarificationId = buildUnresolvedFilterClarificationId(
+        unresolvedFilter as any,
+        0
+      );
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql: "SELECT 1",
+        explanation: "test",
+        confidence: 0.9,
+      };
+
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.askWithClarifications(
+        "patients with simple bandages",
+        "cust-1",
+        {
+          [clarificationId]: "__REMOVE_FILTER__",
+        }
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+      const clarificationsPassed = mockGenerateSQLWithLLM.mock.calls[0][3];
+      expect(clarificationsPassed).toBeUndefined();
+      expect(result.filterMetrics?.totalFilters).toBe(0);
+      expect(result.filterMetrics?.unresolvedWarnings).toBe(0);
+    });
+
+    it("should forward custom constraint selections to SQL generation", async () => {
+      orchestrator = new ThreeModeOrchestrator();
+      const contextInstance = getLatestContextInstance();
+      expect(contextInstance).toBeDefined();
+      contextInstance.discoverContext.mockResolvedValue({
+        question: "test question",
+        intent: {
+          type: "query",
+          confidence: 0.9,
+          scope: "patient",
+          metrics: ["count"],
+          filters: [unresolvedFilter],
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      const clarificationId = buildUnresolvedFilterClarificationId(
+        unresolvedFilter as any,
+        0
+      );
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql: "SELECT 1",
+        explanation: "test",
+        confidence: 0.9,
+      };
+
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const customConstraint = "rpt.Patient.patientType = 'diabetic'";
+
+      const result = await orchestrator.askWithClarifications(
+        "patients with simple bandages",
+        "cust-1",
+        {
+          [clarificationId]: customConstraint,
+        }
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+      const clarificationsPassed = mockGenerateSQLWithLLM.mock.calls[0][3];
+      expect(clarificationsPassed).toEqual({
+        [clarificationId]: customConstraint,
+      });
+      expect(result.filterMetrics?.unresolvedWarnings).toBe(0);
     });
   });
 });

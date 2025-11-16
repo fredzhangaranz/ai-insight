@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ThreeModeOrchestrator } from "@/lib/services/semantic/three-mode-orchestrator.service";
+import { MetricsMonitor } from "@/lib/monitoring";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -41,12 +42,24 @@ export async function POST(req: NextRequest) {
 
     // Initialize orchestrator and execute with clarifications
     const orchestrator = new ThreeModeOrchestrator();
+    const startTime = Date.now();
     const result = await orchestrator.askWithClarifications(
       originalQuestion,
       customerId,
       clarifications,
       modelId
     );
+    const totalDurationMs = Date.now() - startTime;
+
+    const metricsMonitor = MetricsMonitor.getInstance();
+    await metricsMonitor.logQueryPerformanceMetrics({
+      question: originalQuestion,
+      customerId,
+      mode: result.mode,
+      totalDurationMs,
+      filterMetrics: result.filterMetrics,
+      clarificationRequested: result.mode === "clarification",
+    });
 
     return NextResponse.json(result);
   } catch (error) {

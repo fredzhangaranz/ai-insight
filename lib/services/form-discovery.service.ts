@@ -234,6 +234,56 @@ export async function discoverFormMetadata(
 
     const embeddingService = getEmbeddingService();
 
+    // Step 0: Clean all existing semantic index data for this customer
+    // This ensures we don't have stale data (deleted forms/fields/options)
+    logger.startTimer("clean_semantic_index");
+    logger.info(
+      "form_discovery",
+      "cleanup",
+      `Cleaning existing semantic index data for customer ${options.customerId}`
+    );
+
+    // Delete in correct order (options -> fields -> forms) due to foreign key constraints
+    const deleteOptionsResult = await pgPool.query(
+      `
+        DELETE FROM "SemanticIndexOption"
+        WHERE semantic_index_field_id IN (
+          SELECT sif.id
+          FROM "SemanticIndexField" sif
+          JOIN "SemanticIndex" si ON sif.semantic_index_id = si.id
+          WHERE si.customer_id = $1
+        )
+      `,
+      [options.customerId]
+    );
+
+    const deleteFieldsResult = await pgPool.query(
+      `
+        DELETE FROM "SemanticIndexField"
+        WHERE semantic_index_id IN (
+          SELECT id FROM "SemanticIndex" WHERE customer_id = $1
+        )
+      `,
+      [options.customerId]
+    );
+
+    const deleteFormsResult = await pgPool.query(
+      `DELETE FROM "SemanticIndex" WHERE customer_id = $1`,
+      [options.customerId]
+    );
+
+    logger.endTimer(
+      "clean_semantic_index",
+      "form_discovery",
+      "cleanup",
+      `Cleaned ${deleteOptionsResult.rowCount} options, ${deleteFieldsResult.rowCount} fields, ${deleteFormsResult.rowCount} forms`,
+      {
+        optionsDeleted: deleteOptionsResult.rowCount,
+        fieldsDeleted: deleteFieldsResult.rowCount,
+        formsDeleted: deleteFormsResult.rowCount,
+      }
+    );
+
     // Step 1: Fetch forms from customer's Silhouette database
     logger.startTimer("fetch_forms");
     logger.info(
@@ -278,9 +328,10 @@ export async function discoverFormMetadata(
         logger.startTimer(`form_${form.attributeSetKey}`);
 
         // Step 2a: Fetch fields for this form
+        // IMPORTANT: Use form.id (not attributeSetKey) because AttributeType.attributeSetFk references AttributeSet.id
         const fields = await fetchAttributeTypeSummary(
           options.connectionString,
-          form.attributeSetKey
+          form.id
         );
 
         if (fields.length === 0) {

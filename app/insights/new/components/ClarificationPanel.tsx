@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HelpCircle, CheckCircle2, AlertTriangle } from "lucide-react";
 import type { ClarificationRequest } from "@/lib/hooks/useInsights";
@@ -24,8 +24,11 @@ export function ClarificationPanel({
   onSubmit,
   isSubmitting = false,
 }: ClarificationPanelProps) {
-  const [selections, setSelections] = useState<Record<string, string>>(() => {
-    // Pre-select default options
+  const [selections, setSelections] = useState<Record<string, string>>({});
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [customMode, setCustomMode] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
     const defaults: Record<string, string> = {};
     clarifications.forEach((clarification) => {
       const defaultOption = clarification.options.find((opt) => opt.isDefault);
@@ -33,11 +36,10 @@ export function ClarificationPanel({
         defaults[clarification.id] = defaultOption.sqlConstraint;
       }
     });
-    return defaults;
-  });
-
-  const [customValues, setCustomValues] = useState<Record<string, string>>({});
-  const [customMode, setCustomMode] = useState<Record<string, boolean>>({});
+    setSelections(defaults);
+    setCustomValues({});
+    setCustomMode({});
+  }, [clarifications]);
 
   const handleOptionSelect = (clarificationId: string, sqlConstraint: string) => {
     setSelections((prev) => ({

@@ -3,6 +3,7 @@ import * as sql from "mssql";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 
 export type AttributeSetRecord = {
+  id: string;
   attributeSetKey: string;
   name: string;
   description: string | null;
@@ -12,6 +13,10 @@ export type AttributeSetRecord = {
 /**
  * Fetch published Silhouette attribute sets (forms) for customer discovery.
  * See docs/design/semantic_layer/semantic_layer_design.md §6.3.
+ *
+ * IMPORTANT: We fetch both 'id' and 'attributeSetKey' because:
+ * - AttributeType.attributeSetFk references AttributeSet.id (NOT attributeSetKey)
+ * - We must use 'id' for field lookups to find all fields correctly
  */
 export async function fetchAttributeSets(
   connectionString: string
@@ -20,6 +25,7 @@ export async function fetchAttributeSets(
 
   const result = await pool.request().query<AttributeSetRecord>(
     `SELECT
+         id,
          attributeSetKey,
          name,
          description,
@@ -30,6 +36,7 @@ export async function fetchAttributeSets(
   );
 
   return result.recordset.map((row) => ({
+    id: row.id,
     attributeSetKey: row.attributeSetKey,
     name: row.name,
     description: row.description ?? null,
@@ -39,7 +46,7 @@ export async function fetchAttributeSets(
 
 export async function fetchAttributeTypeSummary(
   connectionString: string,
-  attributeSetKey: string
+  attributeSetId: string
 ): Promise<
   Array<{
     id: string;
@@ -52,7 +59,7 @@ export async function fetchAttributeTypeSummary(
 
   const result = await pool
     .request()
-    .input("attributeSetKey", sql.UniqueIdentifier, attributeSetKey)
+    .input("attributeSetId", sql.UniqueIdentifier, attributeSetId)
     .query(
       `SELECT
          at.id,
@@ -61,7 +68,7 @@ export async function fetchAttributeTypeSummary(
          at.variableName
        FROM dbo.AttributeType at
        WHERE at.isDeleted = 0
-         AND at.attributeSetFk = @attributeSetKey
+         AND at.attributeSetFk = @attributeSetId
        ORDER BY at.orderIndex`
     );
 

@@ -28,9 +28,10 @@ const MOCK_RESPONSES = {
     metrics: ["average_healing_rate"],
     filters: [
       {
-        concept: "wound_classification",
-        userTerm: "diabetic wounds",
-        value: "DFU",
+        field: "wound_classification",
+        operator: "equals",
+        userPhrase: "diabetic wounds",
+        value: null,
       },
     ],
     timeRange: { unit: "months" as const, value: 6 },
@@ -52,14 +53,16 @@ const MOCK_RESPONSES = {
     metrics: ["healing_rate", "closure_time"],
     filters: [
       {
-        concept: "wound_classification",
-        userTerm: "diabetic wounds",
-        value: "DFU",
+        field: "wound_classification",
+        operator: "equals",
+        userPhrase: "diabetic wounds",
+        value: null,
       },
       {
-        concept: "wound_classification",
-        userTerm: "arterial wounds",
-        value: "arterial_ulcer",
+        field: "wound_classification",
+        operator: "equals",
+        userPhrase: "arterial wounds",
+        value: null,
       },
     ],
     timeRange: null,
@@ -72,8 +75,10 @@ const MOCK_RESPONSES = {
     metrics: ["infection_risk_score"],
     filters: [
       {
-        concept: "wound_status",
-        userTerm: "high infection risk",
+        field: "wound_status",
+        operator: "equals",
+        userPhrase: "high infection risk",
+        value: null,
       },
     ],
     timeRange: null,
@@ -97,6 +102,23 @@ const MOCK_RESPONSES = {
     timeRange: null,
     confidence: 0.89,
     reasoning: "Question about operational efficiency",
+  },
+  // NEW: Response with single filter (simple bandages use case)
+  simpleBandagesQuery: {
+    type: "outcome_analysis",
+    scope: "patient_cohort",
+    metrics: ["patient_count"],
+    filters: [
+      {
+        field: "wound_type",
+        operator: "equals",
+        userPhrase: "simple bandages",
+        value: null,
+      },
+    ],
+    timeRange: null,
+    confidence: 0.92,
+    reasoning: "Patient listing filtered by wound type",
   },
 };
 
@@ -317,10 +339,10 @@ describe("IntentClassifierService", () => {
       });
 
       const filter = result.filters.find(
-        (f) => f.concept === "wound_classification"
+        (f) => f.field === "wound_classification"
       );
       expect(filter).toBeDefined();
-      expect(filter?.userTerm).toContain("diabetic");
+      expect(filter?.userPhrase).toContain("diabetic");
     });
 
     it("should extract multiple filters", async () => {
@@ -358,6 +380,105 @@ describe("IntentClassifierService", () => {
       });
 
       expect(result.filters.length).toBe(0);
+    });
+  });
+
+  describe("2.3.1 – Filter Value Null Requirement (NEW - Task 1.2)", () => {
+    it("should leave filter.value as null for single filter", async () => {
+      const mockProvider = {
+        complete: vi
+          .fn()
+          .mockResolvedValueOnce(
+            JSON.stringify(MOCK_RESPONSES.simpleBandagesQuery)
+          ),
+      };
+      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+
+      const result = await service.classifyIntent({
+        customerId: "TEST",
+        question: "Show me patients with simple bandages",
+      });
+
+      expect(result.filters).toHaveLength(1);
+      expect(result.filters[0].value).toBeNull();
+      expect(result.filters[0].userPhrase).toBe("simple bandages");
+      expect(result.filters[0].field).toBe("wound_type");
+      expect(result.filters[0].operator).toBe("equals");
+    });
+
+    it("should leave all filter values null for multiple filters", async () => {
+      const mockProvider = {
+        complete: vi
+          .fn()
+          .mockResolvedValueOnce(
+            JSON.stringify(MOCK_RESPONSES.cohortComparison)
+          ),
+      };
+      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+
+      const result = await service.classifyIntent({
+        customerId: "TEST",
+        question: "Show patients with diabetic wounds or arterial wounds",
+      });
+
+      result.filters.forEach((filter) => {
+        expect(filter.value).toBeNull();
+        expect(filter.userPhrase).toBeDefined();
+        expect(filter.field).toBeDefined();
+        expect(filter.operator).toBeDefined();
+      });
+    });
+
+    it("should populate userPhrase with exact user text", async () => {
+      const mockProvider = {
+        complete: vi
+          .fn()
+          .mockResolvedValueOnce(
+            JSON.stringify(MOCK_RESPONSES.simpleBandagesQuery)
+          ),
+      };
+      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+
+      const result = await service.classifyIntent({
+        customerId: "TEST",
+        question: "Find visits with simple bandages",
+      });
+
+      expect(result.filters[0].userPhrase).toBe("simple bandages");
+      expect(result.filters[0].value).toBeNull();
+    });
+
+    it("should handle operators correctly with null values", async () => {
+      const mockProvider = {
+        complete: vi.fn().mockResolvedValueOnce(
+          JSON.stringify({
+            type: "outcome_analysis",
+            scope: "patient_cohort",
+            metrics: ["patient_count"],
+            filters: [
+              {
+                field: "visit_count",
+                operator: "greater_than",
+                userPhrase: "more than 5 visits",
+                value: null,
+              },
+            ],
+            timeRange: null,
+            confidence: 0.90,
+            reasoning: "Filter by visit count",
+          })
+        ),
+      };
+      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+
+      const result = await service.classifyIntent({
+        customerId: "TEST",
+        question: "Show patients with more than 5 visits",
+      });
+
+      expect(result.filters[0].operator).toBe("greater_than");
+      expect(result.filters[0].value).toBeNull();
+      expect(result.filters[0].userPhrase).toBe("more than 5 visits");
     });
   });
 
@@ -504,6 +625,71 @@ describe("IntentClassifierService", () => {
 
       expect(validation.valid).toBe(false);
       expect(validation.error).toContain("metrics");
+    });
+
+    // NEW: Filter structure validation tests (Task 1.2)
+    it("should reject filter missing 'field' property", () => {
+      const invalid = {
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        filters: [{ operator: "equals", userPhrase: "test", value: null }],
+      };
+      const validation = validateIntentClassificationResponse(invalid);
+
+      expect(validation.valid).toBe(false);
+      expect(validation.error).toContain("field");
+    });
+
+    it("should reject filter missing 'operator' property", () => {
+      const invalid = {
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        filters: [
+          { field: "wound_type", userPhrase: "test", value: null },
+        ],
+      };
+      const validation = validateIntentClassificationResponse(invalid);
+
+      expect(validation.valid).toBe(false);
+      expect(validation.error).toContain("operator");
+    });
+
+    it("should reject filter missing 'userPhrase' property", () => {
+      const invalid = {
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        filters: [{ field: "wound_type", operator: "equals", value: null }],
+      };
+      const validation = validateIntentClassificationResponse(invalid);
+
+      expect(validation.valid).toBe(false);
+      expect(validation.error).toContain("userPhrase");
+    });
+
+    it("should reject filter with non-null value", () => {
+      const invalid = {
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        filters: [
+          {
+            field: "wound_type",
+            operator: "equals",
+            userPhrase: "simple bandages",
+            value: "Simple Bandage", // ❌ Should be null
+          },
+        ],
+      };
+      const validation = validateIntentClassificationResponse(invalid);
+
+      expect(validation.valid).toBe(false);
+      expect(validation.error).toContain("value");
+      expect(validation.error).toContain("must be null");
+    });
+
+    it("should accept filter with null value", () => {
+      const valid = {
+        ...MOCK_RESPONSES.simpleBandagesQuery,
+      };
+      const validation = validateIntentClassificationResponse(valid);
+
+      expect(validation.valid).toBe(true);
+      expect(validation.result?.filters[0].value).toBeNull();
     });
   });
 

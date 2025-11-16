@@ -16,6 +16,11 @@ import type {
   TerminologyMapping,
 } from "../context-discovery/types";
 import { executeCustomerQuery } from "./customer-query.service";
+import {
+  getFilterValidatorService,
+  buildFilterMetricsSummary,
+} from "./filter-validator.service";
+import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
 
 const schemaCache = new Map<string, { schema: string; timestamp: number }>();
 const SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -65,13 +70,101 @@ export async function generateSQLWithLLM(
 
   const startTime = Date.now();
 
+  let latestValidation: ValidationResult | undefined;
+
+  // Step 0: Validate filter values (Phase 2, Task 3.2)
+  // Ensure all filter values exist in SemanticIndexOption before SQL generation
+  if (context.intent.filters && context.intent.filters.length > 0) {
+    console.log(
+      `[LLM-SQL-Generator] 🔍 Validating ${context.intent.filters.length} filter value(s)`
+    );
+
+    const validator = getFilterValidatorService();
+    let validation = await validator.validateFilterValues(
+      context.intent.filters as MappedFilter[],
+      customerId
+    );
+
+    if (!validation.valid) {
+      console.error(
+        "[LLM-SQL-Generator] Filter validation failed:",
+        validation.errors
+      );
+
+      // Attempt auto-correction for warnings (case mismatches)
+      const corrected = validator.autoCorrectFilters(
+        context.intent.filters as MappedFilter[],
+        validation.errors
+      );
+
+      // Re-validate after correction
+      const revalidation = await validator.validateFilterValues(
+        corrected,
+        customerId
+      );
+
+      if (!revalidation.valid) {
+        // Still invalid after correction - throw error
+        const errorMessages = revalidation.errors
+          .filter((e) => e.severity === "error")
+          .map((e) => e.message)
+          .join("; ");
+
+        throw new Error(
+          `[LLM-SQL-Generator] Invalid filter values: ${errorMessages}`
+        );
+      }
+
+      validation = revalidation;
+      // Use corrected filters
+      console.log(
+        `[LLM-SQL-Generator] ✅ Auto-corrected ${validation.errors.filter((e) => e.severity === "warning").length} filter value(s)`
+      );
+      context.intent.filters = corrected as any;
+    } else {
+      console.log(
+        `[LLM-SQL-Generator] ✅ All ${context.intent.filters.length} filter value(s) validated successfully`
+      );
+    }
+
+    if (validation.unresolvedWarnings > 0) {
+      console.warn(
+        `[LLM-SQL-Generator] ⚠️ ${validation.unresolvedWarnings} filter(s) skipped because they require clarification`
+      );
+    }
+
+    latestValidation = validation;
+  }
+
+  const finalizedFilters =
+    ((context.intent.filters as MappedFilter[]) || []) as MappedFilter[];
+  context.metadata.filterMetrics = buildFilterMetricsSummary(
+    finalizedFilters,
+    latestValidation
+  );
+
   const schemaDocumentation = safeLoadSchemaDocumentation();
+
+  // DEBUG: Log filters before building prompt
+  console.log('[LLM-SQL-Generator] 🔍 Filters being sent to LLM:', JSON.stringify(context.intent.filters, null, 2));
+
   const userPrompt = await buildUserPrompt(
     context,
     schemaDocumentation,
     customerId,
     clarifications
   );
+
+  // DEBUG: Log formatted filters section
+  console.log('[LLM-SQL-Generator] 📋 Formatted filters in prompt:');
+  console.log(formatFiltersSection(context.intent.filters));
+
+  // DEBUG: Log terminology section
+  console.log('[LLM-SQL-Generator] 📋 Terminology mappings:', JSON.stringify(context.terminology, null, 2));
+
+  // DEBUG: Log full user prompt to see what LLM receives
+  console.log('[LLM-SQL-Generator] 📄 FULL USER PROMPT (first 2000 chars):');
+  console.log(userPrompt.substring(0, 2000));
 
   const llmModelId = modelId?.trim() || DEFAULT_AI_MODEL_ID;
   console.log(`[LLM-SQL-Generator] 🤖 Using model: ${llmModelId}`);
@@ -156,7 +249,17 @@ async function buildUserPrompt(
 
   prompt += formatFiltersSection(intent.filters);
   prompt += formatFormsSection(context.forms || []);
-  prompt += formatTerminologySection(context.terminology || []);
+
+  // IMPORTANT: Skip terminology section if filters have values
+  // Filters are the source of truth after terminology mapping
+  // Including both causes LLM confusion (filters say "Simple Bandage", terminology says "Compression Bandage")
+  const hasFilterValues = intent.filters?.some((f: any) => f.value);
+  if (!hasFilterValues) {
+    prompt += formatTerminologySection(context.terminology || []);
+  } else {
+    console.log('[LLM-SQL-Generator] ⏩ Skipping terminology section - filters already have values');
+  }
+
   prompt += formatJoinPathsSection(context.joinPaths || []);
 
   prompt += `# Database Schema Context (Documentation)\n\n`;
@@ -208,12 +311,19 @@ function formatFiltersSection(
 
   let section = `**Filters:**\n`;
   for (const filter of filters) {
-    const concept = filter.concept || "unknown";
-    const userTerm = filter.userTerm || "unknown";
-    const value = filter.value ? ` = "${filter.value}"` : "";
-    section += `- ${concept}: ${userTerm}${value}\n`;
+    const field = filter.field || "unassigned";
+    const userPhrase = filter.userPhrase || "unknown";
+    const value = filter.value || null;
+    const operator = filter.operator || "equals";
+
+    // Format: Field: userPhrase → value (operator)
+    if (value) {
+      section += `- ${field}: "${userPhrase}" → **"${value}"** (${operator})\n`;
+    } else {
+      section += `- ${field}: "${userPhrase}" (${operator}, value not resolved)\n`;
+    }
   }
-  section += `\n`;
+  section += `\n**IMPORTANT:** Use the exact value shown after → in your SQL WHERE clause. Do NOT modify or substitute these values.\n\n`;
 
   return section;
 }

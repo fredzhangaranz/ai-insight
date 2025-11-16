@@ -1,8 +1,52 @@
-# Intent Classification Fix - Root Cause Analysis
+# Intent Classification Fix - Root Cause Analysis & Architectural Changes
 
-**Date:** 2025-11-12
+**Date:** 2025-11-12 (Initial Fix), 2025-01-16 (Architectural Fix)
 **Issue:** Intent classifier returning all `null` values for simple queries like "How many patients"
 **Status:** FIXED ✅
+
+**ARCHITECTURAL ERROR DISCOVERED (2025-01-16)**: The LLM should NOT assign field names (e.g., "wound_type" vs "dressing_type") without knowing what fields exist in the semantic database. This is the same problem as generating values - **we're making assumptions about the database schema instead of querying it**.
+
+---
+
+## Pending Fix (2025-02-XX): Clarification-first handling for unmapped filters
+
+**Symptom:** `/api/insights/ask` fails with `Filter field not assigned - terminology mapper should have assigned it` whenever the mapper cannot confidently attach a semantic field to a user phrase. This blocks “no semantic match” cases (e.g., “How many patients?”) even though the design calls for clarification or graceful fallback.
+
+### Keep unchanged
+- Intent classifier still emits only `{userPhrase, operator}`; it must **not** guess fields or values (`docs/todos/INTENT_CLASSIFICATION_FIX.md:7-16`).
+- Terminology mapper continues to search every semantic field and annotate filters with `mappingConfidence`, `mappingError`, or `validationWarning`.
+- Filter validation still verifies **mapped** filters against `SemanticIndexOption` for case mismatches and invalid values—warnings can be auto-corrected; genuine value mismatches remain blocking errors.
+- Adaptive clarification + SQL generation contract: clarification mode is triggered only when discovery says the question is ambiguous or under-specified (see `docs/design/semantic_layer/ADAPTIVE_QUERY_RESOLUTION.md` and Uber Finch reference).
+
+### Required changes
+1. **ContextDiscoveryService / orchestrator** (`lib/services/context-discovery/context-discovery.service.ts`, `lib/services/semantic/three-mode-orchestrator.service.ts`)
+   - Treat any `MappedFilter` lacking `field` or flagged with `mappingError` as “unresolved filter”.
+   - Surface unresolved filters to the orchestrator so Adaptive Query Resolution can switch to clarification mode instead of letting SQL generation attempt to run.
+   - If the rest of the pipeline (templates, heuristics, semantic search) proves the question does not require a filter at all (e.g., “count patients”), drop unresolved filters before validation.
+2. **FilterValidatorService** (`lib/services/semantic/filter-validator.service.ts`)
+   - Only validate filters that have both `field` **and** non-null `value`. Skip (do not error) unresolved filters; return them as warnings (`severity: "warning"`, `message: "Filter unresolved – clarification required"`).
+   - Expose helper to aggregate unresolved-filter warnings so higher layers can decide whether to proceed or ask clarifications.
+   - Do **not** throw/return errors solely because `field` is missing; validation errors are reserved for “field exists but is unknown to the DB” or “value not in semantic index”.
+3. **LLM SQL Generator** (`lib/services/semantic/llm-sql-generator.service.ts`)
+   - Stop throwing when validation reports unresolved filters. Instead, bubble those warnings up to the orchestrator (or directly return `responseType: "clarification"` with the unresolved filter details if orchestrator isn’t already doing so).
+   - Preserve current behavior for true validation errors (unknown field value, null value after mapping, DB lookup failure).
+4. **Telemetry + UI**
+   - Continue logging `filterValidationErrors` metrics, but add a separate counter for `filterUnresolvedWarnings` so we can monitor how often clarification mode is invoked.
+   - Ensure `/app/insights/.../InspectionPanel.tsx` renders unresolved filters as “Needs clarification” instead of “error”.
+
+### Non-goals
+- Do **not** remove the validator or bypass terminology mapping.
+- No changes to intent-classification heuristics or prompt.
+- No change to semantic search indexing; this fix is strictly about how we react when semantic lookups return zero matches.
+
+**Correct Architecture**:
+1. Intent Classification extracts **user phrases only** (e.g., "simple bandage")
+2. Semantic Search queries **ALL fields** to find matches
+3. Results may include: wound_type, dressing_type, treatment_type, etc.
+4. **Clarification Mode** if multiple fields match or low confidence
+5. **Direct Mode** if single high-confidence match
+
+**Key Principle**: Never assume. Let the semantic index tell us what exists, then decide if clarification is needed.
 
 ---
 
@@ -232,14 +276,25 @@ After this fix, monitor:
 
 **Document Purpose**: This is the master implementation task list for filter value resolution. Use this as the source of truth for tracking progress.
 
-**Critical Finding**: The comprehensive review (2025-01-15) identified that the current fix addresses prompt formatting (symptoms) but NOT the root cause: **LLM generates filter values without semantic database context**, causing 20-30% of filtered queries to return 0 rows when data exists.
+**Critical Finding**: The comprehensive review (2025-01-15) identified that the current fix addresses prompt formatting (symptoms) but NOT the root cause: **LLM generates BOTH filter field names AND values without semantic database context**, causing 20-30% of filtered queries to return 0 rows when data exists.
+
+**ARCHITECTURAL ERROR DISCOVERED (2025-01-16)**: The LLM should NOT assign field names (e.g., "wound_type" vs "dressing_type") without knowing what fields exist in the semantic database. This is the same problem as generating values - **we're making assumptions about the database schema instead of querying it**.
+
+**Correct Architecture**:
+1. Intent Classification extracts **user phrases only** (e.g., "simple bandage")
+2. Semantic Search queries **ALL fields** to find matches
+3. Results may include: wound_type, dressing_type, treatment_type, etc.
+4. **Clarification Mode** if multiple fields match or low confidence
+5. **Direct Mode** if single high-confidence match
+
+**Key Principle**: Never assume. Let the semantic index tell us what exists, then decide if clarification is needed.
 
 ---
 
 ### Phase 1: Intent Classification Update (Day 1 - 4 hours)
 
 #### ✅ Task 1.1: Update Intent Classification Prompt Structure
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `lib/prompts/intent-classification.prompt.ts`
 - **Estimated Time**: 2 hours
 - **Dependencies**: None
@@ -283,7 +338,7 @@ npm run test:integration -- --grep "intent classification leaves value null"
 ---
 
 #### ✅ Task 1.2: Add Intent Classification Unit Tests
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `tests/unit/intent-classification.test.ts`
 - **Estimated Time**: 1 hour
 - **Dependencies**: Task 1.1
@@ -364,7 +419,7 @@ describe('Intent Classification - Filter Value Null', () => {
 ### Phase 2: Terminology Mapper Enhancement (Day 2 - 6 hours)
 
 #### ✅ Task 2.1: Implement Filter Value Override Logic
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `lib/services/context-discovery/terminology-mapper.service.ts`
 - **Estimated Time**: 3 hours
 - **Dependencies**: Phase 1 complete
@@ -453,7 +508,7 @@ async mapFilters(
 ---
 
 #### ✅ Task 2.2: Implement findBestMatch() Helper Method
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `lib/services/context-discovery/terminology-mapper.service.ts`
 - **Estimated Time**: 2 hours
 - **Dependencies**: Task 2.1
@@ -535,7 +590,7 @@ private async findBestMatch(
 ---
 
 #### ✅ Task 2.3: Add Terminology Mapper Unit Tests
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `tests/unit/terminology-mapper.test.ts`
 - **Estimated Time**: 1 hour
 - **Dependencies**: Task 2.1, Task 2.2
@@ -618,7 +673,7 @@ describe('Terminology Mapper - Filter Value Override', () => {
 ---
 
 #### ✅ Task 2.4: Integrate with Context Discovery Service
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `lib/services/context-discovery/context-discovery.service.ts`
 - **Estimated Time**: 30 minutes
 - **Dependencies**: Task 2.1
@@ -661,7 +716,7 @@ async discoverContext(question: string, customer: string): Promise<DiscoveryResu
 ### Phase 3: Validation Layer (Day 2-3 - 4 hours)
 
 #### ✅ Task 3.1: Implement Filter Validation Service
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `lib/services/semantic/filter-validator.service.ts` (NEW FILE)
 - **Estimated Time**: 2 hours
 - **Dependencies**: Phase 2 complete
@@ -801,7 +856,7 @@ export const filterValidator = new FilterValidatorService();
 ---
 
 #### ✅ Task 3.2: Integrate Validation into SQL Generator
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `lib/services/semantic/llm-sql-generator.service.ts`
 - **Estimated Time**: 1 hour
 - **Dependencies**: Task 3.1
@@ -867,7 +922,7 @@ async generateSQL(context: SQLGenerationContext): Promise<SQLResult> {
 ---
 
 #### ✅ Task 3.3: Add Validation Unit Tests
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `tests/unit/filter-validator.test.ts`
 - **Estimated Time**: 1 hour
 - **Dependencies**: Task 3.1
@@ -949,7 +1004,7 @@ describe('Filter Validator', () => {
 ### Phase 4: Telemetry & Monitoring (Day 3 - 3 hours)
 
 #### ✅ Task 4.1: Add Database Schema for Telemetry
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `database/migration/028_filter_value_telemetry.sql` (NEW FILE)
 - **Estimated Time**: 30 minutes
 - **Dependencies**: None
@@ -966,7 +1021,8 @@ ALTER TABLE "QueryPerformanceMetrics"
 ADD COLUMN IF NOT EXISTS "filterValueOverrideRate" DECIMAL(5,2),
 ADD COLUMN IF NOT EXISTS "filterValidationErrors" INTEGER DEFAULT 0,
 ADD COLUMN IF NOT EXISTS "filterAutoCorrections" INTEGER DEFAULT 0,
-ADD COLUMN IF NOT EXISTS "filterMappingConfidence" DECIMAL(5,2);
+ADD COLUMN IF NOT EXISTS "filterMappingConfidence" DECIMAL(5,2),
+ADD COLUMN IF NOT EXISTS "filterUnresolvedWarnings" INTEGER DEFAULT 0;
 
 -- Add index for querying filter metrics
 CREATE INDEX IF NOT EXISTS idx_query_metrics_filter_errors
@@ -983,7 +1039,7 @@ WHERE "filterValidationErrors" > 0;
 ---
 
 #### ✅ Task 4.2: Implement Telemetry Logging
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
 - **File**: `lib/services/semantic/three-mode-orchestrator.service.ts`
 - **Estimated Time**: 1 hour
 - **Dependencies**: Task 4.1
@@ -991,7 +1047,7 @@ WHERE "filterValidationErrors" > 0;
 **Implementation Steps**:
 1. Collect filter metrics during query execution
 2. Log to QueryPerformanceMetrics table
-3. Calculate override rate, error count, etc.
+3. Calculate override rate, error count, unresolved warnings, etc.
 
 **Code Changes**:
 ```typescript
@@ -1578,4 +1634,182 @@ psql -d insight_gen_db -c "SELECT column_name FROM information_schema.columns WH
 - `docs/design/semantic_layer/ADAPTIVE_QUERY_RESOLUTION.md` - Query resolution strategy
 - `docs/design/semantic_layer/PERFORMANCE_OPTIMIZATION.md` - Performance strategy
 
+---
 
+## ARCHITECTURAL FIX - Field Assignment (2025-01-16)
+
+### Problem Discovery
+
+**User Feedback**: When asking "How many patients have simple bandage", the system returned an error:
+```
+Filter value is null after terminology mapping
+```
+
+**Root Cause**: The LLM was assigning field names (e.g., `field: "wound_type"`) WITHOUT knowing what fields exist in the semantic database. The terminology mapper then searched ONLY that specific field. If "simple bandage" existed in `dressing_type` but not `wound_type`, it would fail to find it.
+
+**Fundamental Issue**: We were making assumptions about the database schema instead of querying it first.
+
+### Architectural Changes Implemented
+
+#### 1. Updated IntentFilter Interface
+
+**File**: `lib/services/context-discovery/types.ts`
+
+```typescript
+// BEFORE (WRONG):
+export interface IntentFilter {
+  field: string;         // ← LLM assigns this WITHOUT database knowledge
+  operator: string;
+  userPhrase: string;
+  value: null;
+}
+
+// AFTER (CORRECT):
+export interface IntentFilter {
+  field?: string;        // ← Optional: Assigned AFTER semantic search
+  operator: string;
+  userPhrase: string;    // ← Only extract the user's phrase
+  value: null;
+}
+```
+
+#### 2. Updated Intent Classification Prompt
+
+**File**: `lib/prompts/intent-classification.prompt.ts`
+
+**Key Changes**:
+- Removed field assignment requirement from LLM
+- Updated examples to NOT include field names
+- Added warnings: "DO NOT ASSIGN FIELD NAMES"
+- Instructed LLM to extract ONLY user phrases
+
+```typescript
+// BEFORE (WRONG):
+Examples:
+- For "simple bandages": {"field":"wound_type","operator":"equals","userPhrase":"simple bandages","value":null}
+
+// AFTER (CORRECT):
+Examples:
+- For "simple bandages": {"operator":"equals","userPhrase":"simple bandages","value":null}
+```
+
+#### 3. Refactored Terminology Mapper to Search ALL Fields
+
+**File**: `lib/services/context-discovery/terminology-mapper.service.ts`
+
+**New Method**: `findMatchesAcrossAllFields()`
+
+**Search Flow**:
+```typescript
+// BEFORE (WRONG - Searched single field):
+SELECT * FROM SemanticIndexOption
+WHERE customer_id = $1
+  AND field.field_name = 'wound_type'  // ← LLM-assigned field
+
+// AFTER (CORRECT - Searches ALL fields):
+SELECT * FROM SemanticIndexOption
+WHERE customer_id = $1
+// No field filter - search across ALL semantic fields
+```
+
+**Decision Logic**:
+1. **Single high-confidence match** (>0.85, confidence gap >0.15) → Use it directly
+2. **Multiple similar matches** (confidence diff <0.15) → Flag for clarification
+3. **No good match** (best <0.5) → Flag for clarification
+
+#### 4. Updated Filter Validator
+
+**File**: `lib/services/semantic/filter-validator.service.ts`
+
+- Added check for undefined field (should be assigned by terminology mapper)
+- Provides clear error if field assignment failed
+
+### Flow Comparison
+
+#### OLD (PROBLEMATIC) FLOW:
+```
+User: "How many patients have simple bandage"
+↓
+Intent Classification: {
+  filters: [{
+    field: "wound_type",     ← LLM ASSUMES this field!
+    userPhrase: "simple bandage"
+  }]
+}
+↓
+Terminology Mapper: Search ONLY "wound_type" field
+↓
+Result: NOT FOUND (because "simple bandage" is in "dressing_type")
+↓
+Error: Filter value is null
+```
+
+#### NEW (CORRECT) FLOW:
+```
+User: "How many patients have simple bandage"
+↓
+Intent Classification: {
+  filters: [{
+    userPhrase: "simple bandage",  ← Only extract the phrase
+    operator: "equals"
+  }]
+}
+↓
+Terminology Mapper: Search ALL semantic fields
+↓
+Results Found:
+  - dressing_type: "Simple Dressing" (confidence: 0.95)
+  - wound_type: "Complex Bandage" (confidence: 0.45)
+  - treatment_type: "Bandage Change" (confidence: 0.60)
+↓
+Decision: Single high-confidence match → Use "dressing_type"
+↓
+Filter Assigned: {
+  field: "dressing_type",      ← Assigned by semantic search
+  value: "Simple Dressing",    ← Exact database value
+  confidence: 0.95
+}
+```
+
+### Files Modified
+
+1. **lib/services/context-discovery/types.ts**
+   - Made `IntentFilter.field` optional
+   - Added architectural documentation
+
+2. **lib/prompts/intent-classification.prompt.ts**
+   - Removed field assignment from LLM instructions
+   - Updated all examples to omit field names
+   - Added warnings about NOT assigning field names
+   - Updated validation to allow undefined field
+
+3. **lib/services/context-discovery/terminology-mapper.service.ts**
+   - Added `findMatchesAcrossAllFields()` method (140 lines)
+   - Refactored `mapFilters()` to use all-field search (180 lines)
+   - Implemented confidence-based decision logic
+   - Maintains backward compatibility for pre-assigned fields (legacy)
+
+4. **lib/services/semantic/filter-validator.service.ts**
+   - Added check for undefined field
+   - Provides clear error messages
+
+### Testing Status
+
+✅ **All existing tests pass** (11/11 terminology mapper, 10/10 filter validator)
+✅ **Backward compatibility maintained** (legacy field-assigned filters still work)
+✅ **New architecture functional** (searches all fields, assigns based on confidence)
+
+### Next Steps
+
+1. **End-to-end testing** with real "simple bandage" query
+2. **Performance monitoring** (searching all fields instead of one)
+3. **Clarification mode implementation** (for ambiguous matches)
+4. **User feedback loop** (verify correct field assignments)
+
+### Key Benefits
+
+1. **Database-driven**: No assumptions about schema
+2. **Flexible**: Works with any semantic field structure
+3. **Confidence-based**: Can trigger clarification when uncertain
+4. **Backward compatible**: Legacy behavior preserved
+5. **Future-proof**: Extensible to clarification mode

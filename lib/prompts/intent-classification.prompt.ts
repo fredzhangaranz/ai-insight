@@ -33,7 +33,7 @@ Given a user question, you must extract:
 1. **Intent Type**: The primary analytical goal
 2. **Scope**: Whether analyzing a patient cohort, individual patient, or aggregate
 3. **Metrics**: Key measurements to calculate
-4. **Filters**: Data constraints (e.g., wound type, status, location)
+4. **Filters**: Data constraints (e.g., wound type, status, location) - structure ONLY, values populated later
 5. **Time Range**: Optional period filter (e.g., "last 6 months")
 
 ## Intent Types
@@ -56,14 +56,17 @@ Given a user question, you must extract:
 **operational_metrics** - Questions about operational efficiency
   Examples: "How many assessments per day?", "Assessment frequency per patient"
 
-## Filter Categories
-Common semantic concepts for wound care:
-- **wound_classification**: DFU (Diabetic Foot Ulcer), VLU (Venous Leg Ulcer), arterial, mixed, pressure ulcer, etc.
-- **wound_status**: Active, healing, closed, chronic, acute
-- **infection_status**: Infected, uninfected, risk_of_infection
-- **body_location**: Lower leg, foot, heel, thigh, upper limb, etc.
-- **patient_type**: Diabetic, vascular, elderly, immunocompromised
-- **clinic_unit**: Type of clinic providing care (wound clinic, vascular, podiatry, etc.)
+## Common Healthcare Concepts (For Reference Only)
+These are examples of semantic concepts that might exist in the database.
+DO NOT use these to assign field names - they are only for understanding user intent.
+
+Common wound care concepts:
+- Wound classifications: DFU (Diabetic Foot Ulcer), VLU (Venous Leg Ulcer), arterial, mixed, pressure ulcer
+- Wound status: Active, healing, closed, chronic, acute
+- Infection status: Infected, uninfected, risk_of_infection
+- Body locations: Lower leg, foot, heel, thigh, upper limb
+- Patient types: Diabetic, vascular, elderly, immunocompromised
+- Clinic units: Wound clinic, vascular, podiatry
 
 ## JSON Response Format
 
@@ -73,10 +76,29 @@ JSON must include these fields:
 - type: One of outcome_analysis, trend_analysis, cohort_comparison, risk_assessment, quality_metrics, operational_metrics
 - scope: One of patient_cohort, individual_patient, aggregate
 - metrics: Array of metric names
-- filters: Array of filter objects 
+- filters: Array of filter objects with EXACT structure below
 - timeRange: null or object with unit (days/weeks/months/years) and number value
 - confidence: number between 0.0 and 1.0
 - reasoning: string explanation
+
+## Filter Structure (CRITICAL - ARCHITECTURAL CHANGE)
+
+⚠️ DO NOT ASSIGN FIELD NAMES! The semantic search will determine the correct field by searching the database.
+
+For each filter, provide ONLY these fields:
+- "operator": comparison operator ("equals", "contains", "greater_than", "less_than", "in")
+- "userPhrase": the EXACT phrase from user's question (e.g., "simple bandages", "diabetic wounds")
+- "value": null (ALWAYS null - terminology mapper will populate from database)
+
+⚠️ CRITICAL:
+- NEVER include a "field" property - the semantic search will assign it based on database lookup
+- NEVER generate the "value" field - always set to null
+- ONLY extract the user's exact phrase and the logical operator
+
+Examples:
+- For "simple bandages": {"operator":"equals","userPhrase":"simple bandages","value":null}
+- For "diabetic wounds": {"operator":"equals","userPhrase":"diabetic wounds","value":null}
+- For "patients with pressure ulcers": {"operator":"equals","userPhrase":"pressure ulcers","value":null}
 
 For "how many patients" respond with:
 {"type":"outcome_analysis","scope":"aggregate","metrics":["patient_count"],"filters":[],"timeRange":null,"confidence":0.95,"reasoning":"Simple patient count"}
@@ -88,9 +110,11 @@ For "how many patients" respond with:
    - Parse natural language: "past X days/weeks/months/years"
 
 2. **Identify Filters**: Find references to data constraints
-   - Match against filter categories listed above
-   - Preserve the user's exact phrasing in "userTerm"
-   - Provide semantic category in "concept"
+   - Extract the user's EXACT phrase (e.g., "simple bandage", "diabetic wounds", "pressure ulcers")
+   - Choose appropriate "operator" (equals, contains, greater_than, less_than, in)
+   - DO NOT assign a "field" name - the semantic search will determine the correct field from the database
+   - ALWAYS set "value" to null - DO NOT generate filter values
+   - IMPORTANT: Let the database tell us what fields exist, don't assume!
 
 3. **Determine Metrics**: Extract measurement goals
    - Healing rate, infection rate, closure rate, assessment frequency, etc.
@@ -122,17 +146,21 @@ Example 1 - Simple count (MOST COMMON):
 Input: "How many patients?"
 Output: {"type":"outcome_analysis","scope":"aggregate","metrics":["patient_count"],"filters":[],"timeRange":null,"confidence":0.95,"reasoning":"Simple patient count"}
 
-Example 2 - Complex query:
-Input: "What is the average healing rate for diabetic wounds in the last 6 months?"
-Output: {"type":"outcome_analysis","scope":"patient_cohort","metrics":["average_healing_rate"],"filters":[{"concept":"wound_classification","userTerm":"diabetic wounds","value":"DFU"}],"timeRange":{"unit":"months","value":6},"confidence":0.95,"reasoning":"Outcome metrics for specific cohort over defined period"}
+Example 2 - Query with filter:
+Input: "Show me patients with simple bandages"
+Output: {"type":"outcome_analysis","scope":"patient_cohort","metrics":["patient_count"],"filters":[{"operator":"equals","userPhrase":"simple bandages","value":null}],"timeRange":null,"confidence":0.92,"reasoning":"Patient listing with filter - semantic search will determine if 'simple bandages' refers to wound type, dressing type, or other field"}
 
-Example 3 - Trend analysis:
+Example 3 - Complex query with filter and time range:
+Input: "What is the average healing rate for diabetic wounds in the last 6 months?"
+Output: {"type":"outcome_analysis","scope":"patient_cohort","metrics":["average_healing_rate"],"filters":[{"operator":"equals","userPhrase":"diabetic wounds","value":null}],"timeRange":{"unit":"months","value":6},"confidence":0.95,"reasoning":"Outcome metrics for specific cohort over defined period"}
+
+Example 4 - Trend analysis:
 Input: "Is wound healing getting faster?"
 Output: {"type":"trend_analysis","scope":"patient_cohort","metrics":["healing_rate"],"filters":[],"timeRange":null,"confidence":0.88,"reasoning":"Trend analysis of healing improvements"}
 
-Example 4 - Comparison:
+Example 5 - Comparison with multiple filters:
 Input: "Do diabetic wounds heal faster than arterial wounds?"
-Output: {"type":"cohort_comparison","scope":"patient_cohort","metrics":["healing_rate","closure_time"],"filters":[{"concept":"wound_classification","userTerm":"diabetic wounds","value":"DFU"},{"concept":"wound_classification","userTerm":"arterial wounds","value":"arterial_ulcer"}],"timeRange":null,"confidence":0.92,"reasoning":"Explicit comparison between two wound types"}
+Output: {"type":"cohort_comparison","scope":"patient_cohort","metrics":["healing_rate","closure_time"],"filters":[{"operator":"equals","userPhrase":"diabetic wounds","value":null},{"operator":"equals","userPhrase":"arterial wounds","value":null}],"timeRange":null,"confidence":0.92,"reasoning":"Explicit comparison between two wound classifications"}
 `;
 
 /**
@@ -266,6 +294,37 @@ export function validateIntentClassificationResponse(response: unknown): {
     }
   }
 
+  // Validate filter structure
+  for (const f of result.filters as unknown[]) {
+    const filter = f as Record<string, unknown>;
+    // ARCHITECTURAL CHANGE: field is optional (assigned by semantic search, not LLM)
+    if (filter.field !== undefined && typeof filter.field !== "string") {
+      return {
+        valid: false,
+        error: "Filter 'field' property must be string if provided (but should be omitted)",
+      };
+    }
+    if (!filter.operator || typeof filter.operator !== "string") {
+      return {
+        valid: false,
+        error: "Filter missing 'operator' property (must be string)",
+      };
+    }
+    if (!filter.userPhrase || typeof filter.userPhrase !== "string") {
+      return {
+        valid: false,
+        error: "Filter missing 'userPhrase' property (must be string)",
+      };
+    }
+    if (filter.value !== null && filter.value !== undefined) {
+      return {
+        valid: false,
+        error:
+          "Filter 'value' must be null (terminology mapper will populate)",
+      };
+    }
+  }
+
   // Cast to IntentClassificationResult
   const typedResult: IntentClassificationResult = {
     type: result.type as IntentType,
@@ -277,9 +336,10 @@ export function validateIntentClassificationResponse(response: unknown): {
     filters: (result.filters as unknown[]).map((f: unknown) => {
       const filter = f as Record<string, unknown>;
       return {
-        concept: filter.concept as string,
-        userTerm: filter.userTerm as string,
-        value: (filter.value as string) || undefined,
+        field: filter.field as string | undefined, // Optional: assigned by semantic search
+        operator: filter.operator as string,
+        userPhrase: filter.userPhrase as string,
+        value: null, // Always null per new architecture
       };
     }),
     timeRange: result.timeRange

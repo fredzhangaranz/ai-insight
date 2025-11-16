@@ -164,9 +164,33 @@ function UnderstandingTab({ result, onChallenge }: {
           <h4 className="text-sm font-semibold text-slate-700 mb-2">Filters Applied</h4>
           <div className="space-y-2">
             {intent.filters.map((filter: any, i: number) => (
-              <div key={i} className="text-sm bg-orange-50 border border-orange-200 rounded p-2">
-                <span className="font-medium">{filter.concept || filter.field}:</span>{" "}
-                {filter.value || filter.condition}
+              <div
+                key={i}
+                className={`text-sm border rounded p-2 ${
+                  filter.validationWarning
+                    ? "bg-amber-50 border-amber-200"
+                    : "bg-slate-50 border-slate-200"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">
+                    {filter.field ||
+                      filter.concept ||
+                      filter.userPhrase ||
+                      `Filter ${i + 1}`}
+                  </span>
+                  {filter.validationWarning && (
+                    <span className="text-xs font-medium text-amber-700">
+                      ⚠ {filter.validationWarning}
+                    </span>
+                  )}
+                </div>
+                <div className="text-slate-700">
+                  {filter.value ||
+                    filter.condition ||
+                    filter.userPhrase ||
+                    "Pending clarification"}
+                </div>
               </div>
             ))}
           </div>

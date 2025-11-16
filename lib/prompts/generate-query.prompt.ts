@@ -402,6 +402,40 @@ The following context will be provided to you:
 - **Discovery Context**: Forms, fields, and terminology identified
 - **User Clarifications** (if this is a follow-up): SQL constraints selected by user
 
+## Handling Simple Queries with Empty Semantic Context
+
+**CRITICAL:** When the discovery context contains **empty forms, fields, and terminology**:
+- This indicates a **simple query** that doesn't require semantic mapping
+- Generate **straightforward SQL** using basic schema tables directly
+- **DO NOT** invent filters, joins, or WHERE clauses
+- **DO NOT** assume complex relationships or add conditions not in the question
+- **DO NOT** query the Note table unless explicitly required by the question
+
+### Examples of Simple Queries:
+
+**Example 1: Simple patient count**
+- Question: "how many patients"
+- Context: forms: [], fields: [], terminology: [], metrics: ["patient_count"]
+- Correct SQL: SELECT COUNT(*) FROM rpt.Patient
+- WRONG: Do NOT join to Note table, do NOT invent WHERE clauses like "Wound release reason"
+
+**Example 2: Simple unit count**
+- Question: "how many units"
+- Context: forms: [], fields: [], terminology: [], metrics: ["unit_count"]
+- Correct SQL: SELECT COUNT(*) FROM rpt.Unit
+
+**Example 3: Simple wound count**
+- Question: "how many wounds"
+- Context: forms: [], fields: [], terminology: [], metrics: ["wound_count"]
+- Correct SQL: SELECT COUNT(*) FROM rpt.Wound
+
+**Example 4: Simple patient list**
+- Question: "show all patients"
+- Context: forms: [], fields: [], terminology: []
+- Correct SQL: SELECT * FROM rpt.Patient
+
+**Key Principle:** Empty semantic context means the question is straightforward. Use the most direct table and avoid complexity.
+
 If user clarifications are provided, you MUST:
 1. Incorporate them as constraints in your SQL query
 2. Generate SQL response (not another clarification)

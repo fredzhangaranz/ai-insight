@@ -6,6 +6,8 @@
  * join path planning, and context bundle assembly.
  */
 
+import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
+
 /**
  * Request object for context discovery pipeline
  */
@@ -53,11 +55,21 @@ export type IntentType =
 
 /**
  * Filter applied within an intent (e.g., wound type = "diabetic")
+ *
+ * ARCHITECTURAL CHANGE (2025-01-16):
+ * - Intent classification extracts ONLY userPhrase and operator (NOT field name)
+ * - Terminology mapper searches ALL semantic fields to find matches
+ * - Field assignment happens AFTER semantic search based on confidence
+ * - This prevents the LLM from making assumptions about database schema
+ *
+ * IMPORTANT: The 'value' field is ALWAYS null after intent classification.
+ * The terminology mapper will populate actual database values after discovery.
  */
 export interface IntentFilter {
-  concept: string; // Semantic concept name (e.g., "wound_classification")
-  userTerm: string; // User's phrasing (e.g., "diabetic wounds")
-  value?: string; // Optional semantic value category
+  field?: string; // Optional: Assigned AFTER semantic search (NOT by LLM)
+  operator: string; // Comparison operator ("equals", "contains", "greater_than", "less_than", "in")
+  userPhrase: string; // User's exact phrasing (e.g., "simple bandages", "diabetic wounds")
+  value: null; // ALWAYS null - terminology mapper populates from semantic database
 }
 
 /**
@@ -157,6 +169,7 @@ export interface ContextBundleMetadata {
   timestamp: string; // ISO 8601 format
   durationMs: number;
   version: string; // API version (e.g., "1.0")
+  filterMetrics?: FilterMetricsSummary;
 }
 
 /**

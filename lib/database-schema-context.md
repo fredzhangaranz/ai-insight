@@ -210,6 +210,30 @@ GROUP BY AT.name, N.value;
 
 ### 5. Common Analysis Patterns
 
+0. **Simple Counts** (Use these for basic "how many" questions):
+
+```sql
+-- Count all patients
+SELECT COUNT(*) FROM rpt.Patient;
+
+-- Count all units (clinics/facilities)
+SELECT COUNT(*) FROM rpt.Unit;
+
+-- Count all wounds
+SELECT COUNT(*) FROM rpt.Wound;
+
+-- Count all assessments
+SELECT COUNT(*) FROM rpt.Assessment;
+
+-- List all patients
+SELECT * FROM rpt.Patient;
+
+-- List all units with their names
+SELECT id, name FROM rpt.Unit;
+```
+
+**IMPORTANT:** For simple count queries (e.g., "how many patients", "how many units"), always query the main table directly. Do NOT join to other tables or add WHERE clauses unless the user explicitly requests filtering.
+
 1. **Trend Analysis**:
 
 ```sql

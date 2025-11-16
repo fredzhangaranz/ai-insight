@@ -141,4 +141,211 @@ describe("TerminologyMapperService", () => {
 
     expect(result).toEqual([]);
   });
+
+  // NEW: Filter mapping tests (Phase 2, Task 2.3)
+  describe("mapFilters (Phase 2 - NEW)", () => {
+    it("should populate null filter values with database values", async () => {
+      mockPool.query.mockResolvedValue({
+        rows: [
+          {
+            option_value: "Simple Bandage",
+            option_code: "SIMPLE_BANDAGE",
+            semantic_category: "bandage_type",
+            confidence: 0.95,
+          },
+        ],
+      });
+
+      const filters = [
+        {
+          field: "wound_type",
+          operator: "equals",
+          userPhrase: "simple bandages",
+          value: null,
+        },
+      ];
+
+      const mapped = await service.mapFilters(filters, "test-customer");
+
+      expect(mapped).toHaveLength(1);
+      expect(mapped[0].value).toBe("Simple Bandage"); // Exact database value
+      expect(mapped[0].mappingConfidence).toBeGreaterThan(0.8);
+      expect(mapped[0].overridden).toBe(false); // value was null, so populated (not overridden)
+    });
+
+    it("should override incorrect LLM values with high confidence", async () => {
+      mockPool.query.mockResolvedValue({
+        rows: [
+          {
+            option_value: "Simple Bandage",
+            option_code: "SIMPLE_BANDAGE",
+            semantic_category: "bandage_type",
+            confidence: 0.95,
+          },
+        ],
+      });
+
+      const filters = [
+        {
+          field: "wound_type",
+          operator: "equals",
+          userPhrase: "simple bandages",
+          value: "simple_bandage", // Wrong format from LLM
+        },
+      ];
+
+      const mapped = await service.mapFilters(filters, "test-customer");
+
+      expect(mapped).toHaveLength(1);
+      expect(mapped[0].value).toBe("Simple Bandage"); // Corrected
+      expect(mapped[0].overridden).toBe(true);
+    });
+
+    it("should handle multiple filters", async () => {
+      mockPool.query.mockImplementation(async (sql: string, params: any[]) => {
+        const field = params[1]?.toLowerCase();
+        if (field === "wound_type") {
+          return {
+            rows: [
+              {
+                option_value: "Simple Bandage",
+                option_code: "SIMPLE_BANDAGE",
+                semantic_category: "bandage_type",
+                confidence: 0.95,
+              },
+            ],
+          };
+        } else if (field === "wound_classification") {
+          return {
+            rows: [
+              {
+                option_value: "Pressure Ulcer",
+                option_code: "PRESSURE_ULCER",
+                semantic_category: "ulcer_type",
+                confidence: 0.90,
+              },
+            ],
+          };
+        }
+        return { rows: [] };
+      });
+
+      const filters = [
+        {
+          field: "wound_type",
+          operator: "equals",
+          userPhrase: "simple bandages",
+          value: null,
+        },
+        {
+          field: "wound_classification",
+          operator: "equals",
+          userPhrase: "pressure ulcer",
+          value: null,
+        },
+      ];
+
+      const mapped = await service.mapFilters(filters, "test-customer");
+
+      expect(mapped).toHaveLength(2);
+      expect(mapped[0].value).toBe("Simple Bandage");
+      expect(mapped[1].value).toBe("Pressure Ulcer");
+    });
+
+    it("should return error for non-existent values", async () => {
+      mockPool.query.mockResolvedValue({ rows: [] });
+
+      const filters = [
+        {
+          field: "wound_type",
+          operator: "equals",
+          userPhrase: "nonexistent wound",
+          value: null,
+        },
+      ];
+
+      const mapped = await service.mapFilters(filters, "test-customer");
+
+      expect(mapped).toHaveLength(1);
+      expect(mapped[0].value).toBeNull();
+      expect(mapped[0].mappingError).toBeDefined();
+      expect(mapped[0].mappingConfidence).toBe(0.0);
+    });
+
+    it("should handle case-insensitive exact matches", async () => {
+      mockPool.query.mockResolvedValue({
+        rows: [
+          {
+            option_value: "Diabetic Foot Ulcer",
+            option_code: "DFU",
+            semantic_category: "ulcer_type",
+            confidence: 0.98,
+          },
+        ],
+      });
+
+      const filters = [
+        {
+          field: "wound_classification",
+          operator: "equals",
+          userPhrase: "diabetic foot ulcer", // lowercase
+          value: null,
+        },
+      ];
+
+      const mapped = await service.mapFilters(filters, "test-customer");
+
+      expect(mapped).toHaveLength(1);
+      expect(mapped[0].value).toBe("Diabetic Foot Ulcer"); // Original casing preserved
+      expect(mapped[0].mappingConfidence).toBe(1.0); // Exact match
+    });
+
+    it("should handle word matching for partial phrases", async () => {
+      mockPool.query.mockResolvedValue({
+        rows: [
+          {
+            option_value: "Simple Bandage",
+            option_code: "SIMPLE_BANDAGE",
+            semantic_category: "bandage_type",
+            confidence: 0.95,
+          },
+        ],
+      });
+
+      const filters = [
+        {
+          field: "wound_type",
+          operator: "equals",
+          userPhrase: "simple bandages", // plural
+          value: null,
+        },
+      ];
+
+      const mapped = await service.mapFilters(filters, "test-customer");
+
+      expect(mapped).toHaveLength(1);
+      expect(mapped[0].value).toBe("Simple Bandage"); // Singular form from database
+      expect(mapped[0].mappingConfidence).toBeGreaterThan(0.5);
+    });
+
+    it("should handle empty filter array", async () => {
+      const mapped = await service.mapFilters([], "test-customer");
+      expect(mapped).toEqual([]);
+    });
+
+    it("should throw error for missing customer", async () => {
+      const filters = [
+        {
+          field: "wound_type",
+          operator: "equals",
+          userPhrase: "test",
+          value: null,
+        },
+      ];
+
+      await expect(service.mapFilters(filters, "")).rejects.toThrow(
+        "customer is required"
+      );
+    });
+  });
 });
