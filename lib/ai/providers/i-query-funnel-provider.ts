@@ -133,4 +133,15 @@ export interface IQueryFunnelProvider {
   extractTemplateDraft(
     request: TemplateExtractionRequest
   ): Promise<TemplateExtractionResponse>;
+
+  /**
+   * General-purpose LLM completion method for flexible prompting.
+   * Used by intent classifier, ambiguity detection, and other services.
+   */
+  complete(options: {
+    system: string;
+    userMessage: string;
+    maxTokens?: number;
+    temperature?: number;
+  }): Promise<string>;
 }

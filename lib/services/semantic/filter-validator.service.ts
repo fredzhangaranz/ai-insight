@@ -5,12 +5,16 @@
  * they exist before SQL generation. Catches case mismatches and missing values.
  *
  * This prevents queries from returning 0 rows due to incorrect filter values.
+ *
+ * NEW (Adaptive Clarification): When validation fails, generates clarification
+ * suggestions for the user to select the correct value.
  */
 
 import type { Pool } from "pg";
 import { getInsightGenDbPool } from "@/lib/db";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
+import type { ClarificationOption } from "@/lib/prompts/generate-query.prompt";
 
 export interface ValidationError {
   field: string;
@@ -19,6 +23,9 @@ export interface ValidationError {
   suggestion?: string;
   validOptions?: string[];
   code?: "UNRESOLVED_FILTER" | "CASE_MISMATCH" | "VALUE_NOT_FOUND" | "DB_ERROR";
+
+  // NEW: Clarification suggestions for adaptive mode
+  clarificationSuggestions?: ClarificationOption[];
 }
 
 export interface ValidationResult {
@@ -230,6 +237,113 @@ export class FilterValidatorService {
     }
 
     return corrected;
+  }
+
+  /**
+   * Generates clarification suggestions for validation errors
+   *
+   * NEW (Adaptive Clarification Mode): When a filter value is not found,
+   * suggest similar values from the semantic database for user to choose.
+   *
+   * @param filters - Filters that failed validation
+   * @param customer - Customer ID
+   * @returns Validation errors enhanced with clarification suggestions
+   */
+  async generateClarificationSuggestions(
+    filters: MappedFilter[],
+    customer: string
+  ): Promise<ValidationError[]> {
+    const errors: ValidationError[] = [];
+    const pool = await getInsightGenDbPool();
+
+    for (const filter of filters) {
+      // Skip filters that are already resolved
+      if (!filter.field || !filter.value) {
+        continue;
+      }
+
+      try {
+        // Get all valid values for this field with similarity scoring
+        const query = `
+          SELECT
+            opt.option_value,
+            opt.option_code,
+            opt.confidence as db_confidence,
+            -- Calculate similarity score
+            CASE
+              WHEN LOWER(opt.option_value) = LOWER($3) THEN 1.0
+              WHEN LOWER(opt.option_value) LIKE LOWER($3 || '%') THEN 0.9
+              WHEN LOWER(opt.option_value) LIKE LOWER('%' || $3 || '%') THEN 0.7
+              ELSE 0.5
+            END as similarity
+          FROM "SemanticIndexOption" opt
+          JOIN "SemanticIndexField" field ON opt.semantic_index_field_id = field.id
+          JOIN "SemanticIndex" idx ON field.semantic_index_id = idx.id
+          WHERE idx.customer_id = $1
+            AND LOWER(field.field_name) = LOWER($2)
+          ORDER BY similarity DESC, opt.confidence DESC NULLS LAST
+          LIMIT 10
+        `;
+
+        const result = await pool.query(query, [
+          customer,
+          filter.field,
+          filter.value,
+        ]);
+
+        if (result.rows.length === 0) {
+          continue;
+        }
+
+        // Check if exact match exists
+        const exactMatch = result.rows.find(
+          (row) => row.option_value === filter.value
+        );
+
+        if (exactMatch) {
+          // Value is valid, no clarification needed
+          continue;
+        }
+
+        // Generate clarification options from top matches
+        const clarificationOptions: ClarificationOption[] = result.rows
+          .slice(0, 5) // Top 5 suggestions
+          .map((row, index) => ({
+            id: `suggestion_${index}`,
+            label: row.option_value,
+            description: row.option_code
+              ? `Code: ${row.option_code}`
+              : undefined,
+            sqlConstraint: `${filter.field} = '${row.option_value}'`,
+            isDefault: index === 0, // Mark first (best match) as default
+          }));
+
+        // Add custom input option
+        clarificationOptions.push({
+          id: "custom",
+          label: "Something else (enter manually)",
+          description: "Type a custom value",
+          sqlConstraint: "", // Will be filled by user
+          isDefault: false,
+        });
+
+        errors.push({
+          field: filter.field,
+          severity: "error",
+          message: `Could not find "${filter.value}" in field "${filter.field}". Did you mean one of these?`,
+          code: "VALUE_NOT_FOUND",
+          validOptions: result.rows.map((r) => r.option_value),
+          clarificationSuggestions: clarificationOptions,
+        });
+      } catch (error) {
+        console.error(
+          `[FilterValidator] Error generating clarifications for "${filter.field}":`,
+          error
+        );
+      }
+    }
+
+    return errors;
   }
 }
 

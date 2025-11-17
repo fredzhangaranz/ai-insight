@@ -20,6 +20,7 @@ import {
 } from "./filter-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
+import { generateAIClarification } from "./ai-ambiguity-detector.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -555,7 +556,10 @@ export class ThreeModeOrchestrator {
         unresolvedFilters: unresolvedInfos.length,
       };
 
-      if (unresolvedNeedingClarification.length > 0) {
+      // Only request clarification for unresolved filters if clarifications were NOT already provided
+      // If clarifications were provided by user, we should proceed to SQL generation
+      // and let the LLM use the clarifications to resolve the filters
+      if (unresolvedNeedingClarification.length > 0 && !clarifications) {
         contextDiscoveryStep.message =
           "Discovering semantic context... (filters unresolved)";
 
@@ -566,14 +570,19 @@ export class ThreeModeOrchestrator {
         );
         context.metadata.filterMetrics = unresolvedSummary;
 
+        // Generate clarifications (AI-powered or fallback to generic)
+        const clarifications = await this.buildUnresolvedClarificationRequests(
+          unresolvedNeedingClarification,
+          question,
+          customerId
+        );
+
         return {
           mode: "clarification",
           question,
           thinking,
           requiresClarification: true,
-          clarifications: this.buildUnresolvedClarificationRequests(
-            unresolvedNeedingClarification
-          ),
+          clarifications,
           clarificationReasoning: this.buildUnresolvedClarificationReasoning(
             unresolvedNeedingClarification
           ),
@@ -920,24 +929,71 @@ export class ThreeModeOrchestrator {
     return await executeCustomerQuery(customerId, fixedSql);
   }
 
-  private buildUnresolvedClarificationRequests(
-    unresolved: UnresolvedFilterInfo[]
-  ): ClarificationRequest[] {
-    return unresolved.map((info) => {
-      const clarId = buildUnresolvedFilterClarificationId(
-        info.filter,
-        info.index
-      );
+  /**
+   * Builds clarification requests for unresolved filters
+   *
+   * Uses AI-powered ambiguity detection (Gemini Flash) to generate contextual options
+   * Falls back to generic "Remove or Custom" if AI fails or returns no options
+   *
+   * @param unresolved - Filters that couldn't be mapped to semantic database
+   * @param originalQuestion - User's original question for context
+   * @param customerId - Customer ID for semantic context
+   * @returns Array of clarification requests (AI-generated or generic fallback)
+   */
+  private async buildUnresolvedClarificationRequests(
+    unresolved: UnresolvedFilterInfo[],
+    originalQuestion: string,
+    customerId: string
+  ): Promise<ClarificationRequest[]> {
+    const clarifications: ClarificationRequest[] = [];
+
+    // Process each unresolved filter
+    for (const info of unresolved) {
       const phrase =
         info.filter.userPhrase ||
         info.filter.field ||
         `Filter ${info.index + 1}`;
-      const question = `I couldn't map "${phrase}" to a specific semantic field. Which SQL constraint should represent this filter?`;
 
-      return {
+      console.log(`[Orchestrator] 🔍 Resolving ambiguous filter: "${phrase}"`);
+
+      try {
+        // Try AI-powered clarification generation
+        const aiClarification = await generateAIClarification({
+          ambiguousTerm: phrase,
+          originalQuestion,
+          customerId,
+          // Pass ambiguous matches if available (for field disambiguation)
+          ambiguousMatches: (info.filter as any).ambiguousMatches,
+        });
+
+        if (aiClarification && aiClarification.options.length > 0) {
+          console.log(
+            `[Orchestrator] ✅ AI generated ${aiClarification.options.length - 1} options for "${phrase}"`
+          );
+          clarifications.push(aiClarification);
+          continue;
+        }
+
+        console.log(
+          `[Orchestrator] ⚠️ AI returned no options for "${phrase}", using generic fallback`
+        );
+      } catch (error) {
+        console.error(
+          `[Orchestrator] ❌ AI clarification failed for "${phrase}":`,
+          error
+        );
+      }
+
+      // Fallback to generic "Remove or Custom" clarification
+      const clarId = buildUnresolvedFilterClarificationId(
+        info.filter,
+        info.index
+      );
+
+      clarifications.push({
         id: clarId,
         ambiguousTerm: phrase,
-        question,
+        question: `I couldn't map "${phrase}" to a specific database field. What should I do?`,
         options: [
           {
             id: `${clarId}_remove`,
@@ -948,8 +1004,14 @@ export class ThreeModeOrchestrator {
           },
         ],
         allowCustom: true,
-      };
-    });
+      });
+
+      console.log(
+        `[Orchestrator] 📋 Using generic clarification for "${phrase}"`
+      );
+    }
+
+    return clarifications;
   }
 
   private buildUnresolvedClarificationReasoning(

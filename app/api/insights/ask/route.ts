@@ -21,8 +21,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let question: string | undefined;
+
   try {
-    const { question, customerId, modelId, clarifications, schemaVersion, promptVersion } = await req.json();
+    const body = await req.json();
+    question = body.question;
+    const { customerId, modelId, clarifications, schemaVersion, promptVersion } = body;
 
     // Validate inputs
     if (!question || !question.trim()) {
@@ -45,13 +49,31 @@ export async function POST(req: NextRequest) {
     const sessionCache = getSessionCacheService();
     const cacheStartTime = Date.now();
 
+    // Convert clarifications object to array if needed
+    // clarifications can be either:
+    // - An object: { "id": "constraint", ... } (from user-provided clarifications)
+    // - An array: [{ id: "...", optionId: "..." }] (from selection options)
+    // - undefined
+    let clarificationsArray: ClarificationSelection[] | undefined;
+    if (clarifications) {
+      if (Array.isArray(clarifications)) {
+        clarificationsArray = clarifications;
+      } else if (typeof clarifications === 'object') {
+        // Convert object to array for cache key generation
+        clarificationsArray = Object.entries(clarifications).map(([id, customValue]) => ({
+          id,
+          customValue: typeof customValue === 'string' ? customValue : undefined,
+        }));
+      }
+    }
+
     const cachedResult = sessionCache.get({
       customerId,
       question,
       modelId,
       schemaVersion,
       promptVersion,
-      clarifications: clarifications as ClarificationSelection[] | undefined,
+      clarifications: clarificationsArray,
     });
 
     if (cachedResult) {
@@ -78,7 +100,13 @@ export async function POST(req: NextRequest) {
     // Pass modelId to orchestrator for model selection
     const orchestrator = new ThreeModeOrchestrator();
     const orchestrationStart = Date.now();
-    const result = await orchestrator.ask(question, customerId, modelId);
+
+    // If clarifications are provided, use askWithClarifications method
+    // This re-runs the query with user-selected values
+    const result = clarifications && Object.keys(clarifications).length > 0
+      ? await orchestrator.askWithClarifications(question, customerId, clarifications, modelId)
+      : await orchestrator.ask(question, customerId, modelId);
+
     const totalDurationMs = Date.now() - orchestrationStart;
 
     // If result contains an error, return it with 200 status but include error field
@@ -98,7 +126,7 @@ export async function POST(req: NextRequest) {
           modelId,
           schemaVersion,
           promptVersion,
-          clarifications: clarifications as ClarificationSelection[] | undefined,
+          clarifications: clarificationsArray,
         },
         result
       );
@@ -124,15 +152,23 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("[/api/insights/ask] Unexpected error:", error);
 
     // Unexpected errors (not handled by orchestrator)
-    return NextResponse.json(
-      {
-        error: "Failed to process question",
-        message: error instanceof Error ? error.message : "Unknown error",
+    // Return error in OrchestrationResult format so frontend can save to history
+    const errorResult = {
+      mode: "error" as const,
+      question: question || "unknown",
+      error: {
+        message: errorMessage,
+        step: "ask",
       },
-      { status: 500 }
-    );
+      sql: `-- Query failed: ${errorMessage}`,
+      results: null,
+      thinking: [],
+    };
+
+    return NextResponse.json(errorResult, { status: 200 });
   }
 }

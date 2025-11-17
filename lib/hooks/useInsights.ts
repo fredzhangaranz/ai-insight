@@ -450,10 +450,16 @@ export function useInsights() {
     startProgressSimulation();
 
     try {
-      const response = await fetch("/api/insights/ask-with-clarifications", {
+      // Use the same /api/insights/ask endpoint with clarifications parameter
+      const response = await fetch("/api/insights/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ originalQuestion, customerId, clarifications, modelId }),
+        body: JSON.stringify({
+          question: originalQuestion,
+          customerId,
+          clarifications,
+          modelId
+        }),
         signal: controller.signal,
       });
 

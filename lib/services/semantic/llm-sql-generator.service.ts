@@ -8,6 +8,7 @@ import {
   type LLMResponse,
   type LLMSQLResponse,
   type LLMClarificationResponse,
+  type ClarificationRequest,
 } from "@/lib/prompts/generate-query.prompt";
 import type {
   ContextBundle,
@@ -19,6 +20,7 @@ import { executeCustomerQuery } from "./customer-query.service";
 import {
   getFilterValidatorService,
   buildFilterMetricsSummary,
+  type ValidationResult,
 } from "./filter-validator.service";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
 
@@ -64,7 +66,9 @@ export async function generateSQLWithLLM(
 
   if (clarifications && Object.keys(clarifications).length > 0) {
     console.log(
-      `[LLM-SQL-Generator] 📝 User provided ${Object.keys(clarifications).length} clarification(s)`
+      `[LLM-SQL-Generator] 📝 User provided ${
+        Object.keys(clarifications).length
+      } clarification(s)`
     );
   }
 
@@ -104,7 +108,54 @@ export async function generateSQLWithLLM(
       );
 
       if (!revalidation.valid) {
-        // Still invalid after correction - throw error
+        // Still invalid after correction - request clarification instead of throwing error
+        console.log(
+          `[LLM-SQL-Generator] 🔍 Generating clarification suggestions for failed validation`
+        );
+
+        const clarificationErrors =
+          await validator.generateClarificationSuggestions(
+            context.intent.filters as MappedFilter[],
+            customerId
+          );
+
+        // Build clarification requests from validation errors
+        const clarifications: ClarificationRequest[] = clarificationErrors
+          .filter(
+            (error) =>
+              error.clarificationSuggestions &&
+              error.clarificationSuggestions.length > 0
+          )
+          .map((error, index) => ({
+            id: `clarify_filter_${index}`,
+            ambiguousTerm: error.field,
+            question: error.message,
+            options: error.clarificationSuggestions!,
+            allowCustom: true,
+          }));
+
+        if (clarifications.length > 0) {
+          // Return clarification response
+          const clarificationResponse: LLMClarificationResponse = {
+            responseType: "clarification",
+            reasoning: `I found some filter values that don't match the database. Please select the correct values to continue.`,
+            clarifications,
+            partialContext: {
+              intent: context.intent.type || "query",
+              formsIdentified: context.forms?.map((f) => f.formName) || [],
+              termsUnderstood:
+                context.terminology?.map((t) => t.userTerm) || [],
+            },
+          };
+
+          console.log(
+            `[LLM-SQL-Generator] 🔍 Returning clarification request with ${clarifications.length} question(s)`
+          );
+
+          return clarificationResponse;
+        }
+
+        // No clarifications possible - throw error
         const errorMessages = revalidation.errors
           .filter((e) => e.severity === "error")
           .map((e) => e.message)
@@ -118,7 +169,9 @@ export async function generateSQLWithLLM(
       validation = revalidation;
       // Use corrected filters
       console.log(
-        `[LLM-SQL-Generator] ✅ Auto-corrected ${validation.errors.filter((e) => e.severity === "warning").length} filter value(s)`
+        `[LLM-SQL-Generator] ✅ Auto-corrected ${
+          validation.errors.filter((e) => e.severity === "warning").length
+        } filter value(s)`
       );
       context.intent.filters = corrected as any;
     } else {
@@ -136,8 +189,8 @@ export async function generateSQLWithLLM(
     latestValidation = validation;
   }
 
-  const finalizedFilters =
-    ((context.intent.filters as MappedFilter[]) || []) as MappedFilter[];
+  const finalizedFilters = ((context.intent.filters as MappedFilter[]) ||
+    []) as MappedFilter[];
   context.metadata.filterMetrics = buildFilterMetricsSummary(
     finalizedFilters,
     latestValidation
@@ -146,7 +199,10 @@ export async function generateSQLWithLLM(
   const schemaDocumentation = safeLoadSchemaDocumentation();
 
   // DEBUG: Log filters before building prompt
-  console.log('[LLM-SQL-Generator] 🔍 Filters being sent to LLM:', JSON.stringify(context.intent.filters, null, 2));
+  console.log(
+    "[LLM-SQL-Generator] 🔍 Filters being sent to LLM:",
+    JSON.stringify(context.intent.filters, null, 2)
+  );
 
   const userPrompt = await buildUserPrompt(
     context,
@@ -156,14 +212,17 @@ export async function generateSQLWithLLM(
   );
 
   // DEBUG: Log formatted filters section
-  console.log('[LLM-SQL-Generator] 📋 Formatted filters in prompt:');
+  console.log("[LLM-SQL-Generator] 📋 Formatted filters in prompt:");
   console.log(formatFiltersSection(context.intent.filters));
 
   // DEBUG: Log terminology section
-  console.log('[LLM-SQL-Generator] 📋 Terminology mappings:', JSON.stringify(context.terminology, null, 2));
+  console.log(
+    "[LLM-SQL-Generator] 📋 Terminology mappings:",
+    JSON.stringify(context.terminology, null, 2)
+  );
 
   // DEBUG: Log full user prompt to see what LLM receives
-  console.log('[LLM-SQL-Generator] 📄 FULL USER PROMPT (first 2000 chars):');
+  console.log("[LLM-SQL-Generator] 📄 FULL USER PROMPT (first 2000 chars):");
   console.log(userPrompt.substring(0, 2000));
 
   const llmModelId = modelId?.trim() || DEFAULT_AI_MODEL_ID;
@@ -191,7 +250,7 @@ export async function generateSQLWithLLM(
   const totalDuration = Date.now() - startTime;
 
   // Log response type
-  if (llmResponse.responseType === 'clarification') {
+  if (llmResponse.responseType === "clarification") {
     console.log(
       `[LLM-SQL-Generator] 🔍 Requesting clarification (${llmResponse.clarifications.length} question(s))`
     );
@@ -207,9 +266,7 @@ export async function generateSQLWithLLM(
     }
   }
 
-  console.log(
-    `[LLM-SQL-Generator] ✅ Completed in ${totalDuration}ms`
-  );
+  console.log(`[LLM-SQL-Generator] ✅ Completed in ${totalDuration}ms`);
 
   return llmResponse;
 }
@@ -257,7 +314,9 @@ async function buildUserPrompt(
   if (!hasFilterValues) {
     prompt += formatTerminologySection(context.terminology || []);
   } else {
-    console.log('[LLM-SQL-Generator] ⏩ Skipping terminology section - filters already have values');
+    console.log(
+      "[LLM-SQL-Generator] ⏩ Skipping terminology section - filters already have values"
+    );
   }
 
   prompt += formatJoinPathsSection(context.joinPaths || []);
@@ -283,7 +342,9 @@ async function buildUserPrompt(
     prompt += `# User Clarifications\n\n`;
     prompt += `The user has provided the following clarifications:\n\n`;
 
-    for (const [clarificationId, sqlConstraint] of Object.entries(clarifications)) {
+    for (const [clarificationId, sqlConstraint] of Object.entries(
+      clarifications
+    )) {
       prompt += `- ${clarificationId}: \`${sqlConstraint}\`\n`;
     }
 
