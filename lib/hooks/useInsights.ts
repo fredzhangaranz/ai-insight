@@ -269,12 +269,9 @@ export function useInsights() {
           step => !currentIds.has(step.id)
         );
 
-        // Clear simulation AFTER merging, so any leftover timeouts are canceled
-        // This prevents ghost animations after server data is authoritative
-        if (typeof window !== 'undefined') {
-          // Use setTimeout to clear after React state update completes
-          setTimeout(() => clearProgressSimulation(), 0);
-        }
+        // DON'T clear simulation here - let it complete naturally
+        // The simulation will stop when analysisStatus changes to "completed"
+        // This prevents jarring jumps and maintains smooth progress
 
         return [...merged, ...newServerSteps];
       }
@@ -358,6 +355,7 @@ export function useInsights() {
         setResult(data);
         setError(new Error(data.error.message));
         updateAnalysisStatus("error");
+        clearProgressSimulation(); // Clean up timeouts after status change
       } else {
         // Success - show results
         setResult(data);
@@ -365,6 +363,7 @@ export function useInsights() {
           setAnalysisModel(data.modelId);
         }
         updateAnalysisStatus("completed");
+        clearProgressSimulation(); // Clean up timeouts after status change
       }
 
       // Auto-save successful query to history (best effort)
@@ -483,6 +482,7 @@ export function useInsights() {
         setResult(data);
         setError(new Error(data.error.message));
         updateAnalysisStatus("error");
+        clearProgressSimulation(); // Clean up timeouts after status change
       } else {
         // Success - show results
         setResult(data);
@@ -490,6 +490,7 @@ export function useInsights() {
           setAnalysisModel(data.modelId);
         }
         updateAnalysisStatus("completed");
+        clearProgressSimulation(); // Clean up timeouts after status change
       }
 
       // Auto-save successful query to history (skip if error)

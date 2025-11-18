@@ -14,6 +14,7 @@ import { createHash } from "crypto";
 import type { Pool } from "pg";
 import { getInsightGenDbPool } from "@/lib/db";
 import { getEmbeddingService } from "@/lib/services/embeddings/gemini-embedding";
+import { getOntologyLookupService } from "@/lib/services/ontology/ontology-lookup.service";
 import type {
   TerminologyMapping,
   TerminologyMappingOptions,
@@ -61,6 +62,15 @@ export interface MappedFilter extends IntentFilter {
   autoCorrected?: boolean; // True if validation auto-corrected the value
   mappingError?: string; // Error message if mapping failed
   validationWarning?: string; // Warning from validation
+
+  // Ontology mapping metadata (Phase 1, Task 1.4)
+  mappingPath?: {
+    originalTerm: string;
+    synonymsUsed?: string[];      // Synonyms tried from ontology
+    levelsTraversed: number;      // 0 = direct, 1 = single-level synonym, 2 = multi-level
+    matchedVia: 'direct' | 'synonym' | 'abbreviation' | 'phrase';
+  };
+  mappingNote?: string; // Human-readable note about mapping process
 }
 
 const DEFAULT_MIN_CONFIDENCE = 0.7;
@@ -218,28 +228,107 @@ export class TerminologyMapperService {
           continue;
         }
 
-        // NEW ARCHITECTURE: Search ALL semantic fields
+        // NEW ARCHITECTURE (Phase 1, Task 1.4): 3-Level Ontology-Aware Pipeline
+        // LEVEL 1: Direct semantic search
+        // LEVEL 2: Single-level synonym expansion via ontology
+        // LEVEL 3: Leave null for LLM clarification
         console.log(
-          `[TerminologyMapper] 🔍 Searching ALL semantic fields for "${filter.userPhrase}"`
+          `[TerminologyMapper] 🔍 Starting 3-level ontology-aware mapping for "${filter.userPhrase}"`
         );
 
-        const allMatches = await this.findMatchesAcrossAllFields(
+        let allMatches = await this.findMatchesAcrossAllFields(
           filter.userPhrase,
           customer,
           pool
         );
 
-        if (allMatches.length === 0) {
-          console.warn(
-            `[TerminologyMapper] ❌ No matches found for "${filter.userPhrase}" in any semantic field`
+        // LEVEL 1: Direct match found
+        if (allMatches.length > 0) {
+          console.log(
+            `[TerminologyMapper] ✅ LEVEL 1 (Direct): Found ${allMatches.length} match(es) for "${filter.userPhrase}"`
           );
-          results.push({
-            ...filter,
-            value: null,
-            mappingConfidence: 0.0,
-            mappingError: `No matching value found in any semantic field`,
-          });
-          continue;
+          // Continue to selection logic below
+        }
+        // LEVEL 2: Try synonym expansion via ontology
+        else {
+          console.log(
+            `[TerminologyMapper] ⏩ LEVEL 1 (Direct): No matches - trying LEVEL 2 (Synonym expansion)`
+          );
+
+          const ontologyService = getOntologyLookupService();
+          const synonyms = await ontologyService.lookupOntologySynonyms(
+            filter.userPhrase,
+            customer,
+            {
+              maxLevels: 1,
+              includeInformal: true,
+              includeDeprecated: false,
+            }
+          );
+
+          if (synonyms.length > 0) {
+            console.log(
+              `[TerminologyMapper] 📚 Found ${synonyms.length} synonym(s) from ontology: ${synonyms.slice(0, 3).join(", ")}${synonyms.length > 3 ? "..." : ""}`
+            );
+
+            // Try each synonym in order
+            for (const synonym of synonyms) {
+              const synonymMatches = await this.findMatchesAcrossAllFields(
+                synonym,
+                customer,
+                pool
+              );
+
+              if (synonymMatches.length > 0) {
+                console.log(
+                  `[TerminologyMapper] ✅ LEVEL 2 (Synonym): Matched via synonym "${synonym}" → found ${synonymMatches.length} match(es)`
+                );
+
+                allMatches = synonymMatches;
+
+                // Add mapping metadata
+                const selectedMatch = synonymMatches[0];
+                results.push({
+                  ...filter,
+                  field: selectedMatch.field,
+                  value: selectedMatch.value,
+                  mappingConfidence: selectedMatch.confidence * 0.85, // Reduce confidence for synonym match
+                  mappingPath: {
+                    originalTerm: filter.userPhrase,
+                    synonymsUsed: [synonym],
+                    levelsTraversed: 1,
+                    matchedVia: 'synonym',
+                  },
+                  mappingNote: `Matched via synonym: "${filter.userPhrase}" → "${synonym}"`,
+                });
+
+                continue; // Move to next filter
+              }
+            }
+          } else {
+            console.log(
+              `[TerminologyMapper] ⏩ LEVEL 2 (Synonym): No synonyms found in ontology`
+            );
+          }
+
+          // LEVEL 3: No match found (neither direct nor synonym)
+          if (allMatches.length === 0) {
+            console.warn(
+              `[TerminologyMapper] ❌ LEVEL 3 (Clarification): No matches found for "${filter.userPhrase}" after synonym expansion - needs clarification`
+            );
+            results.push({
+              ...filter,
+              value: null,
+              mappingConfidence: 0.0,
+              mappingError: `No matching value found in semantic index or ontology`,
+              mappingPath: {
+                originalTerm: filter.userPhrase,
+                levelsTraversed: 2,
+                matchedVia: 'direct', // Attempted direct, failed
+              },
+            });
+            continue;
+          }
         }
 
         // Sort by confidence descending
@@ -262,7 +351,7 @@ export class TerminologyMapperService {
         // 3. No high-confidence match (best < 0.5) → Needs clarification
 
         if (bestMatch.confidence > 0.85 && (!secondBestMatch || bestMatch.confidence - secondBestMatch.confidence > 0.15)) {
-          // Clear winner: single high-confidence match
+          // Clear winner: single high-confidence match (LEVEL 1 direct match)
           console.log(
             `[TerminologyMapper] ✅ Clear winner: using "${bestMatch.field}" = "${bestMatch.value}"`
           );
@@ -271,6 +360,11 @@ export class TerminologyMapperService {
             field: bestMatch.field,
             value: bestMatch.value,
             mappingConfidence: bestMatch.confidence,
+            mappingPath: {
+              originalTerm: filter.userPhrase,
+              levelsTraversed: 0, // Direct match
+              matchedVia: 'direct',
+            },
           });
         } else if (bestMatch.confidence < 0.5) {
           // No good match - needs clarification
@@ -283,6 +377,11 @@ export class TerminologyMapperService {
             value: bestMatch.value,
             mappingConfidence: bestMatch.confidence,
             validationWarning: `Low confidence match - may need clarification`,
+            mappingPath: {
+              originalTerm: filter.userPhrase,
+              levelsTraversed: 0,
+              matchedVia: 'direct',
+            },
           });
         } else {
           // Ambiguous: multiple similar matches
@@ -295,6 +394,11 @@ export class TerminologyMapperService {
             value: bestMatch.value,
             mappingConfidence: bestMatch.confidence,
             validationWarning: `Ambiguous match - found in multiple fields (${allMatches.slice(0, 3).map(m => m.field).join(", ")})`,
+            mappingPath: {
+              originalTerm: filter.userPhrase,
+              levelsTraversed: 0,
+              matchedVia: 'direct',
+            },
           });
         }
       } catch (error) {
@@ -620,11 +724,33 @@ export class TerminologyMapperService {
     }
   }
 
+  /**
+   * @deprecated This function is deprecated as of 2025-11-18.
+   * Use `mapFilters()` instead which searches ALL semantic fields.
+   *
+   * This function will be removed in a future release.
+   * Terminology mappings are now handled directly in filter mapping
+   * with ontology-aware synonym expansion.
+   *
+   * **Reason for deprecation:**
+   * - Duplicate mapping logic causes contradictory results
+   * - mapFilters() is more accurate (searches all fields, not pre-assigned field)
+   * - Ontology integration happens at filter level, not terminology level
+   *
+   * @see mapFilters()
+   * @see docs/todos/in-progress/ontology-mapping-implementation.md
+   */
   async mapUserTerms(
     terms: string[],
     customerId: string,
     options: Partial<TerminologyMappingOptions> = {}
   ): Promise<TerminologyMapping[]> {
+    console.warn(
+      "[TerminologyMapper] ⚠️  mapUserTerms() is DEPRECATED - use mapFilters() instead. " +
+      "This function will be removed in a future release. " +
+      "See: docs/analysis/mapUserTerms-usage-audit.md"
+    );
+
     if (!customerId || !customerId.trim()) {
       throw new Error(
         "[TerminologyMapper] customerId is required to map terminology"

@@ -163,36 +163,56 @@ function UnderstandingTab({ result, onChallenge }: {
         <div>
           <h4 className="text-sm font-semibold text-slate-700 mb-2">Filters Applied</h4>
           <div className="space-y-2">
-            {intent.filters.map((filter: any, i: number) => (
-              <div
-                key={i}
-                className={`text-sm border rounded p-2 ${
-                  filter.validationWarning
-                    ? "bg-amber-50 border-amber-200"
-                    : "bg-slate-50 border-slate-200"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    {filter.field ||
-                      filter.concept ||
-                      filter.userPhrase ||
-                      `Filter ${i + 1}`}
-                  </span>
-                  {filter.validationWarning && (
-                    <span className="text-xs font-medium text-amber-700">
-                      ⚠ {filter.validationWarning}
+            {intent.filters.map((filter: any, i: number) => {
+              // Check if this is an unresolved filter that needs clarification
+              const isUnresolved = !filter.field || filter.value === null || filter.value === undefined;
+              const needsClarification = filter.validationError === "UNRESOLVED_FILTER" ||
+                                        filter.validationWarning?.includes("clarification required") ||
+                                        isUnresolved;
+
+              return (
+                <div
+                  key={i}
+                  className={`text-sm border rounded p-2 ${
+                    needsClarification
+                      ? "bg-blue-50 border-blue-200"
+                      : filter.validationWarning
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-slate-50 border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">
+                      {filter.field ||
+                        filter.concept ||
+                        filter.userPhrase ||
+                        `Filter ${i + 1}`}
                     </span>
+                    {needsClarification ? (
+                      <span className="text-xs font-medium text-blue-700 flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3" />
+                        Needs clarification
+                      </span>
+                    ) : filter.validationWarning ? (
+                      <span className="text-xs font-medium text-amber-700">
+                        ⚠ {filter.validationWarning}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className={needsClarification ? "text-blue-700" : "text-slate-700"}>
+                    {filter.value ||
+                      filter.condition ||
+                      filter.userPhrase ||
+                      "Pending clarification"}
+                  </div>
+                  {needsClarification && (
+                    <div className="text-xs text-blue-600 mt-1">
+                      Will prompt for clarification before generating query
+                    </div>
                   )}
                 </div>
-                <div className="text-slate-700">
-                  {filter.value ||
-                    filter.condition ||
-                    filter.userPhrase ||
-                    "Pending clarification"}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

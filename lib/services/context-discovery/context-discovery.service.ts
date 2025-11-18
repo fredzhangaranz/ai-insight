@@ -415,6 +415,26 @@ export class ContextDiscoveryService {
     userTerms: string[],
     logger: ReturnType<typeof createDiscoveryLogger>
   ) {
+    // DEPRECATED (2025-11-18): Terminology mapping is now handled via mapFilters()
+    // This step is being phased out as part of ontology integration (Phase 1, Task 1.1)
+    //
+    // Reasoning:
+    // - mapFilters() now searches ALL semantic fields (more accurate)
+    // - Terminology mappings can contradict filter values
+    // - LLM prompt already skips terminology when filters have values
+    // - Ontology integration will add synonym expansion to mapFilters()
+    //
+    // See: docs/analysis/mapUserTerms-usage-audit.md
+    // See: docs/todos/in-progress/ontology-mapping-implementation.md Task 1.1
+    logger.info(
+      "context_discovery",
+      "terminology_mapper",
+      "⏩ Skipping deprecated terminology mapping - filter values used instead"
+    );
+    return [];
+
+    // ORIGINAL CODE (commented out for potential rollback):
+    /*
     try {
       if (userTerms.length === 0) {
         logger.debug(
@@ -446,6 +466,7 @@ export class ContextDiscoveryService {
       );
       throw error;
     }
+    */
   }
 
   private async runJoinPathPlanning(

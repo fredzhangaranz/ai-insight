@@ -22,6 +22,7 @@ import {
   XCircleIcon,
   ArrowRightIcon,
   ArrowPathIcon,
+  ChartBarIcon,
 } from "@heroicons/react/24/outline";
 import { Component, ReactNode } from "react";
 
@@ -576,6 +577,13 @@ export default function AdminDashboard() {
                   <Button variant="outline" className="w-full justify-start">
                     <Cog6ToothIcon className="w-4 h-4 mr-2" />
                     Manage Providers
+                  </Button>
+                </Link>
+
+                <Link href="/admin/query-metrics">
+                  <Button variant="outline" className="w-full justify-start">
+                    <ChartBarIcon className="w-4 h-4 mr-2" />
+                    Query Metrics
                   </Button>
                 </Link>
 
