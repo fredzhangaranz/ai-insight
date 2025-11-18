@@ -27,7 +27,7 @@ export interface ParallelTaskResult<T> {
 export interface ParallelExecutionConfig {
   /**
    * Maximum time in milliseconds to wait for all tasks to complete
-   * Default: 30000 (30 seconds)
+   * Default: 60000 (60 seconds)
    */
   timeout?: number;
 
@@ -124,7 +124,7 @@ export interface ParallelExecutionResult<T> {
  * ```
  */
 export class ParallelExecutorService {
-  private readonly DEFAULT_TIMEOUT = 30000; // 30 seconds
+  private readonly DEFAULT_TIMEOUT = 60000; // 60 seconds (increased from 30s - stopgap for LLM timeout issues)
 
   /**
    * Execute multiple tasks in parallel with timeout and cancellation support

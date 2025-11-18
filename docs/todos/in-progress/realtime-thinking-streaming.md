@@ -36,10 +36,10 @@ Replace simulation with actual server-side event streaming so users see progress
 ### Phase 1 Task Breakdown
 
 #### Completed ✅
-- [x] **1.1** Enhanced orchestrator with hierarchical sub-steps (context discovery breakdown)
-- [x] **1.2** Improved thinking step messages with dynamic content (row counts, assumptions)
-- [x] **1.3** Implemented cumulative timing simulation in useInsights
-- [x] **1.4** Created smart merging logic in finalizeThinking
+- [x] **1.1** Enhanced orchestrator with hierarchical sub-steps (context discovery breakdown) _(completed 2025-11-19)_
+- [x] **1.2** Improved thinking step messages with dynamic content (row counts, assumptions) _(completed 2025-11-19)_
+- [x] **1.3** Implemented cumulative timing simulation in useInsights _(completed 2025-11-19)_
+- [x] **1.4** Created smart merging logic in finalizeThinking _(completed 2025-11-19)_
 
 #### In Progress 🚧
 - [ ] **1.5** Fix finalizeThinking to not clear simulation prematurely

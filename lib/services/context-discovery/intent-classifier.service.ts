@@ -418,8 +418,10 @@ export class IntentClassifierService {
     // All providers extend BaseProvider which implements complete()
     const baseProvider = provider as BaseProvider;
 
-    // Call with timeout (30 seconds to account for first-time initialization)
-    const TIMEOUT_MS = 30000;
+    // Call with timeout (60 seconds to account for first-time initialization + complex queries)
+    // STOPGAP FIX: Increased from 30s to handle sequential LLM operations
+    // TODO: Replace with Task 1.1 parallelization for proper fix
+    const TIMEOUT_MS = 60000;
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(
         () =>
@@ -429,6 +431,15 @@ export class IntentClassifierService {
         TIMEOUT_MS
       );
     });
+
+    // Create abort promise if signal is provided (Task 1.1.5)
+    const abortPromise = signal
+      ? new Promise<never>((_, reject) => {
+          signal.addEventListener("abort", () => {
+            reject(new Error("[IntentClassifier] Operation canceled by user"));
+          });
+        })
+      : new Promise<never>(() => {}); // Never-resolving promise if no signal
 
     try {
       const apiCallStartTime = Date.now();
@@ -446,6 +457,7 @@ export class IntentClassifierService {
           temperature: 0.3, // Lower temperature for more consistent JSON
         }),
         timeoutPromise,
+        abortPromise, // Add abort promise to race (Task 1.1.5)
       ]);
 
       const apiCallDuration = Date.now() - apiCallStartTime;

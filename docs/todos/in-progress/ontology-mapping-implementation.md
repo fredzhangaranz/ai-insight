@@ -153,23 +153,23 @@ Users frequently use different terminology than the database:
 **What Was Done:**
 
 #### Subtask 1.1.1: Audit `mapUserTerms()` Usage ✅
-- [x] Searched codebase for all calls to `mapUserTerms()`
-- [x] Documented where it's used and why
-- [x] Determined functionality is only called from one location
-- [x] **File:** Created `docs/analysis/mapUserTerms-usage-audit.md`
-- [x] **Result:** Only called from terminology-mapper.service.ts (as expected)
+- [x] Searched codebase for all calls to `mapUserTerms()` _(completed 2025-11-19)_
+- [x] Documented where it's used and why _(completed 2025-11-19)_
+- [x] Determined functionality is only called from one location _(completed 2025-11-19)_
+- [x] **File:** Created `docs/analysis/mapUserTerms-usage-audit.md` _(completed 2025-11-19)_
+- [x] **Result:** Only called from terminology-mapper.service.ts (as expected) _(completed 2025-11-19)_
 
 #### Subtask 1.1.2: Deprecate `mapUserTerms()` Function ✅
-- [x] Added `@deprecated` annotation with migration guidance
-- [x] Added console warning when called
-- [x] **File:** `lib/services/context-discovery/terminology-mapper.service.ts` (lines 623-648)
-- [x] **Test:** Verified no functionality regression
+- [x] Added `@deprecated` annotation with migration guidance _(completed 2025-11-19)_
+- [x] Added console warning when called _(completed 2025-11-19)_
+- [x] **File:** `lib/services/context-discovery/terminology-mapper.service.ts` (lines 623-648) _(completed 2025-11-19)_
+- [x] **Test:** Verified no functionality regression _(completed 2025-11-19)_
 
 #### Subtask 1.1.3: Remove TerminologyMapping from Context Bundle ✅
-- [x] Skipped old terminology mapping in context discovery
-- [x] **File:** `lib/services/context-discovery/context-discovery.service.ts` (lines 413-470)
-- [x] **Test:** SQL generation still works (build successful)
-- [x] **Note:** Preserved code in comments for potential rollback
+- [x] Skipped old terminology mapping in context discovery _(completed 2025-11-19)_
+- [x] **File:** `lib/services/context-discovery/context-discovery.service.ts` (lines 413-470) _(completed 2025-11-19)_
+- [x] **Test:** SQL generation still works (build successful) _(completed 2025-11-19)_
+- [x] **Note:** Preserved code in comments for potential rollback _(completed 2025-11-19)_
 
 **Success Criteria Met:**
 - ✅ Only ONE mapping system active (ontology-aware `mapFilters()`)
@@ -187,7 +187,7 @@ Users frequently use different terminology than the database:
 **What Was Done:**
 
 #### Subtask 1.2.1: Create Database Migration ✅
-- [x] Created migration: `database/migration/029_ontology_synonyms_schema.sql`
+- [x] Created migration: `database/migration/029_ontology_synonyms_schema.sql` _(completed 2025-11-19)_
 - [ ] Add columns to existing `ClinicalOntology` table:
   ```sql
   ALTER TABLE "ClinicalOntology" ADD COLUMN IF NOT EXISTS preferred_term VARCHAR(255);

@@ -191,9 +191,9 @@ npm run migrate
 
 **Exit Criteria:**
 
-- [x] Migration runs successfully
-- [x] SavedInsights supports customerId
-- [x] Scope includes 'semantic' option
+- [x] Migration runs successfully _(completed 2025-11-19)_
+- [x] SavedInsights supports customerId _(completed 2025-11-19)_
+- [x] Scope includes 'semantic' option _(completed 2025-11-19)_
 
 ---
 
@@ -257,10 +257,10 @@ npm run migrate
 
 **Exit Criteria:**
 
-- [x] Migration runs successfully
-- [x] QueryHistory table created
-- [x] Indexes created for efficient queries
-- [x] Cleanup function available for maintenance
+- [x] Migration runs successfully _(completed 2025-11-19)_
+- [x] QueryHistory table created _(completed 2025-11-19)_
+- [x] Indexes created for efficient queries _(completed 2025-11-19)_
+- [x] Cleanup function available for maintenance _(completed 2025-11-19)_
 
 **Architecture Decision:**
 
@@ -418,11 +418,11 @@ export function useInsights() {
 
 **Exit Criteria:**
 
-- [x] New `/insights` page loads
-- [x] Customer selector functional
-- [x] Question input works
-- [x] Loading states display
-- [x] Error handling works
+- [x] New `/insights` page loads _(completed 2025-11-19)_
+- [x] Customer selector functional _(completed 2025-11-19)_
+- [x] Question input works _(completed 2025-11-19)_
+- [x] Loading states display _(completed 2025-11-19)_
+- [x] Error handling works _(completed 2025-11-19)_
 
 ---
 
@@ -533,10 +533,10 @@ export async function GET(req: NextRequest) {
 
 **Exit Criteria:**
 
-- [x] Fetches active customers from database
-- [x] Dropdown renders correctly
-- [x] Selection updates state
-- [x] Uses existing shadcn/ui components
+- [x] Fetches active customers from database _(completed 2025-11-19)_
+- [x] Dropdown renders correctly _(completed 2025-11-19)_
+- [x] Selection updates state _(completed 2025-11-19)_
+- [x] Uses existing shadcn/ui components _(completed 2025-11-19)_
 
 ---
 
@@ -740,11 +740,11 @@ function ThinkingStepItem({ step }: { step: ThinkingStep }) {
 
 **Exit Criteria:**
 
-- [x] Textarea auto-resizes
-- [x] Ctrl+Enter submits
-- [x] Loading states work
-- [x] Thinking stream displays
-- [x] Uses shadcn/ui components
+- [x] Textarea auto-resizes _(completed 2025-11-19)_
+- [x] Ctrl+Enter submits _(completed 2025-11-19)_
+- [x] Loading states work _(completed 2025-11-19)_
+- [x] Thinking stream displays _(completed 2025-11-19)_
+- [x] Uses shadcn/ui components _(completed 2025-11-19)_
 
 ---
 
@@ -897,10 +897,10 @@ function formatTimestamp(date: Date): string {
 
 **Exit Criteria:**
 
-- [x] Suggested questions display
-- [x] Recent questions fetch from API
-- [x] Click fills question input
-- [x] Timestamps formatted
+- [x] Suggested questions display _(completed 2025-11-19)_
+- [x] Recent questions fetch from API _(completed 2025-11-19)_
+- [x] Click fills question input _(completed 2025-11-19)_
+- [x] Timestamps formatted _(completed 2025-11-19)_
 
 ---
 
@@ -908,16 +908,16 @@ function formatTimestamp(date: Date): string {
 
 **STATUS: ✅ 100% COMPLETE - Option A Implemented**
 
-- [x] Database migration adds customerId to SavedInsights
-- [x] New `/insights/new` page loads without errors
-- [x] Customer selector fetches and displays
-- [x] Question input works with auto-resize
-- [x] Suggested questions populate
-- [x] Query history fetch and display ✅ **FIXED: QueryHistory table implemented**
-- [x] Thinking stream shows steps
-- [x] All styling uses shadcn/ui
-- [x] Mobile responsive
-- [x] No TypeScript errors
+- [x] Database migration adds customerId to SavedInsights _(completed 2025-11-19)_
+- [x] New `/insights/new` page loads without errors _(completed 2025-11-19)_
+- [x] Customer selector fetches and displays _(completed 2025-11-19)_
+- [x] Question input works with auto-resize _(completed 2025-11-19)_
+- [x] Suggested questions populate _(completed 2025-11-19)_
+- [x] Query history fetch and display ✅ **FIXED: QueryHistory table implemented** _(completed 2025-11-19)_
+- [x] Thinking stream shows steps _(completed 2025-11-19)_
+- [x] All styling uses shadcn/ui _(completed 2025-11-19)_
+- [x] Mobile responsive _(completed 2025-11-19)_
+- [x] No TypeScript errors _(completed 2025-11-19)_
 
 **✅ SOLUTION IMPLEMENTED: QueryHistory Table (Auto-save queries)**
 
@@ -1211,11 +1211,11 @@ function exportCSV(results: { rows: any[]; columns: string[] }) {
 
 **Exit Criteria:**
 
-- [x] Actions panel shows all buttons
-- [x] Chart button opens existing ChartConfigurationDialog
-- [x] Save button opens new SaveInsightDialog
-- [x] Template button links to /templates/new
-- [x] Export CSV works
+- [x] Actions panel shows all buttons _(completed 2025-11-19)_
+- [x] Chart button opens existing ChartConfigurationDialog _(completed 2025-11-19)_
+- [x] Save button opens new SaveInsightDialog _(completed 2025-11-19)_
+- [x] Template button links to /templates/new _(completed 2025-11-19)_
+- [x] Export CSV works _(completed 2025-11-19)_
 
 ---
 
@@ -2326,11 +2326,11 @@ export async function POST(req: NextRequest) {
 
 **Exit Criteria:**
 
-- [x] Dialog opens from ActionsPanel
-- [x] All fields save to database
-- [x] Uses existing SavedInsights schema
-- [x] Chart config optional
-- [x] Redirects to saved insight
+- [x] Dialog opens from ActionsPanel _(completed 2025-11-19)_
+- [x] All fields save to database _(completed 2025-11-19)_
+- [x] Uses existing SavedInsights schema _(completed 2025-11-19)_
+- [x] Chart config optional _(completed 2025-11-19)_
+- [x] Redirects to saved insight _(completed 2025-11-19)_
 
 ---
 
@@ -2394,11 +2394,11 @@ export function ActionsPanel({
 
 **Exit Criteria:**
 
-- [x] Chart builder opens from actions
-- [x] Reuses existing ChartConfigurationDialog
-- [x] Flows to SaveInsightDialog
-- [x] Chart config passed through
-- [x] Two-step flow works smoothly
+- [x] Chart builder opens from actions _(completed 2025-11-19)_
+- [x] Reuses existing ChartConfigurationDialog _(completed 2025-11-19)_
+- [x] Flows to SaveInsightDialog _(completed 2025-11-19)_
+- [x] Chart config passed through _(completed 2025-11-19)_
+- [x] Two-step flow works smoothly _(completed 2025-11-19)_
 
 ---
 
@@ -2465,10 +2465,10 @@ function downloadFile(content: string, filename: string, type: string) {
 
 **Exit Criteria:**
 
-- [x] CSV export works
-- [x] JSON export works
-- [x] Template link passes data
-- [x] All export formats valid
+- [x] CSV export works _(completed 2025-11-19)_
+- [x] JSON export works _(completed 2025-11-19)_
+- [x] Template link passes data _(completed 2025-11-19)_
+- [x] All export formats valid _(completed 2025-11-19)_
 
 ---
 
@@ -2557,20 +2557,20 @@ app/insights/components/__tests__/
 
 **Update routes:**
 
-- [x] Keep `/insights/[id]` (view saved insight)
-- [x] Remove `/insights/new` (replaced by `/insights`)
-- [x] Keep `/funnel-test` for testing
+- [x] Keep `/insights/[id]` (view saved insight) _(completed 2025-11-19)_
+- [x] Remove `/insights/new` (replaced by `/insights`) _(completed 2025-11-19)_
+- [x] Keep `/funnel-test` for testing _(completed 2025-11-19)_
 
 **Reuse components:**
 
-- [x] ChartConfigurationDialog
-- [x] ResultsDisplay
-- [x] Template editor
+- [x] ChartConfigurationDialog _(completed 2025-11-19)_
+- [x] ResultsDisplay _(completed 2025-11-19)_
+- [x] Template editor _(completed 2025-11-19)_
 
 **Update database:**
 
-- [x] Add customerId to SavedInsights
-- [x] Add 'semantic' scope option
+- [x] Add customerId to SavedInsights _(completed 2025-11-19)_
+- [x] Add 'semantic' scope option _(completed 2025-11-19)_
 
 ---
 
