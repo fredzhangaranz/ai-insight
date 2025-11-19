@@ -193,23 +193,37 @@ export class SemanticSearcherService {
         concepts.map((concept) => this.getConceptEmbedding(concept))
       );
 
-      // Search form fields
-      const formResults = await this.searchFormFieldsInDB(
-        customerId,
-        conceptEmbeddings,
-        concepts,
-        minConfidence
-      );
+      // PERFORMANCE OPTIMIZATION (Task 1.1.4):
+      // Search form fields and non-form columns in parallel since they're independent
+      // This saves ~0.5-1s when includeNonForm is true
+      let formResults: SemanticSearchResult[];
+      let nonFormResults: SemanticSearchResult[] = [];
 
-      // Search non-form columns if requested
-      const nonFormResults = includeNonForm
-        ? await this.searchNonFormColumnsInDB(
+      if (includeNonForm) {
+        // Run both searches in parallel
+        [formResults, nonFormResults] = await Promise.all([
+          this.searchFormFieldsInDB(
             customerId,
             conceptEmbeddings,
             concepts,
             minConfidence
-          )
-        : [];
+          ),
+          this.searchNonFormColumnsInDB(
+            customerId,
+            conceptEmbeddings,
+            concepts,
+            minConfidence
+          ),
+        ]);
+      } else {
+        // Only search form fields
+        formResults = await this.searchFormFieldsInDB(
+          customerId,
+          conceptEmbeddings,
+          concepts,
+          minConfidence
+        );
+      }
 
       // Combine, sort by confidence descending, and limit
       const allResults = [...formResults, ...nonFormResults]
@@ -320,9 +334,11 @@ export class SemanticSearcherService {
     const pool = await getInsightGenDbPool();
 
     try {
-      // Query form fields with similarity to any concept
+      // Query form fields matching semantic concepts
+      // Note: We match by concept name rather than embedding similarity
+      // since SemanticIndexField doesn't have an embedding column
       const query = `
-        SELECT 
+        SELECT
           f.id,
           'form'::text as source,
           f.field_name,
@@ -330,19 +346,13 @@ export class SemanticSearcherService {
           NULL::text as table_name,
           f.semantic_concept,
           f.data_type,
-          f.confidence,
-          -- Calculate similarity to best matching concept
-          MAX(1 - (SQRT(
-            POWER(f.embedding <-> c.embedding, 2)
-          ))) as similarity_score
+          f.confidence
         FROM "SemanticIndexField" f
         JOIN "SemanticIndex" si ON f.semantic_index_id = si.id
-        JOIN "ClinicalOntology" c ON f.semantic_concept = c.concept_name
         WHERE si.customer_id = $1
           AND f.semantic_concept = ANY($2)
           AND f.confidence >= $3
-        GROUP BY f.id, si.form_name, f.field_name, f.data_type, f.semantic_concept, f.confidence
-        ORDER BY similarity_score DESC, f.confidence DESC
+        ORDER BY f.confidence DESC, f.field_name
       `;
 
       const result = await pool.query(query, [
@@ -358,11 +368,8 @@ export class SemanticSearcherService {
         formName: row.form_name,
         semanticConcept: row.semantic_concept,
         dataType: row.data_type,
-        confidence: Math.min(
-          parseFloat(row.confidence),
-          Math.max(0, Math.min(1, row.similarity_score || 0.7))
-        ),
-        similarityScore: row.similarity_score,
+        confidence: parseFloat(row.confidence),
+        similarityScore: undefined, // No embedding-based similarity in this version
       }));
     } catch (error) {
       console.warn(

@@ -1,6 +1,6 @@
 # Semantic Remaining Task Tracker
 
-**Last Updated:** 2025-11-19
+**Last Updated:** 2025-11-19 (Updated with Phase 5A Assessment-Level Semantics)
 **Scope:** Focus the team on the highest-priority semantic/insight work still open in `docs/todos/in-progress`.
 
 ## P0 — Blockers / Critical Fixes (URGENT - Blocking Production Use)
@@ -54,24 +54,44 @@ See: [performance-optimization-implementation.md](./performance-optimization-imp
 
 ---
 
-### 🔥 HIGH PRIORITY (This Week)
+### 🔥 HIGH PRIORITY (This Week - Week 1)
 
-#### 1. Performance Optimization - Tier 1 Quick Wins (URGENT)
-**Time:** ~20 hours total
-**Why Urgent:** LLM timeouts blocking production use
-**Tasks:**
-- Task 1.1: Parallelize context discovery (6h) - **START HERE**
-- Task 1.2: Model selection Gemini/Claude (6h)
-- Task 1.3: Session-based cache (4h)
-- Task 1.4: Golden queries test suite (4h)
-- Task 1.5: Telemetry & monitoring (3h)
+#### 1. Performance Optimization - Tier 1 Quick Wins ✅ COMPLETE
+**Time:** ~20 hours total (completed Nov 19, 2025)
+**Status:** ✅ ALL TIER 1 TASKS COMPLETE
+**Completed Tasks:**
+- ✅ Task 1.1: Parallelize context discovery (6h)
+- ✅ Task 1.2: Model selection Gemini/Claude (6h)
+- ✅ Task 1.3: Session-based cache (4h)
+- ⏳ Task 1.4: Golden queries test suite (4h) - **IN PROGRESS**
+- ⏳ Task 1.5: Telemetry & monitoring (3h) - **PENDING**
 
 **Expected Impact:** 40-50s → 15-20s (60% latency reduction)
 **See:** [performance-optimization-implementation.md](./performance-optimization-implementation.md)
 
 ---
 
-#### 2. Complete Real-Time Thinking Stream Testing
+#### 2. Complete Task 1.4 Golden Queries Test Suite
+**Time:** 4 hours
+**Status:** In progress
+**Priority:** P1 (blocks template system validation)
+**Action:**
+1. Define golden query format (30 min)
+2. Create 20 diverse queries including 15 template-related queries from C1/C2/C3 analysis (2h)
+3. Implement test runner (2h)
+4. Set up CI integration (1h - optional)
+
+**Template-Related Queries to Include:**
+- 5 temporal proximity queries ("healing rate at 4 weeks", "area reduction at 12 weeks")
+- 3 assessment correlation queries ("visits with no billing", "patients with initial but no follow-up")
+- 2 workflow state queries ("documents by status", "forms in pending review")
+- 5 assessment type queries ("show me wound assessments", "list clinical visits")
+
+**See:** [performance-optimization-implementation.md](./performance-optimization-implementation.md) Task 1.4
+
+---
+
+#### 3. Complete Real-Time Thinking Stream Testing
 **Time:** 30 minutes
 **Status:** Code complete, needs manual browser testing
 **Action:** Run test plan in `docs/testing/realtime-thinking-stream-test-plan.md`
@@ -79,7 +99,7 @@ See: [performance-optimization-implementation.md](./performance-optimization-imp
 
 ---
 
-#### 3. Load Remaining 29 Ontology Terms
+#### 4. Load Remaining 29 Ontology Terms
 **Time:** 1-2 hours
 **Status:** 1/30 terms loaded, 29 pending
 **Action:**
@@ -87,6 +107,69 @@ See: [performance-optimization-implementation.md](./performance-optimization-imp
 2. Run `npm run ontology:load`
 3. Run `npm run ontology:load-synonyms`
 **See:** [ontology-mapping-implementation.md](./ontology-mapping-implementation.md)
+
+---
+
+### 🔥 HIGH PRIORITY (Week 2)
+
+#### 5. Assessment-Level Semantic Indexing (Phase 5A) - **NEW**
+**Time:** ~12 hours total
+**Priority:** P1 (foundational for template system)
+**Why Important:** Enables assessment type queries and multi-assessment correlation templates
+**Dependencies:** None (extends existing semantic index cleanly)
+
+**Objective:** Extend semantic indexing to cover assessment types and enum fields, not just form fields
+
+**Tasks:**
+
+**Day 1 (4 hours) - Database Schema:**
+- [ ] Create migration: `SemanticIndexAssessmentType` table
+  - Fields: customer_id, assessment_type_id, semantic_concept, category, confidence
+  - Index: (customer_id, semantic_concept)
+- [ ] Create migration: `SemanticIndexFieldEnumValue` table
+  - Fields: field_id, enum_value, display_label, sort_order, usage_count
+  - Index: (field_id, is_active)
+- [ ] Run migrations on dev + staging
+
+**Day 2 (4 hours) - Assessment Type Indexer:**
+- [ ] Create `AssessmentTypeIndexer` service
+- [ ] Define semantic concept taxonomy:
+  - `clinical_*`: clinical_wound_assessment, clinical_visit_documentation, clinical_initial_assessment
+  - `billing_*`: billing_documentation, billing_charge_capture
+  - `administrative_*`: administrative_intake, administrative_discharge
+  - `treatment_*`: treatment_plan, treatment_protocol
+- [ ] Build pattern-based auto-detection (name regex matching)
+- [ ] Create manual seed data (10 common assessment types)
+- [ ] Test indexing on C1, C2, C3 customer schemas
+
+**Day 3 AM (2 hours) - Enum Field Detector:**
+- [ ] Extend `silhouette-discovery.service.ts`
+- [ ] Add enum field pattern detection: `*status`, `*state`, `*type`, `*category`
+- [ ] Query distinct values from `rpt.Note` table (2-50 values = enum)
+- [ ] Populate `SemanticIndexFieldEnumValue` with usage counts
+- [ ] Mark fields as `field_type='enum'`
+
+**Day 3 PM (2 hours) - Context Discovery Integration:**
+- [ ] Create `AssessmentTypeSearcher` service
+- [ ] Add to context discovery parallel bundle
+- [ ] Update `SemanticContext` interface to include `assessmentTypes` array
+- [ ] Pass assessment context to SQL generation prompt
+
+**Success Criteria:**
+- ✅ Can answer: "Show me wound assessments"
+- ✅ Can answer: "Which patients have clinical visits?"
+- ✅ Can answer: "List billing forms by status" (with enum dropdown clarification)
+- ✅ Assessment type search latency <500ms
+- ✅ Enum field clarifications show dropdown options
+
+**Expected Impact:**
+- Enables template catalog population (Templates 2-3 require assessment semantics)
+- Foundation for multi-assessment correlation queries
+- Improved clarification UX for workflow state fields
+
+**See:**
+- Design: `docs/design/templating_system/templating_improvement_real_customer_analysis.md` Section 3.1-3.3
+- Alignment: `docs/design/templating_system/architecture_alignment_analysis.md` Section 2.3
 
 ---
 

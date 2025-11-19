@@ -1,0 +1,1373 @@
+﻿{
+  "ReportVersion": "2024.2.6",
+  "ReportGuid": "54766134-eeb4-be25-da43-00eab0efbee4",
+  "ReportName": "Compression Treatment Dashboard",
+  "ReportAlias": "Compression Treatment Dashboard",
+  "ReportCreated": "/Date(1737656384000+1300)/",
+  "ReportChanged": "/Date(1738113707000+1300)/",
+  "EngineVersion": "EngineV2",
+  "CalculationMode": "Interpretation",
+  "ReportUnit": "Centimeters",
+  "Dictionary": {
+    "DataSources": {
+      "0": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Assessment",
+        "Alias": "rpt.Assessment",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeVersionFk",
+            "NameInSource": "assessmentTypeVersionFk",
+            "Alias": "assessmentTypeVersionFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "createdByUserFk",
+            "NameInSource": "createdByUserFk",
+            "Alias": "createdByUserFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "createdByUserName",
+            "NameInSource": "createdByUserName",
+            "Alias": "createdByUserName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTimeOffset"
+          },
+          "4": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "signedByUserFk",
+            "NameInSource": "signedByUserFk",
+            "Alias": "signedByUserFk",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "signedByUserName",
+            "NameInSource": "signedByUserName",
+            "Alias": "signedByUserName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "timeZoneId",
+            "NameInSource": "timeZoneId",
+            "Alias": "timeZoneId",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Assessment a where a.woundFk='bc4b27f7-3a14-a10f-ad0f-2276036c11fc\t\n';"
+      },
+      "1": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AssessmentTypeVersion",
+        "Alias": "rpt.AssessmentTypeVersion",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeId",
+            "NameInSource": "assessmentTypeId",
+            "Alias": "assessmentTypeId",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "definitionVersion",
+            "NameInSource": "definitionVersion",
+            "Alias": "definitionVersion",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "type",
+            "NameInSource": "type",
+            "Alias": "type",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AssessmentTypeVersion"
+      },
+      "2": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AttributeType",
+        "Alias": "rpt.AttributeType",
+        "Columns": {
+          "0": {
+            "Name": "attributeTypeKey",
+            "NameInSource": "attributeTypeKey",
+            "Alias": "attributeTypeKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "dataType",
+            "NameInSource": "dataType",
+            "Alias": "dataType",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "variableName",
+            "NameInSource": "variableName",
+            "Alias": "variableName",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AttributeType"
+      },
+      "3": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.DimDate",
+        "Alias": "rpt.DimDate",
+        "Columns": {
+          "0": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTime"
+          },
+          "1": {
+            "Name": "dayOfMonth",
+            "NameInSource": "dayOfMonth",
+            "Alias": "dayOfMonth",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "dayOfWeek",
+            "NameInSource": "dayOfWeek",
+            "Alias": "dayOfWeek",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "dayOfYear",
+            "NameInSource": "dayOfYear",
+            "Alias": "dayOfYear",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "firstOfMonth",
+            "NameInSource": "firstOfMonth",
+            "Alias": "firstOfMonth",
+            "Type": "System.DateTime"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "month",
+            "NameInSource": "month",
+            "Alias": "month",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "quarter",
+            "NameInSource": "quarter",
+            "Alias": "quarter",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "weekOfYear",
+            "NameInSource": "weekOfYear",
+            "Alias": "weekOfYear",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "year",
+            "NameInSource": "year",
+            "Alias": "year",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.DimDate"
+      },
+      "4": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Measurement",
+        "Alias": "rpt.Measurement",
+        "Columns": {
+          "0": {
+            "Name": "area",
+            "NameInSource": "area",
+            "Alias": "area",
+            "Type": "System.Object"
+          },
+          "1": {
+            "Name": "areaReduction",
+            "NameInSource": "areaReduction",
+            "Alias": "areaReduction",
+            "Type": "System.Object"
+          },
+          "2": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "depth",
+            "NameInSource": "depth",
+            "Alias": "depth",
+            "Type": "System.Object"
+          },
+          "5": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "imageCount",
+            "NameInSource": "imageCount",
+            "Alias": "imageCount",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "islandCount",
+            "NameInSource": "islandCount",
+            "Alias": "islandCount",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "length",
+            "NameInSource": "length",
+            "Alias": "length",
+            "Type": "System.Object"
+          },
+          "10": {
+            "Name": "outlineCount",
+            "NameInSource": "outlineCount",
+            "Alias": "outlineCount",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "perimeter",
+            "NameInSource": "perimeter",
+            "Alias": "perimeter",
+            "Type": "System.Object"
+          },
+          "13": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "volume",
+            "NameInSource": "volume",
+            "Alias": "volume",
+            "Type": "System.Object"
+          },
+          "15": {
+            "Name": "width",
+            "NameInSource": "width",
+            "Alias": "width",
+            "Type": "System.Object"
+          },
+          "16": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Measurement"
+      },
+      "5": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Note",
+        "Alias": "rpt.Note",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "value",
+            "NameInSource": "value",
+            "Alias": "value",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "valueBoolean",
+            "NameInSource": "valueBoolean",
+            "Alias": "valueBoolean",
+            "Type": "System.Boolean"
+          },
+          "8": {
+            "Name": "valueDate",
+            "NameInSource": "valueDate",
+            "Alias": "valueDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "valueDecimal",
+            "NameInSource": "valueDecimal",
+            "Alias": "valueDecimal",
+            "Type": "System.Decimal"
+          },
+          "10": {
+            "Name": "valueInt",
+            "NameInSource": "valueInt",
+            "Alias": "valueInt",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "woundStateFk",
+            "NameInSource": "woundStateFk",
+            "Alias": "woundStateFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Note"
+      },
+      "6": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Patient",
+        "Alias": "rpt.Patient",
+        "Columns": {
+          "0": {
+            "Name": "addressCity",
+            "NameInSource": "addressCity",
+            "Alias": "addressCity",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "addressCountry",
+            "NameInSource": "addressCountry",
+            "Alias": "addressCountry",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "addressPostcode",
+            "NameInSource": "addressPostcode",
+            "Alias": "addressPostcode",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "addressState",
+            "NameInSource": "addressState",
+            "Alias": "addressState",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "addressStreet",
+            "NameInSource": "addressStreet",
+            "Alias": "addressStreet",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "addressSuburb",
+            "NameInSource": "addressSuburb",
+            "Alias": "addressSuburb",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "dateOfBirth",
+            "NameInSource": "dateOfBirth",
+            "Alias": "dateOfBirth",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "domainId",
+            "NameInSource": "domainId",
+            "Alias": "domainId",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "firstName",
+            "NameInSource": "firstName",
+            "Alias": "firstName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "gender",
+            "NameInSource": "gender",
+            "Alias": "gender",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "homePhone",
+            "NameInSource": "homePhone",
+            "Alias": "homePhone",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "lastName",
+            "NameInSource": "lastName",
+            "Alias": "lastName",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "middleName",
+            "NameInSource": "middleName",
+            "Alias": "middleName",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "mobilePhone",
+            "NameInSource": "mobilePhone",
+            "Alias": "mobilePhone",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "workPhone",
+            "NameInSource": "workPhone",
+            "Alias": "workPhone",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Patient"
+      },
+      "7": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Unit",
+        "Alias": "rpt.Unit",
+        "Columns": {
+          "0": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Unit"
+      },
+      "8": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Wound",
+        "Alias": "rpt.Wound",
+        "Columns": {
+          "0": {
+            "Name": "anatomyLabel",
+            "NameInSource": "anatomyLabel",
+            "Alias": "anatomyLabel",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "auxText",
+            "NameInSource": "auxText",
+            "Alias": "auxText",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "baselineDate",
+            "NameInSource": "baselineDate",
+            "Alias": "baselineDate",
+            "Type": "System.DateTime"
+          },
+          "3": {
+            "Name": "baselineDimDateFk",
+            "NameInSource": "baselineDimDateFk",
+            "Alias": "baselineDimDateFk",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "description",
+            "NameInSource": "description",
+            "Alias": "description",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "index",
+            "NameInSource": "index",
+            "Alias": "index",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "label",
+            "NameInSource": "label",
+            "Alias": "label",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "level0AnatomyId",
+            "NameInSource": "level0AnatomyId",
+            "Alias": "level0AnatomyId",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "level0Text",
+            "NameInSource": "level0Text",
+            "Alias": "level0Text",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "level1AnatomyId",
+            "NameInSource": "level1AnatomyId",
+            "Alias": "level1AnatomyId",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "level1Text",
+            "NameInSource": "level1Text",
+            "Alias": "level1Text",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "level2AnatomyId",
+            "NameInSource": "level2AnatomyId",
+            "Alias": "level2AnatomyId",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "level2Text",
+            "NameInSource": "level2Text",
+            "Alias": "level2Text",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "level3AnatomyId",
+            "NameInSource": "level3AnatomyId",
+            "Alias": "level3AnatomyId",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "level3Text",
+            "NameInSource": "level3Text",
+            "Alias": "level3Text",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "17": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Wound"
+      },
+      "9": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundState",
+        "Alias": "rpt.WoundState",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "endDate",
+            "NameInSource": "endDate",
+            "Alias": "endDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "endDateDimDateFk",
+            "NameInSource": "endDateDimDateFk",
+            "Alias": "endDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "isCurrentState",
+            "NameInSource": "isCurrentState",
+            "Alias": "isCurrentState",
+            "Type": "System.Boolean"
+          },
+          "5": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "startDate",
+            "NameInSource": "startDate",
+            "Alias": "startDate",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "startDateDimDateFk",
+            "NameInSource": "startDateDimDateFk",
+            "Alias": "startDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "woundStateTypeFk",
+            "NameInSource": "woundStateTypeFk",
+            "Alias": "woundStateTypeFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundState"
+      },
+      "10": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundStateType",
+        "Alias": "rpt.WoundStateType",
+        "Columns": {
+          "0": {
+            "Name": "attributeLookupKey",
+            "NameInSource": "attributeLookupKey",
+            "Alias": "attributeLookupKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "isActive",
+            "NameInSource": "isActive",
+            "Alias": "isActive",
+            "Type": "System.Boolean"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundStateType"
+      },
+      "11": {
+        "Ident": "StiSqlSource",
+        "Name": "healeddata",
+        "Alias": "healeddata",
+        "Key": "8cd6143bb6eb68dcf34557aa2624a5db",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "value",
+            "NameInSource": "value",
+            "Alias": "value",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "assessmentDate",
+            "NameInSource": "assessmentDate",
+            "Alias": "assessmentDate",
+            "Type": "System.DateTime"
+          },
+          "4": {
+            "Name": "assessmentId",
+            "NameInSource": "assessmentId",
+            "Alias": "assessmentId",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "new_value",
+            "NameInSource": "new_value",
+            "Alias": "new_value",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "healedDate",
+            "NameInSource": "healedDate",
+            "Alias": "healedDate",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "daysToHeal",
+            "NameInSource": "daysToHeal",
+            "Alias": "daysToHeal",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "healingBracket",
+            "NameInSource": "healingBracket",
+            "Alias": "healingBracket",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "primaryEtiology",
+            "NameInSource": "primaryEtiology",
+            "Alias": "primaryEtiology",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "CommandTimeout": 60,
+        "SqlCommand": "WITH ResolvedWounds AS (\n    -- Step 1: Resolve woundFk directly or by looking for it within the same patient and date\n    SELECT \n        n.value,\n        COALESCE(ass.woundFk, subass.woundFk) AS resolvedWoundFk, -- Assign woundFk\n        ass.id AS assessmentId, -- Original assessment ID\n        ass.dimdateFk, -- Original assessment date\n        ass.patientFk -- Patient ID for the assessment\n    FROM rpt.note n\n    INNER JOIN rpt.AttributeType a ON n.attributetypefk = a.id\n    INNER JOIN rpt.Assessment ass ON ass.id = n.assessmentFk\n    LEFT JOIN rpt.Assessment subass \n        ON ass.dimdateFk = subass.dimdateFk \n           AND ass.patientFk = subass.patientFk -- Same patient\n           AND subass.woundFk IS NOT NULL\n    WHERE a.name LIKE '%Compression%'\n),\nHealedWounds AS (\n    -- Step 2: Filter wounds whose current state is healed\n    SELECT DISTINCT \n        w.id AS woundFk,\n        ws.startDateDimDateFk AS healedDateFk -- Date when the wound was healed\n    FROM rpt.Wound w\n    INNER JOIN rpt.WoundState ws ON w.id = ws.woundFk\n    INNER JOIN rpt.WoundStateType wst ON ws.woundstatetypeFk = wst.id\n    WHERE ws.isCurrentState = 1 -- Current state\n      AND wst.name = 'Resurfaced/Resolved' -- Healed state\n),\nCategorizedWounds AS (\n    -- Step 3: Apply categorization based on the 'value' and join to dimdate table\n    SELECT \n        rw.resolvedWoundFk AS woundFk,\n        rw.value,\n        rw.patientFk, -- Include the patientFk in the final result\n        dd.date AS assessmentDate, -- Join to dimdate table and display the date column\n        rw.assessmentId, -- Include the original assessment ID\n        hws.healedDateFk, -- Include the healed date foreign key\n        -- Add the 'new_value' column with categorization based on rw.value\n        CASE \n            WHEN rw.value LIKE '%Coban II%' OR rw.value LIKE '%Multi%' OR rw.value LIKE '%Profore 3%' OR rw.value LIKE '%Circ%' OR rw.value LIKE '%Farrow%' OR rw.value LIKE '%Single Layer%' THEN 'High Compression'\n            WHEN rw.value LIKE '%Coban%' OR rw.value LIKE '%Coban Lite%' OR rw.value LIKE '%Profore 4%' THEN 'Reduced Compression'\n            WHEN rw.value LIKE '%Comprem%' OR rw.value LIKE '%Tubigrip%' THEN 'Tubular Elastic Bandage'\n            WHEN rw.value LIKE '%Compression Pump%' THEN 'Compression Pump'\n            WHEN rw.value LIKE '%Stocking%' THEN 'Compression Stockings'\n            ELSE 'Other'\n        END AS new_value -- Apply the categorization logic\n    FROM ResolvedWounds rw\n    INNER JOIN rpt.dimdate dd ON rw.dimdateFk = dd.id -- Join dimdate table on dimdateFk\n    INNER JOIN HealedWounds hws ON rw.resolvedWoundFk = hws.woundFk -- Filter only healed wounds\n    WHERE rw.resolvedWoundFk IS NOT NULL -- Ensure only valid woundFk entries\n        AND CASE \n            WHEN rw.value LIKE '%Coban II%' OR rw.value LIKE '%Multi%' OR rw.value LIKE '%Profore 3%' OR rw.value LIKE '%Circ%' OR rw.value LIKE '%Farrow%' OR rw.value LIKE '%Single Layer%' THEN 'High Compression'\n            WHEN rw.value LIKE '%Coban%' OR rw.value LIKE '%Coban Lite%' OR rw.value LIKE '%Profore 4%' THEN 'Reduced Compression'\n            WHEN rw.value LIKE '%Comprem%' OR rw.value LIKE '%Tubigrip%' THEN 'Tubular Elastic Bandage'\n            WHEN rw.value LIKE '%Compression Pump%' THEN 'Compression Pump'\n            WHEN rw.value LIKE '%Stocking%' THEN 'Compression Stockings'\n            ELSE 'Other'\n        END != 'Other' -- Exclude 'Other' values\n),\nRankedWounds AS (\n    -- Step 4: Rank the rows by assessmentDate for each woundFk\n    SELECT * ,\n           ROW_NUMBER() OVER (PARTITION BY woundFk ORDER BY assessmentDate) AS rn\n    FROM CategorizedWounds\n),\nMostRecentEtiologies AS (\n    -- Get the most recent etiology for each wound\n    SELECT \n        n.woundFk AS woundId,\n        n.patientFk AS patientId,\n        n.value AS primaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimDateFk DESC) AS RowNum\n    FROM \n        rpt.Note AS n\n    INNER JOIN \n        rpt.AttributeType AS atr \n        ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n    AND n.value='Venous Leg Ulcer/VLU'\n)\n-- Final Query: Combine RankedWounds and MostRecentEtiologies\nSELECT \n    rw.woundFk,\n    rw.value,\n    rw.patientFk,\n    rw.assessmentDate,\n    rw.assessmentId,\n    rw.new_value,\n    healedDimDate.date AS healedDate, -- Convert the healed date foreign key to a readable date\n    DATEDIFF(DAY, rw.assessmentDate, healedDimDate.date) AS daysToHeal, -- Calculate the difference in days\n    -- Categorize daysToHeal into brackets\n    CASE \n        WHEN DATEDIFF(DAY, rw.assessmentDate, healedDimDate.date) <= 60 THEN '0-2 months'\n        WHEN DATEDIFF(DAY, rw.assessmentDate, healedDimDate.date) <= 120 THEN '2-4 months'\n        WHEN DATEDIFF(DAY, rw.assessmentDate, healedDimDate.date) <= 180 THEN '4-6 months'\n        WHEN DATEDIFF(DAY, rw.assessmentDate, healedDimDate.date) <= 240 THEN '6-8 months'\n        WHEN DATEDIFF(DAY, rw.assessmentDate, healedDimDate.date) <= 300 THEN '8-10 months'\n        WHEN DATEDIFF(DAY, rw.assessmentDate, healedDimDate.date) <= 365 THEN '10-12 months'\n        ELSE '12+ months'\n    END AS healingBracket, -- Healing time bracket\n    mre.primaryEtiology -- Include the most recent primary etiology\nFROM RankedWounds rw\nINNER JOIN rpt.dimdate healedDimDate ON rw.healedDateFk = healedDimDate.id -- Join to get the healed date\nLEFT JOIN MostRecentEtiologies mre ON rw.woundFk = mre.woundId AND mre.RowNum = 1 -- Join to get the most recent etiology\nWHERE rw.rn = 1 -- Filter to get the earliest row for each woundFk\nAND mre.rowNum=1\nORDER BY rw.patientFk, rw.woundFk, rw.assessmentDate;\n"
+      },
+      "12": {
+        "Ident": "StiSqlSource",
+        "Name": "total VLU's using compression",
+        "Alias": "total VLU's using compression",
+        "Key": "ab5fc020e993047eae438ff3bd0dd2d1",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "compressionType",
+            "NameInSource": "compressionType",
+            "Alias": "compressionType",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "assessmentDate",
+            "NameInSource": "assessmentDate",
+            "Alias": "assessmentDate",
+            "Type": "System.DateTime"
+          },
+          "4": {
+            "Name": "primaryEtiology",
+            "NameInSource": "primaryEtiology",
+            "Alias": "primaryEtiology",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "CommandTimeout": 60,
+        "SqlCommand": "WITH ResolvedWounds AS (\n    -- Step 1: Resolve woundFk for assessments related to compression\n    SELECT \n        COALESCE(ass.woundFk, subass.woundFk) AS resolvedWoundFk,\n        ass.patientFk,\n        ass.dimdateFk,  -- Include the dimdateFk for sorting by date\n        ass.id AS assessmentId,\n        n.value -- Include the value from the note table (should be n.value)\n    FROM rpt.note n\n    INNER JOIN rpt.AttributeType a ON n.attributetypefk = a.id\n    INNER JOIN rpt.Assessment ass ON ass.id = n.assessmentFk\n    LEFT JOIN rpt.Assessment subass \n        ON ass.dimdateFk = subass.dimdateFk \n           AND ass.patientFk = subass.patientFk \n           AND subass.woundFk IS NOT NULL\n    WHERE a.name LIKE '%Compression%'\n),\n\nVenousLegUlcers AS (\n    -- Step 2: Identify all VLUs\n    SELECT DISTINCT \n        n.woundFk AS woundId,\n        n.patientFk AS patientId\n    FROM rpt.Note AS n\n    INNER JOIN rpt.AttributeType AS atr ON n.attributeTypeFk = atr.id\n    WHERE atr.name = 'Primary Etiology'\n      AND n.value = 'Venous Leg Ulcer/VLU'\n),\n\nCompressionVLUs AS (\n    -- Step 3: Combine resolved wounds with VLUs\n    SELECT DISTINCT \n        vlu.woundId,\n        vlu.patientId\n    FROM ResolvedWounds rw\n    INNER JOIN VenousLegUlcers vlu \n        ON rw.resolvedWoundFk = vlu.woundId\n),\n\nCategorizedWounds AS (\n    -- Step 4: Categorize the wounds based on 'value' and find the earliest one\n    SELECT \n        rw.resolvedWoundFk AS woundFk,\n        rw.patientFk,\n        rw.assessmentId,\n        dd.date AS assessmentDate,\n        rw.dimdateFk,\n        rw.value, -- Include value here\n        CASE \n            WHEN rw.value LIKE '%Coban II%' OR rw.value LIKE '%Multi%' OR rw.value LIKE '%Profore 3%' OR rw.value LIKE '%Circ%' OR rw.value LIKE '%Farrow%' OR rw.value LIKE '%Single Layer%' THEN 'High Compression'\n            WHEN rw.value LIKE '%Coban%' OR rw.value LIKE '%Coban Lite%' OR rw.value LIKE '%Profore 4%' THEN 'Reduced Compression'\n            WHEN rw.value LIKE '%Comprem%' OR rw.value LIKE '%Tubigrip%' THEN 'Tubular Elastic Bandage'\n            WHEN rw.value LIKE '%Compression Pump%' THEN 'Compression Pump'\n            WHEN rw.value LIKE '%Stocking%' THEN 'Compression Stockings'\n            ELSE 'Other'\n        END AS compressionType,\n        ROW_NUMBER() OVER (PARTITION BY rw.resolvedWoundFk ORDER BY dd.date ASC) AS RowNum  -- Earliest first\n    FROM ResolvedWounds rw\n    INNER JOIN rpt.dimdate dd ON rw.dimdateFk = dd.id\n    WHERE rw.resolvedWoundFk IS NOT NULL\n        AND CASE \n            WHEN rw.value LIKE '%Coban II%' OR rw.value LIKE '%Multi%' OR rw.value LIKE '%Profore 3%' OR rw.value LIKE '%Circ%' OR rw.value LIKE '%Farrow%' OR rw.value LIKE '%Single Layer%' THEN 'High Compression'\n            WHEN rw.value LIKE '%Coban%' OR rw.value LIKE '%Coban Lite%' OR rw.value LIKE '%Profore 4%' THEN 'Reduced Compression'\n            WHEN rw.value LIKE '%Comprem%' OR rw.value LIKE '%Tubigrip%' THEN 'Tubular Elastic Bandage'\n            WHEN rw.value LIKE '%Compression Pump%' THEN 'Compression Pump'\n            WHEN rw.value LIKE '%Stocking%' THEN 'Compression Stockings'\n            ELSE 'Other'\n        END != 'Other'  -- Exclude 'Other'\n),\n\nMostRecentEtiologies AS (\n    -- Step 5: Fetch the most recent primary etiologies\n    SELECT \n        n.woundFk,\n        n.patientFk,\n        n.value AS primaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimDateFk DESC) AS RowNum\n    FROM rpt.Note n\n    INNER JOIN rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE atr.name = 'Primary Etiology'\n    AND n.value = 'Venous Leg Ulcer/VLU'\n)\n\n-- Final Query: Get the earliest compression type and the most recent primary etiology for each wound\nSELECT \n    cv.woundFk,\n    cv.patientFk,\n    cv.compressionType,\n    cv.assessmentDate,\n    mre.primaryEtiology\nFROM CategorizedWounds cv\nINNER JOIN MostRecentEtiologies mre \n    ON cv.woundFk = mre.woundFk AND mre.RowNum = 1  -- Join on the most recent primary etiology\nWHERE cv.RowNum = 1  -- Only the earliest compression\nORDER BY cv.patientFk, cv.woundFk;\n"
+      },
+      "13": {
+        "Ident": "StiSqlSource",
+        "Name": "total VLUS",
+        "Alias": "total VLUS",
+        "Key": "ddbaa2f62ea3f4c9cdf2c0faca3b23f0",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "primaryEtiology",
+            "NameInSource": "primaryEtiology",
+            "Alias": "primaryEtiology",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "RowNum",
+            "NameInSource": "RowNum",
+            "Alias": "RowNum",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "CommandTimeout": 60,
+        "SqlCommand": "WITH MostRecentPrimary AS (\n        SELECT\n        n.woundFk,\n        n.patientFk,\n        n.value AS primaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimDateFk DESC) AS RowNum\n    FROM rpt.Note n\n    INNER JOIN rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE atr.name = 'Primary Etiology'\n    AND n.value='Venous Leg Ulcer/VLU'\n)\n\nSELECT * FROM MostRecentPrimary mrp WHERE mrp.rownum=1;\n    "
+      },
+      "14": {
+        "Ident": "StiSqlSource",
+        "Name": "total VLUSCopy",
+        "Alias": "total VLUSCopy",
+        "Key": "9d48950da829457fda75bbf12543a0c6",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "primaryEtiology",
+            "NameInSource": "primaryEtiology",
+            "Alias": "primaryEtiology",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "RowNum",
+            "NameInSource": "RowNum",
+            "Alias": "RowNum",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "CommandTimeout": 60,
+        "SqlCommand": "--WITH MostRecentEtiologies AS (\n    -- Get the most recent etiology for each wound\n    SELECT \n        n.woundFk AS woundId,\n        n.patientFk AS patientId,\n        n.value AS primaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimDateFk DESC) AS RowNum\n    FROM \n        rpt.Note AS n\n    INNER JOIN \n        rpt.AttributeType AS atr \n        ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n    AND n.woundFk = 'd043dccf-1fd3-a909-87e1-226c00f9930e';\n\n/*SELECT \n    mre.woundid,\n    mre.patientid,\n    mre.primaryEtiology\nFROM MostRecentEtiologies mre\nWHERE mre.RowNum = 1;*/\n"
+      }
+    },
+    "Databases": {
+      "0": {
+        "Ident": "StiSqlDatabase",
+        "Name": "Connection",
+        "Alias": "Connection",
+        "ConnectionStringEncrypted": "ng=="
+      }
+    }
+  },
+  "Pages": {
+    "0": {
+      "Ident": "StiDashboard",
+      "Name": "Dashboard_Page",
+      "Guid": "83d5caeb0d0747ef035c58738ea287f3",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiChartElement",
+          "Name": "ChartElement1",
+          "Guid": "8306a865fa54159a79e8426a65688822",
+          "ClientRectangle": "460,100,700,480",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "Values": {
+            "0": {
+              "Ident": "ValueChartMeter",
+              "Key": "1faafcd6b466e3ef5f5a68f3dd3cddea",
+              "Expression": "Count(healeddata.woundFk)",
+              "Label": "woundFk",
+              "SeriesType": "StackedColumn",
+              "ShowZeros": "Gap"
+            }
+          },
+          "Arguments": {
+            "0": {
+              "Ident": "ArgumentChartMeter",
+              "Key": "09102cfbcd3acb2dfc01c3e8aaf0c45c",
+              "Expression": "healeddata.healingBracket",
+              "Label": "healingBracket"
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Chart",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Title": {
+            "Text": "Chart",
+            "Visible": false
+          },
+          "ManuallyEnteredChartMeter": {
+            "Ident": "ValueChartMeter",
+            "Key": "00fc047f4e0ce2f6fa988e9343a968ac"
+          },
+          "Series": {
+            "Ident": "SeriesChartMeter",
+            "Key": "e07985bf757f75c7ea041bdfa69af08c",
+            "Expression": "healeddata.new_value",
+            "Label": "new_value"
+          },
+          "ArgumentFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "ValueFormat": {
+            "Ident": "StiNumberFormatService",
+            "DecimalDigits": 0,
+            "GroupSeparator": ",",
+            "State": "DecimalDigits, Abbreviation"
+          },
+          "XAxis": {
+            "Labels": {
+              "Color": "51,51,102"
+            },
+            "Title": {
+              "Visible": false
+            }
+          },
+          "YAxis": {
+            "Labels": {
+              "Color": "51,51,102"
+            },
+            "Title": {
+              "Visible": false
+            }
+          },
+          "Legend": {
+            "Title": {
+              "Color": "51,51,102"
+            },
+            "Labels": {
+              "Color": "51,51,102"
+            },
+            "HorAlignment": "Center"
+          },
+          "Area": {
+            "SideBySide": true,
+            "GridLinesHor": {
+              "Color": "Transparent",
+              "Visible": false
+            },
+            "GridLinesVert": {
+              "Color": "Transparent"
+            },
+            "InterlacingHor": {
+              "Color": "230,230,230,230",
+              "Visible": true
+            },
+            "InterlacingVert": {
+              "Color": "Transparent"
+            },
+            "Indicator": {
+              "Title": {
+                "Text": ""
+              }
+            }
+          },
+          "Labels": {
+            "Position": "None"
+          },
+          "Options3D": {
+            "Opacity": 1,
+            "Lighting": "Gradient"
+          },
+          "SeriesColors": {
+            "0": "51,153,204",
+            "1": "220,20,60",
+            "2": "102,26,148",
+            "3": "43,188,133",
+            "4": "237,125,49"
+          },
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement1",
+          "Guid": "c1410a225fc7b4ff3fdd2e9213fcc1db",
+          "ClientRectangle": "460,60,700,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,153,204",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "245,245,245",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b><font color=\"#f5f5f5\">Time Taken to Heal With Compression</font></b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "2": {
+          "Ident": "StiProgressElement",
+          "Name": "ProgressElement1",
+          "Guid": "841e8d1148193b1a797f2cb04eee6239",
+          "ClientRectangle": "40,100,400,180",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "Value": {
+            "Ident": "ValueProgressMeter",
+            "Key": "04eb8ed92e469352c1a52fbdcdd89624",
+            "Expression": "distinctCount([totalVLU'susingcompression.woundFk])",
+            "Label": "woundFk"
+          },
+          "Target": {
+            "Ident": "TargetProgressMeter",
+            "Key": "da7ea13b95317632fcf2ac8b59edd02d",
+            "Expression": "distinctCount(totalVLUS.woundFk)",
+            "Label": "woundFk"
+          },
+          "Title": {
+            "Text": "Progress",
+            "Visible": false
+          },
+          "Font": ";13;;",
+          "SeriesColors": {
+            "0": "51,51,102"
+          },
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Progress",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "3": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement2",
+          "Guid": "557c31f68f93dae41e0aef0df06d9e54",
+          "ClientRectangle": "40,60,400,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,153,204",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "245,245,245",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b><font color=\"#f5f5f5\">Ulcers With Compression</font></b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "4": {
+          "Ident": "StiChartElement",
+          "Name": "ChartElement2",
+          "Guid": "6d6f3d2d56b9efd21baf7d8fd75da57a",
+          "ClientRectangle": "40,340,400,240",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Values": {
+            "0": {
+              "Ident": "ValueChartMeter",
+              "Key": "13a67a307dc5113a824fc5e4a2aef4a3",
+              "Expression": "Count([totalVLU'susingcompression.woundFk])",
+              "Label": "woundFk",
+              "SeriesType": "Pie"
+            }
+          },
+          "Arguments": {
+            "0": {
+              "Ident": "ArgumentChartMeter",
+              "Key": "2e9b97b023227aa26ac30c5a54de0bb6",
+              "Expression": "[totalVLU'susingcompression.compressionType]",
+              "Label": "compressionType"
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Chart",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Title": {
+            "Text": "Chart",
+            "Visible": false
+          },
+          "ManuallyEnteredChartMeter": {
+            "Ident": "ValueChartMeter",
+            "Key": "2328b0c0be5f558fdcdadd31ebf9c657"
+          },
+          "ArgumentFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "ValueFormat": {
+            "Ident": "StiNumberFormatService",
+            "DecimalDigits": 0,
+            "GroupSeparator": ",",
+            "State": "DecimalDigits, Abbreviation"
+          },
+          "Legend": {
+            "HorAlignment": "Center"
+          },
+          "Area": {
+            "SideBySide": true,
+            "GridLinesHor": {
+              "Color": "Transparent"
+            },
+            "GridLinesVert": {
+              "Color": "Transparent"
+            },
+            "InterlacingHor": {
+              "Color": "Transparent"
+            },
+            "InterlacingVert": {
+              "Color": "Transparent"
+            },
+            "Indicator": {
+              "Title": {
+                "Text": ""
+              }
+            }
+          },
+          "Labels": {
+            "Position": "Center",
+            "Style": "PercentOfTotal"
+          },
+          "Options3D": {
+            "Opacity": 1,
+            "Lighting": "Gradient"
+          },
+          "SeriesColors": {
+            "0": "51,153,204",
+            "1": "220,20,60",
+            "2": "102,26,148",
+            "3": "43,188,133"
+          },
+          "CornerRadius": "0, 0, 10, 10",
+          "Shadow": ";;;"
+        },
+        "5": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement3",
+          "Guid": "b63089b0ea4eefc5927287c5540fe86b",
+          "ClientRectangle": "40,300,400,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,153,204",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "245,245,245",
+          "Text": "<font face=\"Arial\" size=\"18\" ><text-align=\"Center\"><b><font-color=\"#f5f5f5\">Types of Compression Applied</font-color></b></text-align></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "6": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement4",
+          "Guid": "211d87e9e6f69aec1e77420f2711a723",
+          "ClientRectangle": "40,0,1120,60",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,51,102",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "245,245,245",
+          "Text": "<font face=\"Arial\" size=\"22\"><text-align=\"center\"><b><font color=\"#f5f5f5\">Venous Leg Ulcers</font></b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    }
+  }
+}

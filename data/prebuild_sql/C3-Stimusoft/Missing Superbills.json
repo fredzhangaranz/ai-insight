@@ -1,0 +1,1196 @@
+{
+  "ReportVersion": "2024.2.4",
+  "ReportGuid": "4a6e5d3aac022e6aebf692e523901807",
+  "ReportName": "Missing Superbills",
+  "ReportAlias": "Missing Superbills",
+  "ReportCreated": "/Date(1717031204000+1200)/",
+  "ReportChanged": "/Date(1717042690000+1200)/",
+  "EngineVersion": "EngineV2",
+  "CalculationMode": "Interpretation",
+  "ReportUnit": "Centimeters",
+  "Culture": "en-US",
+  "Styles": {
+    "0": {
+      "Ident": "StiTableStyle",
+      "Name": "Silhouette",
+      "BackColor": "255,255,255",
+      "DataForeground": "50,58,69",
+      "SelectedDataColor": "82,182,249",
+      "SelectedDataForeground": "52,58,65",
+      "AlternatingDataForeground": "52,58,65",
+      "HeaderColor": "249,249,249",
+      "HeaderForeground": "52,58,65",
+      "HotHeaderColor": "53,153,205",
+      "FooterColor": "249,249,249",
+      "FooterForeground": "52,58,65",
+      "GridColor": "220,220,220"
+    }
+  },
+  "Dictionary": {
+    "DataSources": {
+      "0": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Assessment",
+        "Alias": "rpt.Assessment",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeVersionFk",
+            "NameInSource": "assessmentTypeVersionFk",
+            "Alias": "assessmentTypeVersionFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "createdByUserFk",
+            "NameInSource": "createdByUserFk",
+            "Alias": "createdByUserFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "createdByUserName",
+            "NameInSource": "createdByUserName",
+            "Alias": "createdByUserName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTimeOffset"
+          },
+          "4": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "signedByUserFk",
+            "NameInSource": "signedByUserFk",
+            "Alias": "signedByUserFk",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "signedByUserName",
+            "NameInSource": "signedByUserName",
+            "Alias": "signedByUserName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "timeZoneId",
+            "NameInSource": "timeZoneId",
+            "Alias": "timeZoneId",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.Assessment]"
+      },
+      "1": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AssessmentTypeVersion",
+        "Alias": "rpt.AssessmentTypeVersion",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeId",
+            "NameInSource": "assessmentTypeId",
+            "Alias": "assessmentTypeId",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "definitionVersion",
+            "NameInSource": "definitionVersion",
+            "Alias": "definitionVersion",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "type",
+            "NameInSource": "type",
+            "Alias": "type",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.AssessmentTypeVersion]"
+      },
+      "2": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AttributeType",
+        "Alias": "rpt.AttributeType",
+        "Columns": {
+          "0": {
+            "Name": "attributeTypeKey",
+            "NameInSource": "attributeTypeKey",
+            "Alias": "attributeTypeKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "dataType",
+            "NameInSource": "dataType",
+            "Alias": "dataType",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "variableName",
+            "NameInSource": "variableName",
+            "Alias": "variableName",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.AttributeType]"
+      },
+      "3": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.DimDate",
+        "Alias": "rpt.DimDate",
+        "Columns": {
+          "0": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTime"
+          },
+          "1": {
+            "Name": "dayOfMonth",
+            "NameInSource": "dayOfMonth",
+            "Alias": "dayOfMonth",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "dayOfWeek",
+            "NameInSource": "dayOfWeek",
+            "Alias": "dayOfWeek",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "dayOfYear",
+            "NameInSource": "dayOfYear",
+            "Alias": "dayOfYear",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "firstOfMonth",
+            "NameInSource": "firstOfMonth",
+            "Alias": "firstOfMonth",
+            "Type": "System.DateTime"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "month",
+            "NameInSource": "month",
+            "Alias": "month",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "quarter",
+            "NameInSource": "quarter",
+            "Alias": "quarter",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "weekOfYear",
+            "NameInSource": "weekOfYear",
+            "Alias": "weekOfYear",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "year",
+            "NameInSource": "year",
+            "Alias": "year",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.DimDate]"
+      },
+      "4": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Measurement",
+        "Alias": "rpt.Measurement",
+        "Columns": {
+          "0": {
+            "Name": "area",
+            "NameInSource": "area",
+            "Alias": "area",
+            "Type": "System.Object"
+          },
+          "1": {
+            "Name": "areaReduction",
+            "NameInSource": "areaReduction",
+            "Alias": "areaReduction",
+            "Type": "System.Object"
+          },
+          "2": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "depth",
+            "NameInSource": "depth",
+            "Alias": "depth",
+            "Type": "System.Object"
+          },
+          "5": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "imageCount",
+            "NameInSource": "imageCount",
+            "Alias": "imageCount",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "islandCount",
+            "NameInSource": "islandCount",
+            "Alias": "islandCount",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "length",
+            "NameInSource": "length",
+            "Alias": "length",
+            "Type": "System.Object"
+          },
+          "10": {
+            "Name": "outlineCount",
+            "NameInSource": "outlineCount",
+            "Alias": "outlineCount",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "perimeter",
+            "NameInSource": "perimeter",
+            "Alias": "perimeter",
+            "Type": "System.Object"
+          },
+          "13": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "volume",
+            "NameInSource": "volume",
+            "Alias": "volume",
+            "Type": "System.Object"
+          },
+          "15": {
+            "Name": "width",
+            "NameInSource": "width",
+            "Alias": "width",
+            "Type": "System.Object"
+          },
+          "16": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.Measurement]"
+      },
+      "5": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Note",
+        "Alias": "rpt.Note",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "value",
+            "NameInSource": "value",
+            "Alias": "value",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "valueBoolean",
+            "NameInSource": "valueBoolean",
+            "Alias": "valueBoolean",
+            "Type": "System.Boolean"
+          },
+          "8": {
+            "Name": "valueDate",
+            "NameInSource": "valueDate",
+            "Alias": "valueDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "valueDecimal",
+            "NameInSource": "valueDecimal",
+            "Alias": "valueDecimal",
+            "Type": "System.Decimal"
+          },
+          "10": {
+            "Name": "valueInt",
+            "NameInSource": "valueInt",
+            "Alias": "valueInt",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "woundStateFk",
+            "NameInSource": "woundStateFk",
+            "Alias": "woundStateFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.Note]"
+      },
+      "6": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Patient",
+        "Alias": "rpt.Patient",
+        "Columns": {
+          "0": {
+            "Name": "addressCity",
+            "NameInSource": "addressCity",
+            "Alias": "addressCity",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "addressCountry",
+            "NameInSource": "addressCountry",
+            "Alias": "addressCountry",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "addressPostcode",
+            "NameInSource": "addressPostcode",
+            "Alias": "addressPostcode",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "addressState",
+            "NameInSource": "addressState",
+            "Alias": "addressState",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "addressStreet",
+            "NameInSource": "addressStreet",
+            "Alias": "addressStreet",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "addressSuburb",
+            "NameInSource": "addressSuburb",
+            "Alias": "addressSuburb",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "dateOfBirth",
+            "NameInSource": "dateOfBirth",
+            "Alias": "dateOfBirth",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "domainId",
+            "NameInSource": "domainId",
+            "Alias": "domainId",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "firstName",
+            "NameInSource": "firstName",
+            "Alias": "firstName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "gender",
+            "NameInSource": "gender",
+            "Alias": "gender",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "homePhone",
+            "NameInSource": "homePhone",
+            "Alias": "homePhone",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "lastName",
+            "NameInSource": "lastName",
+            "Alias": "lastName",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "middleName",
+            "NameInSource": "middleName",
+            "Alias": "middleName",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "mobilePhone",
+            "NameInSource": "mobilePhone",
+            "Alias": "mobilePhone",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "workPhone",
+            "NameInSource": "workPhone",
+            "Alias": "workPhone",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.Patient]"
+      },
+      "7": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Unit",
+        "Alias": "rpt.Unit",
+        "Columns": {
+          "0": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.Unit]"
+      },
+      "8": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Wound",
+        "Alias": "rpt.Wound",
+        "Columns": {
+          "0": {
+            "Name": "anatomyLabel",
+            "NameInSource": "anatomyLabel",
+            "Alias": "anatomyLabel",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "auxText",
+            "NameInSource": "auxText",
+            "Alias": "auxText",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "baselineDate",
+            "NameInSource": "baselineDate",
+            "Alias": "baselineDate",
+            "Type": "System.DateTime"
+          },
+          "3": {
+            "Name": "baselineDimDateFk",
+            "NameInSource": "baselineDimDateFk",
+            "Alias": "baselineDimDateFk",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "description",
+            "NameInSource": "description",
+            "Alias": "description",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "index",
+            "NameInSource": "index",
+            "Alias": "index",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "label",
+            "NameInSource": "label",
+            "Alias": "label",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "level0AnatomyId",
+            "NameInSource": "level0AnatomyId",
+            "Alias": "level0AnatomyId",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "level0Text",
+            "NameInSource": "level0Text",
+            "Alias": "level0Text",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "level1AnatomyId",
+            "NameInSource": "level1AnatomyId",
+            "Alias": "level1AnatomyId",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "level1Text",
+            "NameInSource": "level1Text",
+            "Alias": "level1Text",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "level2AnatomyId",
+            "NameInSource": "level2AnatomyId",
+            "Alias": "level2AnatomyId",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "level2Text",
+            "NameInSource": "level2Text",
+            "Alias": "level2Text",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "level3AnatomyId",
+            "NameInSource": "level3AnatomyId",
+            "Alias": "level3AnatomyId",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "level3Text",
+            "NameInSource": "level3Text",
+            "Alias": "level3Text",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "17": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.Wound]"
+      },
+      "9": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundState",
+        "Alias": "rpt.WoundState",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "endDate",
+            "NameInSource": "endDate",
+            "Alias": "endDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "endDateDimDateFk",
+            "NameInSource": "endDateDimDateFk",
+            "Alias": "endDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "isCurrentState",
+            "NameInSource": "isCurrentState",
+            "Alias": "isCurrentState",
+            "Type": "System.Boolean"
+          },
+          "5": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "startDate",
+            "NameInSource": "startDate",
+            "Alias": "startDate",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "startDateDimDateFk",
+            "NameInSource": "startDateDimDateFk",
+            "Alias": "startDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "woundStateTypeFk",
+            "NameInSource": "woundStateTypeFk",
+            "Alias": "woundStateTypeFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.WoundState]"
+      },
+      "10": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundStateType",
+        "Alias": "rpt.WoundStateType",
+        "Columns": {
+          "0": {
+            "Name": "attributeLookupKey",
+            "NameInSource": "attributeLookupKey",
+            "Alias": "attributeLookupKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "isActive",
+            "NameInSource": "isActive",
+            "Alias": "isActive",
+            "Type": "System.Boolean"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "select * from [rpt.WoundStateType]"
+      },
+      "11": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.MissingSuperbills",
+        "Alias": "rpt.MissingSuperbills",
+        "Key": "57db376d5ed23a1aa6892f06f18c5168",
+        "Columns": {
+          "0": {
+            "Name": "lastName",
+            "NameInSource": "lastName",
+            "Alias": "lastName",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "MRN",
+            "NameInSource": "MRN",
+            "Alias": "MRN",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "unitName",
+            "NameInSource": "unitName",
+            "Alias": "unitName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "dateOfService",
+            "NameInSource": "dateOfService",
+            "Alias": "dateOfService",
+            "Type": "System.DateTime"
+          },
+          "4": {
+            "Name": "createdBy",
+            "NameInSource": "createdBy",
+            "Alias": "createdBy",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "createdAt",
+            "NameInSource": "createdAt",
+            "Alias": "createdAt",
+            "Type": "System.DateTimeOffset"
+          },
+          "6": {
+            "Name": "dateOfBirth",
+            "NameInSource": "dateOfBirth",
+            "Alias": "dateOfBirth",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "firstName",
+            "NameInSource": "firstName",
+            "Alias": "firstName",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "dateOfService",
+            "NameInSource": "dateOfService",
+            "Alias": "dateOfService",
+            "Type": "System.DateTimeOffset"
+          },
+          "9": {
+            "Name": "visitAssessmentID",
+            "NameInSource": "visitAssessmentID",
+            "Alias": "visitAssessmentID",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "DECLARE @superbillTypeId UNIQUEIDENTIFIER = (SELECT TOP 1 assessmentTypeId FROM rpt.AssessmentTypeVersion WHERE [name] LIKE 'superbill%' ORDER BY definitionVersion DESC);\nDECLARE @visitDetailsTypeId UNIQUEIDENTIFIER = (SELECT TOP 1 assessmentTypeId FROM rpt.AssessmentTypeVersion WHERE [name] LIKE 'visit details%' ORDER BY definitionVersion DESC);\nWITH superbills AS\n(\n  SELECT  a.patientFk, n.valueDate\n  FROM    rpt.Assessment a\n          INNER JOIN rpt.AssessmentTypeVersion atv ON a.assessmentTypeVersionFk = atv.id AND atv.assessmentTypeId = @superbillTypeId\n          INNER JOIN rpt.Note n ON a.id = n.assessmentFk\n          INNER JOIN rpt.AttributeType t ON n.attributeTypeFk = t.id AND t.[name] LIKE 'date of service%'\n)\n\nSELECT  p.id, p.firstName, p.lastName, p.dateOfBirth, p.domainId AS MRN, u.[name] AS unitName, TODATETIMEOFFSET(dos.valueDate, DATEPART(TZOFFSET, a.[date])) AS dateOfService, a.createdByUserName AS createdBy, a.[date] AS createdAt, a.id AS visitAssessmentID\nFROM    rpt.Assessment a\n        INNER JOIN rpt.AssessmentTypeVersion vd ON a.assessmentTypeVersionFk = vd.id\n                                                   AND vd.assessmentTypeId = @visitDetailsTypeId\n        INNER JOIN rpt.Note dos ON a.id = dos.assessmentFk\n        INNER JOIN rpt.AttributeType dost ON dos.attributeTypeFk = dost.id AND dost.[name] LIKE 'date of service%'\n        INNER JOIN rpt.Patient p ON a.patientFk = p.id\n        INNER JOIN rpt.Unit u ON p.unitFk = u.id\n        LEFT OUTER JOIN superbills s ON a.patientFk = s.patientFk AND dos.valueDate = s.valueDate\nWHERE   s.patientFk IS NULL"
+      }
+    },
+    "Databases": {
+      "0": {
+        "Ident": "StiSqlDatabase",
+        "Name": "Silhouette",
+        "Alias": "Silhouette",
+        "ConnectionStringEncrypted": "ng=="
+      }
+    }
+  },
+  "Pages": {
+    "0": {
+      "Ident": "StiDashboard",
+      "Name": "Dashboard_Page",
+      "Guid": "ac78532b2ccfd7e3ffb1d41fbe73856a",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:255,255,255",
+      "Components": {
+        "0": {
+          "Ident": "StiTableElement",
+          "Name": "TableElement1",
+          "Guid": "b5060f2e59af14a00b770390cd93b955",
+          "ClientRectangle": "0,180,1200,420",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": "All;;;;",
+          "BackColor": "249,249,249",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "cc4af9449127efedd50cdc2c4d298262",
+              "Expression": "[rpt.MissingSuperbills.id]",
+              "Label": "id",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "4e0e269088d2fbe0d3cb26518887173f",
+              "Expression": "[rpt.MissingSuperbills.MRN]",
+              "Label": "MRN",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "08a62105e755e0b01fe417c64e5b36e4",
+              "Expression": "[rpt.MissingSuperbills.lastName]",
+              "Label": "Surname",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "ShowHyperlink": true,
+              "HyperlinkPattern": "app#/patient/{Row.id}",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "c408b2be4e54fad48903c2cd59a4b194",
+              "Expression": "[rpt.MissingSuperbills.firstName]",
+              "Label": "First Name",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "4": {
+              "Ident": "DimensionColumn",
+              "Key": "df271916e8f8be2269dc19e97122f1f3",
+              "Expression": "[rpt.MissingSuperbills.dateOfBirth]",
+              "Label": "Date Of Birth",
+              "HorAlignment": "Center",
+              "TextFormat": {
+                "Ident": "StiDateFormatService"
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "5": {
+              "Ident": "DimensionColumn",
+              "Key": "fb169b6d714c7f0d79f7492405150f8c",
+              "Expression": "[rpt.MissingSuperbills.unitName]",
+              "Label": "Unit",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "6": {
+              "Ident": "DimensionColumn",
+              "Key": "26f3c167f25b83c6e3bbdf0cd81c8bec",
+              "Expression": "[rpt.MissingSuperbills.dateOfService]",
+              "Label": "Date Of Service",
+              "HorAlignment": "Center",
+              "TextFormat": {
+                "Ident": "StiDateFormatService"
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "7": {
+              "Ident": "DimensionColumn",
+              "Key": "fb41c9a33bd31fa2ea58b8343e1fe1cb",
+              "Expression": "[rpt.MissingSuperbills.createdBy]",
+              "Label": "Visit Details Author",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "8": {
+              "Ident": "DimensionColumn",
+              "Key": "109224a3c43e2b8917b6888509f7d5d8",
+              "Expression": "[rpt.MissingSuperbills.createdAt]",
+              "Label": "Visit Details Generated",
+              "HorAlignment": "Center",
+              "TextFormat": {
+                "Ident": "StiDateFormatService"
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "ShowHyperlink": true,
+              "HyperlinkPattern": "app#/patient/{Row.id}/assessment/{Row.visitAssessmentID}",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "9": {
+              "Ident": "DimensionColumn",
+              "Key": "66282a1b31465379fc529f58faf17145",
+              "Expression": "[rpt.MissingSuperbills.visitAssessmentID]",
+              "Label": "visitAssessmentID",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "DataFilters": {
+            "0": {
+              "Path": "rpt.MissingSuperbills.unitName",
+              "Condition": "NotEqualTo",
+              "Value": "Test Facility"
+            }
+          },
+          "HeaderForeColor": "52,58,65",
+          "HeaderFont": ";10;Bold;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "Table",
+            "Visible": false
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Silhouette",
+          "CornerRadius": "5, 5, 5, 5",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiListBoxElement",
+          "Name": "ListBoxElement1",
+          "Guid": "366eae026ba964cd311e6fc42e5e80f4",
+          "ClientRectangle": "0,0,400,180",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Padding": {
+            "Left": 2,
+            "Top": 0,
+            "Right": 2,
+            "Bottom": 0
+          },
+          "Border": "All;;;;",
+          "DataFilters": {
+            "0": {
+              "Path": "rpt.MissingSuperbills.createdBy",
+              "Condition": "NotEqualTo",
+              "Value": "aranz"
+            },
+            "1": {
+              "Path": "rpt.MissingSuperbills.createdBy",
+              "Condition": "NotEqualTo",
+              "Value": "ARANZBruceD"
+            }
+          },
+          "ForeColor": "52,58,65",
+          "Font": ";9;;",
+          "ShowAllValue": true,
+          "SelectionMode": "Multi",
+          "KeyMeter": {
+            "Ident": "KeyListBoxMeter",
+            "Key": "3592064fbeb3646b5f0629ee7aa13484",
+            "Expression": "[rpt.MissingSuperbills.createdBy]",
+            "Label": "createdBy"
+          },
+          "Title": {
+            "Text": "Visit Details Created By",
+            "ForeColor": "52,58,65",
+            "BackColor": "249,249,249",
+            "Font": ";;Bold;",
+            "Padding": {
+              "Left": 7,
+              "Top": 5,
+              "Right": 5
+            }
+          },
+          "CornerRadius": "5, 5, 5, 5",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "255,255,255"
+    }
+  }
+}

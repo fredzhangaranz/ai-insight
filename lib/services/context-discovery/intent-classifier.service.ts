@@ -200,7 +200,8 @@ export class IntentClassifierService {
         question,
         ontologyConcepts,
         modelId,
-        customerId
+        customerId,
+        signal
       );
 
       // Step 4: Validate response structure
@@ -329,7 +330,8 @@ export class IntentClassifierService {
     question: string,
     ontologyConcepts: Array<{ conceptName: string; conceptType: string }>,
     modelId: string | undefined,
-    customerId: string
+    customerId: string,
+    signal?: AbortSignal
   ): Promise<unknown> {
     const callStartTime = Date.now();
     console.log(

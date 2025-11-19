@@ -1,0 +1,576 @@
+﻿{
+  "ReportVersion": "2024.2.6",
+  "ReportGuid": "373d2c5e-9b2f-4f97-6e05-a3efcf749119",
+  "ReportName": "WCPAsstCountByProvider",
+  "ReportAlias": "WCPAsstCountByProvider",
+  "ReportCreated": "/Date(1729219304000+1300)/",
+  "ReportChanged": "/Date(1734298266000+1300)/",
+  "EngineVersion": "EngineV2",
+  "CalculationMode": "Interpretation",
+  "ReportUnit": "Centimeters",
+  "Dictionary": {
+    "DataSources": {
+      "0": {
+        "Ident": "StiSqlSource",
+        "Name": "DataSource",
+        "Alias": "DataSource",
+        "Columns": {
+          "0": {
+            "Name": "MonthYear",
+            "NameInSource": "MonthYear",
+            "Alias": "MonthYear",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "Year-Month",
+            "NameInSource": "Year-Month",
+            "Alias": "Year-Month",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "ProviderId",
+            "NameInSource": "ProviderId",
+            "Alias": "ProviderId",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "ProviderName",
+            "NameInSource": "ProviderName",
+            "Alias": "ProviderName",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "Near Infrared Spectroscopy",
+            "NameInSource": "Near Infrared Spectroscopy",
+            "Alias": "Near Infrared Spectroscopy",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "Debridement",
+            "NameInSource": "Debridement",
+            "Alias": "Debridement",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "Wound Assessment",
+            "NameInSource": "Wound Assessment",
+            "Alias": "Wound Assessment",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "Visit Details",
+            "NameInSource": "Visit Details",
+            "Alias": "Visit Details",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "PatientName",
+            "NameInSource": "PatientName",
+            "Alias": "PatientName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "Moleculight Imaging",
+            "NameInSource": "Moleculight Imaging",
+            "Alias": "Moleculight Imaging",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "EXEC sp_set_session_context @key = 'all_access', @value = 1;\n\nWITH TimePeriod([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable]) AS (\n    SELECT DISTINCT \n        rd.year, \n        rd.month, \n        DATENAME(MONTH, DATEADD(MONTH, rd.month - 1, CAST('2008-01-01' AS datetime))) AS month_name,\n        DATENAME(MONTH, DATEADD(MONTH, rd.month - 1, CAST('2008-01-01' AS datetime))) + ' ' + CONVERT(VARCHAR(4), rd.year),\n        CONVERT(VARCHAR(4), rd.year) + '-' + RIGHT('0' + CONVERT(VARCHAR(2), rd.month), 2)\n    FROM \n        rpt.DimDate rd\n    WHERE \n        rd.year >= 2024 \n        AND rd.date <= GETDATE()\n),\nProviders(id, name) AS (\n    SELECT DISTINCT \n        ra.createdByUserFk, \n        ra.createdByUserName \n    FROM   \n        rpt.Assessment ra\n),\nTimePeriod_Providers([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName]) AS (\n    SELECT * \n    FROM TimePeriod \n    CROSS JOIN Providers \n    WHERE [Year] <= YEAR(GETDATE())\n),\nML_ASST_COUNTS([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName], [Molecu-lite Imaging Count]) AS (\n    SELECT \n        tp_p.[Year], \n        tp_p.MonthNumber, \n        tp_p.[Month], \n        tp_p.MonthYear, \n        tp_p.MonthYearSortable, \n        tp_p.[ProviderId], \n        tp_p.ProviderName, \n        COUNT(DISTINCT ml_asst_id) \n    FROM \n        TimePeriod_Providers tp_p\n    LEFT OUTER JOIN (\n        SELECT \n            asst.id ml_asst_id,  \n            asst.createdByUserFk AS createdByUserFk, \n            asst.date AS ml_asst_date \n        FROM \n            rpt.AssessmentTypeVersion atv    \n        INNER JOIN \n            rpt.Assessment asst ON atv.id = asst.assessmentTypeVersionFk  \n        INNER JOIN \n            rpt.Note nt ON nt.assessmentFk = asst.id  \n        INNER JOIN \n            rpt.AttributeType atype ON atype.id = nt.attributeTypeFk  \n        WHERE  \n            atv.assessmentTypeId = '9A4B2FEA-78A8-A1F7-8761-224C0516A846' -- Diagnostic Procedure  \n            AND atype.attributeTypeKey = '31970433-6959-A829-AE4F-224C051BB324' -- Instrument/Equipment  \n            AND nt.value LIKE 'Bacterial Fluorescence Imaging' -- Molecu-lite Imaging\n    ) ml_asst ON tp_p.[ProviderId] = ml_asst.createdByUserFk \n    AND tp_p.Year = YEAR(ml_asst_date) \n    AND tp_p.MonthNumber = MONTH(ml_asst_date)\n    GROUP BY \n        tp_p.[Year], tp_p.MonthNumber, tp_p.[Month], tp_p.MonthYear, tp_p.MonthYearSortable, tp_p.[ProviderId], tp_p.ProviderName\n),\nNI_ASST_COUNTS([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName], [Near Infrared Spectroscopy Count]) AS (\n    SELECT \n        tp_p.[Year], \n        tp_p.MonthNumber, \n        tp_p.[Month], \n        tp_p.MonthYear, \n        tp_p.MonthYearSortable, \n        tp_p.[ProviderId], \n        tp_p.ProviderName, \n        COUNT(DISTINCT ni_asst_id) \n    FROM \n        TimePeriod_Providers tp_p\n    LEFT OUTER JOIN (\n        SELECT \n            asst.id ni_asst_id,  \n            asst.createdByUserFk AS createdByUserFk, \n            asst.date AS ni_asst_date \n        FROM \n            rpt.AssessmentTypeVersion atv    \n        INNER JOIN \n            rpt.Assessment asst ON atv.id = asst.assessmentTypeVersionFk  \n        INNER JOIN \n            rpt.Note nt ON nt.assessmentFk = asst.id  \n        INNER JOIN \n            rpt.AttributeType atype ON atype.id = nt.attributeTypeFk  \n        WHERE  \n            atv.assessmentTypeId = '9A4B2FEA-78A8-A1F7-8761-224C0516A846' -- Diagnostic Procedure  \n            AND atype.attributeTypeKey = '31970433-6959-A829-AE4F-224C051BB324' -- Instrument/Equipment  \n            AND nt.value LIKE 'Near Infrared Spectroscopy' -- Near Infrared Spectroscopy Imaging\n    ) ni_asst ON tp_p.[ProviderId] = ni_asst.createdByUserFk \n    AND tp_p.Year = YEAR(ni_asst_date) \n    AND tp_p.MonthNumber = MONTH(ni_asst_date)\n    GROUP BY \n        tp_p.[Year], tp_p.MonthNumber, tp_p.[Month], tp_p.MonthYear, tp_p.MonthYearSortable, tp_p.[ProviderId], tp_p.ProviderName\n),\nDBD_ASST_COUNTS([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName], [Debridement Count]) AS (\n    SELECT \n        tp_p.[Year], \n        tp_p.MonthNumber, \n        tp_p.[Month], \n        tp_p.MonthYear, \n        tp_p.MonthYearSortable, \n        tp_p.[ProviderId], \n        tp_p.ProviderName, \n        COUNT(DISTINCT dbd_asst_id) \n    FROM \n        TimePeriod_Providers tp_p\n    LEFT OUTER JOIN (\n        SELECT \n            asst.id dbd_asst_id,  \n            asst.createdByUserFk AS createdByUserFk, \n            asst.date AS dbd_asst_date \n        FROM \n            rpt.AssessmentTypeVersion atv    \n        INNER JOIN \n            rpt.Assessment asst ON atv.id = asst.assessmentTypeVersionFk  \n        INNER JOIN \n            rpt.Note nt ON nt.assessmentFk = asst.id  \n        INNER JOIN \n            rpt.AttributeType atype ON atype.id = nt.attributeTypeFk  \n        WHERE  \n            atv.assessmentTypeId = '096cd3b9-7999-aa42-abb3-223104d6e743' -- Wound Procedure  \n            AND atype.attributeTypeKey = '8E6177F2-08B0-A55F-888A-22BB045D7401' -- Overall goal of procedure  \n            AND (nt.value LIKE 'Reduce bacterial colonization.' \n                 OR nt.value LIKE 'Remove devitalized or infected tissue, particulate matter, or foreign tissues that may impede wound healing.' \n                 OR nt.value LIKE 'Sharp removal of hypergranulation tissue.')\n    ) dbd_asst ON tp_p.[ProviderId] = dbd_asst.createdByUserFk \n    AND tp_p.Year = YEAR(dbd_asst_date) \n    AND tp_p.MonthNumber = MONTH(dbd_asst_date)\n    GROUP BY \n        tp_p.[Year], tp_p.MonthNumber, tp_p.[Month], tp_p.MonthYear, tp_p.MonthYearSortable, tp_p.[ProviderId], tp_p.ProviderName\n),\nWOUND_ASST_COUNTS([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName], [Wound Assessment Count]) AS (\n    SELECT \n        tp_p.[Year], \n        tp_p.MonthNumber, \n        tp_p.[Month], \n        tp_p.MonthYear, \n        tp_p.MonthYearSortable, \n        tp_p.[ProviderId], \n        tp_p.ProviderName, \n        COUNT(DISTINCT wnd_asst_id) \n    FROM \n        TimePeriod_Providers tp_p\n    LEFT OUTER JOIN (\n        SELECT \n            asst.id wnd_asst_id,  \n            asst.createdByUserFk AS createdByUserFk, \n            asst.date AS wnd_asst_date \n        FROM \n            rpt.AssessmentTypeVersion atv    \n        INNER JOIN \n            rpt.Assessment asst ON atv.id = asst.assessmentTypeVersionFk  \n        WHERE  \n            atv.assessmentTypeId = '952A706D-AA8B-ADBD-4E57-EF6BA5B20B65' -- Wound assessment\n    ) wound_asst ON tp_p.[ProviderId] = wound_asst.createdByUserFk \n    AND tp_p.Year = YEAR(wnd_asst_date) \n    AND tp_p.MonthNumber = MONTH(wnd_asst_date)\n    GROUP BY \n        tp_p.[Year], tp_p.MonthNumber, tp_p.[Month], tp_p.MonthYear, tp_p.MonthYearSortable, tp_p.[ProviderId], tp_p.ProviderName\n),\nVISIT_ASST_COUNTS([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName], [Visit Details Count]) AS (\n    SELECT \n        tp_p.[Year], \n        tp_p.MonthNumber, \n        tp_p.[Month], \n        tp_p.MonthYear, \n        tp_p.MonthYearSortable, \n        tp_p.[ProviderId], \n        tp_p.ProviderName, \n        COUNT(DISTINCT visit_asst_id) \n    FROM \n        TimePeriod_Providers tp_p\n    LEFT OUTER JOIN (\n        SELECT \n            asst.id visit_asst_id,  \n            asst.createdByUserFk AS createdByUserFk, \n            asst.date AS visit_asst_date \n        FROM \n            rpt.AssessmentTypeVersion atv    \n        INNER JOIN \n            rpt.Assessment asst ON atv.id = asst.assessmentTypeVersionFk  \n        WHERE  \n            atv.assessmentTypeId = 'A4664A75-1E9A-4537-A663-401954F5593D' -- Visit details\n    ) visit_asst ON tp_p.[ProviderId] = visit_asst.createdByUserFk \n    AND tp_p.Year = YEAR(visit_asst_date) \n    AND tp_p.MonthNumber = MONTH(visit_asst_date)\n    GROUP BY \n        tp_p.[Year], tp_p.MonthNumber, tp_p.[Month], tp_p.MonthYear, tp_p.MonthYearSortable, tp_p.[ProviderId], tp_p.ProviderName\n)\nSELECT DISTINCT \n    mlc.MonthYear, \n    mlc.MonthYearSortable AS 'Year-Month', \n    mlc.ProviderId, \n    (SELECT TOP 1 ProviderName\n     FROM ML_ASST_COUNTS \n     WHERE MonthYear = mlc.MonthYear \n       AND MonthYearSortable = mlc.MonthYearSortable \n       AND ProviderId = mlc.ProviderId) AS ProviderName, \n    mlc.[Molecu-lite Imaging Count] AS 'Moleculight Imaging', \n    nic.[Near Infrared Spectroscopy Count] AS 'Near Infrared Spectroscopy', \n    dbdc.[Debridement Count] AS 'Debridement', \n    wac.[Wound Assessment Count] AS 'Wound Assessment', \n    vac.[Visit Details Count] AS 'Visit Details'\nFROM \n    ML_ASST_COUNTS mlc \nLEFT JOIN \n    NI_ASST_COUNTS nic ON nic.MonthYear = mlc.MonthYear \n    AND nic.MonthYearSortable = mlc.MonthYearSortable \n    AND nic.ProviderId = mlc.ProviderId \nLEFT JOIN \n    DBD_ASST_COUNTS dbdc ON dbdc.MonthYear = mlc.MonthYear \n    AND dbdc.MonthYearSortable = mlc.MonthYearSortable \n    AND dbdc.ProviderId = mlc.ProviderId \nLEFT JOIN \n    WOUND_ASST_COUNTS wac ON wac.MonthYear = mlc.MonthYear \n    AND wac.MonthYearSortable = mlc.MonthYearSortable \n    AND wac.ProviderId = mlc.ProviderId \nLEFT JOIN \n    VISIT_ASST_COUNTS vac ON vac.MonthYear = mlc.MonthYear \n    AND vac.MonthYearSortable = mlc.MonthYearSortable \n    AND vac.ProviderId = mlc.ProviderId\nORDER BY \n    mlc.MonthYearSortable, mlc.ProviderId;\n"
+      }
+    },
+    "Databases": {
+      "0": {
+        "Ident": "StiSqlDatabase",
+        "Name": "Silhouette",
+        "Alias": "Silhouette",
+        "ConnectionStringEncrypted": "9BrVoVZP+/lqFb3od1RtF9V43ShFTML14k25pWdcd3vVavvPTV0xmcxHub1jBLEP2VpziVtKc8XiRrnsYyzhL8Na94hFWbvx4U2pyQ=="
+      }
+    }
+  },
+  "Pages": {
+    "0": {
+      "Ident": "StiDashboard",
+      "Name": "Provider_Service_Metrics",
+      "Guid": "ebe90605836040bfea81e84b28fdc0c7",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiChartElement",
+          "Name": "ChartElement1",
+          "Guid": "fe48bc4a71d3b2bb9c243031773e8dd9",
+          "ClientRectangle": "60,100,1060,480",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Left": 0,
+            "Right": 0
+          },
+          "Padding": {
+            "Left": 0,
+            "Right": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "Values": {
+            "0": {
+              "Ident": "ValueChartMeter",
+              "Key": "95c03cdc84560ef58319e1db017fd2ce",
+              "Expression": "Sum(DataSource.Debridement)",
+              "Label": "Debridement"
+            },
+            "1": {
+              "Ident": "ValueChartMeter",
+              "Key": "eff7648a9a48917fb412f769a0706720",
+              "Expression": "Sum(DataSource.NearInfraredSpectroscopy)",
+              "Label": "Near Infrared Spectroscopy"
+            },
+            "2": {
+              "Ident": "ValueChartMeter",
+              "Key": "d14968121104abbaf1a2a0b1cf08cda5",
+              "Expression": "Sum(DataSource.MoleculightImaging)",
+              "Label": "Moleculight Imaging"
+            },
+            "3": {
+              "Ident": "ValueChartMeter",
+              "Key": "f240d3796e718d60424487e90554066b",
+              "Expression": "Sum(DataSource.VisitDetails)",
+              "Label": "Visit Details"
+            },
+            "4": {
+              "Ident": "ValueChartMeter",
+              "Key": "2263ce1bef79165a75020722a5f78358",
+              "Expression": "Sum(DataSource.WoundAssessment)",
+              "Label": "Wound Assessment"
+            }
+          },
+          "Arguments": {
+            "0": {
+              "Ident": "ArgumentChartMeter",
+              "Key": "f072b756c8e3ea2210700c9df24da64c",
+              "Expression": "[DataSource.Year-Month]",
+              "Label": "Year-Month"
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Chart",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Title": {
+            "Text": "Chart",
+            "Visible": false
+          },
+          "ManuallyEnteredChartMeter": {
+            "Ident": "ValueChartMeter",
+            "Key": "c6c341d0fa55b0174668f7ee9343093f"
+          },
+          "ArgumentFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "ValueFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "XAxis": {
+            "Labels": {
+              "Color": "51,51,102"
+            },
+            "Title": {
+              "Visible": false
+            },
+            "ShowEdgeValues": "False",
+            "StartFromZero": "True"
+          },
+          "XTopAxis": {
+            "ShowEdgeValues": "False"
+          },
+          "YAxis": {
+            "Labels": {
+              "Color": "51,51,102"
+            },
+            "Title": {
+              "Text": "Count",
+              "Color": "51,51,102"
+            }
+          },
+          "Legend": {
+            "Labels": {
+              "Font": ";10;;",
+              "Color": "51,51,102"
+            },
+            "HorAlignment": "Center"
+          },
+          "Area": {
+            "SideBySide": true,
+            "GridLinesHor": {
+              "Color": "Transparent"
+            },
+            "GridLinesVert": {
+              "Color": "Transparent"
+            },
+            "InterlacingHor": {
+              "Color": "230,230,230",
+              "Visible": true
+            },
+            "InterlacingVert": {
+              "Color": "Transparent"
+            },
+            "Indicator": {
+              "Title": {
+                "Text": ""
+              }
+            },
+            "HorSpacing": 0,
+            "VertSpacing": 3
+          },
+          "Labels": {
+            "Position": "None"
+          },
+          "Options3D": {
+            "Opacity": 1,
+            "Lighting": "Gradient"
+          },
+          "SeriesColors": {
+            "0": "43,188,133",
+            "1": "235,135,102",
+            "2": "72,148,26",
+            "3": "102,26,148",
+            "4": "51,153,204"
+          },
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement1",
+          "Guid": "f4744bd0877375b151bcf2e2ae473055",
+          "ClientRectangle": "485,60,340,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "ForeColor": "51,51,102",
+          "Font": ";14;Bold;",
+          "ShowAllValue": true,
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "81033a0d5181d0fdf3ee8922600305dd",
+            "Expression": "DataSource.ProviderName",
+            "Label": "ProviderName"
+          },
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "2": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement1",
+          "Guid": "6083aecc9beaf3a40ada0663b5450476",
+          "ClientRectangle": "385,60,100,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"14\" ><text-align=\"Center\"><b><font-color=\"#333366\">Provider:</font-color></b></text-align></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "3": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement2",
+          "Guid": "a84a0c7beb77bdc9e7fe6f8421dff15b",
+          "ClientRectangle": "340,0,520,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"22\" ><text-align=\"Center\"><b><font-color=\"#333366\">Provider Service Metrics</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Style": "AliceBlue",
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    },
+    "1": {
+      "Ident": "StiDashboard",
+      "Name": "Data_Export",
+      "Guid": "2e69dec01b559fff2b290c32ddec30cc",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiTableElement",
+          "Name": "TableDataSource",
+          "Guid": "d2fba749fa344f6b73a25dcb9aeda841",
+          "ClientRectangle": "80,80,1020,480",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "e9d0f1a30e799617243a94bde891b639",
+              "Expression": "DataSource.MonthYear",
+              "Label": "MonthYear",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "8fcd6255da824349f5deaead00edce26",
+              "Expression": "[DataSource.Year-Month]",
+              "Label": "Year-Month",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "93381281afa21dd864e32e4d25282555",
+              "Expression": "DataSource.ProviderId",
+              "Label": "ProviderId",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "67430721aeab91a703575dbdc587471d",
+              "Expression": "DataSource.ProviderName",
+              "Label": "ProviderName",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "4": {
+              "Ident": "MeasureColumn",
+              "Key": "beee6d62f377bb6dc5f27b8b7e84ef97",
+              "Expression": "Sum(DataSource.MoleculiteImaging)",
+              "Label": "Moleculite Imaging",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              }
+            },
+            "5": {
+              "Ident": "MeasureColumn",
+              "Key": "7d03d46419a4e9e606aaf2f7f5ef77a5",
+              "Expression": "Sum(DataSource.NearInfraredSpectroscopy)",
+              "Label": "Near Infrared Spectroscopy",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              }
+            },
+            "6": {
+              "Ident": "MeasureColumn",
+              "Key": "4372ff175fe7e920254f1967abd31bfd",
+              "Expression": "Sum(DataSource.Debridement)",
+              "Label": "Debridement",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              }
+            },
+            "7": {
+              "Ident": "MeasureColumn",
+              "Key": "4ac7994979f1e7de28bb57b8cabcdb41",
+              "Expression": "Sum(DataSource.WoundAssessment)",
+              "Label": "Wound Assessment",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              }
+            },
+            "8": {
+              "Ident": "MeasureColumn",
+              "Key": "36aab3f8274da0e25529652bed0f2d34",
+              "Expression": "Sum(DataSource.VisitDetails)",
+              "Label": "Visit Details",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              }
+            }
+          },
+          "HeaderForeColor": "245,245,245",
+          "FooterForeColor": "51,153,204",
+          "ForeColor": "51,51,102",
+          "HeaderFont": ";10;;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "DataSource",
+            "Visible": false
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Style": "AliceBlue",
+          "SizeMode": "Fit",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement3",
+          "Guid": "b9692938e7df60fc516908ba453fce8e",
+          "ClientRectangle": "400,20,360,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"22\" ><text-align=\"Center\"><b><font-color=\"#333366\">Exportable Data</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    }
+  }
+}

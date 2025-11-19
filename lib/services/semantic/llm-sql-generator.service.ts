@@ -556,10 +556,34 @@ function parseAndValidateLLMResponse(response: unknown): LLMResponse {
   }
 
   if (!validateLLMResponse(parsed)) {
+    // Log full response for debugging (not truncated)
     console.error(
-      "[LLM-SQL-Generator] ❌ Invalid response format:",
-      JSON.stringify(parsed, null, 2).slice(0, 500)
+      "[LLM-SQL-Generator] ❌ Invalid response format (full response):",
+      JSON.stringify(parsed, null, 2)
     );
+    console.error(
+      "[LLM-SQL-Generator] ❌ Response type:",
+      (parsed as any)?.responseType
+    );
+    console.error(
+      "[LLM-SQL-Generator] ❌ Has clarifications array:",
+      Array.isArray((parsed as any)?.clarifications)
+    );
+    if (Array.isArray((parsed as any)?.clarifications)) {
+      console.error(
+        "[LLM-SQL-Generator] ❌ Clarifications count:",
+        (parsed as any).clarifications.length
+      );
+      (parsed as any).clarifications.forEach((c: any, i: number) => {
+        console.error(`[LLM-SQL-Generator] ❌ Clarification ${i}:`, {
+          id: c?.id,
+          ambiguousTerm: c?.ambiguousTerm,
+          hasQuestion: typeof c?.question === 'string',
+          hasOptions: Array.isArray(c?.options),
+          hasAllowCustom: typeof c?.allowCustom === 'boolean',
+        });
+      });
+    }
     throw new Error(
       "LLM response did not match expected format (neither SQL nor clarification)"
     );

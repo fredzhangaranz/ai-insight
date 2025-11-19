@@ -1,0 +1,2258 @@
+﻿{
+  "ReportVersion": "2024.2.6",
+  "ReportGuid": "0635a1b5-cf97-029a-c87d-cdbd0ba6e843",
+  "ReportName": "Healing Rates ",
+  "ReportAlias": "Healing Rates ",
+  "ReportCreated": "/Date(1736995320000+1300)/",
+  "ReportChanged": "/Date(1737577346000+1300)/",
+  "EngineVersion": "EngineV2",
+  "CalculationMode": "Interpretation",
+  "ReportUnit": "Centimeters",
+  "Styles": {
+    "0": {
+      "Ident": "StiTableStyle",
+      "Description": "Style based on formating of Tableby_provider_pivot component",
+      "Name": "Style1",
+      "BackColor": "245,245,245",
+      "DataColor": "245,245,245",
+      "DataForeground": "50,58,69",
+      "SelectedDataColor": "82,182,249",
+      "HeaderColor": "51,153,204",
+      "HotHeaderColor": "32,132,199",
+      "FooterColor": "51,153,204",
+      "FooterForeground": "255,255,255",
+      "GridColor": "220,220,220"
+    },
+    "1": {
+      "Ident": "StiProgressStyle",
+      "Description": "Style based on formating of ProgressElement1 component",
+      "Name": "Style7",
+      "TrackColor": "255,255,255",
+      "BandColor": "255,255,255",
+      "SeriesColors": {
+        "0": "22,93,158",
+        "1": "87,126,182",
+        "2": "86,148,54",
+        "3": "34,80,86",
+        "4": "212,218,224"
+      },
+      "BackColor": "255,0,0"
+    },
+    "2": {
+      "Ident": "StiDialogStyle",
+      "Description": "Style based on formating of ComboBoxElement2 component",
+      "Name": "Style6",
+      "ForeColor": "105,105,105",
+      "SelectedBackColor": "112,48,160",
+      "SelectedForeColor": "174,171,171",
+      "SelectedGlyphColor": "174,171,171",
+      "HotBackColor": "117,112,112",
+      "HotSelectedBackColor": "112,48,160",
+      "HotSelectedForeColor": "117,112,112",
+      "HotSelectedGlyphColor": "117,112,112"
+    },
+    "3": {
+      "Ident": "StiDialogStyle",
+      "Description": "Style based on formating of ComboBoxElement1 component",
+      "Name": "Style5",
+      "ForeColor": "105,105,105",
+      "SelectedBackColor": "51,51,102",
+      "HotSelectedBackColor": "51,51,102"
+    },
+    "4": {
+      "Ident": "StiDialogStyle",
+      "Description": "Style based on formating of ComboBoxElement1 component",
+      "Name": "Style4",
+      "ForeColor": "51,51,102",
+      "BackColor": "10,50,90",
+      "GlyphColor": "238,238,238",
+      "SeparatorColor": "117,134,150",
+      "SelectedBackColor": "30,70,110",
+      "SelectedForeColor": "238,238,238",
+      "SelectedGlyphColor": "238,238,238",
+      "HotBackColor": "0,40,80",
+      "HotForeColor": "238,238,238",
+      "HotGlyphColor": "238,238,238",
+      "HotSelectedBackColor": "50,90,130",
+      "HotSelectedForeColor": "238,238,238",
+      "HotSelectedGlyphColor": "221,221,221"
+    },
+    "5": {
+      "Ident": "StiTableStyle",
+      "Description": "Style based on formating of TableElement1 component",
+      "Name": "Style3",
+      "BackColor": "255,255,255",
+      "DataColor": "245,245,245",
+      "DataForeground": "50,58,69",
+      "SelectedDataColor": "82,182,249",
+      "HeaderColor": "51,51,102",
+      "HotHeaderColor": "32,132,199",
+      "FooterColor": "51,51,102",
+      "FooterForeground": "255,255,255",
+      "GridColor": "220,220,220"
+    },
+    "6": {
+      "Ident": "StiTableStyle",
+      "Description": "Style based on formating of Tableby_unit component",
+      "Name": "Style2",
+      "BackColor": "245,245,245",
+      "DataColor": "245,245,245",
+      "DataForeground": "50,58,69",
+      "SelectedDataColor": "82,182,249",
+      "HeaderColor": "102,26,148",
+      "HotHeaderColor": "32,132,199",
+      "FooterColor": "102,26,148",
+      "FooterForeground": "255,255,255",
+      "GridColor": "220,220,220"
+    }
+  },
+  "Dictionary": {
+    "DataSources": {
+      "0": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Assessment",
+        "Alias": "rpt.Assessment",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeVersionFk",
+            "NameInSource": "assessmentTypeVersionFk",
+            "Alias": "assessmentTypeVersionFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "createdByUserFk",
+            "NameInSource": "createdByUserFk",
+            "Alias": "createdByUserFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "createdByUserName",
+            "NameInSource": "createdByUserName",
+            "Alias": "createdByUserName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTimeOffset"
+          },
+          "4": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "signedByUserFk",
+            "NameInSource": "signedByUserFk",
+            "Alias": "signedByUserFk",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "signedByUserName",
+            "NameInSource": "signedByUserName",
+            "Alias": "signedByUserName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "timeZoneId",
+            "NameInSource": "timeZoneId",
+            "Alias": "timeZoneId",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Assessment"
+      },
+      "1": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AssessmentTypeVersion",
+        "Alias": "rpt.AssessmentTypeVersion",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeId",
+            "NameInSource": "assessmentTypeId",
+            "Alias": "assessmentTypeId",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "definitionVersion",
+            "NameInSource": "definitionVersion",
+            "Alias": "definitionVersion",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "type",
+            "NameInSource": "type",
+            "Alias": "type",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AssessmentTypeVersion"
+      },
+      "2": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AttributeType",
+        "Alias": "rpt.AttributeType",
+        "Columns": {
+          "0": {
+            "Name": "attributeTypeKey",
+            "NameInSource": "attributeTypeKey",
+            "Alias": "attributeTypeKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "dataType",
+            "NameInSource": "dataType",
+            "Alias": "dataType",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "variableName",
+            "NameInSource": "variableName",
+            "Alias": "variableName",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AttributeType"
+      },
+      "3": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.DimDate",
+        "Alias": "rpt.DimDate",
+        "Columns": {
+          "0": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTime"
+          },
+          "1": {
+            "Name": "dayOfMonth",
+            "NameInSource": "dayOfMonth",
+            "Alias": "dayOfMonth",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "dayOfWeek",
+            "NameInSource": "dayOfWeek",
+            "Alias": "dayOfWeek",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "dayOfYear",
+            "NameInSource": "dayOfYear",
+            "Alias": "dayOfYear",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "firstOfMonth",
+            "NameInSource": "firstOfMonth",
+            "Alias": "firstOfMonth",
+            "Type": "System.DateTime"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "month",
+            "NameInSource": "month",
+            "Alias": "month",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "quarter",
+            "NameInSource": "quarter",
+            "Alias": "quarter",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "weekOfYear",
+            "NameInSource": "weekOfYear",
+            "Alias": "weekOfYear",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "year",
+            "NameInSource": "year",
+            "Alias": "year",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.DimDate"
+      },
+      "4": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Measurement",
+        "Alias": "rpt.Measurement",
+        "Columns": {
+          "0": {
+            "Name": "area",
+            "NameInSource": "area",
+            "Alias": "area",
+            "Type": "System.Object"
+          },
+          "1": {
+            "Name": "areaReduction",
+            "NameInSource": "areaReduction",
+            "Alias": "areaReduction",
+            "Type": "System.Object"
+          },
+          "2": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "depth",
+            "NameInSource": "depth",
+            "Alias": "depth",
+            "Type": "System.Object"
+          },
+          "5": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "imageCount",
+            "NameInSource": "imageCount",
+            "Alias": "imageCount",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "islandCount",
+            "NameInSource": "islandCount",
+            "Alias": "islandCount",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "length",
+            "NameInSource": "length",
+            "Alias": "length",
+            "Type": "System.Object"
+          },
+          "10": {
+            "Name": "outlineCount",
+            "NameInSource": "outlineCount",
+            "Alias": "outlineCount",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "perimeter",
+            "NameInSource": "perimeter",
+            "Alias": "perimeter",
+            "Type": "System.Object"
+          },
+          "13": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "volume",
+            "NameInSource": "volume",
+            "Alias": "volume",
+            "Type": "System.Object"
+          },
+          "15": {
+            "Name": "width",
+            "NameInSource": "width",
+            "Alias": "width",
+            "Type": "System.Object"
+          },
+          "16": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Measurement"
+      },
+      "5": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Note",
+        "Alias": "rpt.Note",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "value",
+            "NameInSource": "value",
+            "Alias": "value",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "valueBoolean",
+            "NameInSource": "valueBoolean",
+            "Alias": "valueBoolean",
+            "Type": "System.Boolean"
+          },
+          "8": {
+            "Name": "valueDate",
+            "NameInSource": "valueDate",
+            "Alias": "valueDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "valueDecimal",
+            "NameInSource": "valueDecimal",
+            "Alias": "valueDecimal",
+            "Type": "System.Decimal"
+          },
+          "10": {
+            "Name": "valueInt",
+            "NameInSource": "valueInt",
+            "Alias": "valueInt",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "woundStateFk",
+            "NameInSource": "woundStateFk",
+            "Alias": "woundStateFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Note n where n.value LIKE '%NPWT%';"
+      },
+      "6": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Patient",
+        "Alias": "rpt.Patient",
+        "Columns": {
+          "0": {
+            "Name": "addressCity",
+            "NameInSource": "addressCity",
+            "Alias": "addressCity",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "addressCountry",
+            "NameInSource": "addressCountry",
+            "Alias": "addressCountry",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "addressPostcode",
+            "NameInSource": "addressPostcode",
+            "Alias": "addressPostcode",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "addressState",
+            "NameInSource": "addressState",
+            "Alias": "addressState",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "addressStreet",
+            "NameInSource": "addressStreet",
+            "Alias": "addressStreet",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "addressSuburb",
+            "NameInSource": "addressSuburb",
+            "Alias": "addressSuburb",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "dateOfBirth",
+            "NameInSource": "dateOfBirth",
+            "Alias": "dateOfBirth",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "domainId",
+            "NameInSource": "domainId",
+            "Alias": "domainId",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "firstName",
+            "NameInSource": "firstName",
+            "Alias": "firstName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "gender",
+            "NameInSource": "gender",
+            "Alias": "gender",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "homePhone",
+            "NameInSource": "homePhone",
+            "Alias": "homePhone",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "lastName",
+            "NameInSource": "lastName",
+            "Alias": "lastName",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "middleName",
+            "NameInSource": "middleName",
+            "Alias": "middleName",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "mobilePhone",
+            "NameInSource": "mobilePhone",
+            "Alias": "mobilePhone",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "workPhone",
+            "NameInSource": "workPhone",
+            "Alias": "workPhone",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Patient"
+      },
+      "7": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Unit",
+        "Alias": "rpt.Unit",
+        "Columns": {
+          "0": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Unit"
+      },
+      "8": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Wound",
+        "Alias": "rpt.Wound",
+        "Columns": {
+          "0": {
+            "Name": "anatomyLabel",
+            "NameInSource": "anatomyLabel",
+            "Alias": "anatomyLabel",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "auxText",
+            "NameInSource": "auxText",
+            "Alias": "auxText",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "baselineDate",
+            "NameInSource": "baselineDate",
+            "Alias": "baselineDate",
+            "Type": "System.DateTime"
+          },
+          "3": {
+            "Name": "baselineDimDateFk",
+            "NameInSource": "baselineDimDateFk",
+            "Alias": "baselineDimDateFk",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "description",
+            "NameInSource": "description",
+            "Alias": "description",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "index",
+            "NameInSource": "index",
+            "Alias": "index",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "label",
+            "NameInSource": "label",
+            "Alias": "label",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "level0AnatomyId",
+            "NameInSource": "level0AnatomyId",
+            "Alias": "level0AnatomyId",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "level0Text",
+            "NameInSource": "level0Text",
+            "Alias": "level0Text",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "level1AnatomyId",
+            "NameInSource": "level1AnatomyId",
+            "Alias": "level1AnatomyId",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "level1Text",
+            "NameInSource": "level1Text",
+            "Alias": "level1Text",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "level2AnatomyId",
+            "NameInSource": "level2AnatomyId",
+            "Alias": "level2AnatomyId",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "level2Text",
+            "NameInSource": "level2Text",
+            "Alias": "level2Text",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "level3AnatomyId",
+            "NameInSource": "level3AnatomyId",
+            "Alias": "level3AnatomyId",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "level3Text",
+            "NameInSource": "level3Text",
+            "Alias": "level3Text",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "17": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Wound"
+      },
+      "9": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundState",
+        "Alias": "rpt.WoundState",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "endDate",
+            "NameInSource": "endDate",
+            "Alias": "endDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "endDateDimDateFk",
+            "NameInSource": "endDateDimDateFk",
+            "Alias": "endDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "isCurrentState",
+            "NameInSource": "isCurrentState",
+            "Alias": "isCurrentState",
+            "Type": "System.Boolean"
+          },
+          "5": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "startDate",
+            "NameInSource": "startDate",
+            "Alias": "startDate",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "startDateDimDateFk",
+            "NameInSource": "startDateDimDateFk",
+            "Alias": "startDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "woundStateTypeFk",
+            "NameInSource": "woundStateTypeFk",
+            "Alias": "woundStateTypeFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundState"
+      },
+      "10": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundStateType",
+        "Alias": "rpt.WoundStateType",
+        "Columns": {
+          "0": {
+            "Name": "attributeLookupKey",
+            "NameInSource": "attributeLookupKey",
+            "Alias": "attributeLookupKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "isActive",
+            "NameInSource": "isActive",
+            "Alias": "isActive",
+            "Type": "System.Boolean"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundStateType"
+      },
+      "11": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.4week",
+        "Alias": "rpt.4week",
+        "Key": "98341c46a129a68b88725807a2c3e36d",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "PrimaryEtiology",
+            "NameInSource": "PrimaryEtiology",
+            "Alias": "PrimaryEtiology",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "Provider",
+            "NameInSource": "Provider",
+            "Alias": "Provider",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "Unit",
+            "NameInSource": "Unit",
+            "Alias": "Unit",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "InitialMeasurementArea",
+            "NameInSource": "InitialMeasurementArea",
+            "Alias": "InitialMeasurementArea",
+            "Type": "System.Decimal"
+          },
+          "5": {
+            "Name": "InitialDate",
+            "NameInSource": "InitialDate",
+            "Alias": "InitialDate",
+            "Type": "System.DateTime"
+          },
+          "6": {
+            "Name": "FourWeeksAdded",
+            "NameInSource": "FourWeeksAdded",
+            "Alias": "FourWeeksAdded",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "MeasurementWithin4Weeks",
+            "NameInSource": "MeasurementWithin4Weeks",
+            "Alias": "MeasurementWithin4Weeks",
+            "Type": "System.Decimal"
+          },
+          "8": {
+            "Name": "MeasurementDate",
+            "NameInSource": "MeasurementDate",
+            "Alias": "MeasurementDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": ">25",
+            "NameInSource": ">25",
+            "Alias": ">25",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "FourWeekWoundStateName",
+            "NameInSource": "FourWeekWoundStateName",
+            "Alias": "FourWeekWoundStateName",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 4-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 28, dd.date) AS FourWeeksAdded,\n        m4.area AS MeasurementWithin4Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) <= 7\n),\nWoundStateAtFourWeeks AS (\n    -- Get the wound state at the 4-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS FourWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n        LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n        LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n        AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n        AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 4 weeks\n)\n\nSELECT \n    mw.woundFk,\n    mw.PrimaryEtiology,\n    mw.Provider,\n    mw.Unit,\n    mw.InitialMeasurementArea,\n    mw.InitialDate,\n    mw.FourWeeksAdded,\n    mw.MeasurementWithin4Weeks,\n    mw.MeasurementDate,\n    wsfw.FourWeekWoundStateName, -- Wound state name at 4 weeks\n    CASE \n        WHEN wsfw.FourWeekWoundStateName <> 'open' THEN 'healed'\n        WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n        ELSE 'FALSE' \n    END AS '>25'\nFROM \n    MeasurementWithRanking mw\nLEFT JOIN \n    WoundStateAtFourWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\nWHERE \n    mw.Rank = 1\nORDER BY \n    mw.woundFk;"
+      },
+      "12": {
+        "Ident": "StiSqlSource",
+        "Name": "8week",
+        "Alias": "8week",
+        "Key": "54cca1451148dbe18c7ded4c78d88145",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "PrimaryEtiology",
+            "NameInSource": "PrimaryEtiology",
+            "Alias": "PrimaryEtiology",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "Provider",
+            "NameInSource": "Provider",
+            "Alias": "Provider",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "Unit",
+            "NameInSource": "Unit",
+            "Alias": "Unit",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "InitialMeasurementArea",
+            "NameInSource": "InitialMeasurementArea",
+            "Alias": "InitialMeasurementArea",
+            "Type": "System.Decimal"
+          },
+          "5": {
+            "Name": "InitialDate",
+            "NameInSource": "InitialDate",
+            "Alias": "InitialDate",
+            "Type": "System.DateTime"
+          },
+          "6": {
+            "Name": "EightWeeksAdded",
+            "NameInSource": "EightWeeksAdded",
+            "Alias": "EightWeeksAdded",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "MeasurementWithin8Weeks",
+            "NameInSource": "MeasurementWithin8Weeks",
+            "Alias": "MeasurementWithin8Weeks",
+            "Type": "System.Decimal"
+          },
+          "8": {
+            "Name": "MeasurementDate",
+            "NameInSource": "MeasurementDate",
+            "Alias": "MeasurementDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "EightWeekWoundStateName",
+            "NameInSource": "EightWeekWoundStateName",
+            "Alias": "EightWeekWoundStateName",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": ">50",
+            "NameInSource": ">50",
+            "Alias": ">50",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 8-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 56, dd.date) AS EightWeeksAdded,\n        m4.area AS MeasurementWithin8Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) <= 7\n),\nWoundStateAtEightWeeks AS (\n    -- Get the wound state at the 8-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS EightWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n        LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n        LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n        AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n        AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 8 weeks\n)\nSELECT \n    mw.woundFk,\n    mw.PrimaryEtiology,\n    mw.Provider,\n    mw.Unit,\n    mw.InitialMeasurementArea,\n    mw.InitialDate,\n    mw.EightWeeksAdded,\n    mw.MeasurementWithin8Weeks,\n    mw.MeasurementDate,\n    wsfw.EightWeekWoundStateName, -- Wound state name at 8 weeks\n    CASE \n        WHEN wsfw.EightWeekWoundStateName <> 'open' THEN 'Healed'\n        WHEN mw.MeasurementWithin8Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n        ELSE 'FALSE' \n    END AS '>50'\nFROM \n    MeasurementWithRanking mw\nLEFT JOIN \n    WoundStateAtEightWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\nWHERE \n    mw.Rank = 1\nORDER BY \n    mw.woundFk;\n"
+      },
+      "13": {
+        "Ident": "StiSqlSource",
+        "Name": "12week",
+        "Alias": "12week",
+        "Key": "d12c03fa7fda92bcaee54c694423d681",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "PrimaryEtiology",
+            "NameInSource": "PrimaryEtiology",
+            "Alias": "PrimaryEtiology",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "Provider",
+            "NameInSource": "Provider",
+            "Alias": "Provider",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "Unit",
+            "NameInSource": "Unit",
+            "Alias": "Unit",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "InitialMeasurementArea",
+            "NameInSource": "InitialMeasurementArea",
+            "Alias": "InitialMeasurementArea",
+            "Type": "System.Decimal"
+          },
+          "5": {
+            "Name": "InitialDate",
+            "NameInSource": "InitialDate",
+            "Alias": "InitialDate",
+            "Type": "System.DateTime"
+          },
+          "6": {
+            "Name": "TwelveWeeksAdded",
+            "NameInSource": "TwelveWeeksAdded",
+            "Alias": "TwelveWeeksAdded",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "MeasurementWithin12Weeks",
+            "NameInSource": "MeasurementWithin12Weeks",
+            "Alias": "MeasurementWithin12Weeks",
+            "Type": "System.Decimal"
+          },
+          "8": {
+            "Name": "MeasurementDate",
+            "NameInSource": "MeasurementDate",
+            "Alias": "MeasurementDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "TwelveWeekWoundStateName",
+            "NameInSource": "TwelveWeekWoundStateName",
+            "Alias": "TwelveWeekWoundStateName",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": ">75",
+            "NameInSource": ">75",
+            "Alias": ">75",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 12-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 84, dd.date) AS TwelveWeeksAdded,\n        m4.area AS MeasurementWithin12Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) <= 7\n),\nWoundStateAtTwelveWeeks AS (\n    -- Get the wound state at the 12-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS TwelveWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n        LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n        LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n        AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n        AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 12 weeks\n)\nSELECT \n    mw.woundFk,\n    mw.PrimaryEtiology,\n    mw.Provider,\n    mw.Unit,\n    mw.InitialMeasurementArea,\n    mw.InitialDate,\n    mw.TwelveWeeksAdded,\n    mw.MeasurementWithin12Weeks,\n    mw.MeasurementDate,\n    wsfw.TwelveWeekWoundStateName, -- Wound state name at 12 weeks\n    CASE \n        WHEN wsfw.TwelveWeekWoundStateName <> 'open' THEN 'healed'\n        WHEN mw.MeasurementWithin12Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n        ELSE 'FALSE' \n    END AS '>75'\nFROM \n    MeasurementWithRanking mw\nLEFT JOIN \n    WoundStateAtTwelveWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\nWHERE \n    mw.Rank = 1\nORDER BY \n    mw.woundFk;\n"
+      },
+      "14": {
+        "Ident": "StiSqlSource",
+        "Name": "16week",
+        "Alias": "16week",
+        "Key": "08ec3294ec05d67f0ba60925fa8770ce",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "PrimaryEtiology",
+            "NameInSource": "PrimaryEtiology",
+            "Alias": "PrimaryEtiology",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "Provider",
+            "NameInSource": "Provider",
+            "Alias": "Provider",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "Unit",
+            "NameInSource": "Unit",
+            "Alias": "Unit",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "InitialMeasurementArea",
+            "NameInSource": "InitialMeasurementArea",
+            "Alias": "InitialMeasurementArea",
+            "Type": "System.Decimal"
+          },
+          "5": {
+            "Name": "InitialDate",
+            "NameInSource": "InitialDate",
+            "Alias": "InitialDate",
+            "Type": "System.DateTime"
+          },
+          "6": {
+            "Name": "SixteenWeeksAdded",
+            "NameInSource": "SixteenWeeksAdded",
+            "Alias": "SixteenWeeksAdded",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "MeasurementWithin16Weeks",
+            "NameInSource": "MeasurementWithin16Weeks",
+            "Alias": "MeasurementWithin16Weeks",
+            "Type": "System.Decimal"
+          },
+          "8": {
+            "Name": "MeasurementDate",
+            "NameInSource": "MeasurementDate",
+            "Alias": "MeasurementDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "SixteenWeekWoundStateName",
+            "NameInSource": "SixteenWeekWoundStateName",
+            "Alias": "SixteenWeekWoundStateName",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": ">=100",
+            "NameInSource": ">=100",
+            "Alias": ">=100",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 16-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 112, dd.date) AS SixteenWeeksAdded,\n        m4.area AS MeasurementWithin16Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) <= 7\n),\nWoundStateAtSixteenWeeks AS (\n    -- Get the wound state at the 16-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS SixteenWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n        LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n        LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n        AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n        AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 16 weeks\n)\nSELECT \n    mw.woundFk,\n    mw.PrimaryEtiology,\n    mw.Provider,\n    mw.Unit,\n    mw.InitialMeasurementArea,\n    mw.InitialDate,\n    mw.SixteenWeeksAdded,\n    mw.MeasurementWithin16Weeks,\n    mw.MeasurementDate,\n    wsfw.SixteenWeekWoundStateName, -- Wound state name at 16 weeks\n    CASE \n        WHEN wsfw.SixteenWeekWoundStateName <> 'open' THEN 'healed'\n        WHEN mw.MeasurementWithin16Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n        ELSE 'FALSE' \n    END AS '>=100'\nFROM \n    MeasurementWithRanking mw\nLEFT JOIN \n    WoundStateAtSixteenWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\nWHERE \n    mw.Rank = 1\nORDER BY \n    mw.woundFk;\n"
+      },
+      "15": {
+        "Ident": "StiSqlSource",
+        "Name": "16weekCopy",
+        "Alias": "16weekCopy",
+        "Key": "f7beb99bc2aa4f75f4d0db7a61006cc4",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "PrimaryEtiology",
+            "NameInSource": "PrimaryEtiology",
+            "Alias": "PrimaryEtiology",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "Provider",
+            "NameInSource": "Provider",
+            "Alias": "Provider",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "Unit",
+            "NameInSource": "Unit",
+            "Alias": "Unit",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "InitialMeasurementArea",
+            "NameInSource": "InitialMeasurementArea",
+            "Alias": "InitialMeasurementArea",
+            "Type": "System.Decimal"
+          },
+          "5": {
+            "Name": "InitialDate",
+            "NameInSource": "InitialDate",
+            "Alias": "InitialDate",
+            "Type": "System.DateTime"
+          },
+          "6": {
+            "Name": "SixteenWeeksAdded",
+            "NameInSource": "SixteenWeeksAdded",
+            "Alias": "SixteenWeeksAdded",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "MeasurementWithin16Weeks",
+            "NameInSource": "MeasurementWithin16Weeks",
+            "Alias": "MeasurementWithin16Weeks",
+            "Type": "System.Decimal"
+          },
+          "8": {
+            "Name": "MeasurementDate",
+            "NameInSource": "MeasurementDate",
+            "Alias": "MeasurementDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "SixteenWeekWoundStateName",
+            "NameInSource": "SixteenWeekWoundStateName",
+            "Alias": "SixteenWeekWoundStateName",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": ">=100",
+            "NameInSource": ">=100",
+            "Alias": ">=100",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": ";WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 8-week and 4-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 56, dd.date) AS EightWeeksAdded,  -- 8 weeks added\n        m8.area AS MeasurementWithin8Weeks,           -- Measurement area within 8 weeks\n        dd2.date AS MeasurementDate8Weeks,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) AS DateDifference8Weeks,\n        DATEADD(DAY, 28, dd.date) AS FourWeeksAdded,  -- 4 weeks added\n        m4.area AS MeasurementWithin4Weeks,          -- Measurement area within 4 weeks\n        dd2_4w.date AS MeasurementDate4Weeks,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2_4w.date)) AS DateDifference4Weeks,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date))) AS Rank8Weeks,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2_4w.date))) AS Rank4Weeks\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m8 ON a.id = m8.assessmentFk AND m8.dimdatefk = dd.id  -- Ensure the correct measurement within 8 weeks\n    LEFT JOIN \n        rpt.DimDate dd2 ON m8.dimdatefk = dd2.id\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk  -- Ensure the correct measurement within 4 weeks\n    LEFT JOIN \n        rpt.DimDate dd2_4w ON m4.dimdatefk = dd2_4w.id\n    WHERE \n        (ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) <= 7)  -- Within 8 weeks range\n        OR (ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2_4w.date)) <= 7)  -- Within 4 weeks range\n),\nWoundStateAtEightWeeks AS (\n    -- Get the wound state at the 8-week mark\n    SELECT \n        mw.woundFk,\n        wst.name AS EightWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate8Weeks,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN \n        rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id\n    LEFT JOIN \n        rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id\n        AND mw.MeasurementDate8Weeks>= dd_start.date\n        AND (mw.MeasurementDate8Weeks<= dd_end.date OR dd_end.date IS NULL)\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank8Weeks = 1\n),\nWoundStateAtFourWeeks AS (\n    -- Get the wound state at the 4-week mark\n    SELECT \n        mw.woundFk,\n        wst.name AS FourWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate4Weeks,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN \n        rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id\n    LEFT JOIN \n        rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id\n        AND mw.MeasurementDate4Weeks >= dd_start.date\n        AND (mw.MeasurementDate4Weeks <= dd_end.date OR dd_end.date IS NULL)\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank4Weeks = 1\n)\n\nSELECT \n    mw.woundFk,\n    mw.PrimaryEtiology,\n    mw.Provider,\n    mw.Unit,\n    mw.InitialMeasurementArea,\n    mw.InitialDate,\n    mw.EightWeeksAdded,\n    mw.MeasurementWithin8Weeks,\n    mw.MeasurementDate8Weeks,  -- Correct measurement date for 8 weeks\n    wsfw.EightWeekWoundStateName,\n    CASE \n        WHEN wsfw.EightWeekWoundStateName <> 'open' THEN 'Healed'\n        WHEN mw.MeasurementWithin8Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n        ELSE 'FALSE' \n    END AS '>50',\n    mw.FourWeeksAdded,\n    mw.MeasurementWithin4Weeks, \n    mw.MeasurementDate4Weeks,  -- Correct measurement date for 4 weeks\n    wsfw4.FourWeekWoundStateName,\n    CASE \n        WHEN wsfw4.FourWeekWoundStateName <> 'open' THEN 'Healed'\n        WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE'\n        ELSE 'FALSE'\n    END AS '>25'\nFROM \n    MeasurementWithRanking mw\nLEFT JOIN \n    WoundStateAtEightWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\nLEFT JOIN \n    WoundStateAtFourWeeks wsfw4 ON mw.woundFk = wsfw4.woundFk AND wsfw4.Rank = 1\nWHERE \n    mw.Rank8Weeks = 1 OR mw.Rank4Weeks = 1\nORDER BY \n    mw.woundFk;\n"
+      },
+      "16": {
+        "Ident": "StiSqlSource",
+        "Name": "current_working",
+        "Alias": "current_working",
+        "Key": "057c7700526f8f39c583b3cb1f774182",
+        "Columns": {
+          "0": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "PrimaryEtiology",
+            "NameInSource": "PrimaryEtiology",
+            "Alias": "PrimaryEtiology",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "Provider",
+            "NameInSource": "Provider",
+            "Alias": "Provider",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "Unit",
+            "NameInSource": "Unit",
+            "Alias": "Unit",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "Decreased by >=25% at 4 weeks",
+            "NameInSource": "Decreased by >=25% at 4 weeks",
+            "Alias": "Decreased by >=25% at 4 weeks",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "Decreased by >=50% at 8 weeks",
+            "NameInSource": "Decreased by >=50% at 8 weeks",
+            "Alias": "Decreased by >=50% at 8 weeks",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "Decreased by >=75% at 12 weeks",
+            "NameInSource": "Decreased by >=75% at 12 weeks",
+            "Alias": "Decreased by >=75% at 12 weeks",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "Decreased by >=100% at 16 weeks",
+            "NameInSource": "Decreased by >=100% at 16 weeks",
+            "Alias": "Decreased by >=100% at 16 weeks",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "4WeeksBinary",
+            "NameInSource": "4WeeksBinary",
+            "Alias": "4WeeksBinary",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "8WeeksBinary",
+            "NameInSource": "8WeeksBinary",
+            "Alias": "8WeeksBinary",
+            "Type": "System.Int32"
+          },
+          "10": {
+            "Name": "12WeeksBinary",
+            "NameInSource": "12WeeksBinary",
+            "Alias": "12WeeksBinary",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "16WeeksBinary",
+            "NameInSource": "16WeeksBinary",
+            "Alias": "16WeeksBinary",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 4-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 28, dd.date) AS FourWeeksAdded,\n        m4.area AS MeasurementWithin4Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) <= 7\n),\nWoundStateAtFourWeeks AS (\n    -- Get the wound state at the 4-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS FourWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n    LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n    AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n    AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 4 weeks\n),\nWOUND4FINAL AS (\n    -- Combine data from earlier CTEs and determine wound state at 4 weeks\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.FourWeeksAdded,\n        mw.MeasurementWithin4Weeks,\n        mw.MeasurementDate,\n        wsfw.FourWeekWoundStateName, -- Wound state name at 4 weeks\n        CASE \n            WHEN wsfw.FourWeekWoundStateName <> 'open' THEN 'TRUE (Resurfaced/Resolved)'\n            WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n            ELSE 'FALSE' \n        END AS 'Decreased by >=25% at 4 weeks',\n        CASE \n            WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) OR wsfw.FourWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [4WeeksBinary]\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        WoundStateAtFourWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nMeasurementWithRanking8Weeks AS (\n    -- Rank measurements based on proximity to the 8-week mark (similar to 4-week ranking)\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 56, dd.date) AS EightWeeksAdded,\n        m4.area AS MeasurementWithin8Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) <= 7\n),\nWoundStateAtEightWeeks AS (\n    -- Get the wound state at the 8-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS EightWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking8Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n    LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n    AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n    AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 8 weeks\n),\nWOUND8FINAL AS (\n    -- Combine data from earlier CTEs and determine wound state at 8 weeks\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.EightWeeksAdded,\n        mw.MeasurementWithin8Weeks,\n        mw.MeasurementDate,\n        wsfw.EightWeekWoundStateName, -- Wound state name at 8 weeks\n        CASE \n            WHEN wsfw.EightWeekWoundStateName <> 'open' THEN 'TRUE (Resurfaced/Resolved)'\n            WHEN mw.MeasurementWithin8Weeks <= (0.5 * mw.InitialMeasurementArea) THEN 'TRUE' \n            ELSE 'FALSE' \n        END AS 'Decreased by >=50% at 8 weeks',\n       CASE \n            WHEN mw.MeasurementWithin8Weeks <= (0.5 * mw.InitialMeasurementArea) OR wsfw.EightWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [8WeeksBinary]\n    FROM \n        MeasurementWithRanking8Weeks mw\n    LEFT JOIN \n        WoundStateAtEightWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nMeasurementWithRanking12Weeks AS (\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 84, dd.date) AS TwelveWeeksAdded,\n        m12.area AS MeasurementWithin12Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m12 ON a.id = m12.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m12.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) <= 7\n),\nMeasurementWithRanking16Weeks AS (\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 112, dd.date) AS SixteenWeeksAdded,\n        m16.area AS MeasurementWithin16Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m16 ON a.id = m16.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m16.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) <= 7\n),\n-- Combine data for 12 weeks\nWoundStateAtTwelveWeeks AS (\n    SELECT \n        mw.woundFk,\n        wst.name AS TwelveWeekWoundStateName,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking12Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank = 1\n),\nWoundStateAtSixteenWeeks AS (\n    SELECT \n        mw.woundFk,\n        wst.name AS SixteenWeekWoundStateName,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking16Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank = 1\n),\n-- Final combined data\nWOUND12FINAL AS (\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.TwelveWeeksAdded,\n        mw.MeasurementWithin12Weeks,\n        mw.MeasurementDate,\n        wstw.TwelveWeekWoundStateName,\n        CASE \n            WHEN wstw.TwelveWeekWoundStateName <> 'open' THEN 'TRUE (Resurfaced/Resolved)'\n            WHEN mw.MeasurementWithin12Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE'\n            ELSE 'FALSE'\n        END AS 'Decreased by >=75% at 12 weeks',\n        CASE \n            WHEN mw.MeasurementWithin12Weeks <= (0.75 * mw.InitialMeasurementArea) OR wstw.TwelveWeekWoundStateName<> 'open' THEN 1\n            ELSE 0\n        END AS [12WeeksBinary]\n    FROM \n        MeasurementWithRanking12Weeks mw\n    LEFT JOIN \n        WoundStateAtTwelveWeeks wstw ON mw.woundFk = wstw.woundFk AND wstw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nWOUND16FINAL AS (\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.SixteenWeeksAdded,\n        mw.MeasurementWithin16Weeks,\n        mw.MeasurementDate,\n        wssw.SixteenWeekWoundStateName,\n        CASE \n            WHEN wssw.SixteenWeekWoundStateName <> 'open' THEN ' TRUE (Resurfaced/Resolved)'\n            WHEN mw.MeasurementWithin16Weeks <= ( mw.InitialMeasurementArea) THEN 'TRUE'\n            ELSE 'FALSE'\n        END AS 'Decreased by >=100% at 16 weeks',\n        CASE \n            WHEN mw.MeasurementWithin16Weeks <= (mw.InitialMeasurementArea) OR wssw.SixteenWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [16WeeksBinary]\n    FROM \n        MeasurementWithRanking16Weeks mw\n    LEFT JOIN \n        WoundStateAtSixteenWeeks wssw ON mw.woundFk = wssw.woundFk AND wssw.Rank = 1\n    WHERE \n        mw.Rank = 1\n)\n\nSELECT *\nFROM WOUND4FINAL w4\nINNER JOIN WOUND8FINAL w8 ON w8.woundFk = w4.woundFk\nINNER JOIN WOUND12FINAL w12 ON w12.woundFk = w4.woundFk\nINNER JOIN WOUND16FINAL w16 ON w16.woundFk = w4.woundFk;"
+      },
+      "17": {
+        "Ident": "StiSqlSource",
+        "Name": "by_provider_pivot",
+        "Alias": "by_provider_pivot",
+        "Key": "bad644d8c284cf74b53a9a376566caa6",
+        "Columns": {
+          "0": {
+            "Name": "Provider",
+            "NameInSource": "Provider",
+            "Alias": "Provider",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "Decreased by >=25% at 4 weeks",
+            "NameInSource": "Decreased by >=25% at 4 weeks",
+            "Alias": "Decreased by >=25% at 4 weeks",
+            "Type": "System.Decimal"
+          },
+          "2": {
+            "Name": "Decreased by >=50% at 8 weeks",
+            "NameInSource": "Decreased by >=50% at 8 weeks",
+            "Alias": "Decreased by >=50% at 8 weeks",
+            "Type": "System.Decimal"
+          },
+          "3": {
+            "Name": "Decreased by >=75% at 12 weeks",
+            "NameInSource": "Decreased by >=75% at 12 weeks",
+            "Alias": "Decreased by >=75% at 12 weeks",
+            "Type": "System.Decimal"
+          },
+          "4": {
+            "Name": "Decreased by >=100% at 16 weeks",
+            "NameInSource": "Decreased by >=100% at 16 weeks",
+            "Alias": "Decreased by >=100% at 16 weeks",
+            "Type": "System.Decimal"
+          }
+        },
+        "NameInSource": "Connection",
+        "CommandTimeout": 46,
+        "SqlCommand": "WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 4-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 28, dd.date) AS FourWeeksAdded,\n        m4.area AS MeasurementWithin4Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) <= 7\n),\nWoundStateAtFourWeeks AS (\n    -- Get the wound state at the 4-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS FourWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n    LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n    AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n    AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 4 weeks\n),\nWOUND4FINAL AS (\n    -- Combine data from earlier CTEs and determine wound state at 4 weeks\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.FourWeeksAdded,\n        mw.MeasurementWithin4Weeks,\n        mw.MeasurementDate,\n        wsfw.FourWeekWoundStateName, -- Wound state name at 4 weeks\n        CASE \n            WHEN wsfw.FourWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n            ELSE 'FALSE' \n        END AS 'Decreased by >=25% at 4 weeks',\n        CASE \n            WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) OR wsfw.FourWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [4WeeksBinary]\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        WoundStateAtFourWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nMeasurementWithRanking8Weeks AS (\n    -- Rank measurements based on proximity to the 8-week mark (similar to 4-week ranking)\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 56, dd.date) AS EightWeeksAdded,\n        m4.area AS MeasurementWithin8Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) <= 7\n),\nWoundStateAtEightWeeks AS (\n    -- Get the wound state at the 8-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS EightWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking8Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n    LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n    AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n    AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 8 weeks\n),\nWOUND8FINAL AS (\n    -- Combine data from earlier CTEs and determine wound state at 8 weeks\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.EightWeeksAdded,\n        mw.MeasurementWithin8Weeks,\n        mw.MeasurementDate,\n        wsfw.EightWeekWoundStateName, -- Wound state name at 8 weeks\n        CASE \n            WHEN wsfw.EightWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin8Weeks <= (0.5 * mw.InitialMeasurementArea) THEN 'TRUE' \n            ELSE 'FALSE' \n        END AS 'Decreased by >=50% at 8 weeks',\n       CASE \n            WHEN mw.MeasurementWithin8Weeks <= (0.5 * mw.InitialMeasurementArea) OR wsfw.EightWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [8WeeksBinary]\n    FROM \n        MeasurementWithRanking8Weeks mw\n    LEFT JOIN \n        WoundStateAtEightWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nMeasurementWithRanking12Weeks AS (\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 84, dd.date) AS TwelveWeeksAdded,\n        m12.area AS MeasurementWithin12Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m12 ON a.id = m12.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m12.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) <= 7\n),\nMeasurementWithRanking16Weeks AS (\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 112, dd.date) AS SixteenWeeksAdded,\n        m16.area AS MeasurementWithin16Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m16 ON a.id = m16.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m16.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) <= 7\n),\n-- Combine data for 12 weeks\nWoundStateAtTwelveWeeks AS (\n    SELECT \n        mw.woundFk,\n        wst.name AS TwelveWeekWoundStateName,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking12Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank = 1\n),\nWoundStateAtSixteenWeeks AS (\n    SELECT \n        mw.woundFk,\n        wst.name AS SixteenWeekWoundStateName,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking16Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank = 1\n),\n-- Final combined data\nWOUND12FINAL AS (\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.TwelveWeeksAdded,\n        mw.MeasurementWithin12Weeks,\n        mw.MeasurementDate,\n        wstw.TwelveWeekWoundStateName,\n        CASE \n            WHEN wstw.TwelveWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin12Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE'\n            ELSE 'FALSE'\n        END AS 'Decreased by >=75% at 12 weeks',\n        CASE \n            WHEN mw.MeasurementWithin12Weeks <= (0.75 * mw.InitialMeasurementArea) OR wstw.TwelveWeekWoundStateName<> 'open' THEN 1\n            ELSE 0\n        END AS [12WeeksBinary]\n    FROM \n        MeasurementWithRanking12Weeks mw\n    LEFT JOIN \n        WoundStateAtTwelveWeeks wstw ON mw.woundFk = wstw.woundFk AND wstw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nWOUND16FINAL AS (\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.SixteenWeeksAdded,\n        mw.MeasurementWithin16Weeks,\n        mw.MeasurementDate,\n        wssw.SixteenWeekWoundStateName,\n        CASE \n            WHEN wssw.SixteenWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin16Weeks <= ( mw.InitialMeasurementArea) THEN 'TRUE'\n            ELSE 'FALSE'\n        END AS 'Decreased by >=100% at 16 weeks',\n        CASE \n            WHEN mw.MeasurementWithin16Weeks <= (mw.InitialMeasurementArea) OR wssw.SixteenWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [16WeeksBinary]\n    FROM \n        MeasurementWithRanking16Weeks mw\n    LEFT JOIN \n        WoundStateAtSixteenWeeks wssw ON mw.woundFk = wssw.woundFk AND wssw.Rank = 1\n    WHERE \n        mw.Rank = 1\n)\n\nSELECT \n    Provider,\n    CAST(SUM([4WeeksBinary]) AS FLOAT) / COUNT([4WeeksBinary])*100 AS [Decreased by >=25% at 4 weeks],\n    CAST(SUM([8WeeksBinary]) AS FLOAT) / COUNT([8WeeksBinary])*100 AS [Decreased by >=50% at 8 weeks],\n    CAST(SUM([12WeeksBinary]) AS FLOAT) / COUNT([12WeeksBinary])*100 AS [Decreased by >=75% at 12 weeks],\n    CAST(SUM([16WeeksBinary]) AS FLOAT) / COUNT([16WeeksBinary])*100 AS [Decreased by >=100% at 16 weeks]\nFROM (\n    SELECT \n        w4.Provider,\n        w4.[4WeeksBinary],\n        w8.[8WeeksBinary],\n        w12.[12WeeksBinary],\n        w16.[16WeeksBinary]\n    FROM WOUND4FINAL w4\n    INNER JOIN WOUND8FINAL w8 ON w8.woundFk = w4.woundFk\n    INNER JOIN WOUND12FINAL w12 ON w12.woundFk = w4.woundFk\n    INNER JOIN WOUND16FINAL w16 ON w16.woundFk = w4.woundFk\n) AS CombinedResults\nGROUP BY Provider\nORDER BY Provider;"
+      },
+      "18": {
+        "Ident": "StiSqlSource",
+        "Name": "by_unit",
+        "Alias": "by_unit",
+        "Key": "0d439e50af091e8154e6d0c23919803c",
+        "Columns": {
+          "0": {
+            "Name": "Unit",
+            "NameInSource": "Unit",
+            "Alias": "Unit",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "Decreased by >=25% at 4 weeks",
+            "NameInSource": "Decreased by >=25% at 4 weeks",
+            "Alias": "Decreased by >=25% at 4 weeks",
+            "Type": "System.Decimal"
+          },
+          "2": {
+            "Name": "Decreased by >=50% at 8 weeks",
+            "NameInSource": "Decreased by >=50% at 8 weeks",
+            "Alias": "Decreased by >=50% at 8 weeks",
+            "Type": "System.Decimal"
+          },
+          "3": {
+            "Name": "Decreased by >=75% at 12 weeks",
+            "NameInSource": "Decreased by >=75% at 12 weeks",
+            "Alias": "Decreased by >=75% at 12 weeks",
+            "Type": "System.Decimal"
+          },
+          "4": {
+            "Name": "Decreased by >=100% at 16 weeks",
+            "NameInSource": "Decreased by >=100% at 16 weeks",
+            "Alias": "Decreased by >=100% at 16 weeks",
+            "Type": "System.Decimal"
+          }
+        },
+        "NameInSource": "Connection",
+        "CommandTimeout": 46,
+        "SqlCommand": "WITH MostRecentPrimaryEtiology AS (\n    -- Get the most recent primary etiology for each wound\n    SELECT \n        n.woundFk,\n        n.value AS PrimaryEtiology,\n        ROW_NUMBER() OVER (PARTITION BY n.woundFk ORDER BY n.dimdatefk DESC) AS RowNum\n    FROM \n        rpt.Note n\n    INNER JOIN \n        rpt.AttributeType atr ON n.attributeTypeFk = atr.id\n    WHERE \n        atr.name = 'Primary Etiology'\n),\nMostRecentAssessment AS (\n    -- Get the most recent assessment for each wound\n    SELECT \n        a.woundFk,\n        a.createdByUserName AS Provider,\n        a.unitFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS RowNum\n    FROM \n        rpt.Assessment a\n),\nEarliestMeasurement AS (\n    -- Get the earliest assessment with a measurement for each wound\n    SELECT \n        a.woundFk,\n        m.area AS InitialMeasurementArea,\n        a.dimdatefk AS InitialDimDateFk,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS RowNum\n    FROM \n        rpt.Assessment a\n    INNER JOIN \n        rpt.Measurement m ON a.id = m.assessmentFk\n),\nFinalData AS (\n    -- Combine the most recent primary etiology, assessment details, and initial measurement details\n    SELECT \n        pe.woundFk,\n        pe.PrimaryEtiology,\n        ma.Provider,\n        ma.unitFk,\n        em.InitialMeasurementArea,\n        em.InitialDimDateFk\n    FROM \n        MostRecentPrimaryEtiology pe\n    INNER JOIN \n        EarliestMeasurement em ON pe.woundFk = em.woundFk AND em.RowNum = 1\n    LEFT JOIN \n        MostRecentAssessment ma ON pe.woundFk = ma.woundFk AND ma.RowNum = 1\n    WHERE \n        pe.RowNum = 1\n),\nMeasurementWithRanking AS (\n    -- Rank measurements based on proximity to the 4-week mark\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 28, dd.date) AS FourWeeksAdded,\n        m4.area AS MeasurementWithin4Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 28, dd.date), dd2.date)) <= 7\n),\nWoundStateAtFourWeeks AS (\n    -- Get the wound state at the 4-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS FourWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n    LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n    AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n    AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 4 weeks\n),\nWOUND4FINAL AS (\n    -- Combine data from earlier CTEs and determine wound state at 4 weeks\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.FourWeeksAdded,\n        mw.MeasurementWithin4Weeks,\n        mw.MeasurementDate,\n        wsfw.FourWeekWoundStateName, -- Wound state name at 4 weeks\n        CASE \n            WHEN wsfw.FourWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE' \n            ELSE 'FALSE' \n        END AS 'Decreased by >=25% at 4 weeks',\n        CASE \n            WHEN mw.MeasurementWithin4Weeks <= (0.75 * mw.InitialMeasurementArea) OR wsfw.FourWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [4WeeksBinary]\n    FROM \n        MeasurementWithRanking mw\n    LEFT JOIN \n        WoundStateAtFourWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nMeasurementWithRanking8Weeks AS (\n    -- Rank measurements based on proximity to the 8-week mark (similar to 4-week ranking)\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 56, dd.date) AS EightWeeksAdded,\n        m4.area AS MeasurementWithin8Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m4 ON a.id = m4.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m4.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 56, dd.date), dd2.date)) <= 7\n),\nWoundStateAtEightWeeks AS (\n    -- Get the wound state at the 8-week mark based on MeasurementDate\n    SELECT \n        mw.woundFk,\n        wst.name AS EightWeekWoundStateName,  -- Wound state name from WoundStateType\n        ws.startDate AS WoundStateStartDate,\n        ws.endDate AS WoundStateEndDate,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking8Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.DimDate dd_start ON ws.startDatedimdatefk = dd_start.id  -- Join DimDate for start date\n    LEFT JOIN rpt.DimDate dd_end ON ws.endDatedimdatefk = dd_end.id    -- Join DimDate for end date\n    AND mw.MeasurementDate >= dd_start.date  -- Compare MeasurementDate with start date\n    AND (mw.MeasurementDate <= dd_end.date OR dd_end.date IS NULL)  -- Compare MeasurementDate with end date\n    LEFT JOIN \n        rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id  -- Join to WoundStateType\n    WHERE \n        mw.Rank = 1 -- Closest measurement to 8 weeks\n),\nWOUND8FINAL AS (\n    -- Combine data from earlier CTEs and determine wound state at 8 weeks\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.EightWeeksAdded,\n        mw.MeasurementWithin8Weeks,\n        mw.MeasurementDate,\n        wsfw.EightWeekWoundStateName, -- Wound state name at 8 weeks\n        CASE \n            WHEN wsfw.EightWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin8Weeks <= (0.5 * mw.InitialMeasurementArea) THEN 'TRUE' \n            ELSE 'FALSE' \n        END AS 'Decreased by >=50% at 8 weeks',\n       CASE \n            WHEN mw.MeasurementWithin8Weeks <= (0.5 * mw.InitialMeasurementArea) OR wsfw.EightWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [8WeeksBinary]\n    FROM \n        MeasurementWithRanking8Weeks mw\n    LEFT JOIN \n        WoundStateAtEightWeeks wsfw ON mw.woundFk = wsfw.woundFk AND wsfw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nMeasurementWithRanking12Weeks AS (\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 84, dd.date) AS TwelveWeeksAdded,\n        m12.area AS MeasurementWithin12Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m12 ON a.id = m12.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m12.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 84, dd.date), dd2.date)) <= 7\n),\nMeasurementWithRanking16Weeks AS (\n    SELECT \n        fd.woundFk,\n        fd.PrimaryEtiology,\n        fd.Provider,\n        u.name AS Unit,\n        fd.InitialMeasurementArea,\n        dd.date AS InitialDate,\n        DATEADD(DAY, 112, dd.date) AS SixteenWeeksAdded,\n        m16.area AS MeasurementWithin16Weeks,\n        dd2.date AS MeasurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) AS DateDifference,\n        ROW_NUMBER() OVER (PARTITION BY fd.woundFk ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date))) AS Rank\n    FROM \n        FinalData fd\n    LEFT JOIN \n        rpt.Unit u ON fd.unitFk = u.id\n    LEFT JOIN \n        rpt.DimDate dd ON fd.InitialDimDateFk = dd.id\n    LEFT JOIN \n        rpt.Assessment a ON fd.woundFk = a.woundFk\n    LEFT JOIN \n        rpt.Measurement m16 ON a.id = m16.assessmentFk\n    LEFT JOIN \n        rpt.DimDate dd2 ON m16.dimdatefk = dd2.id\n    WHERE \n        ABS(DATEDIFF(DAY, DATEADD(DAY, 112, dd.date), dd2.date)) <= 7\n),\n-- Combine data for 12 weeks\nWoundStateAtTwelveWeeks AS (\n    SELECT \n        mw.woundFk,\n        wst.name AS TwelveWeekWoundStateName,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking12Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank = 1\n),\nWoundStateAtSixteenWeeks AS (\n    SELECT \n        mw.woundFk,\n        wst.name AS SixteenWeekWoundStateName,\n        mw.MeasurementDate,\n        ROW_NUMBER() OVER (PARTITION BY mw.woundFk ORDER BY ws.startDatedimdatefk DESC) AS Rank\n    FROM \n        MeasurementWithRanking16Weeks mw\n    LEFT JOIN \n        rpt.WoundState ws ON mw.woundFk = ws.woundFk\n    LEFT JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE \n        mw.Rank = 1\n),\n-- Final combined data\nWOUND12FINAL AS (\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.TwelveWeeksAdded,\n        mw.MeasurementWithin12Weeks,\n        mw.MeasurementDate,\n        wstw.TwelveWeekWoundStateName,\n        CASE \n            WHEN wstw.TwelveWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin12Weeks <= (0.75 * mw.InitialMeasurementArea) THEN 'TRUE'\n            ELSE 'FALSE'\n        END AS 'Decreased by >=75% at 12 weeks',\n        CASE \n            WHEN mw.MeasurementWithin12Weeks <= (0.75 * mw.InitialMeasurementArea) OR wstw.TwelveWeekWoundStateName<> 'open' THEN 1\n            ELSE 0\n        END AS [12WeeksBinary]\n    FROM \n        MeasurementWithRanking12Weeks mw\n    LEFT JOIN \n        WoundStateAtTwelveWeeks wstw ON mw.woundFk = wstw.woundFk AND wstw.Rank = 1\n    WHERE \n        mw.Rank = 1\n),\nWOUND16FINAL AS (\n    SELECT \n        mw.woundFk,\n        mw.PrimaryEtiology,\n        mw.Provider,\n        mw.Unit,\n        mw.InitialMeasurementArea,\n        mw.InitialDate,\n        mw.SixteenWeeksAdded,\n        mw.MeasurementWithin16Weeks,\n        mw.MeasurementDate,\n        wssw.SixteenWeekWoundStateName,\n        CASE \n            WHEN wssw.SixteenWeekWoundStateName <> 'open' THEN 'Resurfaced/Resolved'\n            WHEN mw.MeasurementWithin16Weeks <= ( mw.InitialMeasurementArea) THEN 'TRUE'\n            ELSE 'FALSE'\n        END AS 'Decreased by >=100% at 16 weeks',\n        CASE \n            WHEN mw.MeasurementWithin16Weeks <= (mw.InitialMeasurementArea) OR wssw.SixteenWeekWoundStateName <> 'open' THEN 1\n            ELSE 0\n        END AS [16WeeksBinary]\n    FROM \n        MeasurementWithRanking16Weeks mw\n    LEFT JOIN \n        WoundStateAtSixteenWeeks wssw ON mw.woundFk = wssw.woundFk AND wssw.Rank = 1\n    WHERE \n        mw.Rank = 1\n)\n\nSELECT \n    Unit,\n    CAST(SUM([4WeeksBinary]) AS FLOAT) / COUNT([4WeeksBinary])*100 AS [Decreased by >=25% at 4 weeks],\n    CAST(SUM([8WeeksBinary]) AS FLOAT) / COUNT([8WeeksBinary])*100 AS [Decreased by >=50% at 8 weeks],\n    CAST(SUM([12WeeksBinary]) AS FLOAT) / COUNT([12WeeksBinary])*100 AS [Decreased by >=75% at 12 weeks],\n    CAST(SUM([16WeeksBinary]) AS FLOAT) / COUNT([16WeeksBinary])*100 AS [Decreased by >=100% at 16 weeks]\nFROM (\n    SELECT \n        w4.Unit,\n        w4.[4WeeksBinary],\n        w8.[8WeeksBinary],\n        w12.[12WeeksBinary],\n        w16.[16WeeksBinary]\n    FROM WOUND4FINAL w4\n    INNER JOIN WOUND8FINAL w8 ON w8.woundFk = w4.woundFk\n    INNER JOIN WOUND12FINAL w12 ON w12.woundFk = w4.woundFk\n    INNER JOIN WOUND16FINAL w16 ON w16.woundFk = w4.woundFk\n) AS CombinedResults\nGROUP BY Unit\nORDER BY Unit;"
+      }
+    },
+    "Databases": {
+      "0": {
+        "Ident": "StiSqlDatabase",
+        "Name": "Connection",
+        "Alias": "Connection",
+        "ConnectionStringEncrypted": "ng=="
+      }
+    }
+  },
+  "Pages": {
+    "0": {
+      "Ident": "StiDashboard",
+      "Name": "Dashboard_Page",
+      "Guid": "07c36c6f323bea5243f3c3d598a96bd8",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiTableElement",
+          "Name": "TableElement1",
+          "Guid": "605a2afd87275da5e299043c8d25be6d",
+          "ClientRectangle": "0,40,960,560",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "089576d1b81c35cde6878e2ac97ac30e",
+              "Expression": "current_working.PrimaryEtiology",
+              "Label": "PrimaryEtiology",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "1fb59394c5a78c8877f1e1d01080d883",
+              "Expression": "current_working.Provider",
+              "Label": "Provider",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "b1321b29f4be8619322ebe62c968d86f",
+              "Expression": "current_working.Unit",
+              "Label": "Unit",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "7e0bfd3eaa6b644c6fadd0c1b5563c84",
+              "Expression": "[current_working.Decreasedby>=25%at4weeks]",
+              "Label": "Decreased by >=25% at 4 weeks",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "4": {
+              "Ident": "DimensionColumn",
+              "Key": "364d510e09dcff059b79eb06bb61d223",
+              "Expression": "[current_working.Decreasedby>=50%at8weeks]",
+              "Label": "Decreased by >=50% at 8 weeks",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "5": {
+              "Ident": "DimensionColumn",
+              "Key": "00fdd93e4e2a65d26eec2043a6981399",
+              "Expression": "[current_working.Decreasedby>=75%at12weeks]",
+              "Label": "Decreased by >=75% at 12 weeks",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "6": {
+              "Ident": "DimensionColumn",
+              "Key": "1f9adea43cee34e090b0dfa2fd6664e0",
+              "Expression": "[current_working.Decreasedby>=100%at16weeks]",
+              "Label": "Decreased by >=100% at 16 weeks",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "HeaderFont": ";10;;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "Table",
+            "Visible": false
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style3",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement1",
+          "Guid": "019dc9c184a1f010790fe10a094e3095",
+          "ClientRectangle": "160,0,280,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "ShowAllValue": true,
+          "SelectionMode": "Multi",
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "da1881d5cea4f5f101c2290a8f5fc1de",
+            "Expression": "current_working.Provider",
+            "Label": "Provider"
+          },
+          "Style": "Blue",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "2": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement1",
+          "Guid": "10997645c0bdf3cf63fb7b48872ce3ff",
+          "ClientRectangle": "20,0,140,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"18\" ><text-align=\"Center\"><b><font-color=\"#333366\">Provider:</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "3": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement2",
+          "Guid": "effe2d20bffe0350a984e1b8401702c2",
+          "ClientRectangle": "620,0,280,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "ShowAllValue": true,
+          "SelectionMode": "Multi",
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "2430d5d3d0450497177f1230e7b26686",
+            "Expression": "current_working.Unit",
+            "Label": "Unit"
+          },
+          "Style": "Blue",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "4": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement2",
+          "Guid": "91cdafc5fbbe4c98a01ca7122623990f",
+          "ClientRectangle": "480,0,140,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"18\" ><text-align=\"Center\"><b><font-color=\"#333366\">Unit:</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "5": {
+          "Ident": "StiProgressElement",
+          "Name": "ProgressElement1",
+          "Guid": "7d894d1d423169df08598dea01b2e3ca",
+          "ClientRectangle": "960,80,240,100",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "Value": {
+            "Ident": "ValueProgressMeter",
+            "Key": "7eaf9400b25d6981a3d618cd2411aedd",
+            "Expression": "Sum([current_working.4WeeksBinary])",
+            "Label": "4WeeksBinary"
+          },
+          "Target": {
+            "Ident": "TargetProgressMeter",
+            "Key": "a61fd99e00c9525e1a32e5b08f94d9f6",
+            "Expression": "Count(current_working.woundFk)",
+            "Label": "woundFk"
+          },
+          "Title": {
+            "Text": "Progress",
+            "Visible": false
+          },
+          "ForeColor": "51,51,102",
+          "Font": ";13;;",
+          "Style": "Custom",
+          "CustomStyleName": "Style7",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Progress",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "6": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement3",
+          "Guid": "8aa5f3dc9bb904877024b03e68ec36bc",
+          "ClientRectangle": "960,40,240,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"14\" ><text-align=\"Center\"><b>Decreased by &gt;=25% at 4 weeks</b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "7": {
+          "Ident": "StiProgressElement",
+          "Name": "ProgressElement2",
+          "Guid": "4fb068cb6de97bdd2215010cc09b7d90",
+          "ClientRectangle": "960,220,240,100",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "Value": {
+            "Ident": "ValueProgressMeter",
+            "Key": "21484d54303a90e7821bc495f4c100d7",
+            "Expression": "Sum([current_working.8WeeksBinary])",
+            "Label": "8WeeksBinary"
+          },
+          "Target": {
+            "Ident": "TargetProgressMeter",
+            "Key": "ff84b8d34d6f267a7878d3ab1ac2df40",
+            "Expression": "Count(current_working.woundFk)",
+            "Label": "woundFk"
+          },
+          "Title": {
+            "Text": "Progress",
+            "Visible": false
+          },
+          "ForeColor": "51,51,102",
+          "Font": ";13;;",
+          "Style": "Custom",
+          "CustomStyleName": "Style7",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Progress",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "8": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement4",
+          "Guid": "9c9e27bbfafe28041f4be2faf19b6f8e",
+          "ClientRectangle": "960,180,240,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"14\" ><text-align=\"Center\"><b>Decreased by &gt;=50% at 8 weeks</b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "9": {
+          "Ident": "StiProgressElement",
+          "Name": "ProgressElement3",
+          "Guid": "d1219945c27c09038691d39d46556123",
+          "ClientRectangle": "960,360,240,100",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "Value": {
+            "Ident": "ValueProgressMeter",
+            "Key": "40fa728bca407a297b2c2ec49824f93e",
+            "Expression": "Sum([current_working.12WeeksBinary])",
+            "Label": "12WeeksBinary"
+          },
+          "Target": {
+            "Ident": "TargetProgressMeter",
+            "Key": "21d8209d05fa48579c37cae7b8aaf8ac",
+            "Expression": "Count(current_working.woundFk)",
+            "Label": "woundFk"
+          },
+          "Title": {
+            "Text": "Progress",
+            "Visible": false
+          },
+          "ForeColor": "51,51,102",
+          "Font": ";13;;",
+          "Style": "Custom",
+          "CustomStyleName": "Style7",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Progress",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "10": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement5",
+          "Guid": "f55b9591060379a8722cd357e66a4399",
+          "ClientRectangle": "960,320,240,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"14\" ><text-align=\"Center\"><b>Decreased by &gt;=75% at 12 weeks</b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "11": {
+          "Ident": "StiProgressElement",
+          "Name": "ProgressElement4",
+          "Guid": "732f38ae832c2ea2eaaf436ee41cd047",
+          "ClientRectangle": "960,500,240,100",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "Value": {
+            "Ident": "ValueProgressMeter",
+            "Key": "b0649e4dd54ef6bd249f9341afea90ad",
+            "Expression": "Sum([current_working.16WeeksBinary])",
+            "Label": "16WeeksBinary"
+          },
+          "Target": {
+            "Ident": "TargetProgressMeter",
+            "Key": "73c18aa57998317fd7b429ac07b094ad",
+            "Expression": "Count(current_working.woundFk)",
+            "Label": "woundFk"
+          },
+          "Title": {
+            "Text": "Progress",
+            "Visible": false
+          },
+          "ForeColor": "51,51,102",
+          "Font": ";13;;",
+          "Style": "Custom",
+          "CustomStyleName": "Style7",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Progress",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "12": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement6",
+          "Guid": "095e3ca0e4f3d7ba7a1076cc231b051a",
+          "ClientRectangle": "960,460,240,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"14\" ><text-align=\"Center\"><b>Decreased by 100% at 16 weeks</b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Style": "DarkBlue",
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    },
+    "1": {
+      "Ident": "StiDashboard",
+      "Name": "Tables_For_Export",
+      "Guid": "8fb1a76dce5332df589eb693a3c87bb3",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiTableElement",
+          "Name": "Tableby_provider_pivot",
+          "Guid": "a75e6a9c067fd71cbe8ae27ccff7dd0e",
+          "ClientRectangle": "20,40,580,540",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "bedea2365f314ce97688026552cd01a2",
+              "Expression": "by_provider_pivot.Provider",
+              "Label": "Provider",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "23934f71e359a7e23f74c6c1c81aac4a",
+              "Expression": "[by_provider_pivot.Decreasedby>=25%at4weeks]",
+              "Label": "Decreased by >=25% at 4 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "c2ddb700a736584149b1600b5c182174",
+              "Expression": "[by_provider_pivot.Decreasedby>=50%at8weeks]",
+              "Label": "Decreased by >=50% at 8 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "5446f89d80ba3145660d0acefa7f646b",
+              "Expression": "[by_provider_pivot.Decreasedby>=75%at12weeks]",
+              "Label": "Decreased by >=75% at 12 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "4": {
+              "Ident": "DimensionColumn",
+              "Key": "534276b3f11eebe5862bb17b9e441e76",
+              "Expression": "[by_provider_pivot.Decreasedby>=100%at16weeks]",
+              "Label": "Decreased by >=100% at 16 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "HeaderFont": ";10;;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "by_provider_pivot",
+            "Visible": false
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style1",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiTableElement",
+          "Name": "Tableby_unit",
+          "Guid": "224aea9cd4a01d4d00f5e578e575a108",
+          "ClientRectangle": "640,40,540,540",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "f7c0341341b2aef263a7761cfad49acf",
+              "Expression": "by_unit.Unit",
+              "Label": "Unit",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "c07a48a7574cfd9b223eab7b3687776d",
+              "Expression": "[by_unit.Decreasedby>=25%at4weeks]",
+              "Label": "Decreased by >=25% at 4 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "a261d47bc48caa05fcc2980ccf10507c",
+              "Expression": "[by_unit.Decreasedby>=50%at8weeks]",
+              "Label": "Decreased by >=50% at 8 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "a36006913d4bc1d86152af2c17fa5ee8",
+              "Expression": "[by_unit.Decreasedby>=75%at12weeks]",
+              "Label": "Decreased by >=75% at 12 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "4": {
+              "Ident": "DimensionColumn",
+              "Key": "77363ca31ad9cdad3302625be9b62ff1",
+              "Expression": "[by_unit.Decreasedby>=100%at16weeks]",
+              "Label": "Decreased by >=100% at 16 weeks",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "GroupSeparator": ","
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "HeaderFont": ";10;;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "by_unit",
+            "Visible": false
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style2",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;"
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Style": "DarkBlue",
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    }
+  }
+}
