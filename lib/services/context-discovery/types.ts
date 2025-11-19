@@ -147,6 +147,18 @@ export interface FieldInContext {
 }
 
 /**
+ * Assessment type information in context bundle (Phase 5A)
+ */
+export interface AssessmentTypeInContext {
+  assessmentTypeId: string;
+  assessmentName: string;
+  semanticConcept: string;
+  semanticCategory: 'clinical' | 'billing' | 'administrative' | 'treatment';
+  confidence: number;
+  reason: string; // Why this assessment type was included
+}
+
+/**
  * Complete context bundle returned by discovery pipeline (Step 5)
  * Ready for SQL generation in Phase 6
  */
@@ -155,6 +167,7 @@ export interface ContextBundle {
   question: string;
   intent: IntentClassificationResult;
   forms: FormInContext[];
+  assessmentTypes?: AssessmentTypeInContext[]; // Phase 5A: Assessment-level context
   terminology: TerminologyMapping[];
   joinPaths: JoinPath[];
   overallConfidence: number;

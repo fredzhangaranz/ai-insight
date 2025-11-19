@@ -27,12 +27,14 @@ import { getJoinPathPlannerService } from "./join-path-planner.service";
 import { getContextAssemblerService } from "./context-assembler.service";
 import { getParallelExecutorService } from "../semantic/parallel-executor.service";
 import { getModelRouterService } from "../semantic/model-router.service";
+import { createAssessmentTypeSearcher } from "./assessment-type-searcher.service";
 import type {
   ContextDiscoveryRequest,
   ContextBundle,
   PipelineStepResult,
   FormInContext,
   FieldInContext,
+  AssessmentTypeInContext,
   SemanticSearchResult,
 } from "./types";
 
@@ -133,23 +135,24 @@ export class ContextDiscoveryService {
         );
       }
 
-      // Step 2 & 3: Semantic Search + Terminology Mapping (PARALLEL EXECUTION)
-      // These steps both depend on intentResult but are independent of each other
-      // Running them in parallel saves ~0.5s (terminology mapping time)
+      // Step 2, 3 & 5A: Semantic Search + Terminology Mapping + Assessment Type Search (PARALLEL EXECUTION)
+      // These steps all depend on intentResult but are independent of each other
+      // Running them in parallel saves ~1s total
       // See: docs/todos/in-progress/performance-optimization-implementation.md Task 1.1.4
+      // Phase 5A: Added assessment type search to parallel bundle
       logger.info(
         "context_discovery",
         "orchestrator",
-        "🚀 Starting parallel execution: Semantic Search + Terminology Mapping"
+        "🚀 Starting parallel execution: Semantic Search + Terminology Mapping + Assessment Type Search"
       );
 
       const parallelStart = Date.now();
-      logger.startTimer("step2_3_parallel", "context_discovery", "parallel_bundle");
+      logger.startTimer("step2_3_5a_parallel", "context_discovery", "parallel_bundle");
 
       const userTerms = this.extractUserTerms(intentResult);
       const parallelExecutor = getParallelExecutorService();
 
-      const parallelResult = await parallelExecutor.executeTwo(
+      const parallelResult = await parallelExecutor.executeThree(
         {
           name: "semantic_search",
           fn: () => this.runSemanticSearch(request.customerId, intentResult, logger),
@@ -159,18 +162,22 @@ export class ContextDiscoveryService {
           fn: () => this.runTerminologyMapping(request.customerId, userTerms, logger),
         },
         {
-          timeout: 15000, // 15s timeout for both tasks
-          throwOnError: true, // Throw if either fails
+          name: "assessment_type_search",
+          fn: () => this.runAssessmentTypeSearch(request.customerId, request.question, intentResult, logger),
+        },
+        {
+          timeout: 15000, // 15s timeout for all tasks
+          throwOnError: false, // Don't throw if assessment search fails (it's optional)
           emitTelemetry: true,
           signal: request.signal, // Pass abort signal for early cancellation (Task 1.1.5)
         }
       );
 
-      const [semanticResults, terminology] = parallelResult;
+      const [semanticResults, terminology, assessmentTypes] = parallelResult;
       const parallelDuration = Date.now() - parallelStart;
 
       logger.endTimer(
-        "step2_3_parallel",
+        "step2_3_5a_parallel",
         "context_discovery",
         "parallel_bundle",
         `Parallel bundle completed in ${parallelDuration}ms`
@@ -206,7 +213,7 @@ export class ContextDiscoveryService {
       logger.info(
         "context_discovery",
         "orchestrator",
-        `✅ Parallel Execution Complete: Semantic Search (${forms.length} forms, ${formFieldsCount} fields) + Terminology Mapping (${terminology.length} mappings)`
+        `✅ Parallel Execution Complete: Semantic Search (${forms.length} forms, ${formFieldsCount} fields) + Terminology Mapping (${terminology.length} mappings) + Assessment Types (${assessmentTypes.length} types)`
       );
 
       // Step 4: Join Path Planning
@@ -250,6 +257,7 @@ export class ContextDiscoveryService {
         question: request.question,
         intent: intentResult,
         forms,
+        assessmentTypes: assessmentTypes.length > 0 ? assessmentTypes : undefined, // Phase 5A
         terminology,
         joinPaths,
         discoveryRunId,
@@ -574,6 +582,101 @@ export class ContextDiscoveryService {
     }
 
     return Array.from(terms);
+  }
+
+  /**
+   * Step 5A: Assessment Type Search (Phase 5A)
+   *
+   * Searches for assessment types that match the user's question.
+   * This enables assessment-level queries like "show me wound assessments"
+   * and multi-assessment correlation like "visits without billing".
+   */
+  private async runAssessmentTypeSearch(
+    customerId: string,
+    question: string,
+    intent: any,
+    logger: any
+  ): Promise<AssessmentTypeInContext[]> {
+    try {
+      const searcher = createAssessmentTypeSearcher(customerId);
+
+      // Extract keywords from question for assessment type matching
+      const keywords = this.extractAssessmentKeywords(question);
+
+      if (keywords.length === 0) {
+        // No assessment-related keywords found
+        return [];
+      }
+
+      // Search using keywords
+      const results: AssessmentTypeInContext[] = [];
+
+      for (const keyword of keywords) {
+        const matches = await searcher.searchByKeywords(keyword);
+
+        for (const match of matches) {
+          // Avoid duplicates
+          if (!results.find((r) => r.assessmentTypeId === match.assessmentTypeId)) {
+            results.push({
+              assessmentTypeId: match.assessmentTypeId,
+              assessmentName: match.assessmentName,
+              semanticConcept: match.semanticConcept,
+              semanticCategory: match.semanticCategory,
+              confidence: match.confidence,
+              reason: `Matched keyword: "${keyword}"`,
+            });
+          }
+        }
+      }
+
+      logger.info(
+        "context_discovery",
+        "assessment_type_searcher",
+        `Found ${results.length} assessment types matching keywords: ${keywords.join(", ")}`
+      );
+
+      return results;
+    } catch (error: any) {
+      logger.error(
+        "context_discovery",
+        "assessment_type_searcher",
+        `Error searching assessment types: ${error.message}`
+      );
+      // Return empty array on error (assessment types are optional)
+      return [];
+    }
+  }
+
+  /**
+   * Extract assessment-related keywords from question
+   */
+  private extractAssessmentKeywords(question: string): string[] {
+    const keywords: string[] = [];
+    const questionLower = question.toLowerCase();
+
+    // Assessment type keywords
+    const assessmentPatterns = [
+      'wound assessment',
+      'assessment',
+      'visit',
+      'billing',
+      'discharge',
+      'intake',
+      'consent',
+      'treatment plan',
+      'progress note',
+      'clinical note',
+      'form',
+      'documentation',
+    ];
+
+    for (const pattern of assessmentPatterns) {
+      if (questionLower.includes(pattern)) {
+        keywords.push(pattern);
+      }
+    }
+
+    return keywords;
   }
 
   private extractRequiredTables(

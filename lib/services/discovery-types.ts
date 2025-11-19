@@ -4,6 +4,7 @@ export type DiscoveryStageOptions = {
   nonFormSchema: boolean;
   nonFormValues: boolean;
   relationships: boolean;
+  assessmentTypes: boolean; // Phase 5A: Assessment-level semantic indexing
   discoveryLogging: boolean;
 };
 
@@ -18,6 +19,7 @@ export const DEFAULT_DISCOVERY_STAGES: DiscoveryStageOptions = {
   nonFormSchema: true,
   nonFormValues: false,
   relationships: true,
+  assessmentTypes: true, // Phase 5A: Enabled by default
   discoveryLogging: true,
 };
 

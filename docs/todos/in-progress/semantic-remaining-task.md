@@ -123,24 +123,24 @@ See: [performance-optimization-implementation.md](./performance-optimization-imp
 **Tasks:**
 
 **Day 1 (4 hours) - Database Schema:**
-- [ ] Create migration: `SemanticIndexAssessmentType` table
+- [x] Create migration: `SemanticIndexAssessmentType` table _(completed 2025-11-19)_
   - Fields: customer_id, assessment_type_id, semantic_concept, category, confidence
   - Index: (customer_id, semantic_concept)
-- [ ] Create migration: `SemanticIndexFieldEnumValue` table
+- [x] Create migration: `SemanticIndexFieldEnumValue` table _(completed 2025-11-19)_
   - Fields: field_id, enum_value, display_label, sort_order, usage_count
   - Index: (field_id, is_active)
-- [ ] Run migrations on dev + staging
+- [x] Run migrations on dev + staging _(completed 2025-11-19)_
 
 **Day 2 (4 hours) - Assessment Type Indexer:**
-- [ ] Create `AssessmentTypeIndexer` service
-- [ ] Define semantic concept taxonomy:
+- [x] Create `AssessmentTypeIndexer` service _(completed 2025-11-19)_
+- [x] Define semantic concept taxonomy: _(completed 2025-11-19)_
   - `clinical_*`: clinical_wound_assessment, clinical_visit_documentation, clinical_initial_assessment
   - `billing_*`: billing_documentation, billing_charge_capture
   - `administrative_*`: administrative_intake, administrative_discharge
   - `treatment_*`: treatment_plan, treatment_protocol
-- [ ] Build pattern-based auto-detection (name regex matching)
-- [ ] Create manual seed data (10 common assessment types)
-- [ ] Test indexing on C1, C2, C3 customer schemas
+- [x] Build pattern-based auto-detection (name regex matching) _(completed 2025-11-19)_
+- [x] Create manual seed data (10 common assessment types) _(completed 2025-11-19)_
+- [x] Test indexing on C1, C2, C3 customer schemas _(completed 2025-11-19)_
 
 **Day 3 AM (2 hours) - Enum Field Detector:**
 - [ ] Extend `silhouette-discovery.service.ts`

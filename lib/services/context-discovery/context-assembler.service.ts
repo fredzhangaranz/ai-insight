@@ -4,6 +4,7 @@ import type {
   ContextBundleMetadata,
   FieldInContext,
   FormInContext,
+  AssessmentTypeInContext,
   IntentClassificationResult,
   JoinPath,
   TerminologyMapping,
@@ -16,6 +17,7 @@ export interface ContextAssemblyParams {
   question: string;
   intent: IntentClassificationResult;
   forms?: FormInContext[];
+  assessmentTypes?: AssessmentTypeInContext[]; // Phase 5A
   terminology?: TerminologyMapping[];
   joinPaths?: JoinPath[];
   metadataOverrides?: Partial<ContextBundleMetadata>;
@@ -47,6 +49,7 @@ export class ContextAssemblerService {
     }
 
     const forms = params.forms ? [...params.forms] : [];
+    const assessmentTypes = params.assessmentTypes ? [...params.assessmentTypes] : undefined; // Phase 5A
     const terminology = params.terminology ? [...params.terminology] : [];
     const joinPaths = params.joinPaths ? [...params.joinPaths] : [];
 
@@ -69,6 +72,7 @@ export class ContextAssemblerService {
       question: question.trim(),
       intent,
       forms,
+      assessmentTypes, // Phase 5A: Include assessment types if found
       terminology,
       joinPaths,
       overallConfidence,

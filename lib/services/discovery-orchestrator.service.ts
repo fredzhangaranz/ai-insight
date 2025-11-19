@@ -10,6 +10,7 @@ import { discoverNonFormSchema } from "@/lib/services/non-form-schema-discovery.
 // DISABLED: Privacy violation - indexes actual patient/form data
 // import { discoverNonFormValues } from "@/lib/services/non-form-value-discovery.service";
 import { discoverEntityRelationships } from "@/lib/services/relationship-discovery.service";
+import { AssessmentTypeIndexer } from "@/lib/services/context-discovery/assessment-type-indexer.service";
 import { closeSqlServerPool } from "@/lib/services/sqlserver/client";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
 import {
@@ -37,6 +38,7 @@ type DiscoverySummary = {
   non_form_columns: number;
   non_form_columns_requiring_review: number;
   non_form_values: number;
+  assessment_types_discovered: number; // Phase 5A
   warnings: string[];
 };
 
@@ -168,6 +170,24 @@ async function computeNonFormStats(
     columnCount: columnResult.rows[0]?.total ?? 0,
     reviewCount: columnResult.rows[0]?.review_count ?? 0,
     valueCount: 0, // Always 0 - table no longer exists
+  };
+}
+
+async function computeAssessmentTypeStats(
+  pool: Pool,
+  customerId: string
+): Promise<{
+  assessmentTypeCount: number;
+}> {
+  const result = await pool.query<{ total: number }>(
+    `SELECT COUNT(DISTINCT assessment_type_id)::int AS total
+     FROM "SemanticIndexAssessmentType"
+     WHERE customer_id = $1`,
+    [customerId]
+  );
+
+  return {
+    assessmentTypeCount: result.rows[0]?.total ?? 0,
   };
 }
 
@@ -318,6 +338,9 @@ function buildSummary(params: {
     reviewCount: number;
     valueCount: number;
   };
+  assessmentTypeStats: {
+    assessmentTypeCount: number;
+  };
   aggregateWarnings: string[];
 }): DiscoverySummary {
   return {
@@ -328,6 +351,7 @@ function buildSummary(params: {
     non_form_columns: params.nonFormStats.columnCount,
     non_form_columns_requiring_review: params.nonFormStats.reviewCount,
     non_form_values: params.nonFormStats.valueCount,
+    assessment_types_discovered: params.assessmentTypeStats.assessmentTypeCount,
     warnings: [...params.aggregateWarnings],
   };
 }
@@ -440,7 +464,40 @@ export async function runFullDiscovery(
       aggregateErrors.push(...relationshipsResult.errors);
     }
 
-    // Stage 4: Non-Form Values Discovery (DISABLED - Privacy Violation)
+    // Stage 4: Assessment Type Indexing (Phase 5A)
+    if (stages.assessmentTypes) {
+      logger.startTimer("assessment_types");
+      try {
+        const indexer = new AssessmentTypeIndexer(customerRow.id, connectionString, runId);
+        const indexResult = await indexer.indexAll();
+        const assessmentDuration = logger.endTimer(
+          "assessment_types",
+          "assessment_types",
+          "orchestrator",
+          `Assessment type indexing completed: ${indexResult.indexed} assessment types indexed`,
+          {
+            total: indexResult.total,
+            indexed: indexResult.indexed,
+            skipped: indexResult.skipped,
+          }
+        );
+        if (indexResult.indexed === 0 && indexResult.total > 0) {
+          aggregateWarnings.push(
+            `Found ${indexResult.total} assessment types but could not match any to semantic concepts`
+          );
+        }
+      } catch (error: any) {
+        logger.error(
+          "assessment_types",
+          "orchestrator",
+          `Assessment type indexing failed: ${error.message}`,
+          { errorType: error.constructor.name }
+        );
+        aggregateErrors.push(`Assessment type indexing failed: ${error.message}`);
+      }
+    }
+
+    // Stage 5: Non-Form Values Discovery (DISABLED - Privacy Violation)
     // This stage queried actual patient/form data from rpt.* tables
     // and stored it in SemanticIndexNonFormValue table.
     // REMOVED: See privacy-safe-discovery-fix.md
@@ -463,7 +520,7 @@ export async function runFullDiscovery(
     }
     */
 
-    // Stage 5: Summary Statistics
+    // Stage 6: Summary Statistics
     logger.startTimer("summary");
     const formSummary = await computeFormStats(pool, customerRow.id);
     const summaryDuration = logger.endTimer(
@@ -480,10 +537,12 @@ export async function runFullDiscovery(
     aggregateErrors.push(...formSummary.errors);
 
     const nonFormStats = await computeNonFormStats(pool, customerRow.id);
+    const assessmentTypeStats = await computeAssessmentTypeStats(pool, customerRow.id);
 
     const summary = buildSummary({
       formStats: formSummary,
       nonFormStats,
+      assessmentTypeStats,
       aggregateWarnings,
     });
 
@@ -659,7 +718,35 @@ export async function runFullDiscoveryWithProgress(
       });
     }
 
-    // Stage 4: Non-Form Values (DISABLED - Privacy Violation)
+    // Stage 4: Assessment Type Indexing (Phase 5A)
+    if (stages.assessmentTypes) {
+      sendEvent("stage-start", {
+        stage: "assessment_types",
+        name: "Assessment Type Indexing",
+      });
+      try {
+        const indexer = new AssessmentTypeIndexer(customerRow.id, connectionString, runId);
+        const indexResult = await indexer.indexAll();
+        sendEvent("stage-complete", {
+          stage: "assessment_types",
+          assessmentTypesIndexed: indexResult.indexed,
+          total: indexResult.total,
+        });
+        if (indexResult.indexed === 0 && indexResult.total > 0) {
+          aggregateWarnings.push(
+            `Found ${indexResult.total} assessment types but could not match any to semantic concepts`
+          );
+        }
+      } catch (error: any) {
+        aggregateErrors.push(`Assessment type indexing failed: ${error.message}`);
+        sendEvent("stage-error", {
+          stage: "assessment_types",
+          error: error.message,
+        });
+      }
+    }
+
+    // Stage 5: Non-Form Values (DISABLED - Privacy Violation)
     // REMOVED: See privacy-safe-discovery-fix.md
     /*
     if (stages.nonFormValues) {
@@ -680,7 +767,7 @@ export async function runFullDiscoveryWithProgress(
     }
     */
 
-    // Stage 5: Computing Summary Statistics
+    // Stage 6: Computing Summary Statistics
     sendEvent("stage-start", {
       stage: "summary",
       name: "Computing Summary Statistics",
@@ -690,10 +777,12 @@ export async function runFullDiscoveryWithProgress(
     aggregateErrors.push(...formSummary.errors);
 
     const nonFormStats = await computeNonFormStats(pool, customerRow.id);
+    const assessmentTypeStats = await computeAssessmentTypeStats(pool, customerRow.id);
 
     const summary = buildSummary({
       formStats: formSummary,
       nonFormStats,
+      assessmentTypeStats,
       aggregateWarnings,
     });
     sendEvent("stage-complete", { stage: "summary" });

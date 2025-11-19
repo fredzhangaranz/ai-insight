@@ -56,6 +56,8 @@ const migrations = [
   "027_update_ai_config_dual_models.sql",
   "028_create_query_performance_metrics.sql",
   "029_ontology_synonyms_schema.sql",
+  "030_semantic_assessment_type_index.sql",
+  "031_semantic_field_enum_values.sql",
 ];
 
 async function runMigrations() {

@@ -46,6 +46,7 @@ type DiscoverySummary = {
   non_form_columns: number;
   non_form_columns_requiring_review: number;
   non_form_values: number;
+  assessment_types_discovered: number;
   warnings: string[];
 };
 
@@ -89,8 +90,9 @@ type ProgressStage = {
 type DiscoveryStageOptions = {
   formDiscovery: boolean;
   nonFormSchema: boolean;
-  nonFormValues: boolean;
+  nonFormValues: boolean; // DEPRECATED: Disabled for privacy - kept for backwards compatibility
   relationships: boolean;
+  assessmentTypes: boolean;
   discoveryLogging: boolean;
 };
 
@@ -99,14 +101,16 @@ const DEFAULT_STAGES: DiscoveryStageOptions = {
   nonFormSchema: true,
   nonFormValues: false,
   relationships: true,
+  assessmentTypes: true,
   discoveryLogging: true,
 };
 
 const STAGE_DESCRIPTIONS = {
   formDiscovery: "Discover and analyze form metadata and fields",
   nonFormSchema: "Discover database schemas and table structures",
-  nonFormValues: "Discover values in non-form fields (performance intensive)",
+  // nonFormValues: REMOVED - Privacy violation (indexed actual patient data)
   relationships: "Discover entity relationships and constraints",
+  assessmentTypes: "Index assessment types with semantic concepts for assessment-level queries",
   discoveryLogging: "Log discovery events for debugging and monitoring",
 };
 
@@ -241,13 +245,14 @@ export function DiscoveryTab({
         status: "pending",
       });
     }
-    if (selectedStages.nonFormValues) {
+    if (selectedStages.assessmentTypes) {
       stagesToShow.push({
-        stage: "non_form_values",
-        name: "Non-Form Values Discovery",
+        stage: "assessment_types",
+        name: "Assessment Type Indexing",
         status: "pending",
       });
     }
+    // nonFormValues stage removed from UI - privacy violation
     stagesToShow.push({
       stage: "summary",
       name: "Computing Summary Statistics",
@@ -321,13 +326,22 @@ export function DiscoveryTab({
               } else if (event.type === "complete") {
                 setLatestResult(event.data);
                 if (event.data.status === "succeeded") {
+                  const summary = event.data.summary;
+                  const parts: string[] = [];
+                  if ((summary?.forms_discovered ?? 0) > 0) {
+                    parts.push(`${summary?.forms_discovered} forms`);
+                  }
+                  if ((summary?.fields_discovered ?? 0) > 0) {
+                    parts.push(`${summary?.fields_discovered} fields`);
+                  }
+                  if ((summary?.assessment_types_discovered ?? 0) > 0) {
+                    parts.push(`${summary?.assessment_types_discovered} assessment types`);
+                  }
                   toast({
                     title: "Discovery completed",
-                    description: `Discovered ${
-                      event.data.summary?.forms_discovered ?? 0
-                    } forms and ${
-                      event.data.summary?.fields_discovered ?? 0
-                    } fields.`,
+                    description: parts.length > 0
+                      ? `Discovered ${parts.join(", ")}.`
+                      : "Discovery completed successfully.",
                   });
                   await fetchHistory();
                 } else {
@@ -352,11 +366,22 @@ export function DiscoveryTab({
         setLatestResult(data);
 
         if (data.status === "succeeded") {
+          const summary = data.summary;
+          const parts: string[] = [];
+          if ((summary?.forms_discovered ?? 0) > 0) {
+            parts.push(`${summary?.forms_discovered} forms`);
+          }
+          if ((summary?.fields_discovered ?? 0) > 0) {
+            parts.push(`${summary?.fields_discovered} fields`);
+          }
+          if ((summary?.assessment_types_discovered ?? 0) > 0) {
+            parts.push(`${summary?.assessment_types_discovered} assessment types`);
+          }
           toast({
             title: "Discovery completed",
-            description: `Discovered ${
-              data.summary?.forms_discovered ?? 0
-            } forms and ${data.summary?.fields_discovered ?? 0} fields.`,
+            description: parts.length > 0
+              ? `Discovered ${parts.join(", ")}.`
+              : "Discovery completed successfully.",
           });
           await fetchHistory();
         } else {
@@ -427,7 +452,7 @@ export function DiscoveryTab({
                     "formDiscovery",
                     "nonFormSchema",
                     "relationships",
-                    "nonFormValues",
+                    "assessmentTypes",
                     "discoveryLogging",
                   ] as const
                 ).map((stage) => (
@@ -455,12 +480,12 @@ export function DiscoveryTab({
                           ? "Non-Form Schema Discovery"
                           : stage === "relationships"
                           ? "Entity Relationship Discovery"
-                          : stage === "nonFormValues"
-                          ? "Non-Form Values Discovery"
+                          : stage === "assessmentTypes"
+                          ? "Assessment Type Indexing"
                           : "Discovery Logging"}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {STAGE_DESCRIPTIONS[stage]}
+                        {STAGE_DESCRIPTIONS[stage as keyof typeof STAGE_DESCRIPTIONS]}
                       </div>
                     </div>
                   </label>
@@ -574,6 +599,17 @@ export function DiscoveryTab({
                   </div>
                   <div className="rounded-md bg-muted/50 p-3">
                     <div className="text-xs uppercase text-muted-foreground">
+                      Assessment Types
+                    </div>
+                    <div className="text-lg font-semibold">
+                      {latestSummary.assessment_types_discovered ?? 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Indexed with semantic concepts
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-muted/50 p-3">
+                    <div className="text-xs uppercase text-muted-foreground">
                       Average Confidence
                     </div>
                     <div className="text-lg font-semibold">
@@ -582,7 +618,7 @@ export function DiscoveryTab({
                         : "—"}
                     </div>
                   </div>
-                  <div className="rounded-md bg-muted/50 p-3">
+                  <div className="rounded-md bg-muted/50 p-3 md:col-span-2">
                     <div className="text-xs uppercase text-muted-foreground">
                       Warnings
                     </div>
@@ -688,12 +724,14 @@ export function DiscoveryTab({
                           {run.stages
                             ? Object.entries(run.stages)
                                 .filter(([_, value]) => value)
-                                .map(
-                                  ([key]) =>
-                                    STAGE_DESCRIPTIONS[
-                                      key as keyof DiscoveryStageOptions
-                                    ]
-                                )
+                                .map(([key]) => {
+                                  // Skip nonFormValues (deprecated)
+                                  if (key === "nonFormValues") return null;
+                                  return STAGE_DESCRIPTIONS[
+                                    key as keyof typeof STAGE_DESCRIPTIONS
+                                  ];
+                                })
+                                .filter(Boolean)
                                 .join(", ")
                             : "None"}
                         </div>
