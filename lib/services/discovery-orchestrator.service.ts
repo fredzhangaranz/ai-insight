@@ -5,12 +5,13 @@ import {
   getCustomer,
   getCustomerConnectionString,
 } from "@/lib/services/customer-service";
-import { discoverFormMetadata } from "@/lib/services/form-discovery.service";
+import { discoverFormMetadata, discoverStandaloneFields } from "@/lib/services/form-discovery.service";
 import { discoverNonFormSchema } from "@/lib/services/non-form-schema-discovery.service";
 // DISABLED: Privacy violation - indexes actual patient/form data
 // import { discoverNonFormValues } from "@/lib/services/non-form-value-discovery.service";
 import { discoverEntityRelationships } from "@/lib/services/relationship-discovery.service";
 import { AssessmentTypeIndexer } from "@/lib/services/context-discovery/assessment-type-indexer.service";
+import { EnumFieldIndexer } from "@/lib/services/context-discovery/enum-field-indexer.service";
 import { closeSqlServerPool } from "@/lib/services/sqlserver/client";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
 import {
@@ -33,12 +34,14 @@ type FormDiscoveryResult = {
 type DiscoverySummary = {
   forms_discovered: number;
   fields_discovered: number;
+  standalone_fields_discovered: number; // Fields without attributeSetFk
   avg_confidence: number | null;
   fields_requiring_review: number;
   non_form_columns: number;
   non_form_columns_requiring_review: number;
   non_form_values: number;
   assessment_types_discovered: number; // Phase 5A
+  enum_fields_detected: number; // Phase 5A - Day 3
   warnings: string[];
 };
 
@@ -191,6 +194,25 @@ async function computeAssessmentTypeStats(
   };
 }
 
+async function computeEnumFieldStats(
+  pool: Pool,
+  customerId: string
+): Promise<{
+  enumFieldCount: number;
+}> {
+  const result = await pool.query<{ total: number }>(
+    `SELECT COUNT(*)::int AS total
+     FROM "SemanticIndexNonForm"
+     WHERE customer_id = $1
+       AND field_type = 'enum'`,
+    [customerId]
+  );
+
+  return {
+    enumFieldCount: result.rows[0]?.total ?? 0,
+  };
+}
+
 async function updateCustomerLastDiscovered(
   pool: Pool,
   customerId: string
@@ -333,6 +355,7 @@ async function runFormDiscoveryStep(
 
 function buildSummary(params: {
   formStats: FormDiscoveryResult;
+  standaloneFieldsDiscovered: number;
   nonFormStats: {
     columnCount: number;
     reviewCount: number;
@@ -341,17 +364,22 @@ function buildSummary(params: {
   assessmentTypeStats: {
     assessmentTypeCount: number;
   };
+  enumFieldStats: {
+    enumFieldCount: number;
+  };
   aggregateWarnings: string[];
 }): DiscoverySummary {
   return {
     forms_discovered: params.formStats.formsDiscovered ?? 0,
     fields_discovered: params.formStats.fieldsDiscovered ?? 0,
+    standalone_fields_discovered: params.standaloneFieldsDiscovered,
     avg_confidence: params.formStats.avgConfidence,
     fields_requiring_review: params.formStats.fieldsRequiringReview ?? 0,
     non_form_columns: params.nonFormStats.columnCount,
     non_form_columns_requiring_review: params.nonFormStats.reviewCount,
     non_form_values: params.nonFormStats.valueCount,
     assessment_types_discovered: params.assessmentTypeStats.assessmentTypeCount,
+    enum_fields_detected: params.enumFieldStats.enumFieldCount,
     warnings: [...params.aggregateWarnings],
   };
 }
@@ -404,6 +432,7 @@ export async function runFullDiscovery(
 
   try {
     // Stage 1: Form Discovery
+    let standaloneFieldsDiscovered = 0;
     if (stages.formDiscovery) {
       logger.startTimer("form_discovery");
       const formStats = await runFormDiscoveryStep(
@@ -424,6 +453,35 @@ export async function runFullDiscovery(
       );
       aggregateWarnings.push(...formStats.warnings);
       aggregateErrors.push(...formStats.errors);
+
+      // Stage 1.5: Standalone Fields Discovery
+      // Discover AttributeTypes without an attributeSetFk (e.g., "Treatment Applied")
+      logger.startTimer("standalone_fields");
+      try {
+        const standaloneResult = await discoverStandaloneFields({
+          customerId: customerRow.id,
+          connectionString,
+          discoveryRunId: runId,
+        });
+        standaloneFieldsDiscovered = standaloneResult.fieldsDiscovered;
+        logger.endTimer(
+          "standalone_fields",
+          "standalone_discovery",
+          "orchestrator",
+          `Standalone fields discovery completed: ${standaloneFieldsDiscovered} fields`,
+          { standaloneFieldsDiscovered }
+        );
+        aggregateWarnings.push(...standaloneResult.warnings);
+        aggregateErrors.push(...standaloneResult.errors);
+      } catch (error: any) {
+        logger.error(
+          "standalone_discovery",
+          "orchestrator",
+          `Standalone fields discovery failed: ${error.message}`,
+          error
+        );
+        aggregateErrors.push(`Standalone fields discovery failed: ${error.message}`);
+      }
     }
 
     // Stage 2: Non-Form Schema Discovery
@@ -443,6 +501,36 @@ export async function runFullDiscovery(
       );
       aggregateWarnings.push(...nonFormSchemaResult.warnings);
       aggregateErrors.push(...nonFormSchemaResult.errors);
+
+      // Stage 2.5: Enum Field Detection (Phase 5A - Day 3)
+      // Detect enum fields from non-form columns immediately after discovery
+      logger.startTimer("enum_field_detection");
+      try {
+        const enumIndexer = new EnumFieldIndexer(customerRow.id, connectionString);
+        const enumResult = await enumIndexer.indexAll();
+        const enumDuration = logger.endTimer(
+          "enum_field_detection",
+          "enum_field_detection",
+          "orchestrator",
+          `Enum field detection completed: ${enumResult.detected} enum fields detected`,
+          {
+            total: enumResult.total,
+            detected: enumResult.detected,
+            skipped: enumResult.skipped,
+          }
+        );
+        console.log(
+          `[DiscoveryOrchestrator] Enum detection: ${enumResult.detected}/${enumResult.total} fields are enums`
+        );
+      } catch (error: any) {
+        logger.error(
+          "enum_field_detection",
+          "orchestrator",
+          `Enum field detection failed: ${error.message}`,
+          { errorType: error.constructor.name }
+        );
+        aggregateWarnings.push(`Enum field detection failed: ${error.message}`);
+      }
     }
 
     // Stage 3: Relationship Discovery
@@ -538,11 +626,14 @@ export async function runFullDiscovery(
 
     const nonFormStats = await computeNonFormStats(pool, customerRow.id);
     const assessmentTypeStats = await computeAssessmentTypeStats(pool, customerRow.id);
+    const enumFieldStats = await computeEnumFieldStats(pool, customerRow.id);
 
     const summary = buildSummary({
       formStats: formSummary,
+      standaloneFieldsDiscovered,
       nonFormStats,
       assessmentTypeStats,
+      enumFieldStats,
       aggregateWarnings,
     });
 
@@ -661,6 +752,7 @@ export async function runFullDiscoveryWithProgress(
 
   try {
     // Stage 1: Form Discovery
+    let standaloneFieldsDiscovered = 0;
     if (stages.formDiscovery) {
       sendEvent("stage-start", {
         stage: "form_discovery",
@@ -678,6 +770,32 @@ export async function runFullDiscoveryWithProgress(
         formsDiscovered: formStats.formsDiscovered,
         fieldsDiscovered: formStats.fieldsDiscovered,
       });
+
+      // Stage 1.5: Standalone Fields Discovery
+      sendEvent("stage-start", {
+        stage: "standalone_fields",
+        name: "Standalone Fields Discovery",
+      });
+      try {
+        const standaloneResult = await discoverStandaloneFields({
+          customerId: customerRow.id,
+          connectionString,
+          discoveryRunId: runId,
+        });
+        standaloneFieldsDiscovered = standaloneResult.fieldsDiscovered;
+        aggregateWarnings.push(...standaloneResult.warnings);
+        aggregateErrors.push(...standaloneResult.errors);
+        sendEvent("stage-complete", {
+          stage: "standalone_fields",
+          fieldsDiscovered: standaloneFieldsDiscovered,
+        });
+      } catch (error: any) {
+        aggregateErrors.push(`Standalone fields discovery failed: ${error.message}`);
+        sendEvent("stage-complete", {
+          stage: "standalone_fields",
+          fieldsDiscovered: 0,
+        });
+      }
     }
 
     // Stage 2: Non-Form Schema Discovery
@@ -778,11 +896,14 @@ export async function runFullDiscoveryWithProgress(
 
     const nonFormStats = await computeNonFormStats(pool, customerRow.id);
     const assessmentTypeStats = await computeAssessmentTypeStats(pool, customerRow.id);
+    const enumFieldStats = await computeEnumFieldStats(pool, customerRow.id);
 
     const summary = buildSummary({
       formStats: formSummary,
+      standaloneFieldsDiscovered,
       nonFormStats,
       assessmentTypeStats,
+      enumFieldStats,
       aggregateWarnings,
     });
     sendEvent("stage-complete", { stage: "summary" });

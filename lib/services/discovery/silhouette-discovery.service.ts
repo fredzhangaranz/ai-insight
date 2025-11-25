@@ -81,6 +81,52 @@ export async function fetchAttributeTypeSummary(
 }
 
 /**
+ * Fetch standalone AttributeTypes (fields without an associated AttributeSet/form)
+ *
+ * This handles fields like "Treatment Applied" that exist independently in dbo.AttributeType
+ * but are not part of any structured form. These fields are used directly in rpt.Note table.
+ *
+ * See: docs/todos/in-progress/investigations/TREATMENT_APPLIED_ROOT_CAUSE.md
+ *
+ * @param connectionString - Silhouette database connection string
+ * @returns Array of standalone AttributeTypes with SingleSelect or MultiSelect data types
+ */
+export async function fetchStandaloneAttributeTypes(
+  connectionString: string
+): Promise<
+  Array<{
+    id: string;
+    name: string;
+    dataType: number;
+    variableName: string | null;
+  }>
+> {
+  const pool = await getSqlServerPool(connectionString);
+
+  const result = await pool
+    .request()
+    .query(
+      `SELECT
+         at.id,
+         at.name,
+         at.dataType,
+         at.variableName
+       FROM dbo.AttributeType at
+       WHERE at.isDeleted = 0
+         AND at.attributeSetFk IS NULL
+         AND at.dataType IN (1000, 1001)  -- SingleSelect (1000) or MultiSelect (1001)
+       ORDER BY at.name ASC`
+    );
+
+  return result.recordset.map((row) => ({
+    id: row.id,
+    name: row.name,
+    dataType: row.dataType,
+    variableName: row.variableName ?? null,
+  }));
+}
+
+/**
  * Detect enum fields by pattern matching and value distribution
  *
  * Phase 5A: Identifies fields that are likely enum/dropdown fields based on:

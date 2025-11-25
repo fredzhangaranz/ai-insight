@@ -58,6 +58,7 @@ const migrations = [
   "029_ontology_synonyms_schema.sql",
   "030_semantic_assessment_type_index.sql",
   "031_semantic_field_enum_values.sql",
+  "032_extend_nonform_enum_support.sql",
 ];
 
 async function runMigrations() {

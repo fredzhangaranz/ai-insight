@@ -16,6 +16,7 @@
     "seed-template-catalog": "node scripts/seed-template-catalog.js",
     "seed-admin": "node scripts/seed-default-admin.js",
     "seed-assessment-types": "tsx scripts/seed-assessment-types.ts",
+    "test-enum-detection": "tsx scripts/test-enum-detection.ts",
     "ontology:load": "node scripts/ontology-loader.js",
     "ontology:load-synonyms": "node scripts/load-ontology-synonyms.js",
     "ontology:export": "node scripts/ontology-exporter.js",

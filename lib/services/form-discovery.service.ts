@@ -4,6 +4,7 @@ import { getEmbeddingService } from "@/lib/services/embeddings/gemini-embedding"
 import {
   fetchAttributeSets,
   fetchAttributeTypeSummary,
+  fetchStandaloneAttributeTypes,
 } from "@/lib/services/discovery/silhouette-discovery.service";
 import {
   createDiscoveryLogger,
@@ -1105,6 +1106,251 @@ export async function discoverFormMetadata(
       fieldsDiscovered: null,
       avgConfidence: null,
       fieldsRequiringReview: null,
+      warnings,
+      errors: [message],
+    };
+  }
+}
+
+/**
+ * Discover standalone AttributeTypes (fields not associated with any form)
+ *
+ * This function discovers fields like "Treatment Applied" that exist in dbo.AttributeType
+ * but have attributeSetFk = NULL (no associated form/AttributeSet).
+ *
+ * These fields are used directly in the rpt.Note table and won't be discovered by
+ * regular form discovery which only indexes fields belonging to AttributeSets.
+ *
+ * See: docs/todos/in-progress/investigations/TREATMENT_APPLIED_ROOT_CAUSE.md
+ *
+ * @param options - Discovery options (customerId, connectionString, discoveryRunId)
+ * @returns Number of standalone fields discovered
+ */
+export async function discoverStandaloneFields(
+  options: FormDiscoveryOptions
+): Promise<{
+  fieldsDiscovered: number;
+  warnings: string[];
+  errors: string[];
+}> {
+  const logger = createDiscoveryLogger(
+    options.customerId,
+    options.discoveryRunId
+  );
+
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  let fieldsProcessed = 0;
+
+  try {
+    logger.info(
+      "standalone_discovery",
+      "init",
+      `Starting standalone field discovery for customer ${options.customerId}`
+    );
+
+    const pgPool = await getInsightGenDbPool();
+    const embeddingService = getEmbeddingService();
+
+    // Fetch standalone AttributeTypes (those without an attributeSetFk)
+    logger.startTimer("fetch_standalone_fields");
+    const standaloneFields = await fetchStandaloneAttributeTypes(
+      options.connectionString
+    );
+    logger.endTimer(
+      "fetch_standalone_fields",
+      "standalone_discovery",
+      "fetch",
+      `Found ${standaloneFields.length} standalone fields`
+    );
+
+    if (standaloneFields.length === 0) {
+      logger.info(
+        "standalone_discovery",
+        "summary",
+        "No standalone fields found (attributeSetFk IS NULL)"
+      );
+      await logger.persistLogs();
+      return { fieldsDiscovered: 0, warnings, errors };
+    }
+
+    logger.info(
+      "standalone_discovery",
+      "process",
+      `Processing ${standaloneFields.length} standalone fields`
+    );
+
+    // Create a virtual "Standalone Fields" form entry to group these fields
+    const standaloneFormName = "Standalone Fields (No Form)";
+    const standaloneFormId = "00000000-0000-0000-0000-000000000000"; // Special UUID for standalone
+
+    logger.startTimer("create_standalone_form_index");
+
+    // Check if standalone form index already exists
+    const existingFormResult = await pgPool.query(
+      `SELECT id FROM "SemanticIndex"
+       WHERE customer_id = $1 AND form_identifier = $2`,
+      [options.customerId, standaloneFormId]
+    );
+
+    let semanticIndexId: string;
+
+    if (existingFormResult.rows.length > 0) {
+      semanticIndexId = existingFormResult.rows[0].id;
+      logger.info(
+        "standalone_discovery",
+        "form",
+        `Reusing existing standalone form index: ${semanticIndexId}`
+      );
+    } else {
+      // Create semantic index entry for standalone fields
+      const formEmbedding = await embeddingService.generateEmbedding(
+        standaloneFormName
+      );
+
+      const formInsertResult = await pgPool.query(
+        `INSERT INTO "SemanticIndex"
+         (customer_id, form_name, form_identifier, form_description, embedding, discovered_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING id`,
+        [
+          options.customerId,
+          standaloneFormName,
+          standaloneFormId,
+          "Fields that exist independently without belonging to any specific form",
+          toVectorLiteral(formEmbedding),
+        ]
+      );
+
+      semanticIndexId = formInsertResult.rows[0].id;
+      logger.info(
+        "standalone_discovery",
+        "form",
+        `Created standalone form index: ${semanticIndexId}`
+      );
+    }
+
+    logger.endTimer(
+      "create_standalone_form_index",
+      "standalone_discovery",
+      "form",
+      "Standalone form index ready"
+    );
+
+    // Process each standalone field
+    for (const field of standaloneFields) {
+      try {
+        logger.startTimer(`field_${field.id}`);
+
+        // Generate embedding for field
+        const fieldPrompt = buildFieldEmbeddingPrompt(
+          field.name,
+          standaloneFormName,
+          field.variableName
+        );
+        const fieldEmbedding =
+          await embeddingService.generateEmbedding(fieldPrompt);
+
+        // Find ontology match
+        const ontologyMatch = await fetchOntologyMatch(fieldEmbedding, pgPool);
+        const semanticConcept = ontologyMatch?.conceptName || "unknown";
+        const semanticCategory = ontologyMatch?.conceptType || "general";
+        const confidence = ontologyMatch?.similarity || 0;
+
+        // Insert field into SemanticIndexField
+        const fieldInsertResult = await pgPool.query(
+          `INSERT INTO "SemanticIndexField"
+           (semantic_index_id, field_name, field_identifier, variable_name, data_type, semantic_concept, semantic_category, confidence, embedding, discovered_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+           RETURNING id`,
+          [
+            semanticIndexId,
+            field.name,
+            field.id,
+            field.variableName,
+            field.dataType,
+            semanticConcept,
+            semanticCategory,
+            confidence,
+            toVectorLiteral(fieldEmbedding),
+          ]
+        );
+
+        const fieldSemanticId = fieldInsertResult.rows[0].id;
+
+        // Fetch options from AttributeLookup table
+        const sqlServerPool = await getSqlServerPool(options.connectionString);
+        const optionsResult = await sqlServerPool
+          .request()
+          .input("attributeTypeId", field.id)
+          .query(
+            `SELECT id, value, orderIndex
+             FROM dbo.AttributeLookup
+             WHERE attributeTypeFk = @attributeTypeId
+               AND isDeleted = 0
+             ORDER BY orderIndex ASC`
+          );
+
+        // Insert options into SemanticIndexOption
+        for (const option of optionsResult.recordset) {
+          const optionEmbedding = await embeddingService.generateEmbedding(
+            option.value
+          );
+
+          await pgPool.query(
+            `INSERT INTO "SemanticIndexOption"
+             (semantic_index_field_id, option_value, option_identifier, sort_order, embedding, discovered_at)
+             VALUES ($1, $2, $3, $4, $5, NOW())`,
+            [
+              fieldSemanticId,
+              option.value,
+              option.id,
+              option.orderIndex,
+              toVectorLiteral(optionEmbedding),
+            ]
+          );
+        }
+
+        fieldsProcessed++;
+        logger.endTimer(
+          `field_${field.id}`,
+          "standalone_discovery",
+          "field",
+          `Processed field "${field.name}" with ${optionsResult.recordset.length} options`
+        );
+      } catch (error: any) {
+        const errorMsg = `Failed to process standalone field "${field.name}": ${error.message}`;
+        logger.error("standalone_discovery", "field", errorMsg, error);
+        errors.push(errorMsg);
+      }
+    }
+
+    logger.info(
+      "standalone_discovery",
+      "summary",
+      `Successfully discovered ${fieldsProcessed} standalone fields`
+    );
+    logger.logMetric(
+      "standalone_discovery",
+      "summary",
+      "fields_discovered",
+      fieldsProcessed
+    );
+
+    await logger.persistLogs();
+
+    return {
+      fieldsDiscovered: fieldsProcessed,
+      warnings,
+      errors,
+    };
+  } catch (error: any) {
+    const message = error?.message || "Standalone field discovery failed";
+    logger.error("standalone_discovery", "summary", message, error);
+    await logger.persistLogs();
+
+    return {
+      fieldsDiscovered: 0,
       warnings,
       errors: [message],
     };

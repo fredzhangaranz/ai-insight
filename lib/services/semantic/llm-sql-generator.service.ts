@@ -15,6 +15,7 @@ import type {
   FormInContext,
   JoinPath,
   TerminologyMapping,
+  AssessmentTypeInContext,
 } from "../context-discovery/types";
 import { executeCustomerQuery } from "./customer-query.service";
 import {
@@ -306,6 +307,7 @@ async function buildUserPrompt(
 
   prompt += formatFiltersSection(intent.filters);
   prompt += formatFormsSection(context.forms || []);
+  prompt += formatAssessmentTypesSection(context.assessmentTypes || []); // Phase 5A
 
   // IMPORTANT: Skip terminology section if filters have values
   // Filters are the source of truth after terminology mapping
@@ -426,6 +428,38 @@ function formatTerminologySection(terminology: TerminologyMapping[]): string {
     );
   }
   lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
+function formatAssessmentTypesSection(
+  assessmentTypes: ContextBundle["assessmentTypes"]
+): string {
+  if (!assessmentTypes || assessmentTypes.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = ["# Relevant Assessment Types", ""];
+  lines.push(
+    "The following assessment types are relevant to this query based on semantic analysis:"
+  );
+  lines.push("");
+
+  for (const assessment of assessmentTypes) {
+    lines.push(`## ${assessment.assessmentName}`);
+    lines.push(`- **Category:** ${assessment.semanticCategory}`);
+    lines.push(`- **Concept:** ${assessment.semanticConcept}`);
+    lines.push(`- **Confidence:** ${(assessment.confidence * 100).toFixed(0)}%`);
+    if (assessment.reason) {
+      lines.push(`- **Reason:** ${assessment.reason}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(
+    "**IMPORTANT:** Use these assessment types to help identify which assessment tables or forms to query."
+  );
+  lines.push("");
+
   return `${lines.join("\n")}\n`;
 }
 
