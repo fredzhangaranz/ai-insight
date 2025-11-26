@@ -1,0 +1,2168 @@
+# Templating System Improvements: Implementation Plan
+
+**Document Version:** 1.1
+**Created:** 2025-11-26
+**Updated:** 2025-11-26
+**Status:** In Progress
+**Owner:** Engineering Team
+
+**Related Documents:**
+- `docs/design/templating_system/templating_improvement_real_customer_analysis.md`
+- `docs/todos/in-progress/performance-optimization-implementation.md`
+- `docs/todos/in-progress/semantic-remaining-task.md`
+
+---
+
+## Overview
+
+This document provides a detailed, step-by-step implementation plan for the templating system improvements identified from real customer analysis (C1, C2, C3). The improvements address critical gaps in assessment-level semantics, temporal proximity queries, and multi-assessment correlation patterns.
+
+**IMPORTANT UPDATE (2025-11-26):** Week 1 work has been COMPLETED. Database migrations and indexing services are already implemented:
+- ✅ Migrations 030, 031, 032 (Assessment types & enum support)
+- ✅ AssessmentTypeIndexer, AssessmentTypeSearcher, EnumFieldIndexer services
+- ✅ AssessmentTypeTaxonomy with 30+ semantic concepts
+- ✅ Seed script for assessment types
+
+---
+
+## Table of Contents
+
+1. [Implementation Status Summary](#implementation-status-summary)
+2. [Phase 1: Foundation (Week 1-2)](#phase-1-foundation-week-1-2) - **PARTIALLY COMPLETE**
+3. [Phase 2: Template Catalog (Week 3-4)](#phase-2-template-catalog-week-3-4)
+4. [Phase 3: Expansion (Month 2)](#phase-3-expansion-month-2)
+5. [Testing & Validation](#testing--validation)
+6. [Success Metrics](#success-metrics)
+
+---
+
+## Implementation Status Summary
+
+### ✅ **COMPLETED (Week 1)**
+
+#### Database Schema
+- ✅ **Migration 030**: `SemanticIndexAssessmentType` table created
+  - File: `database/migration/030_semantic_assessment_type_index.sql`
+  - Includes all required fields, indexes, and comments
+  - Includes helper functions
+
+- ✅ **Migration 031**: `SemanticIndexFieldEnumValue` table created
+  - File: `database/migration/031_semantic_field_enum_values.sql`
+  - Extends `SemanticIndexField` with `field_type` column
+  - Includes helper functions: `get_field_enum_values()`, `increment_enum_usage()`
+
+- ✅ **Migration 032**: Non-form enum support
+  - File: `database/migration/032_extend_nonform_enum_support.sql`
+  - Creates `SemanticIndexNonFormEnumValue` table
+  - Extends `SemanticIndexNonForm` with `field_type` column
+
+#### Services & Taxonomy
+- ✅ **AssessmentTypeIndexer Service**
+  - File: `lib/services/context-discovery/assessment-type-indexer.service.ts`
+  - Methods: `discoverAssessmentTypes()`, `indexAssessmentType()`, `indexAll()`, `seedManualMapping()`
+  - Fully implemented with error handling
+
+- ✅ **AssessmentTypeTaxonomy**
+  - File: `lib/services/context-discovery/assessment-type-taxonomy.ts`
+  - 30+ semantic concepts across clinical, billing, administrative, treatment categories
+  - Pattern matching with regex and keyword support
+  - Helper functions: `findMatchingConcepts()`, `getConceptByName()`, `getConceptsByCategory()`
+
+- ✅ **AssessmentTypeSearcher Service**
+  - File: `lib/services/context-discovery/assessment-type-searcher.service.ts`
+  - Methods: `searchByConcept()`, `searchByCategory()`, `searchByKeywords()`, `search()`, `getAll()`, `getByIds()`
+  - Ready for context discovery integration
+
+- ✅ **EnumFieldIndexer Service**
+  - File: `lib/services/context-discovery/enum-field-indexer.service.ts`
+  - Methods: `getNonFormFields()`, `getFormFields()`, `detectEnumForField()`, `detectEnumForFormField()`, `saveEnumValues()`, `saveFormFieldEnumValues()`, `indexAll()`, `clearAll()`
+  - Supports both form fields and non-form fields
+  - Integrated into discovery orchestrator Stage 2.5
+
+#### Scripts & Tooling
+- ✅ **Seed Assessment Types Script**
+  - File: `scripts/seed-assessment-types.ts`
+  - Supports auto mode (pattern matching) and manual mode
+  - Includes manual seed data for common assessment types
+
+### 🔄 **IN PROGRESS**
+
+- [ ] Integration of assessment type searcher into context discovery
+- [ ] Intent classifier extensions for new intent types
+
+### ⏳ **NOT STARTED**
+
+- [ ] Template matcher service
+- [ ] Placeholder resolver service
+- [ ] Template catalog creation
+- [ ] Orchestrator integration
+- [ ] Golden query test suite
+
+---
+
+## Phase 1: Foundation (Week 1-2)
+
+### Week 1: Database Schema & Assessment Indexing
+
+#### Day 1-2: Database Migrations ✅ **COMPLETED**
+
+- [x] **Task 1.1: Create `SemanticIndexAssessmentType` table migration**
+  - **File:** `database/migration/030_semantic_assessment_type_index.sql`
+  - **Status:** ✅ Complete
+  - **Notes:**
+    - Includes all required fields plus audit fields (discovered_at, discovery_run_id)
+    - Includes full-text search index on assessment_name
+    - Includes comprehensive comments and documentation
+
+- [x] **Task 1.2: Create `SemanticIndexFieldEnumValue` table migration**
+  - **File:** `database/migration/031_semantic_field_enum_values.sql`
+  - **Status:** ✅ Complete
+  - **Notes:**
+    - Includes `field_type` column addition to `SemanticIndexField`
+    - Includes helper functions for getting enum values and incrementing usage
+    - Includes all required indexes
+
+- [x] **Task 1.3: Create `SemanticIndexNonFormEnumValue` table migration**
+  - **File:** `database/migration/032_extend_nonform_enum_support.sql`
+  - **Status:** ✅ Complete
+  - **Notes:**
+    - Extends enum support to non-form fields
+    - Mirrors structure of form field enum values
+
+- [x] **Task 1.4: Run migrations on staging environment**
+  - **Status:** ✅ Complete
+  - **Actions:**
+    - [x] Apply all three migrations (030, 031, 032)
+    - [x] Verify table structure
+    - [x] Verify indexes exist
+    - [x] Check constraints work correctly
+    - [x] Test helper functions
+  - **Notes:**
+    - All migrations successfully applied to database
+    - Tables verified: SemanticIndexAssessmentType, SemanticIndexFieldEnumValue, SemanticIndexNonFormEnumValue
+    - All indexes and constraints confirmed working
+    - Helper functions tested and operational
+
+---
+
+#### Day 3-4: Assessment Type Indexer Service ✅ **COMPLETED**
+
+- [x] **Task 1.5: Create assessment type semantic concept taxonomy**
+  - **File:** `lib/services/context-discovery/assessment-type-taxonomy.ts`
+  - **Status:** ✅ Complete
+  - **Notes:**
+    - 30+ semantic concepts defined
+    - Categories: clinical (15), billing (3), administrative (6), treatment (6)
+    - Pattern matching with regex + keyword fallback
+    - Helper functions: `findMatchingConcepts()`, `getConceptByName()`, `getConceptsByCategory()`
+
+- [x] **Task 1.6: Create AssessmentTypeIndexer service**
+  - **File:** `lib/services/context-discovery/assessment-type-indexer.service.ts`
+  - **Status:** ✅ Complete
+  - **Methods Implemented:**
+    - ✅ `discoverAssessmentTypes()` - queries rpt.AssessmentTypeVersion
+    - ✅ `matchSemanticConcepts()` - pattern matching using taxonomy
+    - ✅ `indexAssessmentType()` - indexes single assessment type
+    - ✅ `indexAll()` - indexes all discovered types
+    - ✅ `seedManualMapping()` - manual override support
+    - ✅ `getIndexed()` - retrieves indexed types
+    - ✅ `clearAll()` - cleanup utility
+
+- [x] **Task 1.7: Create manual seed data for common assessment types**
+  - **File:** `scripts/seed-assessment-types.ts`
+  - **Status:** ✅ Complete
+  - **Notes:**
+    - Includes manual seed data for 10+ common assessment types
+    - Supports both auto mode (pattern matching) and manual mode
+    - CLI usage: `npm run seed-assessment-types <customerId>`
+
+- [x] **Task 1.8: Add assessment type indexing to semantic discovery pipeline**
+  - **File:** `lib/services/discovery-orchestrator.service.ts`
+  - **Status:** ✅ Complete
+  - **Actions:**
+    - [x] Verify if orchestrator exists
+    - [x] Add assessment type indexer to constructor dependencies
+    - [x] Add assessment type indexing step to discovery flow
+    - [x] Run after form field discovery (Stage 4)
+    - [x] Log assessment types discovered
+    - [x] Handle errors gracefully
+  - **Notes:**
+    - Implemented in both `runFullDiscovery()` and `runFullDiscoveryWithProgress()` functions
+    - Runs as "Stage 4: Assessment Type Indexing" after relationship discovery
+    - Includes proper logging with timers and error tracking
+    - Adds warnings when assessment types found but not matched to concepts
+    - Stats computed via `computeAssessmentTypeStats()` and included in summary
+    - Controlled by `stages.assessmentTypes` flag for optional execution
+
+- [x] **Task 1.9: Create CLI command for manual assessment type indexing**
+  - **File:** `scripts/seed-assessment-types.ts`
+  - **Status:** ✅ Complete
+  - **Usage:** `npm run seed-assessment-types <customerId> [--manual]`
+
+- [ ] **Task 1.10: Test assessment type indexing end-to-end**
+  - **Actions:**
+    - [ ] Run indexing on test customer
+    - [ ] Verify records in `SemanticIndexAssessmentType` table
+    - [ ] Verify semantic concepts are correct
+    - [ ] Verify confidence scores are reasonable
+    - [ ] Test `AssessmentTypeSearcher.searchByConcept()` queries
+
+---
+
+#### Day 5: Enum Field Detector ✅ **COMPLETE**
+
+- [x] **Task 1.11: Create enum field detection patterns**
+  - **Status:** ✅ Complete (built into EnumFieldIndexer)
+  - **Notes:**
+    - Pattern detection is handled by `detectEnumField()` in silhouette-discovery service
+    - Uses cardinality analysis (2-50 distinct values)
+
+- [x] **Task 1.12: Create EnumFieldIndexer service**
+  - **File:** `lib/services/context-discovery/enum-field-indexer.service.ts`
+  - **Status:** ✅ Complete (for non-form fields)
+  - **Methods Implemented:**
+    - ✅ `getNonFormFields()` - gets fields to analyze
+    - ✅ `detectEnumForField()` - detects if field is enum
+    - ✅ `saveEnumValues()` - saves enum values to database
+    - ✅ `indexAll()` - indexes all enum fields
+    - ✅ `getIndexedEnumFields()` - retrieves indexed enums
+    - ✅ `clearAll()` - cleanup utility
+
+- [x] **Task 1.13: Extend enum detection to form fields**
+  - **File:** `lib/services/context-discovery/enum-field-indexer.service.ts`
+  - **Status:** ✅ Complete (then DISABLED by design decision)
+  - **Design Decision (2025-11-26):**
+    - **DISABLED** form field enum detection - it's redundant with `SemanticIndexOption`
+    - Form field dropdown options are already indexed during form discovery for SingleSelect/MultiSelect fields
+    - `SemanticIndexOption` table already stores all dropdown values with labels and sort order
+    - Detecting enums from Text fields is complex, slow, and rarely useful
+    - **KEPT** non-form enum detection for rpt.* columns (valuable and unique)
+  - **Implementation:**
+    - `getFormFields()` now returns empty array with explanation comment
+    - `indexAll()` returns `formFieldsTotal: 0, formFieldsDetected: 0`
+    - Documentation updated to clarify this service only handles non-form fields
+  - **Notes:**
+    - Use `SemanticIndexOption` for form field dropdown values
+    - Use `SemanticIndexNonFormEnumValue` for non-form column enum values
+    - This eliminates redundancy and improves performance
+
+- [x] **Task 1.14: Integrate enum detection into field indexing**
+  - **File:** `lib/services/discovery-orchestrator.service.ts`
+  - **Status:** ✅ Complete
+  - **Actions:**
+    - [x] Enum detection already integrated as "Stage 2.5" after non-form schema discovery
+    - [x] Updated orchestrator to use new `indexAll()` return structure
+    - [x] Added detailed logging for form vs non-form enum detection
+    - [x] Error handling in place without failing overall discovery
+  - **Notes:**
+    - Enum detection runs automatically after non-form schema discovery
+    - Processes both form fields (SemanticIndexField) and non-form fields (SemanticIndexNonForm)
+    - Results tracked in discovery run logs with separate counters for form/non-form
+
+- [ ] **Task 1.15: Test enum field detection**
+  - **Actions:**
+    - [ ] Run field indexing on test customer
+    - [ ] Verify enum fields detected (status, state, type, etc.)
+    - [ ] Verify `SemanticIndexFieldEnumValue` populated
+    - [ ] Verify `SemanticIndexNonFormEnumValue` populated
+    - [ ] Verify `field_type = 'enum'` set correctly
+    - [ ] Check usage_count values are correct
+
+---
+
+### Week 2: Template Matcher & Intent Classification
+
+#### Day 1-2: Extend Intent Classifier (Hybrid Approach)
+
+**Architecture Decision:** Use a **hybrid pattern-matching + AI fallback** approach for intent classification:
+- **Fast path (1-5ms):** Pattern matching with keywords/regex for 80%+ of queries
+- **Smart fallback (500-2000ms):** AI-based classification when pattern confidence is low
+- **Self-improving:** Log disagreements to discover new patterns over time
+
+**Benefits:**
+- ✅ Fast and cost-effective for common queries
+- ✅ Flexible and accurate for novel phrasings
+- ✅ Deterministic and debuggable primary path
+- ✅ Continuous improvement from real usage data
+
+**Architectural Alignment:**
+- ✅ Follows existing `IntentClassifierService` pattern (singleton with cache)
+- ✅ Uses existing `getAIProvider()` factory for LLM calls
+- ✅ Console logging + fire-and-forget database logging
+- ✅ No formal DI container (runtime dependency resolution)
+
+**Reference Implementation:** See `lib/services/context-discovery/intent-classifier.service.ts`
+
+**File Structure:**
+```
+lib/services/intent-classifier/
+├── intent-classifier.service.ts       # Main hybrid orchestrator (singleton)
+├── cache.ts                           # IntentClassifierCache class
+├── patterns/
+│   ├── temporal-proximity.patterns.ts
+│   ├── assessment-correlation.patterns.ts
+│   └── workflow-status.patterns.ts
+└── prompts/
+    └── intent-classification-ai.prompt.ts
+```
+
+**Key Changes from Original Plan:**
+- ❌ Deleted Task 2.8 (AIIntentClassifier service) - Use existing `getAIProvider()` instead
+- ⚠️ Updated Task 2.9 → Split into Tasks 2.9 (prompts) and 2.10 (orchestration)
+- ✅ Added Task 2.8 (cache implementation)
+- ✅ Service uses singleton pattern, no constructor DI
+- ✅ Database access via `getInsightGenDbPool()` at runtime
+- ✅ Fire-and-forget logging pattern for performance
+
+---
+
+- [ ] **Task 2.1: Create new IntentClassifierService with pattern + AI hybrid**
+  - **File:** `lib/services/intent-classifier/intent-classifier.service.ts` (NEW)
+  - **Note:** This is a NEW service separate from existing `context-discovery/intent-classifier.service.ts`
+  - **Actions:**
+    - [ ] Create QueryIntent type with new intent types:
+      ```typescript
+      export type QueryIntent =
+        | 'aggregation_by_category'
+        | 'time_series_trend'
+        | 'temporal_proximity_query'  // NEW
+        | 'assessment_correlation_check'  // NEW
+        | 'workflow_status_monitoring'  // NEW
+        | 'latest_per_entity'
+        | 'as_of_state'
+        | 'top_k'
+        | 'pivot'
+        | 'join_analysis'
+        | 'legacy_unknown';
+      ```
+    - [ ] Create classification result interface:
+      ```typescript
+      export interface IntentClassificationResult {
+        intent: QueryIntent;
+        confidence: number;  // 0.0 - 1.0
+        method: 'pattern' | 'ai' | 'fallback';  // How it was classified
+        matchedPatterns?: string[];  // For pattern-based
+        reasoning?: string;  // For AI-based
+      }
+
+      export interface IntentClassificationOptions {
+        modelId?: string;
+        enableCache?: boolean;
+        timeoutMs?: number;
+      }
+      ```
+    - [ ] Create service skeleton with singleton pattern:
+      ```typescript
+      export class IntentClassifierService {
+        private cache = new IntentClassifierCache();
+        private readonly CONFIDENCE_THRESHOLD = 0.85;
+        private readonly DEFAULT_TIMEOUT_MS = 60000;
+
+        constructor() {
+          // Setup cache cleanup (every 10 minutes)
+          setInterval(() => this.cache.cleanupExpired(), 10 * 60 * 1000);
+        }
+
+        async classify(
+          question: string,
+          customerId: string,
+          options?: IntentClassificationOptions
+        ): Promise<IntentClassificationResult> {
+          // Implementation in later tasks
+        }
+      }
+
+      // Singleton getter
+      let instance: IntentClassifierService | null = null;
+      export function getIntentClassifierService(): IntentClassifierService {
+        if (!instance) instance = new IntentClassifierService();
+        return instance;
+      }
+      ```
+
+- [ ] **Task 2.2: Define temporal proximity indicators (pattern-based)**
+  - **File:** `lib/services/intent-classifier/temporal-proximity-patterns.ts`
+  - **Actions:**
+    - [ ] Create keyword patterns:
+      ```typescript
+      export const TEMPORAL_PROXIMITY_INDICATORS = {
+        keywords: [
+          'at', 'around', 'approximately', 'near', 'close to', 'within',
+          'by', 'after', 'since', 'roughly', 'about'
+        ],
+        timeUnits: [
+          /(\\d+)\\s*(?:weeks?|wks?)/i,
+          /(\\d+)\\s*(?:months?|mos?)/i,
+          /(\\d+)\\s*(?:days?)/i,
+          /(\\d+)\\s*(?:years?|yrs?)/i
+        ],
+        outcomeKeywords: [
+          'healing', 'healed', 'outcome', 'result', 'reduction', 'improvement',
+          'measurement', 'area', 'size', 'change', 'progress'
+        ]
+      };
+      ```
+
+- [ ] **Task 2.3: Implement pattern-based temporal proximity detection**
+  - **File:** `lib/services/intent-classifier.service.ts`
+  - **Actions:**
+    - [ ] Add pattern detection function:
+      ```typescript
+      private detectTemporalProximityPattern(
+        question: string
+      ): IntentClassificationResult | null {
+        const lower = question.toLowerCase();
+        const matchedPatterns: string[] = [];
+
+        const hasProximityKeyword = TEMPORAL_PROXIMITY_INDICATORS.keywords.some(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`proximity:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        const hasTimeUnit = TEMPORAL_PROXIMITY_INDICATORS.timeUnits.some(pattern => {
+          const match = lower.match(pattern);
+          if (match) {
+            matchedPatterns.push(`timeUnit:${match[0]}`);
+            return true;
+          }
+          return false;
+        });
+
+        const hasOutcomeKeyword = TEMPORAL_PROXIMITY_INDICATORS.outcomeKeywords.some(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`outcome:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        // Require all three components for high confidence
+        if (hasProximityKeyword && hasTimeUnit && hasOutcomeKeyword) {
+          return {
+            intent: 'temporal_proximity_query',
+            confidence: 0.9,
+            method: 'pattern',
+            matchedPatterns
+          };
+        }
+
+        // Partial match - lower confidence
+        if (hasTimeUnit && (hasProximityKeyword || hasOutcomeKeyword)) {
+          return {
+            intent: 'temporal_proximity_query',
+            confidence: 0.6,
+            method: 'pattern',
+            matchedPatterns
+          };
+        }
+
+        return null;
+      }
+      ```
+
+- [ ] **Task 2.4: Define assessment correlation patterns (pattern-based)**
+  - **File:** `lib/services/intent-classifier/assessment-correlation-patterns.ts`
+  - **Actions:**
+    - [ ] Create keyword patterns:
+      ```typescript
+      export const ASSESSMENT_CORRELATION_INDICATORS = {
+        antiJoinKeywords: [
+          'missing', 'without', 'no', 'lacking',
+          'but no', 'with no', 'not have', 'absence of'
+        ],
+        correlationKeywords: [
+          'reconciliation', 'correlation', 'relationship',
+          'match', 'compare', 'discrepancy', 'mismatch'
+        ],
+        assessmentTypeKeywords: [
+          'assessment', 'form', 'documentation', 'record',
+          'visit', 'billing', 'clinical', 'discharge', 'intake'
+        ]
+      };
+      ```
+
+- [ ] **Task 2.5: Implement pattern-based assessment correlation detection**
+  - **File:** `lib/services/intent-classifier.service.ts`
+  - **Actions:**
+    - [ ] Add pattern detection function:
+      ```typescript
+      private detectAssessmentCorrelationPattern(
+        question: string
+      ): IntentClassificationResult | null {
+        const lower = question.toLowerCase();
+        const matchedPatterns: string[] = [];
+
+        const hasAntiJoinKeyword = ASSESSMENT_CORRELATION_INDICATORS.antiJoinKeywords.some(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`antiJoin:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        const hasCorrelationKeyword = ASSESSMENT_CORRELATION_INDICATORS.correlationKeywords.some(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`correlation:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        // Count assessment type mentions (need at least 2 for correlation)
+        const assessmentTypeMatches = ASSESSMENT_CORRELATION_INDICATORS.assessmentTypeKeywords.filter(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`assessmentType:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        // High confidence: anti-join keyword + multiple assessment types
+        if (hasAntiJoinKeyword && assessmentTypeMatches.length >= 2) {
+          return {
+            intent: 'assessment_correlation_check',
+            confidence: 0.85,
+            method: 'pattern',
+            matchedPatterns
+          };
+        }
+
+        // Medium confidence: correlation keyword + multiple assessment types
+        if (hasCorrelationKeyword && assessmentTypeMatches.length >= 2) {
+          return {
+            intent: 'assessment_correlation_check',
+            confidence: 0.75,
+            method: 'pattern',
+            matchedPatterns
+          };
+        }
+
+        return null;
+      }
+      ```
+
+- [ ] **Task 2.6: Define workflow status monitoring patterns (pattern-based)**
+  - **File:** `lib/services/intent-classifier/workflow-status-patterns.ts`
+  - **Actions:**
+    - [ ] Create keyword patterns:
+      ```typescript
+      export const WORKFLOW_STATUS_INDICATORS = {
+        statusKeywords: [
+          'workflow', 'status', 'state', 'progress', 'stage',
+          'by status', 'in state', 'pending', 'complete', 'in progress',
+          'approved', 'rejected', 'review'
+        ],
+        groupByKeywords: [
+          'by', 'grouped by', 'group by', 'per', 'breakdown'
+        ],
+        ageKeywords: [
+          'age', 'days old', 'old', 'recent', 'stale'
+        ]
+      };
+      ```
+
+- [ ] **Task 2.7: Implement pattern-based workflow status detection**
+  - **File:** `lib/services/intent-classifier.service.ts`
+  - **Actions:**
+    - [ ] Add pattern detection function:
+      ```typescript
+      private detectWorkflowStatusPattern(
+        question: string
+      ): IntentClassificationResult | null {
+        const lower = question.toLowerCase();
+        const matchedPatterns: string[] = [];
+
+        const hasStatusKeyword = WORKFLOW_STATUS_INDICATORS.statusKeywords.some(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`status:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        const hasGroupByKeyword = WORKFLOW_STATUS_INDICATORS.groupByKeywords.some(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`groupBy:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        const hasAgeKeyword = WORKFLOW_STATUS_INDICATORS.ageKeywords.some(kw => {
+          if (lower.includes(kw)) {
+            matchedPatterns.push(`age:${kw}`);
+            return true;
+          }
+          return false;
+        });
+
+        // High confidence: status + group by
+        if (hasStatusKeyword && hasGroupByKeyword) {
+          return {
+            intent: 'workflow_status_monitoring',
+            confidence: 0.9,
+            method: 'pattern',
+            matchedPatterns
+          };
+        }
+
+        // Medium confidence: status + age (e.g., "pending forms older than 7 days")
+        if (hasStatusKeyword && hasAgeKeyword) {
+          return {
+            intent: 'workflow_status_monitoring',
+            confidence: 0.8,
+            method: 'pattern',
+            matchedPatterns
+          };
+        }
+
+        // Lower confidence: just status keyword
+        if (hasStatusKeyword) {
+          return {
+            intent: 'workflow_status_monitoring',
+            confidence: 0.6,
+            method: 'pattern',
+            matchedPatterns
+          };
+        }
+
+        return null;
+      }
+      ```
+
+- [ ] **Task 2.8: Create cache implementation**
+  - **File:** `lib/services/intent-classifier/cache.ts`
+  - **Pattern:** Follow existing `IntentClassificationServiceCache` pattern
+  - **Actions:**
+    - [ ] Create cache entry interface:
+      ```typescript
+      interface CacheEntry<T> {
+        value: T;
+        expiresAt: number;
+      }
+      ```
+    - [ ] Create cache class:
+      ```typescript
+      import { createHash } from "crypto";
+      import type { IntentClassificationResult } from "./intent-classifier.service";
+
+      export class IntentClassifierCache {
+        private patternCache = new Map<string, CacheEntry<IntentClassificationResult>>();
+        private aiCache = new Map<string, CacheEntry<IntentClassificationResult>>();
+
+        private readonly PATTERN_CACHE_TTL = 60 * 60 * 1000; // 60 minutes
+        private readonly AI_CACHE_TTL = 60 * 60 * 1000; // 60 minutes
+
+        private generateCacheKey(question: string, customerId: string): string {
+          return createHash("sha256")
+            .update(`${customerId}:${question}`)
+            .digest("hex");
+        }
+
+        getResult(question: string, customerId: string): IntentClassificationResult | null {
+          const key = this.generateCacheKey(question, customerId);
+          // Try pattern cache first (faster)
+          const patternResult = this.get(this.patternCache, key);
+          if (patternResult) return patternResult;
+          // Fall back to AI cache
+          return this.get(this.aiCache, key);
+        }
+
+        setResult(
+          question: string,
+          customerId: string,
+          result: IntentClassificationResult
+        ): void {
+          const key = this.generateCacheKey(question, customerId);
+          const cache = result.method === 'pattern' ? this.patternCache : this.aiCache;
+          const ttl = result.method === 'pattern' ? this.PATTERN_CACHE_TTL : this.AI_CACHE_TTL;
+          this.set(cache, key, result, ttl);
+        }
+
+        cleanupExpired(): void {
+          const now = Date.now();
+          for (const [key, entry] of this.patternCache.entries()) {
+            if (now > entry.expiresAt) this.patternCache.delete(key);
+          }
+          for (const [key, entry] of this.aiCache.entries()) {
+            if (now > entry.expiresAt) this.aiCache.delete(key);
+          }
+        }
+
+        private get<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
+          const entry = cache.get(key);
+          if (!entry || Date.now() > entry.expiresAt) {
+            cache.delete(key);
+            return null;
+          }
+          return entry.value;
+        }
+
+        private set<T>(
+          cache: Map<string, CacheEntry<T>>,
+          key: string,
+          value: T,
+          ttlMs: number
+        ): void {
+          cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+        }
+      }
+      ```
+
+- [ ] **Task 2.9: Create AI prompt templates**
+  - **File:** `lib/services/intent-classifier/prompts/intent-classification-ai.prompt.ts`
+  - **Actions:**
+    - [ ] Create system prompt constant:
+      ```typescript
+      export const INTENT_CLASSIFICATION_SYSTEM_PROMPT = `You are an intent classifier for healthcare data queries.
+Your task is to classify user questions into one of the predefined intent types.
+
+Be precise and consider the context carefully. Return your classification with a confidence score.`;
+      ```
+    - [ ] Create prompt builder function:
+      ```typescript
+      export function buildIntentClassificationPrompt(
+        question: string,
+        availableIntents: QueryIntent[]
+      ): string {
+        const intentDescriptions: Record<QueryIntent, string> = {
+          'temporal_proximity_query': 'Outcomes at a specific time point (e.g., "at 4 weeks", "around 12 weeks")',
+          'assessment_correlation_check': 'Missing or mismatched data across assessment types (e.g., "visits without billing")',
+          'workflow_status_monitoring': 'Filter or group by workflow status/state (e.g., "forms by status")',
+          'aggregation_by_category': 'Count/sum/average grouped by categories',
+          'time_series_trend': 'Trends over time periods',
+          'latest_per_entity': 'Most recent record per entity',
+          'as_of_state': 'State at a specific date',
+          'top_k': 'Top/bottom N results',
+          'pivot': 'Transform rows to columns',
+          'join_analysis': 'Combine multiple data sources',
+          'legacy_unknown': 'Unknown or unclassified query type',
+        };
+
+        return `Classify the following query into one of these intent types:
+
+Available intents:
+${availableIntents.map(i => `- ${i}: ${intentDescriptions[i]}`).join('\n')}
+
+Query: "${question}"
+
+Respond in JSON format:
+{
+  "intent": "<intent_type>",
+  "confidence": <0.0-1.0>,
+  "reasoning": "<brief explanation>"
+}`;
+      }
+      ```
+    - [ ] Create response parser:
+      ```typescript
+      export function parseIntentClassificationResponse(
+        response: string
+      ): IntentClassificationResult {
+        const parsed = JSON.parse(response);
+        return {
+          intent: parsed.intent,
+          confidence: parsed.confidence,
+          method: 'ai',
+          reasoning: parsed.reasoning,
+        };
+      }
+      ```
+
+- [ ] **Task 2.10: Implement hybrid classification orchestration in main service**
+  - **File:** `lib/services/intent-classifier/intent-classifier.service.ts`
+  - **Pattern:** Follow existing `IntentClassifierService` architecture (singleton, no constructor DI)
+  - **Actions:**
+    - [ ] Implement main `classify()` method with hybrid logic:
+      ```typescript
+      async classify(
+        question: string,
+        customerId: string,
+        options?: IntentClassificationOptions
+      ): Promise<IntentClassificationResult> {
+        console.log(`[IntentClassifier] 🚀 Starting classification`, { question, customerId });
+        const startTime = Date.now();
+
+        try {
+          // Step 1: Check cache
+          if (options?.enableCache !== false) {
+            const cached = this.cache.getResult(question, customerId);
+            if (cached) {
+              console.log(`[IntentClassifier] 💾 Cache hit`);
+              return cached;
+            }
+          }
+
+          // Step 2: Try pattern-based classification (fast path)
+          const patternResults = [
+            this.detectTemporalProximityPattern(question),
+            this.detectAssessmentCorrelationPattern(question),
+            this.detectWorkflowStatusPattern(question),
+          ].filter(r => r !== null) as IntentClassificationResult[];
+
+          patternResults.sort((a, b) => b.confidence - a.confidence);
+          const bestPattern = patternResults[0];
+
+          // Step 3: If high-confidence pattern match, use it
+          if (bestPattern && bestPattern.confidence >= this.CONFIDENCE_THRESHOLD) {
+            const latency = Date.now() - startTime;
+            console.log(`[IntentClassifier] ✅ Pattern match (${latency}ms)`, {
+              intent: bestPattern.intent,
+              confidence: bestPattern.confidence,
+              patterns: bestPattern.matchedPatterns,
+            });
+
+            this.cache.setResult(question, customerId, bestPattern);
+            this.logToDatabase(question, bestPattern, latency, customerId);
+            return bestPattern;
+          }
+
+          // Step 4: Fall back to AI classification
+          console.log(`[IntentClassifier] 🤖 Low pattern confidence, using AI fallback`, {
+            bestPatternConfidence: bestPattern?.confidence || 0,
+          });
+
+          const aiResult = await this.classifyWithAI(question, options);
+          const latency = Date.now() - startTime;
+
+          console.log(`[IntentClassifier] ✅ AI classification (${latency}ms)`, {
+            intent: aiResult.intent,
+            confidence: aiResult.confidence,
+          });
+
+          // Step 5: Log disagreements for learning
+          if (bestPattern && bestPattern.intent !== aiResult.intent) {
+            this.logDisagreement(question, bestPattern, aiResult, customerId);
+          }
+
+          this.cache.setResult(question, customerId, aiResult);
+          this.logToDatabase(question, aiResult, latency, customerId);
+          return aiResult;
+
+        } catch (error: any) {
+          const latency = Date.now() - startTime;
+          console.error(`[IntentClassifier] ❌ Classification failed (${latency}ms):`, error);
+
+          // Return degraded response
+          return {
+            intent: 'legacy_unknown',
+            confidence: 0.0,
+            method: 'fallback',
+            reasoning: `Classification failed: ${error.message}. Please rephrase your question.`,
+          };
+        }
+      }
+      ```
+    - [ ] Implement AI classification helper (uses existing provider factory):
+      ```typescript
+      private async classifyWithAI(
+        question: string,
+        options?: IntentClassificationOptions
+      ): Promise<IntentClassificationResult> {
+        const modelId = options?.modelId || DEFAULT_AI_MODEL_ID;
+        const timeoutMs = options?.timeoutMs || this.DEFAULT_TIMEOUT_MS;
+
+        // Use existing provider factory (no new service needed!)
+        const provider = await getAIProvider(modelId, true);
+
+        const prompt = buildIntentClassificationPrompt(
+          question,
+          this.getAvailableIntents()
+        );
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('AI classification timeout')), timeoutMs);
+        });
+
+        const response = await Promise.race([
+          provider.complete({
+            system: INTENT_CLASSIFICATION_SYSTEM_PROMPT,
+            userMessage: prompt,
+            temperature: 0.1,
+            maxTokens: 150,
+          }),
+          timeoutPromise,
+        ]);
+
+        return parseIntentClassificationResponse(response);
+      }
+      ```
+    - [ ] Implement database logging (fire-and-forget pattern):
+      ```typescript
+      private logToDatabase(
+        question: string,
+        result: IntentClassificationResult,
+        latencyMs: number,
+        customerId: string
+      ): void {
+        // Fire-and-forget - don't await
+        (async () => {
+          try {
+            const pool = await getInsightGenDbPool();
+            await pool.query(
+              `INSERT INTO "IntentClassificationLog" (
+                customer_id, question, intent, confidence, method,
+                latency_ms, matched_patterns, reasoning, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+              [
+                customerId,
+                question,
+                result.intent,
+                result.confidence,
+                result.method,
+                latencyMs,
+                JSON.stringify(result.matchedPatterns || []),
+                result.reasoning || null,
+              ]
+            );
+          } catch (error) {
+            console.error(`[IntentClassifier] ❌ Failed to log to database:`, error);
+          }
+        })();
+      }
+      ```
+    - [ ] Implement disagreement logging:
+      ```typescript
+      private logDisagreement(
+        question: string,
+        patternResult: IntentClassificationResult,
+        aiResult: IntentClassificationResult,
+        customerId: string
+      ): void {
+        console.warn(`[IntentClassifier] ⚠️ Pattern-AI disagreement`, {
+          question,
+          patternIntent: patternResult.intent,
+          patternConfidence: patternResult.confidence,
+          aiIntent: aiResult.intent,
+          aiConfidence: aiResult.confidence,
+        });
+
+        // Fire-and-forget
+        (async () => {
+          try {
+            const pool = await getInsightGenDbPool();
+            await pool.query(
+              `INSERT INTO "IntentClassificationDisagreement" (
+                customer_id, question, pattern_intent, pattern_confidence,
+                ai_intent, ai_confidence, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [
+                customerId,
+                question,
+                patternResult.intent,
+                patternResult.confidence,
+                aiResult.intent,
+                aiResult.confidence,
+              ]
+            );
+          } catch (error) {
+            console.error(`[IntentClassifier] ❌ Failed to log disagreement:`, error);
+          }
+        })();
+      }
+      ```
+    - [ ] Add helper methods:
+      ```typescript
+      private getAvailableIntents(): QueryIntent[] {
+        return [
+          'aggregation_by_category',
+          'time_series_trend',
+          'temporal_proximity_query',
+          'assessment_correlation_check',
+          'workflow_status_monitoring',
+          'latest_per_entity',
+          'as_of_state',
+          'top_k',
+          'pivot',
+          'join_analysis',
+          'legacy_unknown',
+        ];
+      }
+      ```
+
+- [ ] **Task 2.11: Create database tables for classification logging**
+  - **File:** `database/migration/033_intent_classification_logging.sql`
+  - **Actions:**
+    - [ ] Create IntentClassificationLog table:
+      ```sql
+      CREATE TABLE IF NOT EXISTS "IntentClassificationLog" (
+        id SERIAL PRIMARY KEY,
+        customer_id UUID NOT NULL REFERENCES "Customer"(id),
+        question TEXT NOT NULL,
+        intent VARCHAR(100) NOT NULL,
+        confidence DECIMAL(3,2) NOT NULL,
+        method VARCHAR(20) NOT NULL,  -- 'pattern' | 'ai' | 'fallback'
+        latency_ms INTEGER NOT NULL,
+        matched_patterns JSONB,
+        reasoning TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_intent_log_customer ON "IntentClassificationLog"(customer_id);
+      CREATE INDEX idx_intent_log_method ON "IntentClassificationLog"(method);
+      CREATE INDEX idx_intent_log_created ON "IntentClassificationLog"(created_at);
+      ```
+    - [ ] Create IntentClassificationDisagreement table:
+      ```sql
+      CREATE TABLE IF NOT EXISTS "IntentClassificationDisagreement" (
+        id SERIAL PRIMARY KEY,
+        customer_id UUID NOT NULL REFERENCES "Customer"(id),
+        question TEXT NOT NULL,
+        pattern_intent VARCHAR(100) NOT NULL,
+        pattern_confidence DECIMAL(3,2) NOT NULL,
+        ai_intent VARCHAR(100) NOT NULL,
+        ai_confidence DECIMAL(3,2) NOT NULL,
+        resolved BOOLEAN DEFAULT FALSE,
+        resolution_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_disagreement_customer ON "IntentClassificationDisagreement"(customer_id);
+      CREATE INDEX idx_disagreement_resolved ON "IntentClassificationDisagreement"(resolved);
+      ```
+
+- [ ] **Task 2.12: Add unit tests for pattern-based classification**
+  - **File:** `lib/services/intent-classifier.service.spec.ts`
+  - **Actions:**
+    - [ ] Test temporal proximity detection:
+      - [ ] "healing rate at 4 weeks" → temporal_proximity_query (0.9 confidence)
+      - [ ] "area reduction around 12 weeks" → temporal_proximity_query (0.9 confidence)
+      - [ ] "wounds in last 4 weeks" → NOT temporal_proximity_query (date range)
+      - [ ] "roughly 4 weeks outcome" → temporal_proximity_query (0.9 confidence)
+    - [ ] Test assessment correlation detection:
+      - [ ] "visits with no billing" → assessment_correlation_check (0.85 confidence)
+      - [ ] "patients without discharge forms" → assessment_correlation_check (0.85 confidence)
+      - [ ] "billing reconciliation" → assessment_correlation_check (0.75 confidence)
+    - [ ] Test workflow status detection:
+      - [ ] "show me forms by status" → workflow_status_monitoring (0.9 confidence)
+      - [ ] "documents in pending state" → workflow_status_monitoring (0.8 confidence)
+      - [ ] "pending forms" → workflow_status_monitoring (0.6 confidence)
+
+- [ ] **Task 2.13: Add integration tests for hybrid classification**
+  - **File:** `lib/services/intent-classifier.integration.spec.ts`
+  - **Actions:**
+    - [ ] Test pattern fast path (high confidence):
+      - [ ] Verify pattern match used
+      - [ ] Verify AI not called
+      - [ ] Verify latency < 10ms
+    - [ ] Test AI fallback (low confidence):
+      - [ ] Verify pattern match attempted
+      - [ ] Verify AI called
+      - [ ] Verify disagreement logged
+      - [ ] Verify latency 500-2000ms
+    - [ ] Test classification logging:
+      - [ ] Verify IntentClassificationLog record created
+      - [ ] Verify all fields populated correctly
+
+- [ ] **Task 2.14: Test intent classification with real questions**
+  - **Actions:**
+    - [ ] Create test set from C1/C2/C3 queries (20 queries)
+    - [ ] Run classification on each
+    - [ ] Verify correct intent assigned
+    - [ ] Measure classification accuracy:
+      - [ ] Pattern accuracy (high confidence matches)
+      - [ ] AI accuracy (fallback cases)
+      - [ ] Overall accuracy
+    - [ ] Measure performance:
+      - [ ] Pattern latency (target: <10ms)
+      - [ ] AI latency (target: 500-2000ms)
+      - [ ] Cache hit rate (pattern match rate)
+    - [ ] Document failures for pattern improvement
+
+---
+
+#### Day 3-4: Build Template Matcher Service
+
+- [ ] **Task 2.15: Define Template interface**
+  - **File:** `lib/services/template/template.interface.ts`
+  - **Actions:**
+    - [ ] Create interfaces:
+      ```typescript
+      export interface Template {
+        id: number;
+        name: string;
+        version: number;
+        intent: QueryIntent;
+        description: string;
+        keywords: string[];
+        tags: string[];
+        placeholders: TemplatePlaceholder[];
+        questionExamples: string[];
+        sqlPattern: string;
+        resultShape: ResultShape;
+        notes?: string;
+      }
+
+      export interface TemplatePlaceholder {
+        name: string;
+        type: 'int' | 'decimal' | 'string' | 'string[]' | 'date' | 'boolean';
+        semantic: string;
+        required: boolean;
+        default?: any;
+        description: string;
+        examples?: any[];
+        validators?: string[];
+      }
+
+      export interface MatchedTemplate {
+        template: Template;
+        confidence: number;
+        matchedKeywords: string[];
+        missingPlaceholders: string[];
+      }
+      ```
+
+- [ ] **Task 2.16: Create TemplateMatcher service skeleton**
+  - **File:** `lib/services/template/template-matcher.service.ts`
+  - **Actions:**
+    - [ ] Create service class:
+      ```typescript
+      export class TemplateMatcherService {
+        constructor(
+          private readonly templateRepository: TemplateRepository,
+          private readonly logger: LoggerService,
+        ) {}
+
+        async matchTemplates(
+          intent: QueryIntent,
+          question: string,
+          concepts: string[]
+        ): Promise<MatchedTemplate[]>
+
+        private calculateKeywordMatchScore(
+          question: string,
+          keywords: string[]
+        ): { score: number; matched: string[] }
+
+        private calculateTagMatchScore(
+          concepts: string[],
+          tags: string[]
+        ): number
+      }
+      ```
+
+- [ ] **Task 2.20: Implement keyword matching algorithm**
+  - **File:** `lib/services/template/template-matcher.service.ts`
+  - **Actions:**
+    - [ ] Implement `calculateKeywordMatchScore()`:
+      - [ ] Tokenize question to lowercase words
+      - [ ] For each template keyword, check if present in question
+      - [ ] Calculate score: (matched keywords / total keywords)
+      - [ ] Return score and matched keyword list
+    - [ ] Add weight for exact phrase matches (higher score)
+
+- [ ] **Task 2.17: Implement tag matching algorithm**
+  - **File:** `lib/services/template/template-matcher.service.ts`
+  - **Actions:**
+    - [ ] Implement `calculateTagMatchScore()`:
+      - [ ] Compare semantic concepts to template tags
+      - [ ] Calculate Jaccard similarity or overlap coefficient
+      - [ ] Return score 0-1
+
+- [ ] **Task 2.18: Implement main template matching logic**
+  - **File:** `lib/services/template/template-matcher.service.ts`
+  - **Actions:**
+    - [ ] Implement `matchTemplates()`:
+      - [ ] Load all templates for given intent
+      - [ ] For each template:
+        - [ ] Calculate keyword match score (weight: 0.6)
+        - [ ] Calculate tag match score (weight: 0.4)
+        - [ ] Combine scores: `confidence = 0.6 * keywordScore + 0.4 * tagScore`
+      - [ ] Filter templates with confidence > 0.5
+      - [ ] Sort by confidence DESC
+      - [ ] Return top 3 matches
+
+- [ ] **Task 2.19: Create TemplateRepository**
+  - **File:** `lib/repositories/template.repository.ts`
+  - **Actions:**
+    - [ ] Create repository class:
+      ```typescript
+      export class TemplateRepository {
+        constructor(private readonly db: DatabaseService) {}
+
+        async getTemplatesByIntent(intent: QueryIntent): Promise<Template[]>
+        async getTemplateById(id: number): Promise<Template | null>
+        async getAllTemplates(): Promise<Template[]>
+      }
+      ```
+    - [ ] Implement methods to query `QueryTemplate` table (existing)
+    - [ ] Parse JSON fields (placeholders, keywords, etc.)
+
+- [ ] **Task 2.20: Add unit tests for template matcher**
+  - **File:** `lib/services/template/template-matcher.service.spec.ts`
+  - **Actions:**
+    - [ ] Test keyword matching:
+      - [ ] Question with 100% keyword match → score 1.0
+      - [ ] Question with 50% keyword match → score 0.5
+      - [ ] Question with no matches → score 0.0
+    - [ ] Test tag matching
+    - [ ] Test combined confidence calculation
+    - [ ] Test filtering and sorting
+
+---
+
+#### Day 5: Build Placeholder Resolver Service
+
+- [ ] **Task 2.17: Create PlaceholderResolver service skeleton**
+  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+  - **Actions:**
+    - [ ] Create service class:
+      ```typescript
+      export interface ResolvedPlaceholders {
+        values: Record<string, any>;
+        allResolved: boolean;
+        missingClarifications: ClarificationRequest[];
+      }
+
+      export class PlaceholderResolverService {
+        constructor(
+          private readonly logger: LoggerService,
+        ) {}
+
+        async resolvePlaceholders(
+          template: Template,
+          question: string,
+          context: SemanticContext
+        ): Promise<ResolvedPlaceholders>
+
+        private resolveTimeWindowPlaceholder(question: string, placeholder: TemplatePlaceholder): any | null
+        private resolveAssessmentTypePlaceholder(question: string, context: SemanticContext, placeholder: TemplatePlaceholder): any | null
+        private resolveFieldVariablePlaceholder(question: string, context: SemanticContext, placeholder: TemplatePlaceholder): any | null
+        private generateClarification(placeholder: TemplatePlaceholder): ClarificationRequest
+      }
+      ```
+
+- [ ] **Task 2.18: Implement time window resolution**
+  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+  - **Actions:**
+    - [ ] Implement `resolveTimeWindowPlaceholder()`:
+      - [ ] Extract time value and unit from question
+      - [ ] Patterns: "4 weeks" → 28 days, "3 months" → 90 days
+      - [ ] Convert to days (multiplier: weeks=7, months=30, years=365)
+      - [ ] Validate against placeholder validators
+      - [ ] Return value or null if not found
+
+- [ ] **Task 2.19: Implement assessment type resolution**
+  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+  - **Actions:**
+    - [ ] Implement `resolveAssessmentTypePlaceholder()`:
+      - [ ] Extract assessment type keywords from question
+      - [ ] Search `SemanticIndexAssessmentType` for matching concepts
+      - [ ] Return semantic concept or null
+
+- [ ] **Task 2.20: Implement field variable resolution**
+  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+  - **Actions:**
+    - [ ] Implement `resolveFieldVariablePlaceholder()`:
+      - [ ] Extract field keywords from question
+      - [ ] Search semantic context for matching field
+      - [ ] Return variable name or null
+
+- [ ] **Task 2.21: Implement clarification generation**
+  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+  - **Actions:**
+    - [ ] Implement `generateClarification()`:
+      - [ ] Generate user-friendly question for missing placeholder
+      - [ ] Provide examples from placeholder.examples
+      - [ ] For enum fields, fetch enum values from `SemanticIndexFieldEnumValue`
+      - [ ] Return ClarificationRequest object
+
+- [ ] **Task 2.22: Implement main resolution logic**
+  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+  - **Actions:**
+    - [ ] Implement `resolvePlaceholders()`:
+      - [ ] For each placeholder in template:
+        - [ ] Call appropriate resolver based on semantic type
+        - [ ] If resolved, store in values map
+        - [ ] If not resolved and required, generate clarification
+      - [ ] Check if all required placeholders resolved
+      - [ ] Return ResolvedPlaceholders
+
+- [ ] **Task 2.23: Add unit tests for placeholder resolver**
+  - **File:** `lib/services/template/placeholder-resolver.service.spec.ts`
+  - **Actions:**
+    - [ ] Test time window resolution:
+      - [ ] "4 weeks" → 28 days
+      - [ ] "3 months" → 90 days
+      - [ ] "12 weeks" → 84 days
+    - [ ] Test assessment type resolution
+    - [ ] Test field variable resolution
+    - [ ] Test clarification generation
+    - [ ] Test full resolution with all placeholders
+
+---
+
+## Phase 2: Template Catalog (Week 3-4)
+
+### Week 3: Priority Templates
+
+#### Day 1-2: Template 1 - Area Reduction at Time Point
+
+- [ ] **Task 3.1: Create template JSON definition**
+  - **File:** `lib/prompts/templates/area-reduction-at-timepoint.json`
+  - **Actions:**
+    - [ ] Create JSON file with full template definition
+    - [ ] Copy structure from design doc Appendix A.1
+    - [ ] Define all placeholders (timePointDays, toleranceDays, reductionThreshold)
+    - [ ] Add keywords and tags
+    - [ ] Add question examples
+    - [ ] Include full SQL pattern
+
+- [ ] **Task 3.2: Insert template into database**
+  - **File:** `lib/db/seeds/templates/area-reduction-at-timepoint.seed.ts`
+  - **Actions:**
+    - [ ] Create seed script
+    - [ ] Insert into `QueryTemplate` table
+    - [ ] Set intent = 'temporal_proximity_query'
+    - [ ] Test insertion on dev database
+
+- [ ] **Task 3.3: Create template-specific placeholder resolver**
+  - **File:** `lib/services/template/resolvers/area-reduction-resolver.ts`
+  - **Actions:**
+    - [ ] Create resolver class extending base resolver
+    - [ ] Add specialized logic for timePointDays extraction
+    - [ ] Handle tolerance window defaults
+    - [ ] Handle reduction threshold defaults
+    - [ ] Add unit tests
+
+- [ ] **Task 3.4: Test template with C1 queries**
+  - **Actions:**
+    - [ ] Extract 5 real queries from C1 scripts about healing rates
+    - [ ] Run through intent classifier (should detect temporal_proximity_query)
+    - [ ] Run through template matcher (should match this template)
+    - [ ] Run through placeholder resolver
+    - [ ] Verify placeholders resolved correctly
+    - [ ] Document any failures
+
+- [ ] **Task 3.5: Test template with C3 queries**
+  - **Actions:**
+    - [ ] Extract 5 real queries from C3 scripts about healing rates
+    - [ ] Run same tests as Task 3.4
+    - [ ] Verify template works across customers
+    - [ ] Document any failures
+
+- [ ] **Task 3.6: Refine template based on test results**
+  - **Actions:**
+    - [ ] Review failed test cases
+    - [ ] Adjust keywords if needed
+    - [ ] Adjust placeholder resolution logic
+    - [ ] Re-test
+    - [ ] Aim for >85% accuracy on test queries
+
+---
+
+#### Day 3: Template 2 - Multi-Assessment Correlation
+
+- [ ] **Task 3.7: Create template JSON definition**
+  - **File:** `lib/prompts/templates/multi-assessment-correlation.json`
+  - **Actions:**
+    - [ ] Create JSON file with full template definition
+    - [ ] Copy structure from design doc (Template 2)
+    - [ ] Define placeholders (sourceAssessmentConcept, targetAssessmentConcept, matchingDateField)
+    - [ ] Add keywords and tags
+    - [ ] Add question examples
+    - [ ] Include full SQL pattern
+
+- [ ] **Task 3.8: Insert template into database**
+  - **File:** `lib/db/seeds/templates/multi-assessment-correlation.seed.ts`
+  - **Actions:**
+    - [ ] Create seed script
+    - [ ] Insert into `QueryTemplate` table
+    - [ ] Set intent = 'assessment_correlation_check'
+    - [ ] Test insertion
+
+- [ ] **Task 3.9: Create template-specific placeholder resolver**
+  - **File:** `lib/services/template/resolvers/assessment-correlation-resolver.ts`
+  - **Actions:**
+    - [ ] Create resolver class
+    - [ ] Add logic to extract source assessment type from question
+    - [ ] Add logic to extract target assessment type from question
+    - [ ] Add logic to identify matching field (usually date field)
+    - [ ] Add unit tests
+
+- [ ] **Task 3.10: Test template with C3 queries**
+  - **Actions:**
+    - [ ] Extract queries about "missing superbills" / billing reconciliation
+    - [ ] Generalize terminology to generic assessment types
+    - [ ] Run through intent classifier
+    - [ ] Run through template matcher
+    - [ ] Verify placeholders resolved
+    - [ ] Test generated SQL (validate structure)
+
+- [ ] **Task 3.11: Refine template based on test results**
+  - **Actions:**
+    - [ ] Review failures
+    - [ ] Adjust keywords and placeholder resolution
+    - [ ] Re-test
+    - [ ] Aim for >70% accuracy (lower bar as this is complex)
+
+---
+
+#### Day 4: Template 3 - Workflow State Filtering
+
+- [ ] **Task 3.12: Create template JSON definition**
+  - **File:** `lib/prompts/templates/workflow-state-filtering.json`
+  - **Actions:**
+    - [ ] Create JSON file with full template definition
+    - [ ] Define placeholders (assessmentConcept, statusFieldVariable, statusValues)
+    - [ ] Add keywords and tags
+    - [ ] Add question examples
+    - [ ] Include full SQL pattern
+
+- [ ] **Task 3.13: Insert template into database**
+  - **File:** `lib/db/seeds/templates/workflow-state-filtering.seed.ts`
+  - **Actions:**
+    - [ ] Create seed script
+    - [ ] Insert into `QueryTemplate` table
+    - [ ] Set intent = 'workflow_status_monitoring'
+    - [ ] Test insertion
+
+- [ ] **Task 3.14: Create template-specific placeholder resolver**
+  - **File:** `lib/services/template/resolvers/workflow-state-resolver.ts`
+  - **Actions:**
+    - [ ] Create resolver class
+    - [ ] Add logic to extract assessment type
+    - [ ] Add logic to identify status field
+    - [ ] Add logic to extract status values from question
+    - [ ] If status values not specified, generate clarification with enum values
+    - [ ] Add unit tests
+
+- [ ] **Task 3.15: Enhance clarification with enum values**
+  - **Actions:**
+    - [ ] When generating clarification for statusValues placeholder:
+      - [ ] Query `SemanticIndexFieldEnumValue` for the status field
+      - [ ] Include enum values as options in clarification
+      - [ ] Support multi-select
+    - [ ] Test clarification generation
+
+- [ ] **Task 3.16: Test template with C3 queries**
+  - **Actions:**
+    - [ ] Extract queries about workflow status / coding status
+    - [ ] Run through pipeline
+    - [ ] Verify enum value clarification triggers correctly
+    - [ ] Test with user-provided status values
+    - [ ] Validate SQL generation
+
+- [ ] **Task 3.17: Refine template based on test results**
+
+---
+
+#### Day 5: Testing & Refinement
+
+- [ ] **Task 3.18: Create golden query test suite**
+  - **File:** `test/golden-queries/customer-queries.json`
+  - **Actions:**
+    - [ ] Extract 20 real queries from C1/C2/C3 scripts
+    - [ ] Categorize by template:
+      - [ ] 8 queries for Template 1 (area reduction)
+      - [ ] 6 queries for Template 2 (multi-assessment)
+      - [ ] 6 queries for Template 3 (workflow state)
+    - [ ] For each query:
+      - [ ] Record original customer question
+      - [ ] Record expected intent
+      - [ ] Record expected template match
+      - [ ] Record expected placeholder values
+      - [ ] Record expected SQL structure (or reference SQL)
+
+- [ ] **Task 3.19: Create golden query test runner**
+  - **File:** `test/golden-queries/golden-query-runner.spec.ts`
+  - **Actions:**
+    - [ ] Create test suite
+    - [ ] For each golden query:
+      - [ ] Run through intent classifier → verify intent
+      - [ ] Run through template matcher → verify template match
+      - [ ] Run through placeholder resolver → verify placeholders
+      - [ ] Compare results to expected
+    - [ ] Calculate accuracy metrics:
+      - [ ] Intent classification accuracy
+      - [ ] Template match accuracy
+      - [ ] Placeholder resolution accuracy
+
+- [ ] **Task 3.20: Run golden query tests**
+  - **Actions:**
+    - [ ] Execute test suite
+    - [ ] Record results for each query
+    - [ ] Calculate overall accuracy
+    - [ ] Target: >85% for Template 1, >70% for Templates 2 & 3
+
+- [ ] **Task 3.21: Analyze failures and iterate**
+  - **Actions:**
+    - [ ] Review failed test cases
+    - [ ] Identify patterns in failures:
+      - [ ] Keyword mismatches?
+      - [ ] Placeholder resolution errors?
+      - [ ] Intent misclassification?
+    - [ ] Make targeted fixes
+    - [ ] Re-run tests
+    - [ ] Iterate until targets met
+
+---
+
+### Week 4: Integration & End-to-End Testing
+
+#### Day 1-2: Orchestrator Integration
+
+- [ ] **Task 4.1: Create TemplateInjector service**
+  - **File:** `lib/services/template/template-injector.service.ts`
+  - **Actions:**
+    - [ ] Create service class:
+      ```typescript
+      export class TemplateInjectorService {
+        constructor(private readonly logger: LoggerService) {}
+
+        injectPlaceholders(
+          sqlPattern: string,
+          placeholderValues: Record<string, any>
+        ): string
+      }
+      ```
+    - [ ] Implement placeholder injection:
+      - [ ] Replace `{placeholderName}` with actual values
+      - [ ] Handle different data types (string, number, array)
+      - [ ] Escape SQL strings properly
+      - [ ] Handle null/undefined values
+    - [ ] Add unit tests
+
+- [ ] **Task 4.2: Create TemplateUsageLogger service**
+  - **File:** `lib/services/template/template-usage-logger.service.ts`
+  - **Actions:**
+    - [ ] Create service class:
+      ```typescript
+      export interface TemplateUsageLog {
+        templateVersionId: number;
+        subQuestionId: number;
+        question: string;
+        success: boolean;
+        mode: 'template_direct' | 'template_reference';
+        latencyMs: number;
+        placeholderValues: Record<string, any>;
+      }
+
+      export class TemplateUsageLoggerService {
+        constructor(private readonly db: DatabaseService) {}
+
+        async logUsage(log: TemplateUsageLog): Promise<void>
+      }
+      ```
+    - [ ] Implement logging to `TemplateUsage` table (existing)
+    - [ ] Add indexes if needed
+
+- [ ] **Task 4.3: Add template-first mode to orchestrator**
+  - **File:** `lib/services/three-mode-orchestrator.service.ts` (existing)
+  - **Actions:**
+    - [ ] Add template matcher to constructor dependencies
+    - [ ] Add placeholder resolver to constructor dependencies
+    - [ ] Add template injector to constructor dependencies
+    - [ ] Add template usage logger to constructor dependencies
+    - [ ] Define configuration:
+      ```typescript
+      const TEMPLATE_ENABLED_INTENTS = [
+        'temporal_proximity_query',
+        'assessment_correlation_check',
+        'workflow_status_monitoring',
+      ];
+      const TEMPLATE_CONFIDENCE_THRESHOLD = 0.85;
+      ```
+
+- [ ] **Task 4.4: Implement template-first execution mode**
+  - **File:** `lib/services/three-mode-orchestrator.service.ts`
+  - **Actions:**
+    - [ ] Add method:
+      ```typescript
+      private async executeTemplateMode(
+        template: Template,
+        question: string,
+        customerId: string,
+        subQuestionId: number
+      ): Promise<OrchestratorResult>
+      ```
+    - [ ] Implement logic:
+      - [ ] Resolve placeholders
+      - [ ] If not all resolved, return clarification
+      - [ ] If all resolved, inject into SQL pattern
+      - [ ] Log template usage
+      - [ ] Return SQL with metadata
+
+- [ ] **Task 4.5: Modify main orchestration flow**
+  - **File:** `lib/services/three-mode-orchestrator.service.ts`
+  - **Actions:**
+    - [ ] Update `orchestrate()` method:
+      ```typescript
+      async orchestrate(question: string, customerId: string) {
+        // Step 1: Intent classification (existing)
+        const intent = await this.intentClassifier.classify(question, customerId);
+
+        // Step 2: Template matching (NEW)
+        if (TEMPLATE_ENABLED_INTENTS.includes(intent)) {
+          const templates = await this.templateMatcher.match(intent, question);
+
+          if (templates.length > 0 && templates[0].confidence > TEMPLATE_CONFIDENCE_THRESHOLD) {
+            // High-confidence template match - use template-first mode
+            return this.executeTemplateMode(templates[0], question, customerId, subQuestionId);
+          }
+        }
+
+        // Step 3: Semantic search (existing - fallback)
+        const context = await this.discoverContext(question, customerId);
+
+        // Step 4: SQL generation with template reference (ENHANCED)
+        const sqlPrompt = this.buildSQLPrompt({
+          question,
+          context,
+          templates: templates?.slice(0, 2),  // Include top 2 as reference
+          intent
+        });
+
+        const sql = await this.llmSQLGenerator.generate(sqlPrompt);
+
+        return { sql, context, templates, mode: 'semantic' };
+      }
+      ```
+    - [ ] Update SQL prompt builder to include template reference
+    - [ ] Add template metadata to response
+
+- [ ] **Task 4.6: Add template reference mode**
+  - **File:** `lib/services/sql-prompt-builder.service.ts` (existing)
+  - **Actions:**
+    - [ ] Update prompt template to include templates section:
+      ```typescript
+      if (templates && templates.length > 0) {
+        prompt += `\n\n## Relevant Query Templates\n\n`;
+        prompt += `The following template(s) may be relevant to this query. You can use them as a reference or adapt them:\n\n`;
+        for (const template of templates) {
+          prompt += `### Template: ${template.name}\n`;
+          prompt += `Description: ${template.description}\n`;
+          prompt += `SQL Pattern:\n\`\`\`sql\n${template.sqlPattern}\n\`\`\`\n\n`;
+        }
+      }
+      ```
+
+- [ ] **Task 4.7: Test orchestrator with template mode**
+  - **Actions:**
+    - [ ] Create test questions that should trigger template mode
+    - [ ] Run through orchestrator
+    - [ ] Verify template-first mode executes for high-confidence matches
+    - [ ] Verify semantic fallback works for low-confidence
+    - [ ] Verify template reference included in prompts
+    - [ ] Check template usage logging works
+
+---
+
+#### Day 3: Assessment Type Discovery Integration
+
+- [ ] **Task 4.8: Add assessment type search to context discovery**
+  - **File:** `lib/services/semantic/context-discovery.service.ts` (existing)
+  - **Actions:**
+    - [ ] Add assessment type searcher to dependencies
+    - [ ] Add step in discovery flow:
+      ```typescript
+      // After field discovery
+      const assessmentTypes = await this.assessmentTypeSearcher.search(
+        customerId,
+        concepts,
+        { minConfidence: 0.7 }
+      );
+      context.assessmentTypes = assessmentTypes;
+      ```
+
+- [x] **Task 4.9: AssessmentTypeSearcher service**
+  - **File:** `lib/services/context-discovery/assessment-type-searcher.service.ts`
+  - **Status:** ✅ Complete (already exists)
+
+- [ ] **Task 4.10: Include assessment types in SQL generation context**
+  - **File:** `lib/services/sql-prompt-builder.service.ts`
+  - **Actions:**
+    - [ ] Add assessment types section to prompt:
+      ```typescript
+      if (context.assessmentTypes && context.assessmentTypes.length > 0) {
+        prompt += `\n\n## Relevant Assessment Types\n\n`;
+        for (const at of context.assessmentTypes) {
+          prompt += `- ${at.assessment_name} (${at.semantic_concept})\n`;
+          prompt += `  Assessment Type ID: ${at.assessment_type_id}\n`;
+          prompt += `  Category: ${at.semantic_category}\n\n`;
+        }
+      }
+      ```
+
+- [ ] **Task 4.11: Test assessment type discovery**
+  - **Actions:**
+    - [ ] Create test question: "Show me wound assessments"
+    - [ ] Run through context discovery
+    - [ ] Verify assessment types found
+    - [ ] Verify included in SQL prompt
+    - [ ] Test SQL generation includes assessment type filter
+
+---
+
+#### Day 4-5: End-to-End Testing & Metrics
+
+- [ ] **Task 4.12: Create comprehensive E2E test suite**
+  - **File:** `test/e2e/template-system.e2e.spec.ts`
+  - **Actions:**
+    - [ ] Create test suite with real customer scenarios
+    - [ ] Test Template 1 (Area Reduction):
+      - [ ] "What is the healing rate at 4 weeks?"
+      - [ ] "Show me area reduction at 12 weeks"
+      - [ ] "Which wounds healed by 8 weeks?"
+    - [ ] Test Template 2 (Multi-Assessment):
+      - [ ] "Show me visits with no billing documentation"
+      - [ ] "Which patients have assessments but no discharge?"
+    - [ ] Test Template 3 (Workflow):
+      - [ ] "Show me forms by status"
+      - [ ] "Documents in pending review state"
+    - [ ] Test assessment-level queries:
+      - [ ] "Show me wound assessments"
+      - [ ] "List all visit documentation"
+    - [ ] Test fallback to semantic mode:
+      - [ ] Questions that don't match templates
+
+- [ ] **Task 4.13: Run E2E tests on staging with real data**
+  - **Actions:**
+    - [ ] Set up test customer in staging
+    - [ ] Index assessment types for customer
+    - [ ] Index enum fields for customer
+    - [ ] Run full E2E test suite
+    - [ ] Record results for each test case
+    - [ ] Measure latencies
+
+- [ ] **Task 4.14: Measure accuracy metrics**
+  - **Actions:**
+    - [ ] Calculate SQL correctness rate:
+      - [ ] Manually review generated SQL
+      - [ ] Compare to expected patterns
+      - [ ] Mark as correct/incorrect
+      - [ ] Target: >85% for template-matched queries
+    - [ ] Calculate intent classification accuracy:
+      - [ ] Verify intent matches expected
+      - [ ] Target: >90%
+    - [ ] Calculate template match accuracy:
+      - [ ] Verify correct template selected
+      - [ ] Target: >85% for high-confidence matches
+
+- [ ] **Task 4.15: Measure performance metrics**
+  - **Actions:**
+    - [ ] Measure query latencies:
+      - [ ] Template-first mode latency (target: 4-6s)
+      - [ ] Semantic mode latency (baseline: 8-12s)
+      - [ ] Template match latency (target: <300ms)
+    - [ ] Calculate template hit rate:
+      - [ ] % of queries using template-first mode
+      - [ ] Target: >40% for test queries
+    - [ ] Measure cache hit rate (if caching implemented)
+
+- [ ] **Task 4.16: Create metrics dashboard**
+  - **File:** `lib/services/metrics/template-metrics.service.ts`
+  - **Actions:**
+    - [ ] Create service to track:
+      - [ ] Template usage counts by template
+      - [ ] Template success rate by template
+      - [ ] Average latency by mode
+      - [ ] Intent classification distribution
+    - [ ] Store metrics in database
+    - [ ] Create API endpoint to fetch metrics
+    - [ ] Build simple dashboard UI (optional)
+
+- [ ] **Task 4.17: Generate metrics report**
+  - **File:** `docs/metrics/template-system-metrics-report.md`
+  - **Actions:**
+    - [ ] Document baseline metrics (before templates)
+    - [ ] Document current metrics (with templates)
+    - [ ] Calculate improvements:
+      - [ ] Accuracy improvement
+      - [ ] Latency reduction
+      - [ ] Template hit rate
+    - [ ] Identify areas for improvement
+    - [ ] Create recommendations for Phase 3
+
+---
+
+## Phase 3: Expansion (Month 2)
+
+### Week 5-6: Additional Templates
+
+- [ ] **Task 5.1: Template 4 - WiFi/SINBAD Score Extraction**
+  - **Actions:**
+    - [ ] Create template JSON definition
+    - [ ] Define placeholders (scoreFieldName, gradeExtractPattern)
+    - [ ] Insert into database
+    - [ ] Create placeholder resolver
+    - [ ] Test with C1 queries
+    - [ ] Target accuracy: >80%
+
+- [ ] **Task 5.2: Template 5 - Wound Type PIVOT/UNPIVOT**
+  - **Actions:**
+    - [ ] Create template JSON definition
+    - [ ] Define placeholders (woundTypeFields)
+    - [ ] Insert into database
+    - [ ] Create placeholder resolver
+    - [ ] Test with C2 queries
+    - [ ] Target accuracy: >75%
+
+- [ ] **Task 5.3: Template 6 - Infection Detection + Antibiotics**
+  - **Actions:**
+    - [ ] Create template JSON definition
+    - [ ] Define placeholders (infectionIndicatorField, antibioticFields)
+    - [ ] Insert into database
+    - [ ] Create placeholder resolver
+    - [ ] Test with C1 queries
+    - [ ] Target accuracy: >75%
+
+- [ ] **Task 5.4: Template 7 - Date Range Inclusion Criteria**
+  - **Actions:**
+    - [ ] Create template JSON definition
+    - [ ] Define placeholders (startDate, endDate, inclusionCriteria)
+    - [ ] Insert into database
+    - [ ] Create placeholder resolver
+    - [ ] Test with C1 queries
+    - [ ] Target accuracy: >80%
+
+- [ ] **Task 5.5: Template 8 - Dynamic Assessment Type Lookup**
+  - **Actions:**
+    - [ ] Create template JSON definition
+    - [ ] Define placeholders (assessmentNamePattern)
+    - [ ] Insert into database
+    - [ ] Create placeholder resolver
+    - [ ] Test with all customer queries
+    - [ ] Target accuracy: >90% (foundational pattern)
+
+- [ ] **Task 5.6: Update golden query test suite**
+  - **Actions:**
+    - [ ] Add 20 more queries covering new templates
+    - [ ] Run full test suite (40 total queries)
+    - [ ] Calculate overall accuracy
+    - [ ] Target: >80% across all templates
+
+---
+
+### Week 7-8: Optimization & Production Readiness
+
+#### Optimization
+
+- [ ] **Task 6.1: Optimize template matching performance**
+  - **Actions:**
+    - [ ] Profile template matcher
+    - [ ] Identify bottlenecks
+    - [ ] Add caching for template definitions (in-memory)
+    - [ ] Optimize keyword matching algorithm
+    - [ ] Measure improved latency
+    - [ ] Target: <300ms for template matching
+
+- [ ] **Task 6.2: Optimize placeholder resolution performance**
+  - **Actions:**
+    - [ ] Profile placeholder resolver
+    - [ ] Cache semantic context lookups
+    - [ ] Optimize regex pattern matching
+    - [ ] Measure improved latency
+
+- [ ] **Task 6.3: Add caching for assessment type searches**
+  - **Actions:**
+    - [ ] Cache assessment type index per customer
+    - [ ] Invalidate cache on re-indexing
+    - [ ] Measure cache hit rate
+    - [ ] Target: >80% cache hit rate
+
+---
+
+#### Monitoring & Observability
+
+- [ ] **Task 6.4: Add detailed logging**
+  - **Actions:**
+    - [ ] Log intent classification results
+    - [ ] Log template match results with confidence scores
+    - [ ] Log placeholder resolution steps
+    - [ ] Log template usage (direct vs reference mode)
+    - [ ] Include trace IDs for correlation
+
+- [ ] **Task 6.5: Add error tracking**
+  - **Actions:**
+    - [ ] Capture and log template matching failures
+    - [ ] Capture placeholder resolution failures
+    - [ ] Capture SQL generation failures
+    - [ ] Send alerts for high failure rates
+
+- [ ] **Task 6.6: Create template usage analytics dashboard**
+  - **File:** `src/admin/components/TemplateAnalyticsDashboard.tsx`
+  - **Actions:**
+    - [ ] Display template usage by template (bar chart)
+    - [ ] Display success rate by template (table)
+    - [ ] Display average latency by mode (line chart)
+    - [ ] Display intent classification distribution (pie chart)
+    - [ ] Add date range filter
+    - [ ] Add customer filter
+
+---
+
+#### Documentation
+
+- [ ] **Task 6.7: Write template creation guide**
+  - **File:** `docs/guides/creating-query-templates.md`
+  - **Actions:**
+    - [ ] Explain template structure
+    - [ ] Document placeholder types
+    - [ ] Document keyword selection best practices
+    - [ ] Provide template creation checklist
+    - [ ] Include examples
+
+- [ ] **Task 6.8: Write template testing guide**
+  - **File:** `docs/guides/testing-query-templates.md`
+  - **Actions:**
+    - [ ] Explain golden query test suite
+    - [ ] Document how to add test cases
+    - [ ] Document accuracy metrics
+    - [ ] Provide testing checklist
+
+- [ ] **Task 6.9: Write runbook for template system**
+  - **File:** `docs/runbooks/template-system-operations.md`
+  - **Actions:**
+    - [ ] Document how to add new templates
+    - [ ] Document how to update existing templates
+    - [ ] Document how to monitor template performance
+    - [ ] Document troubleshooting steps
+    - [ ] Document rollback procedures
+
+- [ ] **Task 6.10: Update user-facing documentation**
+  - **File:** `docs/user-guide/query-capabilities.md`
+  - **Actions:**
+    - [ ] Document new query capabilities
+    - [ ] Provide example questions for each template
+    - [ ] Explain when templates are used vs semantic mode
+    - [ ] Add FAQ section
+
+---
+
+#### Production Deployment
+
+- [ ] **Task 6.11: Create deployment plan**
+  - **File:** `docs/deployment/template-system-deployment-plan.md`
+  - **Actions:**
+    - [ ] Document deployment steps
+    - [ ] Define rollout strategy (gradual vs full)
+    - [ ] Define success criteria
+    - [ ] Define rollback criteria
+    - [ ] Assign responsibilities
+
+- [ ] **Task 6.12: Deploy to staging**
+  - **Actions:**
+    - [ ] Run all migrations
+    - [ ] Deploy code changes
+    - [ ] Run smoke tests
+    - [ ] Run E2E tests
+    - [ ] Verify metrics collection
+    - [ ] Test with real users (internal)
+
+- [ ] **Task 6.13: Run staging validation**
+  - **Actions:**
+    - [ ] Run for 3-5 days in staging
+    - [ ] Monitor error rates
+    - [ ] Monitor performance metrics
+    - [ ] Collect user feedback
+    - [ ] Fix any critical issues
+
+- [ ] **Task 6.14: Deploy to production (gradual rollout)**
+  - **Actions:**
+    - [ ] Enable template system for 10% of traffic (feature flag)
+    - [ ] Monitor for 24 hours
+    - [ ] Increase to 25% if stable
+    - [ ] Monitor for 24 hours
+    - [ ] Increase to 50% if stable
+    - [ ] Monitor for 24 hours
+    - [ ] Increase to 100% if stable
+
+- [ ] **Task 6.15: Post-deployment validation**
+  - **Actions:**
+    - [ ] Run golden query tests in production
+    - [ ] Measure production accuracy metrics
+    - [ ] Measure production latency metrics
+    - [ ] Verify template hit rate meets target (>40%)
+    - [ ] Monitor error rates for 1 week
+    - [ ] Collect user feedback
+
+---
+
+## Testing & Validation
+
+### Unit Tests
+
+- [ ] **Intent Classifier Tests**
+  - [ ] Test temporal proximity intent detection (10+ test cases)
+  - [ ] Test assessment correlation intent detection (10+ test cases)
+  - [ ] Test workflow status intent detection (10+ test cases)
+
+- [ ] **Template Matcher Tests**
+  - [ ] Test keyword matching algorithm (20+ test cases)
+  - [ ] Test tag matching algorithm (10+ test cases)
+  - [ ] Test confidence calculation (10+ test cases)
+  - [ ] Test filtering and sorting (5+ test cases)
+
+- [ ] **Placeholder Resolver Tests**
+  - [ ] Test time window resolution (15+ test cases)
+  - [ ] Test assessment type resolution (10+ test cases)
+  - [ ] Test field variable resolution (10+ test cases)
+  - [ ] Test clarification generation (10+ test cases)
+  - [ ] Test full resolution flow (10+ test cases)
+
+- [ ] **Template Injector Tests**
+  - [ ] Test placeholder injection (15+ test cases)
+  - [ ] Test SQL escaping (10+ test cases)
+  - [ ] Test null/undefined handling (5+ test cases)
+
+- [x] **Assessment Type Indexer Tests** (likely exists)
+  - [x] Test pattern matching (15+ test cases)
+  - [x] Test indexing flow (5+ test cases)
+
+- [x] **Enum Field Detector Tests** (likely exists)
+  - [x] Test enum field detection (10+ test cases)
+  - [x] Test distinct value extraction (5+ test cases)
+
+---
+
+### Integration Tests
+
+- [ ] **Orchestrator Integration Tests**
+  - [ ] Test template-first mode execution
+  - [ ] Test template reference mode execution
+  - [ ] Test semantic fallback mode
+  - [ ] Test clarification flow
+  - [ ] Test template usage logging
+
+- [ ] **Context Discovery Integration Tests**
+  - [ ] Test assessment type discovery integration
+  - [ ] Test combined field + assessment type discovery
+
+---
+
+### E2E Tests
+
+- [ ] **Golden Query Test Suite** (40 queries total)
+  - [ ] 12 queries for Template 1 (Area Reduction)
+  - [ ] 8 queries for Template 2 (Multi-Assessment)
+  - [ ] 8 queries for Template 3 (Workflow State)
+  - [ ] 4 queries for Template 4 (WiFi/SINBAD)
+  - [ ] 4 queries for Template 5 (PIVOT/UNPIVOT)
+  - [ ] 4 queries for Template 6 (Infection)
+
+- [ ] **Cross-Customer Tests**
+  - [ ] Test same query pattern across C1, C2, C3
+  - [ ] Verify template reusability
+
+---
+
+## Success Metrics
+
+### Accuracy Metrics (Targets)
+
+- [ ] **SQL Correctness Rate:** >85% (baseline: ~60%)
+  - Measured via golden query test suite
+
+- [ ] **Temporal Query Accuracy:** >80% (baseline: ~20%)
+  - Subset: "at X weeks" queries
+
+- [ ] **Assessment Query Accuracy:** >85% (baseline: ~40%)
+  - Subset: "show me [assessment]" queries
+
+- [ ] **Multi-Assessment Correlation:** >70% (baseline: ~0%)
+  - Subset: "X with no Y" queries
+
+### Performance Metrics (Targets)
+
+- [ ] **Template-First Mode Latency:** 4-6s (baseline: 8-12s)
+  - 50% reduction via semantic search bypass
+
+- [ ] **Template Match Latency:** <300ms
+  - New capability
+
+- [ ] **Template Hit Rate:** >40%
+  - % of queries using template-first mode
+
+- [ ] **Cache Hit Rate:** 50-60% (baseline: 20-30%)
+  - For templated queries
+
+### Business Metrics (Targets)
+
+- [ ] **Customer Query Success Rate:** >80%
+  - Reduced support burden
+
+- [ ] **Template Reuse Across Customers:** >60%
+  - Demonstrates generalizability
+
+- [ ] **Time to Add New Customer:** <2 weeks
+  - Faster onboarding with templates
+
+---
+
+## Risk Mitigation
+
+### Risk 1: Template Overfitting
+- **Mitigation:** Use generic terminology, test across customers
+- **Action:** Review all templates for customer-specific terms before production
+
+### Risk 2: LLM Ignoring Templates
+- **Mitigation:** Two-mode approach (direct vs reference)
+- **Action:** Monitor template reference mode effectiveness
+
+### Risk 3: Placeholder Resolution Errors
+- **Mitigation:** Extensive unit tests, clarification fallback
+- **Action:** Create 100+ test cases for placeholder resolver
+
+### Risk 4: Template Maintenance Burden
+- **Mitigation:** Template versioning, monitoring, auto-deprecation
+- **Action:** Set up alerts for template success rate drops
+
+---
+
+## Appendix: Completed Work Details
+
+### Migration 030: SemanticIndexAssessmentType
+
+**Key Features:**
+- Assessment type ID (from rpt.AssessmentTypeVersion)
+- Semantic concept mapping (e.g., clinical_wound_assessment)
+- Category classification (clinical, billing, administrative, treatment)
+- Confidence scoring
+- Discovery run tracking
+- Full-text search on assessment names
+
+### Migration 031: SemanticIndexFieldEnumValue
+
+**Key Features:**
+- Enum value storage with display labels
+- Usage count tracking
+- Sort order support
+- Active/deprecated status
+- Helper functions: `get_field_enum_values()`, `increment_enum_usage()`
+
+### Migration 032: SemanticIndexNonFormEnumValue
+
+**Key Features:**
+- Extends enum support to non-form columns
+- Mirrors structure of form field enum values
+- Full-text search on enum values
+
+### AssessmentTypeTaxonomy
+
+**30+ Semantic Concepts:**
+- Clinical: 15 concepts (wound_assessment, visit_documentation, initial_assessment, etc.)
+- Billing: 3 concepts (billing_documentation, charge_capture, claim_form)
+- Administrative: 6 concepts (intake, consent, demographics, etc.)
+- Treatment: 6 concepts (plan, protocol, order, etc.)
+
+**Pattern Matching:**
+- Regex patterns for assessment name matching
+- Keyword fallback with reduced confidence
+- Confidence scoring: 0.85-0.95 for pattern matches, 0.6-0.7 for keyword matches
+
+---
+
+## Document History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2025-11-26 | Engineering Team | Initial implementation plan |
+| 1.1 | 2025-11-26 | Engineering Team | Updated with completed Week 1 work |
+
+---
+
+**End of Document**

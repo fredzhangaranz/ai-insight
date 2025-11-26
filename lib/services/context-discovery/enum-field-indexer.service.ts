@@ -2,9 +2,14 @@
  * Enum Field Indexer Service
  *
  * Detects and indexes enum fields (dropdown/radio fields with limited value sets)
- * from non-form columns in rpt.* tables.
+ * from non-form columns in rpt.* tables (e.g., rpt.Visit.status, rpt.Wound.level0Text).
+ *
+ * IMPORTANT: Form field enums are NOT handled here. Form field dropdown options are
+ * already indexed in SemanticIndexOption during form discovery for SingleSelect/MultiSelect
+ * fields. This service only handles non-form database columns.
  *
  * Created: 2025-11-20
+ * Updated: 2025-11-26 - Disabled form field enum detection (redundant with SemanticIndexOption)
  * Purpose: Phase 5A - Day 3 - Enum Field Detection
  * See: docs/design/templating_system/templating_improvement_real_customer_analysis.md Section 3.3
  */
@@ -34,8 +39,8 @@ export interface EnumFieldDetectionResult {
  * Responsibilities:
  * 1. Detect enum fields from non-form columns using pattern matching + cardinality analysis
  * 2. Extract distinct values and usage counts from actual data
- * 3. Populate SemanticIndexFieldEnumValue table
- * 4. Mark fields as field_type='enum' in SemanticIndexField
+ * 3. Populate SemanticIndexNonFormEnumValue table
+ * 4. Mark fields as field_type='enum' in SemanticIndexNonForm
  */
 export class EnumFieldIndexer {
   private customerId: string;
@@ -81,7 +86,33 @@ export class EnumFieldIndexer {
   }
 
   /**
-   * Detect if a field is an enum and extract its values
+   * Get all form fields for enum detection
+   *
+   * DISABLED: Form field enums are already handled by SemanticIndexOption
+   * which is populated during form discovery for SingleSelect/MultiSelect fields.
+   * This method now returns an empty array to skip form field enum detection.
+   *
+   * Rationale:
+   * - SemanticIndexOption already stores dropdown options for SingleSelect/MultiSelect fields
+   * - Detecting enums from Text fields is complex, slow, and rarely useful
+   * - Non-form enum detection (rpt.* columns) is still valuable and remains active
+   */
+  async getFormFields(): Promise<
+    Array<{
+      fieldId: string;
+      fieldName: string;
+      formName: string;
+      attributeTypeId: string;
+    }>
+  > {
+    // Form field enum detection is disabled - return empty array
+    // Use SemanticIndexOption for form field dropdown values instead
+    console.log('[EnumFieldIndexer] Form field enum detection is disabled (using SemanticIndexOption instead)');
+    return [];
+  }
+
+  /**
+   * Detect if a non-form field is an enum and extract its values
    */
   async detectEnumForField(
     fieldId: string,
@@ -126,7 +157,7 @@ export class EnumFieldIndexer {
   }
 
   /**
-   * Save enum values to database
+   * Save enum values to database (for non-form fields)
    */
   async saveEnumValues(detection: EnumFieldDetectionResult): Promise<void> {
     const pool = await getInsightGenDbPool();
@@ -174,27 +205,38 @@ export class EnumFieldIndexer {
   }
 
   /**
-   * Index all enum fields for this customer
+   * Index all enum fields for this customer (non-form fields only)
+   *
+   * Note: Form field enums are handled by SemanticIndexOption (populated during form discovery)
    */
   async indexAll(): Promise<{
     total: number;
     detected: number;
     skipped: number;
+    formFieldsTotal: number;
+    formFieldsDetected: number;
+    nonFormFieldsTotal: number;
+    nonFormFieldsDetected: number;
     results: EnumFieldDetectionResult[];
   }> {
     console.log(
       `[EnumFieldIndexer] Starting enum field detection for customer ${this.customerId}`
     );
-
-    // Get all non-form fields
-    const fields = await this.getNonFormFields();
-    console.log(`[EnumFieldIndexer] Found ${fields.length} non-form fields to analyze`);
+    console.log(
+      `[EnumFieldIndexer] Note: Form field enums are handled by SemanticIndexOption (not this indexer)`
+    );
 
     const results: EnumFieldDetectionResult[] = [];
     let detected = 0;
     let skipped = 0;
 
-    for (const field of fields) {
+    // Process non-form fields
+    console.log(`[EnumFieldIndexer] Processing non-form fields...`);
+    const nonFormFields = await this.getNonFormFields();
+    console.log(`[EnumFieldIndexer] Found ${nonFormFields.length} non-form fields to analyze`);
+
+    let nonFormDetected = 0;
+    for (const field of nonFormFields) {
       const detection = await this.detectEnumForField(
         field.fieldId,
         field.fieldName,
@@ -207,8 +249,9 @@ export class EnumFieldIndexer {
       if (detection.isEnum) {
         await this.saveEnumValues(detection);
         detected++;
+        nonFormDetected++;
         console.log(
-          `[EnumFieldIndexer] ✅ Enum detected: ${detection.fieldName} (${detection.cardinality} values)`
+          `[EnumFieldIndexer] ✅ Non-form enum detected: ${detection.fieldName} (${detection.cardinality} values)`
         );
       } else {
         skipped++;
@@ -218,12 +261,23 @@ export class EnumFieldIndexer {
       }
     }
 
-    console.log(`[EnumFieldIndexer] Complete: ${detected} enums detected, ${skipped} skipped`);
+    // Form field detection is disabled (handled by SemanticIndexOption)
+    const formFields = await this.getFormFields(); // Returns empty array
+    const formDetected = 0;
+
+    const totalFields = nonFormFields.length + formFields.length;
+    console.log(
+      `[EnumFieldIndexer] Complete: ${detected} enums detected (${formDetected} form, ${nonFormDetected} non-form), ${skipped} skipped`
+    );
 
     return {
-      total: fields.length,
+      total: totalFields,
       detected,
       skipped,
+      formFieldsTotal: 0, // Form fields are handled by SemanticIndexOption
+      formFieldsDetected: 0,
+      nonFormFieldsTotal: nonFormFields.length,
+      nonFormFieldsDetected: nonFormDetected,
       results,
     };
   }
@@ -274,12 +328,15 @@ export class EnumFieldIndexer {
   }
 
   /**
-   * Clear all enum data for this customer
+   * Clear all enum data for this customer (non-form fields only)
+   *
+   * Note: Form field enum data (SemanticIndexOption) is managed by form discovery,
+   * not this service.
    */
   async clearAll(): Promise<number> {
     const pool = await getInsightGenDbPool();
 
-    // 1. Delete enum values (CASCADE will handle this, but explicit is clearer)
+    // 1. Delete non-form enum values (CASCADE will handle this, but explicit is clearer)
     await pool.query(
       `DELETE FROM "SemanticIndexNonFormEnumValue"
        WHERE nonform_id IN (
@@ -289,7 +346,7 @@ export class EnumFieldIndexer {
       [this.customerId]
     );
 
-    // 2. Reset field_type to 'text' for enum fields
+    // 2. Reset field_type to 'text' for non-form enum fields
     const result = await pool.query(
       `UPDATE "SemanticIndexNonForm"
        SET field_type = 'text'
@@ -299,7 +356,7 @@ export class EnumFieldIndexer {
     );
 
     const count = result.rowCount || 0;
-    console.log(`[EnumFieldIndexer] Cleared ${count} enum fields`);
+    console.log(`[EnumFieldIndexer] Cleared ${count} non-form enum fields`);
     return count;
   }
 }

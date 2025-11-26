@@ -4,8 +4,7 @@
  * Purpose: Extend SemanticIndexNonForm to support enum field detection
  *
  * This migration adds field_type to SemanticIndexNonForm so that non-form
- * columns can be marked as enums, and updates the SemanticIndexFieldEnumValue
- * table to support both form and non-form enum fields.
+ * columns can be marked as enums.
  *
  * Created: 2025-11-20
  * Related: Phase 5A - Day 3 - Enum Field Detection for Non-Form Columns
@@ -36,7 +35,8 @@ END $$;
 --
 -- Purpose: Store enum/dropdown values for non-form fields
 --
--- Similar to SemanticIndexFieldEnumValue but for non-form columns
+-- Note: Form field dropdown values are stored in SemanticIndexOption
+-- (populated during form discovery for SingleSelect/MultiSelect fields)
 --
 CREATE TABLE IF NOT EXISTS "SemanticIndexNonFormEnumValue" (
   id SERIAL PRIMARY KEY,

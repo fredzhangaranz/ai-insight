@@ -501,9 +501,12 @@ export async function runFullDiscovery(
       );
       aggregateWarnings.push(...nonFormSchemaResult.warnings);
       aggregateErrors.push(...nonFormSchemaResult.errors);
+    }
 
-      // Stage 2.5: Enum Field Detection (Phase 5A - Day 3)
-      // Detect enum fields from non-form columns immediately after discovery
+    // Stage 2.5: Enum Field Detection (Phase 5A - Day 3)
+    // Detect enum fields from both form and non-form columns
+    // Runs if EITHER formDiscovery OR nonFormSchema was enabled
+    if (stages.formDiscovery || stages.nonFormSchema) {
       logger.startTimer("enum_field_detection");
       try {
         const enumIndexer = new EnumFieldIndexer(customerRow.id, connectionString);
@@ -512,15 +515,19 @@ export async function runFullDiscovery(
           "enum_field_detection",
           "enum_field_detection",
           "orchestrator",
-          `Enum field detection completed: ${enumResult.detected} enum fields detected`,
+          `Enum field detection completed: ${enumResult.detected} enum fields detected (${enumResult.formFieldsDetected} form, ${enumResult.nonFormFieldsDetected} non-form)`,
           {
             total: enumResult.total,
             detected: enumResult.detected,
             skipped: enumResult.skipped,
+            formFieldsTotal: enumResult.formFieldsTotal,
+            formFieldsDetected: enumResult.formFieldsDetected,
+            nonFormFieldsTotal: enumResult.nonFormFieldsTotal,
+            nonFormFieldsDetected: enumResult.nonFormFieldsDetected,
           }
         );
         console.log(
-          `[DiscoveryOrchestrator] Enum detection: ${enumResult.detected}/${enumResult.total} fields are enums`
+          `[DiscoveryOrchestrator] Enum detection: ${enumResult.detected}/${enumResult.total} fields are enums (${enumResult.formFieldsDetected} form, ${enumResult.nonFormFieldsDetected} non-form)`
         );
       } catch (error: any) {
         logger.error(
@@ -815,6 +822,39 @@ export async function runFullDiscoveryWithProgress(
         stage: "non_form_schema",
         columnsDiscovered: nonFormSchemaResult.discoveredColumns,
       });
+    }
+
+    // Stage 2.5: Enum Field Detection (Phase 5A - Day 3)
+    // Detect enum fields from both form and non-form columns
+    // Runs if EITHER formDiscovery OR nonFormSchema was enabled
+    if (stages.formDiscovery || stages.nonFormSchema) {
+      sendEvent("stage-start", {
+        stage: "enum_field_detection",
+        name: "Enum Field Detection",
+      });
+      try {
+        const enumIndexer = new EnumFieldIndexer(customerRow.id, connectionString);
+        const enumResult = await enumIndexer.indexAll();
+        sendEvent("stage-complete", {
+          stage: "enum_field_detection",
+          total: enumResult.total,
+          detected: enumResult.detected,
+          formFieldsDetected: enumResult.formFieldsDetected,
+          nonFormFieldsDetected: enumResult.nonFormFieldsDetected,
+        });
+        console.log(
+          `[DiscoveryOrchestrator] Enum detection: ${enumResult.detected}/${enumResult.total} fields are enums (${enumResult.formFieldsDetected} form, ${enumResult.nonFormFieldsDetected} non-form)`
+        );
+      } catch (error: any) {
+        console.error(
+          `[DiscoveryOrchestrator] Enum field detection failed: ${error.message}`
+        );
+        aggregateWarnings.push(`Enum field detection failed: ${error.message}`);
+        sendEvent("stage-error", {
+          stage: "enum_field_detection",
+          error: error.message,
+        });
+      }
     }
 
     // Stage 3: Relationship Discovery
