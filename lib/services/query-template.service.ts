@@ -5,6 +5,8 @@ import { getInsightGenDbPool } from "../db";
 import { isTemplateSystemEnabled } from "../config/template-flags";
 import {
   PlaceholdersSpec,
+  PlaceholdersSpecSlot,
+  TemplateResultShape,
   validateTemplate,
   ValidationResult,
   ValidationError,
@@ -30,6 +32,8 @@ export interface QueryTemplate {
   successRate?: number;
   successCount?: number;
   usageCount?: number;
+  resultShape?: TemplateResultShape | null;
+  notes?: string | null;
 }
 
 export interface TemplateCatalog {
@@ -42,6 +46,8 @@ export interface TemplateMatch {
   baseScore: number;
   matchedKeywords: string[];
   matchedExample?: string;
+  matchedTags?: string[];
+  matchedConcepts?: string[];
   successRate?: number;
 }
 
@@ -56,6 +62,13 @@ const catalogCache: Partial<
   Record<TemplateCatalogSource, TemplateCatalogCacheEntry>
 > = {};
 
+interface TemplateCatalogIndex {
+  byTemplateId: Map<number, QueryTemplate>;
+  byIntent: Map<string, QueryTemplate[]>;
+}
+
+let catalogIndex: TemplateCatalogIndex | null = null;
+
 interface DbTemplateRow {
   templateId: number;
   templateVersionId: number;
@@ -65,6 +78,8 @@ interface DbTemplateRow {
   status: TemplateStatus;
   sqlPattern: string;
   placeholdersSpec: PlaceholdersSpec | null;
+  resultShape: TemplateResultShape | null;
+  notes: string | null;
   keywords: string[] | null;
   tags: string[] | null;
   examples: string[] | null;
@@ -115,6 +130,7 @@ export async function getTemplates(options?: {
   }
 
   catalogCache[source] = { catalog, loadedAt: Date.now() };
+  rebuildTemplateIndex(catalog);
   return catalog;
 }
 
@@ -129,7 +145,9 @@ async function loadTemplateCatalog(
 
 async function loadCatalogFromJson(): Promise<TemplateCatalog> {
   const jsonRaw = await fs.promises.readFile(CATALOG_RELATIVE_PATH, "utf-8");
-  return JSON.parse(jsonRaw) as TemplateCatalog;
+  const parsed = JSON.parse(jsonRaw) as TemplateCatalog;
+  const templates = normalizeCatalogTemplates(parsed?.templates ?? []);
+  return { templates };
 }
 
 let hasWarnedAboutDbFallback = false;
@@ -145,11 +163,13 @@ async function loadCatalogFromDb(): Promise<TemplateCatalog> {
          t.description,
          t.intent,
          t.status,
-         tv."sqlPattern" AS "sqlPattern",
-         tv."placeholdersSpec" AS "placeholdersSpec",
-         tv.keywords,
-         tv.tags,
-         tv.examples,
+       tv."sqlPattern" AS "sqlPattern",
+       tv."placeholdersSpec" AS "placeholdersSpec",
+       tv."resultShape" AS "resultShape",
+       tv.notes,
+       tv.keywords,
+       tv.tags,
+       tv.examples,
          tv.version,
          usage.success_count AS "successCount",
          usage.total_count AS "usageCount"
@@ -361,6 +381,7 @@ export function resetTemplateCatalogCache(): void {
   delete catalogCache.json;
   delete catalogCache.db;
   hasWarnedAboutDbFallback = false;
+  catalogIndex = null;
 }
 
 export function reloadTemplateCatalog(): void {
@@ -385,21 +406,12 @@ function clamp01(value: number): number {
 }
 
 function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
-  const placeholdersSpec = row.placeholdersSpec as
-    | { slots?: Array<{ name?: string }> }
-    | null
-    | undefined;
-
-  const slots = Array.isArray(placeholdersSpec?.slots)
-    ? placeholdersSpec!.slots
+  const normalizedSpec = normalizePlaceholdersSpec(row.placeholdersSpec);
+  const slots = Array.isArray(normalizedSpec?.slots)
+    ? normalizedSpec!.slots
         .map((slot) => (slot?.name ?? "").trim())
         .filter((name): name is string => Boolean(name))
     : [];
-
-  const normalizeTextArray = (value: string[] | null | undefined) =>
-    Array.isArray(value) && value.length > 0
-      ? value.map((item) => String(item))
-      : undefined;
 
   const successCount = row.successCount ?? 0;
   const usageCount = row.usageCount ?? 0;
@@ -408,7 +420,7 @@ function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
       ? Math.min(Math.max(successCount / usageCount, 0), 1)
       : undefined;
 
-  return {
+  const template: QueryTemplate = {
     templateId: row.templateId,
     templateVersionId: row.templateVersionId,
     name: row.name,
@@ -416,14 +428,165 @@ function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
     sqlPattern: row.sqlPattern,
     version: row.version,
     placeholders: slots.length > 0 ? slots : undefined,
-    placeholdersSpec: row.placeholdersSpec ?? undefined,
-    keywords: normalizeTextArray(row.keywords),
-    tags: normalizeTextArray(row.tags),
-    questionExamples: normalizeTextArray(row.examples),
+    placeholdersSpec: normalizedSpec ?? undefined,
+    keywords: normalizeCatalogStringArray(row.keywords),
+    tags: normalizeCatalogStringArray(row.tags),
+    questionExamples: normalizeCatalogStringArray(row.examples),
     intent: row.intent,
     status: row.status,
     successRate,
     successCount,
     usageCount,
+    resultShape: row.resultShape ?? undefined,
+    notes: row.notes ?? undefined,
   };
+
+  return normalizeLoadedTemplate(template);
+}
+
+function normalizePlaceholdersSpec(
+  spec: PlaceholdersSpec | null
+): PlaceholdersSpec | null {
+  if (!spec?.slots) return spec ?? null;
+  const slots = spec.slots
+    .map((slot) => {
+      if (!slot?.name) return null;
+      const semanticValue =
+        typeof slot.semantic === "string"
+          ? slot.semantic.trim()
+          : slot.semantic;
+      return {
+        ...slot,
+        name: slot.name.trim(),
+        semantic:
+          typeof semanticValue === "string" && semanticValue.length > 0
+            ? semanticValue
+            : semanticValue ?? null,
+      };
+    })
+    .filter((slot): slot is PlaceholdersSpecSlot => Boolean(slot));
+  return { ...spec, slots };
+}
+
+function normalizeCatalogStringArray(
+  value: string[] | null | undefined
+): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const deduped = Array.from(
+    new Set(value.map((item) => String(item).trim()).filter(Boolean))
+  );
+  return deduped.length > 0 ? deduped : undefined;
+}
+
+function normalizeLoadedTemplate(template: QueryTemplate): QueryTemplate {
+  const normalizedSpec = normalizePlaceholdersSpec(
+    template.placeholdersSpec ?? null
+  );
+  const placeholdersFromSpec =
+    normalizedSpec?.slots?.map((slot) => slot.name) ?? [];
+
+  const normalizedPlaceholders =
+    normalizeCatalogStringArray(template.placeholders) ??
+    (placeholdersFromSpec.length > 0 ? placeholdersFromSpec : undefined);
+
+  const normalizedTemplate: QueryTemplate = {
+    ...template,
+    name: template.name?.trim() ?? template.name,
+    description: normalizeOptionalString(template.description),
+    intent: normalizeOptionalString(template.intent),
+    notes: normalizeOptionalString(template.notes),
+    keywords: normalizeCatalogStringArray(template.keywords),
+    tags: normalizeCatalogStringArray(template.tags),
+    questionExamples: normalizeCatalogStringArray(
+      template.questionExamples
+    ),
+    placeholders: normalizedPlaceholders,
+  };
+
+  if (normalizedSpec) {
+    normalizedTemplate.placeholdersSpec = normalizedSpec;
+  } else if (normalizedTemplate.placeholdersSpec) {
+    normalizedTemplate.placeholdersSpec = undefined;
+  }
+
+  return normalizedTemplate;
+}
+
+function normalizeOptionalString(
+  value?: string | null
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeCatalogTemplates(
+  templates: QueryTemplate[]
+): QueryTemplate[] {
+  return templates
+    .filter((tpl): tpl is QueryTemplate => Boolean(tpl))
+    .map((tpl) => normalizeLoadedTemplate(tpl));
+}
+
+function rebuildTemplateIndex(catalog: TemplateCatalog): void {
+  const byTemplateId = new Map<number, QueryTemplate>();
+  const byIntent = new Map<string, QueryTemplate[]>();
+
+  for (const template of catalog.templates) {
+    if (typeof template.templateId === "number") {
+      byTemplateId.set(template.templateId, template);
+    }
+
+    const intentKey = normalizeIntentKey(template.intent);
+    if (intentKey) {
+      const list = byIntent.get(intentKey);
+      if (list) {
+        list.push(template);
+      } else {
+        byIntent.set(intentKey, [template]);
+      }
+    }
+  }
+
+  catalogIndex = { byTemplateId, byIntent };
+}
+
+function normalizeIntentKey(intent?: string): string | null {
+  const key = intent?.trim().toLowerCase();
+  return key && key.length > 0 ? key : null;
+}
+
+function ensureCatalogIndex(catalog: TemplateCatalog): TemplateCatalogIndex {
+  if (!catalogIndex) {
+    rebuildTemplateIndex(catalog);
+  }
+  return catalogIndex!;
+}
+
+export async function getTemplateById(
+  templateId: number,
+  options?: { forceReload?: boolean }
+): Promise<QueryTemplate | undefined> {
+  if (!Number.isFinite(templateId)) {
+    return undefined;
+  }
+  const catalog = await getTemplates(options);
+  const index = ensureCatalogIndex(catalog);
+  return index.byTemplateId.get(templateId);
+}
+
+export async function getTemplatesByIntent(
+  intent: string,
+  options?: { forceReload?: boolean }
+): Promise<QueryTemplate[]> {
+  const key = normalizeIntentKey(intent);
+  if (!key) return [];
+
+  const catalog = await getTemplates(options);
+  const index = ensureCatalogIndex(catalog);
+  const matches = index.byIntent.get(key);
+  if (!matches || matches.length === 0) {
+    return [];
+  }
+  return [...matches];
 }

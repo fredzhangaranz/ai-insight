@@ -10,15 +10,34 @@ export interface TemplateMatchResult {
   confidence: number;
   matchedKeywords?: string[];
   matchedExample?: string;
+  matchedTags?: string[];
+  explanations?: TemplateMatchExplanation[];
+}
+
+export interface TemplateMatchExplanation {
+  template: QueryTemplate;
+  confidence: number;
+  matchedKeywords: string[];
+  matchedTags: string[];
+  matchedConcepts: string[];
+  matchedExample?: string;
+  successRate?: number;
 }
 
 /**
  * Attempts to match a question to an existing template
  * Returns the best matching template if confidence > 0.7
  */
+const EXAMPLE_WEIGHT = 0.5;
+const KEYWORD_WEIGHT = 0.3;
+const TAG_WEIGHT = 0.15;
+const INTENT_WEIGHT = 0.05;
+
 export async function matchTemplate(
   question: string,
-  customerId: string
+  customerId: string,
+  concepts: string[] = [],
+  options?: { topK?: number }
 ): Promise<TemplateMatchResult> {
   const catalog = await getTemplates();
 
@@ -36,14 +55,31 @@ export async function matchTemplate(
   }
 
   // Score each template against the question
+  const normalizedConcepts = Array.isArray(concepts)
+    ? concepts.map((concept) => concept.toLowerCase().trim()).filter(Boolean)
+    : [];
+
   const matches: TemplateMatch[] = activeTemplates
-    .map((template) => scoreTemplate(question, template))
+    .map((template) => scoreTemplate(question, template, normalizedConcepts))
     .filter((match) => match.score > 0)
     .sort((a, b) => b.score - a.score);
 
   if (matches.length === 0) {
     return { matched: false, confidence: 0 };
   }
+
+  const topK = options?.topK ?? 3;
+  const explanations: TemplateMatchExplanation[] = matches
+    .slice(0, Math.max(topK, 1))
+    .map((match) => ({
+      template: match.template,
+      confidence: match.score,
+      matchedKeywords: match.matchedKeywords,
+      matchedTags: match.matchedTags ?? [],
+      matchedConcepts: match.matchedConcepts ?? [],
+      matchedExample: match.matchedExample,
+      successRate: match.successRate,
+    }));
 
   const bestMatch = matches[0];
   const confidence = bestMatch.score;
@@ -59,6 +95,8 @@ export async function matchTemplate(
     confidence,
     matchedKeywords: bestMatch.matchedKeywords,
     matchedExample: bestMatch.matchedExample,
+    matchedTags: bestMatch.matchedTags,
+    explanations,
   };
 }
 
@@ -66,68 +104,48 @@ export async function matchTemplate(
  * Score a template against a question
  * Returns a score between 0 and 1
  */
-function scoreTemplate(question: string, template: QueryTemplate): TemplateMatch {
+function scoreTemplate(
+  question: string,
+  template: QueryTemplate,
+  concepts: string[]
+): TemplateMatch {
   const questionLower = question.toLowerCase().trim();
   let score = 0;
   const matchedKeywords: string[] = [];
   let matchedExample: string | undefined;
+  let matchedTags: string[] = [];
 
-  // 1. Check for exact or near-exact match with examples (50% weight)
-  if (template.questionExamples && template.questionExamples.length > 0) {
-    for (const example of template.questionExamples) {
-      const exampleLower = example.toLowerCase().trim();
-      const similarity = calculateStringSimilarity(questionLower, exampleLower);
+  const exampleResult = calculateExampleMatchScore(
+    questionLower,
+    template.questionExamples
+  );
+  score += exampleResult.score * EXAMPLE_WEIGHT;
+  matchedExample = exampleResult.matchedExample;
 
-      if (similarity > 0.9) {
-        score += 0.5;
-        matchedExample = example;
-        break;
-      } else if (similarity > 0.7) {
-        score += 0.3;
-        matchedExample = example;
-        break;
-      }
-    }
-  }
+  const keywordResult = calculateKeywordMatchScore(
+    questionLower,
+    template.keywords
+  );
+  score += keywordResult.score * KEYWORD_WEIGHT;
+  matchedKeywords.push(...keywordResult.matchedKeywords);
 
-  // 2. Check for keyword matches (40% weight)
-  if (template.keywords && template.keywords.length > 0) {
-    let keywordMatches = 0;
-    for (const keyword of template.keywords) {
-      if (questionLower.includes(keyword.toLowerCase())) {
-        matchedKeywords.push(keyword);
-        keywordMatches++;
-      }
-    }
+  const tagResult = calculateTagMatchScore(concepts, template.tags);
+  score += tagResult.score * TAG_WEIGHT;
+  matchedTags = tagResult.matchedTags;
 
-    if (template.keywords.length > 0) {
-      const keywordMatchRatio = keywordMatches / template.keywords.length;
-      score += keywordMatchRatio * 0.4;
-    }
-  }
+  const intentScore = calculateIntentMatchScore(questionLower, template.intent);
+  score += intentScore * INTENT_WEIGHT;
 
-  // 3. Check for intent-based words (10% weight)
-  if (template.intent) {
-    const intentKeywords = getIntentKeywords(template.intent);
-    let intentMatches = 0;
-
-    for (const word of intentKeywords) {
-      if (questionLower.includes(word.toLowerCase())) {
-        intentMatches++;
-      }
-    }
-
-    if (intentKeywords.length > 0) {
-      score += (intentMatches / intentKeywords.length) * 0.1;
-    }
-  }
+  const normalizedScore = Math.min(score, 1.0);
 
   return {
     template,
-    score: Math.min(score, 1.0), // Cap at 1.0
+    score: normalizedScore,
     baseScore: score,
     matchedKeywords,
     matchedExample,
+    matchedTags,
+    matchedConcepts: tagResult.matchedConcepts,
     successRate: template.successRate,
   };
 }
@@ -191,4 +209,102 @@ function getIntentKeywords(intent: string): string[] {
   };
 
   return intentMap[intent.toLowerCase()] || [];
+}
+
+function calculateExampleMatchScore(
+  questionLower: string,
+  examples?: string[]
+): { score: number; matchedExample?: string } {
+  if (!examples || examples.length === 0) {
+    return { score: 0 };
+  }
+
+  for (const example of examples) {
+    const exampleLower = example.toLowerCase().trim();
+    const similarity = calculateStringSimilarity(questionLower, exampleLower);
+
+    if (similarity > 0.9) {
+      return { score: 1, matchedExample: example };
+    }
+    if (similarity > 0.7) {
+      return { score: 0.6, matchedExample: example };
+    }
+  }
+
+  return { score: 0 };
+}
+
+function calculateKeywordMatchScore(
+  questionLower: string,
+  keywords?: string[]
+): { score: number; matchedKeywords: string[] } {
+  if (!keywords || keywords.length === 0) {
+    return { score: 0, matchedKeywords: [] };
+  }
+
+  const matchedKeywords: string[] = [];
+  for (const keyword of keywords) {
+    if (questionLower.includes(keyword.toLowerCase())) {
+      matchedKeywords.push(keyword);
+    }
+  }
+
+  const ratio = matchedKeywords.length / keywords.length;
+  return { score: clamp01(ratio), matchedKeywords };
+}
+
+function calculateTagMatchScore(
+  concepts: string[],
+  tags?: string[]
+): { score: number; matchedTags: string[]; matchedConcepts: string[] } {
+  if (!tags || tags.length === 0 || concepts.length === 0) {
+    return { score: 0, matchedTags: [], matchedConcepts: [] };
+  }
+
+  const tagSet = new Set(tags.map((tag) => tag.toLowerCase()));
+  const conceptSet = new Set(concepts.map((concept) => concept.toLowerCase()));
+
+  let intersection = 0;
+  const matchedTags: string[] = [];
+  const matchedConcepts: string[] = [];
+
+  for (const tag of tagSet) {
+    if (conceptSet.has(tag)) {
+      intersection += 1;
+      matchedTags.push(tag);
+      matchedConcepts.push(tag);
+    }
+  }
+
+  const unionSize = tagSet.size + conceptSet.size - intersection;
+  const score = unionSize === 0 ? 0 : intersection / unionSize;
+  return {
+    score: clamp01(score),
+    matchedTags,
+    matchedConcepts,
+  };
+}
+
+function calculateIntentMatchScore(
+  questionLower: string,
+  intent?: string
+): number {
+  if (!intent) return 0;
+  const intentKeywords = getIntentKeywords(intent);
+  if (intentKeywords.length === 0) return 0;
+
+  let matches = 0;
+  for (const word of intentKeywords) {
+    if (questionLower.includes(word.toLowerCase())) {
+      matches++;
+    }
+  }
+  return clamp01(matches / intentKeywords.length);
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
 }

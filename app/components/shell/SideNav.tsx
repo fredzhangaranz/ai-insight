@@ -217,6 +217,11 @@ export function SideNav() {
                         >
                           Customers Setup
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/intent-telemetry")}
+                        >
+                          Intent Telemetry
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => router.push("/admin")}>
                           AI Providers
                         </DropdownMenuItem>

@@ -9,7 +9,7 @@ import {
   TemplateStatus,
 } from "./query-template.service";
 
-import type { PlaceholdersSpec } from "./template-validator.service";
+import type { PlaceholdersSpec, TemplateResultShape } from "./template-validator.service";
 import {
   validateTemplate,
   ValidationResult,
@@ -84,6 +84,8 @@ export interface TemplateDraftPayload {
   tags?: string[];
   examples?: string[];
   createdBy?: string;
+  resultShape?: TemplateResultShape | null;
+  notes?: string | null;
 }
 
 export interface TemplateDraftUpdatePayload extends TemplateDraftPayload {}
@@ -103,6 +105,8 @@ interface NormalizedDraftPayload {
   tags: string[];
   examples: string[];
   createdBy: string;
+  resultShape: TemplateResultShape | null;
+  notes?: string | null;
 }
 
 export async function listTemplates(
@@ -154,6 +158,7 @@ export async function createTemplateDraft(
     sqlPattern: normalized.sqlPattern,
     placeholders,
     placeholdersSpec: normalized.placeholdersSpec ?? undefined,
+    resultShape: normalized.resultShape ?? undefined,
   });
 
   if (!validation.valid) {
@@ -184,7 +189,7 @@ export async function createTemplateDraft(
     const versionInsert = await client.query(
       `INSERT INTO "TemplateVersion"
          ("templateId", version, "sqlPattern", "placeholdersSpec", keywords, tags, examples, "validationRules", "resultShape", notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         templateId,
@@ -195,6 +200,8 @@ export async function createTemplateDraft(
         normalized.tags,
         normalized.examples,
         JSON.stringify({ warnings: validation.warnings }),
+        normalized.resultShape ? JSON.stringify(normalized.resultShape) : null,
+        normalized.notes ?? null,
       ]
     );
 
@@ -244,6 +251,7 @@ export async function updateTemplateDraft(
     sqlPattern: normalized.sqlPattern,
     placeholders,
     placeholdersSpec: normalized.placeholdersSpec ?? undefined,
+    resultShape: normalized.resultShape ?? undefined,
   });
 
   if (!validation.valid) {
@@ -292,7 +300,9 @@ export async function updateTemplateDraft(
            keywords = $4,
            tags = $5,
            examples = $6,
-           "validationRules" = $7
+           "validationRules" = $7,
+           "resultShape" = $8,
+           notes = $9
        WHERE id = $1`,
       [
         templateVersionId,
@@ -302,6 +312,8 @@ export async function updateTemplateDraft(
         normalized.tags,
         normalized.examples,
         JSON.stringify({ warnings: validation.warnings }),
+        normalized.resultShape ? JSON.stringify(normalized.resultShape) : null,
+        normalized.notes ?? null,
       ]
     );
 
@@ -331,7 +343,8 @@ export async function publishTemplate(
       `SELECT t.status,
               t.name,
               tv."sqlPattern",
-              tv."placeholdersSpec"
+              tv."placeholdersSpec",
+              tv."resultShape"
        FROM "Template" t
        JOIN "TemplateVersion" tv ON tv.id = t."activeVersionId"
        WHERE t.id = $1
@@ -351,12 +364,13 @@ export async function publishTemplate(
 
     const spec = row.placeholdersSpec as PlaceholdersSpec | null;
     const placeholders = derivePlaceholders(spec, row.sqlPattern as string);
-    const validation = validateTemplate({
-      name: row.name,
-      sqlPattern: row.sqlPattern,
-      placeholders,
-      placeholdersSpec: spec ?? undefined,
-    });
+  const validation = validateTemplate({
+    name: row.name,
+    sqlPattern: row.sqlPattern,
+    placeholders,
+    placeholdersSpec: spec ?? undefined,
+    resultShape: row.resultShape ?? undefined,
+  });
 
     if (!validation.valid) {
       throw new TemplateValidationError(validation);
@@ -674,6 +688,39 @@ function normalizeStringArray(values?: string[] | null): string[] {
   return Array.from(deduped);
 }
 
+function normalizeResultShape(
+  shape?: TemplateResultShape | null
+): TemplateResultShape | null {
+  if (!shape) return null;
+  const normalized: TemplateResultShape = {};
+
+  if (Array.isArray(shape.dimensions)) {
+    const dims = shape.dimensions
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value): value is string => Boolean(value));
+    if (dims.length > 0) normalized.dimensions = dims;
+  }
+
+  if (Array.isArray(shape.metrics)) {
+    const metrics = shape.metrics
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value): value is string => Boolean(value));
+    if (metrics.length > 0) normalized.metrics = metrics;
+  }
+
+  if (typeof shape.primaryEntity === "string") {
+    const trimmed = shape.primaryEntity.trim();
+    if (trimmed) normalized.primaryEntity = trimmed;
+  }
+
+  if (typeof shape.description === "string") {
+    const trimmed = shape.description.trim();
+    if (trimmed) normalized.description = trimmed;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
 function derivePlaceholders(
   spec?: PlaceholdersSpec | null,
   sqlPattern?: string
@@ -730,6 +777,8 @@ function normalizeDraftPayload(
     tags: normalizeStringArray(payload.tags),
     examples: normalizeStringArray(payload.examples),
     createdBy: payload.createdBy?.trim() || "template-service",
+    resultShape: normalizeResultShape(payload.resultShape),
+    notes: payload.notes?.trim() || undefined,
   };
 }
 

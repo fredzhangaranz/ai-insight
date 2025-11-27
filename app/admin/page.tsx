@@ -563,6 +563,24 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Intent Classification Telemetry</CardTitle>
+              <CardDescription>
+                Review pattern vs AI usage, latency, and disagreements.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between flex-wrap gap-4">
+              <p className="text-sm text-slate-600">
+                View detailed logs explaining how intents are classified,
+                including “How I got this” details for every query.
+              </p>
+              <Link href="/admin/intent-telemetry">
+                <Button variant="outline">Open Telemetry Page</Button>
+              </Link>
+            </CardContent>
+          </Card>
+
           {/* Quick Actions */}
           <Card>
             <CardHeader>

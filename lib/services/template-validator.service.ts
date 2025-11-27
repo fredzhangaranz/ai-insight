@@ -16,10 +16,20 @@ export interface PlaceholdersSpecSlot {
   required?: boolean;
   default?: unknown;
   validators?: string[];
+  description?: string;
+  examples?: unknown[];
+  patterns?: string[];
 }
 
 export interface PlaceholdersSpec {
   slots: PlaceholdersSpecSlot[];
+}
+
+export interface TemplateResultShape {
+  dimensions?: string[];
+  metrics?: string[];
+  primaryEntity?: string;
+  description?: string;
 }
 
 export interface TemplateValidationInput {
@@ -27,6 +37,8 @@ export interface TemplateValidationInput {
   sqlPattern: string;
   placeholders?: string[];
   placeholdersSpec?: PlaceholdersSpec | null;
+  resultShape?: TemplateResultShape | null;
+  notes?: string | null;
 }
 
 export interface ValidationIssue {
@@ -73,6 +85,13 @@ export function validateTemplate(
   );
   errors.push(...specResult.errors);
   warnings.push(...specResult.warnings);
+
+  const shapeResult = validateResultShape(
+    template.resultShape,
+    template.name
+  );
+  errors.push(...shapeResult.errors);
+  warnings.push(...shapeResult.warnings);
 
   const scaffoldResult = detectFunnelScaffold(
     template.sqlPattern,
@@ -145,6 +164,100 @@ export function validatePlaceholders(
         meta: { placeholder: original },
       });
     }
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+export function validateResultShape(
+  shape: TemplateResultShape | null | undefined,
+  templateName?: string
+): ValidationResult {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
+
+  if (!shape) {
+    warnings.push({
+      code: "resultShape.missing",
+      message: formatMessage(
+        templateName,
+        "resultShape missing; downstream consumers cannot infer charting metadata."
+      ),
+    });
+    return { valid: true, errors, warnings };
+  }
+
+  if (shape.dimensions && !Array.isArray(shape.dimensions)) {
+    errors.push({
+      code: "resultShape.dimensions.invalid",
+      message: formatMessage(
+        templateName,
+        "resultShape.dimensions must be an array of strings."
+      ),
+    });
+  }
+
+  if (shape.metrics && !Array.isArray(shape.metrics)) {
+    errors.push({
+      code: "resultShape.metrics.invalid",
+      message: formatMessage(
+        templateName,
+        "resultShape.metrics must be an array of strings."
+      ),
+    });
+  }
+
+  if (shape.dimensions && Array.isArray(shape.dimensions)) {
+    for (const value of shape.dimensions) {
+      if (typeof value !== "string") {
+        errors.push({
+          code: "resultShape.dimensions.type",
+          message: formatMessage(
+            templateName,
+            "resultShape.dimensions entries must be strings."
+          ),
+        });
+        break;
+      }
+    }
+  }
+
+  if (shape.metrics && Array.isArray(shape.metrics)) {
+    for (const value of shape.metrics) {
+      if (typeof value !== "string") {
+        errors.push({
+          code: "resultShape.metrics.type",
+          message: formatMessage(
+            templateName,
+            "resultShape.metrics entries must be strings."
+          ),
+        });
+        break;
+      }
+    }
+  }
+
+  if (
+    shape.primaryEntity &&
+    typeof shape.primaryEntity !== "string"
+  ) {
+    errors.push({
+      code: "resultShape.primaryEntity.invalid",
+      message: formatMessage(
+        templateName,
+        "resultShape.primaryEntity must be a string."
+      ),
+    });
+  }
+
+  if (shape.description && typeof shape.description !== "string") {
+    errors.push({
+      code: "resultShape.description.invalid",
+      message: formatMessage(
+        templateName,
+        "resultShape.description must be a string."
+      ),
+    });
   }
 
   return { valid: errors.length === 0, errors, warnings };

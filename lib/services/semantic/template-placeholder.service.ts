@@ -2,6 +2,15 @@
 // Template Placeholder Extraction and Filling for Phase 7B
 
 import type { QueryTemplate } from "../query-template.service";
+import type {
+  PlaceholdersSpec,
+  PlaceholdersSpecSlot,
+} from "../template-validator.service";
+import {
+  createAssessmentTypeSearcher,
+  type AssessmentTypeSearchResult,
+} from "../context-discovery/assessment-type-searcher.service";
+import { getInsightGenDbPool } from "@/lib/db";
 
 export interface PlaceholderValues {
   [key: string]: string | number;
@@ -11,47 +20,100 @@ export interface PlaceholderExtractionResult {
   values: PlaceholderValues;
   confidence: number;
   filledSQL: string;
+  missingPlaceholders: string[];
+  clarifications: ClarificationRequest[];
+  resolvedAssessmentTypes?: ResolvedAssessmentType[]; // For audit/debugging
+}
+
+export interface ResolvedAssessmentType {
+  placeholder: string;
+  originalText: string;
+  assessmentTypeId: string;
+  assessmentName: string;
+  semanticConcept: string;
+  confidence: number;
+}
+
+export interface ClarificationRequest {
+  placeholder: string;
+  prompt: string;
+  examples?: string[];
+  options?: string[];
 }
 
 /**
  * Extract placeholder values from user question and fill template
+ *
+ * @param question - User's natural language question
+ * @param template - Query template to fill
+ * @param customerId - Customer ID for assessment type resolution (optional)
  */
 export async function extractAndFillPlaceholders(
   question: string,
-  template: QueryTemplate
+  template: QueryTemplate,
+  customerId?: string
 ): Promise<PlaceholderExtractionResult> {
-  const placeholders = template.placeholders || [];
-  const values: PlaceholderValues = {};
+  const slots = buildPlaceholderSlots(template);
+  const placeholderNames =
+    template.placeholders && template.placeholders.length > 0
+      ? template.placeholders
+      : slots.map((slot) => slot.rawName);
 
-  if (placeholders.length === 0) {
-    // No placeholders, return template SQL as-is
+  const values: PlaceholderValues = {};
+  const missingPlaceholders: string[] = [];
+  const clarifications: ClarificationRequest[] = [];
+  const resolvedAssessmentTypes: ResolvedAssessmentType[] = [];
+
+  if (!placeholderNames || placeholderNames.length === 0) {
     return {
       values: {},
       confidence: 1.0,
       filledSQL: template.sqlPattern,
+      missingPlaceholders,
+      clarifications,
+      resolvedAssessmentTypes,
     };
   }
 
-  // Extract values for each placeholder
-  for (const placeholder of placeholders) {
-    const value = extractPlaceholderValue(question, placeholder, template);
-    if (value !== null) {
-      values[placeholder] = value;
+  for (const placeholder of placeholderNames) {
+    const slot = slots.find(
+      (s) => normalizePlaceholderName(s.rawName) === normalizePlaceholderName(placeholder)
+    );
+    const resolution = await resolvePlaceholder(
+      question,
+      placeholder,
+      template,
+      slot,
+      customerId
+    );
+
+    if (resolution.value !== null && resolution.value !== undefined) {
+      values[placeholder] = resolution.value;
+
+      // Track resolved assessment types
+      if (resolution.assessmentType) {
+        resolvedAssessmentTypes.push(resolution.assessmentType);
+      }
+    } else if (slot?.required !== false) {
+      missingPlaceholders.push(placeholder);
+      if (resolution.clarification) {
+        clarifications.push(resolution.clarification);
+      }
     }
   }
 
-  // Calculate confidence based on how many placeholders were filled
   const filledCount = Object.keys(values).length;
-  const totalCount = placeholders.length;
+  const totalCount = placeholderNames.length || 1;
   const confidence = filledCount / totalCount;
-
-  // Fill template SQL with extracted values
   const filledSQL = fillTemplateSQL(template.sqlPattern, values);
 
   return {
     values,
     confidence,
     filledSQL,
+    missingPlaceholders,
+    clarifications,
+    resolvedAssessmentTypes: resolvedAssessmentTypes.length > 0 ? resolvedAssessmentTypes : undefined,
   };
 }
 
@@ -61,13 +123,19 @@ export async function extractAndFillPlaceholders(
 function extractPlaceholderValue(
   question: string,
   placeholder: string,
-  template: QueryTemplate
+  template: QueryTemplate,
+  slot?: NormalizedSlot
 ): string | number | null {
   const questionLower = question.toLowerCase();
   const placeholderLower = placeholder.toLowerCase();
 
   // Get placeholder spec if available
-  const spec = template.placeholdersSpec?.[placeholder];
+  const spec =
+    slot ??
+    findSpecSlot(
+      template.placeholdersSpec,
+      normalizePlaceholderName(placeholder)
+    );
 
   // Strategy 1: Use placeholder spec patterns if available
   if (spec?.patterns) {
@@ -151,6 +219,843 @@ function extractPlaceholderValue(
   }
 
   return null;
+}
+
+async function resolvePlaceholder(
+  question: string,
+  placeholder: string,
+  template: QueryTemplate,
+  slot?: NormalizedSlot,
+  customerId?: string
+): Promise<{
+  value: string | number | null;
+  clarification?: ClarificationRequest;
+  assessmentType?: ResolvedAssessmentType;
+}> {
+  // Try specialized resolvers first (sync)
+  const specialized = resolveWithSpecializedResolvers(
+    question,
+    placeholder,
+    slot
+  );
+  if (specialized) {
+    const checked = await applyValidators(
+      specialized.value,
+      placeholder,
+      slot,
+      specialized.clarification,
+      customerId
+    );
+    if (checked) {
+      return checked;
+    }
+  }
+
+  // Try assessment type resolution (async)
+  if (customerId && shouldUseAssessmentTypeResolver(slot, placeholder)) {
+    const assessmentResolution = await resolveAssessmentTypePlaceholder(
+      question,
+      placeholder,
+      customerId,
+      slot
+    );
+    if (assessmentResolution.value !== null) {
+      return assessmentResolution;
+    }
+  }
+
+  // Try field variable resolution (async)
+  if (customerId && shouldUseFieldVariableResolver(slot, placeholder)) {
+    const fieldResolution = await resolveFieldVariablePlaceholder(
+      question,
+      placeholder,
+      customerId,
+      slot
+    );
+    if (fieldResolution.value !== null) {
+      return fieldResolution;
+    }
+  }
+
+  // Try generic extraction (sync)
+  const value = extractPlaceholderValue(question, placeholder, template, slot);
+  if (value !== null && value !== undefined) {
+    const checked = await applyValidators(
+      value,
+      placeholder,
+      slot,
+      undefined,
+      customerId
+    );
+    if (checked) {
+      return checked;
+    }
+  }
+
+  // Try default value
+  if (slot?.default !== undefined && slot.default !== null) {
+    const checked = await applyValidators(
+      slot.default as string | number,
+      placeholder,
+      slot,
+      undefined,
+      customerId
+    );
+    if (checked) {
+      return checked;
+    }
+  }
+
+  // Generate clarification
+  const clarification = slot
+    ? await buildClarification(placeholder, slot, undefined, customerId)
+    : await buildClarification(placeholder, undefined, undefined, customerId);
+  return { value: null, clarification };
+}
+
+function buildPlaceholderSlots(template: QueryTemplate): NormalizedSlot[] {
+  const spec = template.placeholdersSpec as PlaceholdersSpec | null | undefined;
+  if (!spec?.slots || spec.slots.length === 0) return [];
+  return spec.slots
+    .map((slot) => {
+      if (!slot?.name) return null;
+      return {
+        ...slot,
+        rawName: slot.name,
+        normalizedName: normalizePlaceholderName(slot.name),
+      } as NormalizedSlot;
+    })
+    .filter((slot): slot is NormalizedSlot => Boolean(slot));
+}
+
+interface NormalizedSlot extends PlaceholdersSpecSlot {
+  rawName: string;
+  normalizedName: string;
+}
+
+interface SpecializedResolution {
+  value: string | number | null;
+  clarification?: ClarificationRequest;
+}
+
+// ============================================================================
+// Assessment Type Resolution
+// ============================================================================
+
+/**
+ * Semantic patterns that indicate an assessment type placeholder
+ */
+const ASSESSMENT_TYPE_SEMANTICS = new Set([
+  "assessment_type",
+  "assessmenttype",
+  "assessment_concept",
+  "assessmentconcept",
+  "form_type",
+  "formtype",
+  "documentation_type",
+  "documentationtype",
+]);
+
+/**
+ * Keywords in placeholder names that suggest assessment type
+ */
+const ASSESSMENT_TYPE_KEYWORDS = [
+  "assessment",
+  "form",
+  "documentation",
+  "document",
+  "record",
+  "visit",
+  "encounter",
+];
+
+/**
+ * Check if placeholder should use assessment type resolver
+ */
+function shouldUseAssessmentTypeResolver(
+  slot: NormalizedSlot | undefined,
+  placeholder: string
+): boolean {
+  // Check slot semantic
+  const semantic = slot?.semantic?.toLowerCase();
+  if (semantic && ASSESSMENT_TYPE_SEMANTICS.has(semantic)) {
+    return true;
+  }
+
+  // Check placeholder name
+  const normalized = placeholder.toLowerCase();
+  return ASSESSMENT_TYPE_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword)
+  );
+}
+
+/**
+ * Extract assessment type keywords from question
+ */
+function extractAssessmentTypeKeywords(question: string): string[] {
+  const lower = question.toLowerCase();
+  const keywords: string[] = [];
+
+  // Common assessment type patterns
+  const patterns = [
+    /\b(wound|visit|billing|intake|discharge|clinical|treatment|assessment|documentation)\s+(?:assessment|form|documentation|record)s?\b/gi,
+    /\b(?:assessment|form|documentation|record)s?\s+(?:for|about|regarding)\s+(\w+)\b/gi,
+    /\b(wound|visit|billing|intake|discharge|clinical)\s+(?:data|information)\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    const matches = question.matchAll(pattern);
+    for (const match of matches) {
+      if (match[1]) {
+        keywords.push(match[1].toLowerCase());
+      }
+    }
+  }
+
+  // Also check for standalone keywords
+  const standaloneKeywords = [
+    "wound",
+    "visit",
+    "billing",
+    "superbill",
+    "intake",
+    "discharge",
+    "clinical",
+    "treatment",
+    "consent",
+    "demographics",
+  ];
+
+  for (const keyword of standaloneKeywords) {
+    if (lower.includes(keyword) && !keywords.includes(keyword)) {
+      keywords.push(keyword);
+    }
+  }
+
+  return keywords;
+}
+
+/**
+ * Resolve assessment type placeholder using SemanticIndexAssessmentType
+ *
+ * Strategy:
+ * 1. Extract assessment type keywords from question
+ * 2. Search indexed assessment types using keywords
+ * 3. Return best match (highest confidence)
+ * 4. Store resolved assessment type for audit
+ */
+async function resolveAssessmentTypePlaceholder(
+  question: string,
+  placeholder: string,
+  customerId: string,
+  slot?: NormalizedSlot
+): Promise<{
+  value: string | number | null;
+  clarification?: ClarificationRequest;
+  assessmentType?: ResolvedAssessmentType;
+}> {
+  console.log(
+    `[TemplatePlaceholder] Resolving assessment type for placeholder: ${placeholder}`
+  );
+
+  // Extract keywords from question
+  const keywords = extractAssessmentTypeKeywords(question);
+
+  if (keywords.length === 0) {
+    console.log(
+      `[TemplatePlaceholder] No assessment type keywords found in question`
+    );
+    return { value: null };
+  }
+
+  console.log(
+    `[TemplatePlaceholder] Extracted keywords: ${keywords.join(", ")}`
+  );
+
+  // Search for matching assessment types
+  const searcher = createAssessmentTypeSearcher(customerId);
+  const results: AssessmentTypeSearchResult[] = [];
+
+  for (const keyword of keywords) {
+    const matches = await searcher.searchByKeywords(keyword);
+    results.push(...matches);
+  }
+
+  if (results.length === 0) {
+    console.log(
+      `[TemplatePlaceholder] No matching assessment types found`
+    );
+    return { value: null };
+  }
+
+  // Sort by confidence and take best match
+  results.sort((a, b) => b.confidence - a.confidence);
+  const best = results[0];
+
+  console.log(
+    `[TemplatePlaceholder] Resolved to: ${best.assessmentName} (${best.semanticConcept}, confidence: ${best.confidence})`
+  );
+
+  // Create resolved assessment type for audit
+  const resolvedAssessmentType: ResolvedAssessmentType = {
+    placeholder,
+    originalText: keywords.join(", "),
+    assessmentTypeId: best.assessmentTypeId,
+    assessmentName: best.assessmentName,
+    semanticConcept: best.semanticConcept,
+    confidence: best.confidence,
+  };
+
+  // Return assessment type ID as value
+  return {
+    value: best.assessmentTypeId,
+    assessmentType: resolvedAssessmentType,
+  };
+}
+
+// ============================================================================
+// Field Variable Resolution
+// ============================================================================
+
+/**
+ * Semantic patterns that indicate a field variable placeholder
+ */
+const FIELD_VARIABLE_SEMANTICS = new Set([
+  "field_name",
+  "fieldname",
+  "column_name",
+  "columnname",
+  "field_variable",
+  "fieldvariable",
+  "status_field",
+  "statusfield",
+]);
+
+/**
+ * Keywords in placeholder names that suggest field variables
+ */
+const FIELD_VARIABLE_KEYWORDS = [
+  "field",
+  "column",
+  "variable",
+  "status",
+  "state",
+  "attribute",
+];
+
+/**
+ * Check if placeholder should use field variable resolver
+ */
+function shouldUseFieldVariableResolver(
+  slot: NormalizedSlot | undefined,
+  placeholder: string
+): boolean {
+  // Check slot semantic
+  const semantic = slot?.semantic?.toLowerCase();
+  if (semantic && FIELD_VARIABLE_SEMANTICS.has(semantic)) {
+    return true;
+  }
+
+  // Check placeholder name
+  const normalized = placeholder.toLowerCase();
+  return FIELD_VARIABLE_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword)
+  );
+}
+
+/**
+ * Search for field by name pattern across both form and non-form fields
+ */
+async function searchFieldByName(
+  customerId: string,
+  fieldNamePattern: string
+): Promise<{
+  fieldName: string;
+  fieldType: string;
+  source: 'form' | 'nonform';
+  semanticConcept?: string;
+  enumValues?: string[];
+} | null> {
+  const pool = await getInsightGenDbPool();
+
+  // Search in SemanticIndexField (form fields) first
+  try {
+    const formFieldQuery = `
+      SELECT
+        sif.field_name as "fieldName",
+        sif.data_type as "fieldType",
+        sif.semantic_concept as "semanticConcept",
+        COALESCE(
+          json_agg(sio.option_value ORDER BY sio.option_value)
+          FILTER (WHERE sio.option_value IS NOT NULL),
+          '[]'
+        ) as "enumValues"
+      FROM "SemanticIndexField" sif
+      JOIN "SemanticIndex" si ON sif.semantic_index_id = si.id
+      LEFT JOIN "SemanticIndexOption" sio ON sio.semantic_index_field_id = sif.id
+      WHERE si.customer_id = $1
+        AND LOWER(sif.field_name) LIKE LOWER($2)
+      GROUP BY sif.id, sif.field_name, sif.data_type, sif.semantic_concept
+      ORDER BY sif.confidence DESC NULLS LAST
+      LIMIT 1
+    `;
+
+    const formResult = await pool.query(formFieldQuery, [customerId, `%${fieldNamePattern}%`]);
+
+    if (formResult.rows.length > 0) {
+      const row = formResult.rows[0];
+      return {
+        fieldName: row.fieldName,
+        fieldType: row.fieldType || 'text',
+        source: 'form',
+        semanticConcept: row.semanticConcept,
+        enumValues: Array.isArray(row.enumValues) ? row.enumValues : [],
+      };
+    }
+
+    // Search in SemanticIndexNonForm (non-form fields)
+    const nonFormFieldQuery = `
+      SELECT
+        sinf.field_name as "fieldName",
+        sinf.field_type as "fieldType",
+        sinf.semantic_concept as "semanticConcept",
+        COALESCE(
+          json_agg(sinfev.enum_value ORDER BY sinfev.usage_count DESC, sinfev.enum_value)
+          FILTER (WHERE sinfev.enum_value IS NOT NULL AND sinfev.is_active = TRUE),
+          '[]'
+        ) as "enumValues"
+      FROM "SemanticIndexNonForm" sinf
+      LEFT JOIN "SemanticIndexNonFormEnumValue" sinfev ON sinfev.nonform_id = sinf.id
+      WHERE sinf.customer_id = $1
+        AND LOWER(sinf.field_name) LIKE LOWER($2)
+      GROUP BY sinf.id, sinf.field_name, sinf.field_type, sinf.semantic_concept
+      ORDER BY (sinf.embedding_count * sinf.assessment_count) DESC
+      LIMIT 1
+    `;
+
+    const nonFormResult = await pool.query(nonFormFieldQuery, [customerId, `%${fieldNamePattern}%`]);
+
+    if (nonFormResult.rows.length > 0) {
+      const row = nonFormResult.rows[0];
+      return {
+        fieldName: row.fieldName,
+        fieldType: row.fieldType || 'text',
+        source: 'nonform',
+        semanticConcept: row.semanticConcept,
+        enumValues: Array.isArray(row.enumValues) ? row.enumValues : [],
+      };
+    }
+
+    return null;
+  } catch (error: any) {
+    console.error(`[TemplatePlaceholder] Error searching for field:`, error);
+    return null;
+  }
+}
+
+/**
+ * Extract field name pattern from question
+ */
+function extractFieldNamePattern(question: string, slot?: NormalizedSlot): string | null {
+  const lower = question.toLowerCase();
+
+  // Common patterns for field names
+  const patterns = [
+    /\b(?:status|state|type|category)\s+(?:of|for)\s+(\w+)/i,
+    /\b(\w+)\s+(?:status|state|field|column)/i,
+    /\bwhere\s+(\w+)\s*=/i,
+    /\bby\s+(\w+)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = question.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  // Check slot examples for hints
+  if (slot?.examples && slot.examples.length > 0) {
+    return String(slot.examples[0]);
+  }
+
+  return null;
+}
+
+/**
+ * Resolve field variable placeholder using semantic field indexes
+ *
+ * Strategy:
+ * 1. Extract field name pattern from question
+ * 2. Search in SemanticIndexField (form fields)
+ * 3. Search in SemanticIndexNonForm (non-form fields)
+ * 4. Return field name, or enum value if field is enum type
+ */
+async function resolveFieldVariablePlaceholder(
+  question: string,
+  placeholder: string,
+  customerId: string,
+  slot?: NormalizedSlot
+): Promise<{
+  value: string | number | null;
+  clarification?: ClarificationRequest;
+}> {
+  console.log(
+    `[TemplatePlaceholder] Resolving field variable for placeholder: ${placeholder}`
+  );
+
+  // Extract field name pattern from question or slot
+  const fieldPattern = extractFieldNamePattern(question, slot);
+
+  if (!fieldPattern) {
+    console.log(
+      `[TemplatePlaceholder] No field name pattern found in question`
+    );
+    return { value: null };
+  }
+
+  console.log(
+    `[TemplatePlaceholder] Extracted field pattern: ${fieldPattern}`
+  );
+
+  // Search for matching field
+  const field = await searchFieldByName(customerId, fieldPattern);
+
+  if (!field) {
+    console.log(
+      `[TemplatePlaceholder] No matching field found for pattern: ${fieldPattern}`
+    );
+    return { value: null };
+  }
+
+  console.log(
+    `[TemplatePlaceholder] Resolved to field: ${field.fieldName} (${field.source}, type: ${field.fieldType})`
+  );
+
+  // Return field name as value
+  return {
+    value: field.fieldName,
+  };
+}
+
+// ============================================================================
+// Time Window Resolution
+// ============================================================================
+
+const TIME_UNIT_PATTERN =
+  "(?:day|days|d|week|weeks|wk|wks|month|months|mo|mos|year|years|yr|yrs|quarter|quarters|qtr|qtrs)";
+
+const TIME_WINDOW_SEMANTICS = new Set([
+  "time_window",
+  "timewindow",
+  "time_point",
+  "timepoint",
+  "time_window_days",
+]);
+
+const TIME_UNIT_MULTIPLIERS: Record<string, number> = {
+  day: 1,
+  days: 1,
+  d: 1,
+  week: 7,
+  weeks: 7,
+  wk: 7,
+  wks: 7,
+  month: 30,
+  months: 30,
+  mo: 30,
+  mos: 30,
+  year: 365,
+  years: 365,
+  yr: 365,
+  yrs: 365,
+  quarter: 90,
+  quarters: 90,
+  qtr: 90,
+  qtrs: 90,
+};
+
+async function buildClarification(
+  placeholder: string,
+  slot?: NormalizedSlot,
+  extraHint?: string,
+  customerId?: string
+): Promise<ClarificationRequest> {
+  const promptParts = [`Please provide a value for "${placeholder}"`];
+  if (slot?.description) {
+    promptParts.push(`(${slot.description})`);
+  } else if (slot?.semantic) {
+    promptParts.push(`(${slot.semantic})`);
+  }
+  if (extraHint) {
+    promptParts.push(extraHint);
+  }
+
+  // Try to pull enum values if this is a field variable placeholder
+  let options: string[] | undefined;
+  if (customerId && shouldUseFieldVariableResolver(slot, placeholder)) {
+    try {
+      // Extract field name pattern from placeholder name
+      const fieldNamePattern = extractFieldNamePatternFromPlaceholder(placeholder);
+      if (fieldNamePattern) {
+        console.log(
+          `[buildClarification] Searching for field with pattern: ${fieldNamePattern}`
+        );
+        const field = await searchFieldByName(customerId, fieldNamePattern);
+        if (field && field.enumValues && field.enumValues.length > 0) {
+          options = field.enumValues;
+          console.log(
+            `[buildClarification] Found ${options.length} enum values for ${placeholder}: ${options.join(", ")}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        `[buildClarification] Error fetching enum values for ${placeholder}:`,
+        error
+      );
+      // Continue without options - graceful degradation
+    }
+  }
+
+  return {
+    placeholder,
+    prompt: promptParts.join(" "),
+    examples: slot?.examples?.map((example) => String(example)),
+    options,
+  };
+}
+
+/**
+ * Extract field name pattern from placeholder name for clarification lookup
+ * Returns just the base name (e.g., "status" from "statusField")
+ * searchFieldByName will add the SQL LIKE wildcards (%)
+ */
+function extractFieldNamePatternFromPlaceholder(
+  placeholder: string
+): string | null {
+  const normalized = placeholder.toLowerCase();
+
+  // Remove common suffixes: Field, Column, Variable, Name
+  const cleanedName = normalized
+    .replace(/(?:field|column|variable|name)$/i, "")
+    .trim();
+
+  if (cleanedName.length > 0) {
+    return cleanedName;
+  }
+
+  // Fallback: use the placeholder name as-is
+  return normalized;
+}
+
+function normalizePlaceholderName(name: string): string {
+  return name.replace(/\[\]$/, "").replace(/\?$/, "").trim();
+}
+
+function resolveWithSpecializedResolvers(
+  question: string,
+  placeholder: string,
+  slot?: NormalizedSlot
+): SpecializedResolution | null {
+  if (shouldUseTimeWindowResolver(slot, placeholder)) {
+    const detected = detectTimeWindowValue(question, slot, placeholder);
+    if (detected !== null) {
+      return { value: detected };
+    }
+  }
+  return null;
+}
+
+function shouldUseTimeWindowResolver(
+  slot: NormalizedSlot | undefined,
+  placeholder: string
+): boolean {
+  const semantic = slot?.semantic?.toLowerCase();
+  if (semantic && TIME_WINDOW_SEMANTICS.has(semantic)) {
+    return true;
+  }
+
+  const normalized = placeholder.toLowerCase();
+  return (
+    normalized.includes("time") ||
+    normalized.includes("day") ||
+    normalized.includes("week") ||
+    normalized.includes("month") ||
+    normalized.includes("window")
+  );
+}
+
+function detectTimeWindowValue(
+  question: string,
+  slot?: NormalizedSlot,
+  placeholder?: string
+): number | null {
+  const isTolerance = isTolerancePlaceholder(slot, placeholder);
+  const patterns = isTolerance
+    ? [
+        new RegExp(
+          `(?:within|inside|tolerance\\s+(?:of)?|window\\s+(?:of)?|±|\\+/-)\\s*(\\d+(?:\\.\\d+)?)\\s*[- ]?(${TIME_UNIT_PATTERN})\\b`,
+          "i"
+        ),
+      ]
+    : [
+        new RegExp(
+          `(?:last|past|within|in|over|during|around|about|after|approximately)\\s+(\\d+(?:\\.\\d+)?)\\s*[- ]?(${TIME_UNIT_PATTERN})\\b`,
+          "i"
+        ),
+        new RegExp(
+          `\\b(\\d+(?:\\.\\d+)?)\\s*[- ]?(${TIME_UNIT_PATTERN})\\b`,
+          "i"
+        ),
+      ];
+  const source = question.toLowerCase();
+
+  for (const regex of patterns) {
+    const match = source.match(regex);
+    if (!match) continue;
+    const amount = parseFloat(match[1]);
+    if (!Number.isFinite(amount)) continue;
+    const unit = match[2]?.toLowerCase();
+    if (!unit) continue;
+    const multiplier = TIME_UNIT_MULTIPLIERS[unit];
+    if (!multiplier) continue;
+    const days = Math.round(amount * multiplier);
+    if (days <= 0) continue;
+    return days;
+  }
+
+  return null;
+}
+
+function isTolerancePlaceholder(
+  slot: NormalizedSlot | undefined,
+  placeholder?: string
+): boolean {
+  const normalized =
+    placeholder?.toLowerCase() ?? slot?.rawName?.toLowerCase() ?? "";
+  return normalized.includes("tolerance") || normalized.includes("window");
+}
+
+async function applyValidators(
+  rawValue: string | number | null | undefined,
+  placeholder: string,
+  slot?: NormalizedSlot,
+  fallbackClarification?: ClarificationRequest,
+  customerId?: string
+): Promise<{
+  value: string | number | null;
+  clarification?: ClarificationRequest;
+} | null> {
+  if (rawValue === null || rawValue === undefined) {
+    return fallbackClarification
+      ? { value: null, clarification: fallbackClarification }
+      : null;
+  }
+
+  if (!slot) {
+    return { value: rawValue };
+  }
+
+  const validation = enforceSlotValidators(rawValue, slot);
+  if (!validation.valid) {
+    return {
+      value: null,
+      clarification: await buildClarification(
+        placeholder,
+        slot,
+        validation.message,
+        customerId
+      ),
+    };
+  }
+
+  return { value: validation.value ?? rawValue };
+}
+
+interface SlotValidationResult {
+  valid: boolean;
+  value?: string | number;
+  message?: string;
+}
+
+function enforceSlotValidators(
+  value: string | number,
+  slot: NormalizedSlot
+): SlotValidationResult {
+  let normalizedValue: string | number = value;
+  const type = slot.type?.toLowerCase();
+
+  if (type && ["int", "float", "decimal", "number"].includes(type)) {
+    const numeric = coerceToNumber(value);
+    if (numeric === null) {
+      return { valid: false, message: "Enter a numeric value" };
+    }
+    normalizedValue = type === "int" ? Math.round(numeric) : numeric;
+  }
+
+  if (Array.isArray(slot.validators)) {
+    for (const rawRule of slot.validators) {
+      const rule = rawRule?.trim().toLowerCase();
+      if (!rule) continue;
+      if (rule === "non-empty") {
+        if (
+          normalizedValue === "" ||
+          normalizedValue === null ||
+          normalizedValue === undefined
+        ) {
+          return { valid: false, message: "Value cannot be empty" };
+        }
+        continue;
+      }
+      const minMatch = rule.match(/^min:(-?\d+(?:\.\d+)?)$/);
+      if (minMatch) {
+        const min = parseFloat(minMatch[1]);
+        const numeric = coerceToNumber(normalizedValue);
+        if (numeric === null || numeric < min) {
+          return {
+            valid: false,
+            message: `Value must be at least ${min}`,
+          };
+        }
+        continue;
+      }
+      const maxMatch = rule.match(/^max:(-?\d+(?:\.\d+)?)$/);
+      if (maxMatch) {
+        const max = parseFloat(maxMatch[1]);
+        const numeric = coerceToNumber(normalizedValue);
+        if (numeric === null || numeric > max) {
+          return {
+            valid: false,
+            message: `Value must be at most ${max}`,
+          };
+        }
+      }
+    }
+  }
+
+  return { valid: true, value: normalizedValue };
+}
+
+function coerceToNumber(value: string | number): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  const parsed = Number(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function findSpecSlot(
+  spec: PlaceholdersSpec | null | undefined,
+  normalizedPlaceholder: string
+): PlaceholdersSpecSlot | undefined {
+  if (!spec?.slots) return undefined;
+  return spec.slots.find((slot) => {
+    if (!slot?.name) return false;
+    return (
+      normalizePlaceholderName(slot.name) === normalizedPlaceholder
+    );
+  });
 }
 
 /**

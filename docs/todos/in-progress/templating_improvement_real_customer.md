@@ -316,11 +316,11 @@ lib/services/intent-classifier/
 
 ---
 
-- [ ] **Task 2.1: Create new IntentClassifierService with pattern + AI hybrid**
+- [x] **Task 2.1: Create new IntentClassifierService with pattern + AI hybrid**
   - **File:** `lib/services/intent-classifier/intent-classifier.service.ts` (NEW)
   - **Note:** This is a NEW service separate from existing `context-discovery/intent-classifier.service.ts`
   - **Actions:**
-    - [ ] Create QueryIntent type with new intent types:
+    - [x] Create QueryIntent type with new intent types:
       ```typescript
       export type QueryIntent =
         | 'aggregation_by_category'
@@ -335,7 +335,7 @@ lib/services/intent-classifier/
         | 'join_analysis'
         | 'legacy_unknown';
       ```
-    - [ ] Create classification result interface:
+    - [x] Create classification result interface:
       ```typescript
       export interface IntentClassificationResult {
         intent: QueryIntent;
@@ -351,7 +351,7 @@ lib/services/intent-classifier/
         timeoutMs?: number;
       }
       ```
-    - [ ] Create service skeleton with singleton pattern:
+    - [x] Create service skeleton with singleton pattern:
       ```typescript
       export class IntentClassifierService {
         private cache = new IntentClassifierCache();
@@ -380,10 +380,10 @@ lib/services/intent-classifier/
       }
       ```
 
-- [ ] **Task 2.2: Define temporal proximity indicators (pattern-based)**
+- [x] **Task 2.2: Define temporal proximity indicators (pattern-based)**
   - **File:** `lib/services/intent-classifier/temporal-proximity-patterns.ts`
   - **Actions:**
-    - [ ] Create keyword patterns:
+    - [x] Create keyword patterns:
       ```typescript
       export const TEMPORAL_PROXIMITY_INDICATORS = {
         keywords: [
@@ -403,10 +403,10 @@ lib/services/intent-classifier/
       };
       ```
 
-- [ ] **Task 2.3: Implement pattern-based temporal proximity detection**
+- [x] **Task 2.3: Implement pattern-based temporal proximity detection**
   - **File:** `lib/services/intent-classifier.service.ts`
   - **Actions:**
-    - [ ] Add pattern detection function:
+    - [x] Add pattern detection function:
       ```typescript
       private detectTemporalProximityPattern(
         question: string
@@ -463,10 +463,10 @@ lib/services/intent-classifier/
       }
       ```
 
-- [ ] **Task 2.4: Define assessment correlation patterns (pattern-based)**
+- [x] **Task 2.4: Define assessment correlation patterns (pattern-based)**
   - **File:** `lib/services/intent-classifier/assessment-correlation-patterns.ts`
   - **Actions:**
-    - [ ] Create keyword patterns:
+    - [x] Create keyword patterns:
       ```typescript
       export const ASSESSMENT_CORRELATION_INDICATORS = {
         antiJoinKeywords: [
@@ -484,10 +484,10 @@ lib/services/intent-classifier/
       };
       ```
 
-- [ ] **Task 2.5: Implement pattern-based assessment correlation detection**
+- [x] **Task 2.5: Implement pattern-based assessment correlation detection**
   - **File:** `lib/services/intent-classifier.service.ts`
   - **Actions:**
-    - [ ] Add pattern detection function:
+    - [x] Add pattern detection function:
       ```typescript
       private detectAssessmentCorrelationPattern(
         question: string
@@ -544,10 +544,10 @@ lib/services/intent-classifier/
       }
       ```
 
-- [ ] **Task 2.6: Define workflow status monitoring patterns (pattern-based)**
+- [x] **Task 2.6: Define workflow status monitoring patterns (pattern-based)**
   - **File:** `lib/services/intent-classifier/workflow-status-patterns.ts`
   - **Actions:**
-    - [ ] Create keyword patterns:
+    - [x] Create keyword patterns:
       ```typescript
       export const WORKFLOW_STATUS_INDICATORS = {
         statusKeywords: [
@@ -564,10 +564,10 @@ lib/services/intent-classifier/
       };
       ```
 
-- [ ] **Task 2.7: Implement pattern-based workflow status detection**
+- [x] **Task 2.7: Implement pattern-based workflow status detection**
   - **File:** `lib/services/intent-classifier.service.ts`
   - **Actions:**
-    - [ ] Add pattern detection function:
+    - [x] Add pattern detection function:
       ```typescript
       private detectWorkflowStatusPattern(
         question: string
@@ -633,18 +633,18 @@ lib/services/intent-classifier/
       }
       ```
 
-- [ ] **Task 2.8: Create cache implementation**
+- [x] **Task 2.8: Create cache implementation**
   - **File:** `lib/services/intent-classifier/cache.ts`
   - **Pattern:** Follow existing `IntentClassificationServiceCache` pattern
   - **Actions:**
-    - [ ] Create cache entry interface:
+    - [x] Create cache entry interface:
       ```typescript
       interface CacheEntry<T> {
         value: T;
         expiresAt: number;
       }
       ```
-    - [ ] Create cache class:
+    - [x] Create cache class:
       ```typescript
       import { createHash } from "crypto";
       import type { IntentClassificationResult } from "./intent-classifier.service";
@@ -712,17 +712,17 @@ lib/services/intent-classifier/
       }
       ```
 
-- [ ] **Task 2.9: Create AI prompt templates**
+- [x] **Task 2.9: Create AI prompt templates**
   - **File:** `lib/services/intent-classifier/prompts/intent-classification-ai.prompt.ts`
   - **Actions:**
-    - [ ] Create system prompt constant:
+    - [x] Create system prompt constant:
       ```typescript
       export const INTENT_CLASSIFICATION_SYSTEM_PROMPT = `You are an intent classifier for healthcare data queries.
 Your task is to classify user questions into one of the predefined intent types.
 
 Be precise and consider the context carefully. Return your classification with a confidence score.`;
       ```
-    - [ ] Create prompt builder function:
+    - [x] Create prompt builder function:
       ```typescript
       export function buildIntentClassificationPrompt(
         question: string,
@@ -757,7 +757,7 @@ Respond in JSON format:
 }`;
       }
       ```
-    - [ ] Create response parser:
+    - [x] Create response parser:
       ```typescript
       export function parseIntentClassificationResponse(
         response: string
@@ -772,11 +772,11 @@ Respond in JSON format:
       }
       ```
 
-- [ ] **Task 2.10: Implement hybrid classification orchestration in main service**
+- [x] **Task 2.10: Implement hybrid classification orchestration in main service**
   - **File:** `lib/services/intent-classifier/intent-classifier.service.ts`
   - **Pattern:** Follow existing `IntentClassifierService` architecture (singleton, no constructor DI)
   - **Actions:**
-    - [ ] Implement main `classify()` method with hybrid logic:
+    - [x] Implement main `classify()` method with hybrid logic:
       ```typescript
       async classify(
         question: string,
@@ -856,7 +856,7 @@ Respond in JSON format:
         }
       }
       ```
-    - [ ] Implement AI classification helper (uses existing provider factory):
+    - [x] Implement AI classification helper (uses existing provider factory):
       ```typescript
       private async classifyWithAI(
         question: string,
@@ -890,7 +890,7 @@ Respond in JSON format:
         return parseIntentClassificationResponse(response);
       }
       ```
-    - [ ] Implement database logging (fire-and-forget pattern):
+    - [x] Implement database logging (fire-and-forget pattern):
       ```typescript
       private logToDatabase(
         question: string,
@@ -924,7 +924,7 @@ Respond in JSON format:
         })();
       }
       ```
-    - [ ] Implement disagreement logging:
+    - [x] Implement disagreement logging:
       ```typescript
       private logDisagreement(
         question: string,
@@ -983,10 +983,10 @@ Respond in JSON format:
       }
       ```
 
-- [ ] **Task 2.11: Create database tables for classification logging**
-  - **File:** `database/migration/033_intent_classification_logging.sql`
+- [x] **Task 2.11: Intent classification observability (storage + API + UI)**
+  - **Files:** `database/migration/033_intent_classification_logging.sql`, `app/api/admin/intent-classification/logs/route.ts`, `app/admin/intent-telemetry/page.tsx`
   - **Actions:**
-    - [ ] Create IntentClassificationLog table:
+    - [x] Create IntentClassificationLog table:
       ```sql
       CREATE TABLE IF NOT EXISTS "IntentClassificationLog" (
         id SERIAL PRIMARY KEY,
@@ -1005,7 +1005,7 @@ Respond in JSON format:
       CREATE INDEX idx_intent_log_method ON "IntentClassificationLog"(method);
       CREATE INDEX idx_intent_log_created ON "IntentClassificationLog"(created_at);
       ```
-    - [ ] Create IntentClassificationDisagreement table:
+    - [x] Create IntentClassificationDisagreement table:
       ```sql
       CREATE TABLE IF NOT EXISTS "IntentClassificationDisagreement" (
         id SERIAL PRIMARY KEY,
@@ -1023,6 +1023,9 @@ Respond in JSON format:
       CREATE INDEX idx_disagreement_customer ON "IntentClassificationDisagreement"(customer_id);
       CREATE INDEX idx_disagreement_resolved ON "IntentClassificationDisagreement"(resolved);
       ```
+    - [x] Build admin API endpoint (GET `/api/admin/intent-classification/logs`) that filters by customer/intent/method/date range and returns summaries (pattern vs AI vs fallback counts, latency stats, recent disagreements)
+    - [x] Add admin UI surface (dedicated telemetry page + dashboard link) that displays those summaries plus the latest log entries with “How I got this” context
+    - [x] Define and implement retention/cleanup (e.g., scheduled job purging logs >30 days or aggregating into metrics)
 
 - [ ] **Task 2.12: Add unit tests for pattern-based classification**
   - **File:** `lib/services/intent-classifier.service.spec.ts`
@@ -1044,18 +1047,18 @@ Respond in JSON format:
 - [ ] **Task 2.13: Add integration tests for hybrid classification**
   - **File:** `lib/services/intent-classifier.integration.spec.ts`
   - **Actions:**
-    - [ ] Test pattern fast path (high confidence):
-      - [ ] Verify pattern match used
-      - [ ] Verify AI not called
-      - [ ] Verify latency < 10ms
-    - [ ] Test AI fallback (low confidence):
-      - [ ] Verify pattern match attempted
-      - [ ] Verify AI called
-      - [ ] Verify disagreement logged
-      - [ ] Verify latency 500-2000ms
-    - [ ] Test classification logging:
-      - [ ] Verify IntentClassificationLog record created
-      - [ ] Verify all fields populated correctly
+    - [x] Test pattern fast path (high confidence):
+      - [x] Verify pattern match used
+      - [x] Verify AI not called
+      - [x] Verify latency < 10ms
+    - [x] Test AI fallback (low confidence):
+      - [x] Verify pattern match attempted
+      - [x] Verify AI called
+      - [x] Verify disagreement logged
+      - [x] Verify latency 500-2000ms
+    - [x] Test classification logging:
+      - [x] Verify IntentClassificationLog record created
+      - [x] Verify all fields populated correctly
 
 - [ ] **Task 2.14: Test intent classification with real questions**
   - **Actions:**
@@ -1076,222 +1079,125 @@ Respond in JSON format:
 
 #### Day 3-4: Build Template Matcher Service
 
-- [ ] **Task 2.15: Define Template interface**
-  - **File:** `lib/services/template/template.interface.ts`
+- [x] **Task 2.15: Enrich existing template types**
+  - **Files:** `lib/services/query-template.service.ts`, `lib/services/template-validator.service.ts`
   - **Actions:**
-    - [ ] Create interfaces:
-      ```typescript
-      export interface Template {
-        id: number;
-        name: string;
-        version: number;
-        intent: QueryIntent;
-        description: string;
-        keywords: string[];
-        tags: string[];
-        placeholders: TemplatePlaceholder[];
-        questionExamples: string[];
-        sqlPattern: string;
-        resultShape: ResultShape;
-        notes?: string;
-      }
+    - [x] Extend `QueryTemplate` / `PlaceholdersSpec` to capture result shape, notes, semantic metadata, etc.
+    - [x] Keep a single canonical interface (no duplicate Template definitions)
+    - [x] Update validators so new metadata is enforced when loading from DB/JSON
 
-      export interface TemplatePlaceholder {
-        name: string;
-        type: 'int' | 'decimal' | 'string' | 'string[]' | 'date' | 'boolean';
-        semantic: string;
-        required: boolean;
-        default?: any;
-        description: string;
-        examples?: any[];
-        validators?: string[];
-      }
-
-      export interface MatchedTemplate {
-        template: Template;
-        confidence: number;
-        matchedKeywords: string[];
-        missingPlaceholders: string[];
-      }
-      ```
-
-- [ ] **Task 2.16: Create TemplateMatcher service skeleton**
-  - **File:** `lib/services/template/template-matcher.service.ts`
+- [x] **Task 2.16: Enhance TemplateMatcher scoring**
+  - **File:** `lib/services/semantic/template-matcher.service.ts`
   - **Actions:**
-    - [ ] Create service class:
-      ```typescript
-      export class TemplateMatcherService {
-        constructor(
-          private readonly templateRepository: TemplateRepository,
-          private readonly logger: LoggerService,
-        ) {}
+    - [x] Introduce helpers for keyword vs. tag scoring while keeping existing functional API
+    - [x] Plug in semantic concepts (from intent classifier/context discovery) as part of the score
+    - [x] Preserve backward compatibility for current consumers
 
-        async matchTemplates(
-          intent: QueryIntent,
-          question: string,
-          concepts: string[]
-        ): Promise<MatchedTemplate[]>
-
-        private calculateKeywordMatchScore(
-          question: string,
-          keywords: string[]
-        ): { score: number; matched: string[] }
-
-        private calculateTagMatchScore(
-          concepts: string[],
-          tags: string[]
-        ): number
-      }
-      ```
-
-- [ ] **Task 2.20: Implement keyword matching algorithm**
-  - **File:** `lib/services/template/template-matcher.service.ts`
+- [x] **Task 2.17: Add semantic/tag overlap scoring**
+  - **File:** `lib/services/semantic/template-matcher.service.ts`
   - **Actions:**
-    - [ ] Implement `calculateKeywordMatchScore()`:
-      - [ ] Tokenize question to lowercase words
-      - [ ] For each template keyword, check if present in question
-      - [ ] Calculate score: (matched keywords / total keywords)
-      - [ ] Return score and matched keyword list
-    - [ ] Add weight for exact phrase matches (higher score)
+    - [x] Compute Jaccard/overlap between detected concepts and template tags
+    - [x] Feed this score into the overall confidence (configurable weight)
+    - [x] Return matched tags/concepts for downstream explanation
 
-- [ ] **Task 2.17: Implement tag matching algorithm**
-  - **File:** `lib/services/template/template-matcher.service.ts`
+- [x] **Task 2.18: Tune TemplateMatcher pipeline**
+  - **File:** `lib/services/semantic/template-matcher.service.ts`
   - **Actions:**
-    - [ ] Implement `calculateTagMatchScore()`:
-      - [ ] Compare semantic concepts to template tags
-      - [ ] Calculate Jaccard similarity or overlap coefficient
-      - [ ] Return score 0-1
+    - [x] Re-balance weights for examples/keywords/tags to hit desired confidence
+    - [x] Return top‑K matches with structured explanations (keywords/tags/examples)
+    - [x] Update orchestrator consumers if return data expands
 
-- [ ] **Task 2.18: Implement main template matching logic**
-  - **File:** `lib/services/template/template-matcher.service.ts`
+- [x] **Task 2.19: Expand template repository utilities**
+  - **File:** `lib/services/query-template.service.ts`
   - **Actions:**
-    - [ ] Implement `matchTemplates()`:
-      - [ ] Load all templates for given intent
-      - [ ] For each template:
-        - [ ] Calculate keyword match score (weight: 0.6)
-        - [ ] Calculate tag match score (weight: 0.4)
-        - [ ] Combine scores: `confidence = 0.6 * keywordScore + 0.4 * tagScore`
-      - [ ] Filter templates with confidence > 0.5
-      - [ ] Sort by confidence DESC
-      - [ ] Return top 3 matches
+    - [x] Add helpers to fetch templates by intent/id, reusing existing DB/JSON loaders
+    - [x] Normalize keywords/tags/placeholdersSpec when loading from DB
+    - [x] Provide memoized lookups for matcher/resolver code
 
-- [ ] **Task 2.19: Create TemplateRepository**
-  - **File:** `lib/repositories/template.repository.ts`
+- [x] **Task 2.20: Add TemplateMatcher unit tests for new scoring**
+  - **File:** `lib/services/semantic/__tests__/template-matcher.service.test.ts`
   - **Actions:**
-    - [ ] Create repository class:
-      ```typescript
-      export class TemplateRepository {
-        constructor(private readonly db: DatabaseService) {}
-
-        async getTemplatesByIntent(intent: QueryIntent): Promise<Template[]>
-        async getTemplateById(id: number): Promise<Template | null>
-        async getAllTemplates(): Promise<Template[]>
-      }
-      ```
-    - [ ] Implement methods to query `QueryTemplate` table (existing)
-    - [ ] Parse JSON fields (placeholders, keywords, etc.)
-
-- [ ] **Task 2.20: Add unit tests for template matcher**
-  - **File:** `lib/services/template/template-matcher.service.spec.ts`
-  - **Actions:**
-    - [ ] Test keyword matching:
-      - [ ] Question with 100% keyword match → score 1.0
-      - [ ] Question with 50% keyword match → score 0.5
-      - [ ] Question with no matches → score 0.0
-    - [ ] Test tag matching
-    - [ ] Test combined confidence calculation
-    - [ ] Test filtering and sorting
+    - [x] Cover keyword/tag/semantic scoring edge cases
+    - [x] Verify combined confidence, filtering, sorting
+    - [x] Ensure returned explanations include matched keywords/tags
 
 ---
 
 #### Day 5: Build Placeholder Resolver Service
 
-- [ ] **Task 2.17: Create PlaceholderResolver service skeleton**
-  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+- [x] **Task 2.17: Extend placeholder resolver foundation**
+  - **File:** `lib/services/semantic/template-placeholder.service.ts`
   - **Actions:**
-    - [ ] Create service class:
-      ```typescript
-      export interface ResolvedPlaceholders {
-        values: Record<string, any>;
-        allResolved: boolean;
-        missingClarifications: ClarificationRequest[];
-      }
+    - [x] Refactor existing extractor so individual resolver helpers (time window, assessment type, field, clarifications) are pluggable
+    - [x] Ensure the function still returns `extractAndFillPlaceholders` results but now includes a `missingClarifications` structure
+    - [x] Keep logging/backward compatibility while preparing for Tasks 2.21+ enhancements
 
-      export class PlaceholderResolverService {
-        constructor(
-          private readonly logger: LoggerService,
-        ) {}
-
-        async resolvePlaceholders(
-          template: Template,
-          question: string,
-          context: SemanticContext
-        ): Promise<ResolvedPlaceholders>
-
-        private resolveTimeWindowPlaceholder(question: string, placeholder: TemplatePlaceholder): any | null
-        private resolveAssessmentTypePlaceholder(question: string, context: SemanticContext, placeholder: TemplatePlaceholder): any | null
-        private resolveFieldVariablePlaceholder(question: string, context: SemanticContext, placeholder: TemplatePlaceholder): any | null
-        private generateClarification(placeholder: TemplatePlaceholder): ClarificationRequest
-      }
-      ```
-
-- [ ] **Task 2.18: Implement time window resolution**
-  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+- [x] **Task 2.21: Improve time window resolution**
+  - **File:** `lib/services/semantic/template-placeholder.service.ts`
   - **Actions:**
-    - [ ] Implement `resolveTimeWindowPlaceholder()`:
-      - [ ] Extract time value and unit from question
-      - [ ] Patterns: "4 weeks" → 28 days, "3 months" → 90 days
-      - [ ] Convert to days (multiplier: weeks=7, months=30, years=365)
-      - [ ] Validate against placeholder validators
-      - [ ] Return value or null if not found
+    - [x] Handle new time expressions (weeks/months/years) with validator hooks
+    - [x] Convert to canonical units (days) for downstream services
+    - [x] Validate against placeholder constraints before returning values
 
-- [ ] **Task 2.19: Implement assessment type resolution**
-  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+- [x] **Task 2.22: Implement assessment type resolution**
+  - **File:** `lib/services/semantic/template-placeholder.service.ts`
+  - **Status:** ✅ Complete
   - **Actions:**
-    - [ ] Implement `resolveAssessmentTypePlaceholder()`:
-      - [ ] Extract assessment type keywords from question
-      - [ ] Search `SemanticIndexAssessmentType` for matching concepts
-      - [ ] Return semantic concept or null
+    - [x] Use `SemanticIndexAssessmentType` to resolve placeholders tied to assessment concepts
+    - [x] Store both the resolved concept and original text for audit/debugging
+  - **Notes:**
+    - Implemented `shouldUseAssessmentTypeResolver()`, `extractAssessmentTypeKeywords()`, and `resolveAssessmentTypePlaceholder()`
+    - Added `ResolvedAssessmentType` interface for audit trail
+    - Extended `extractAndFillPlaceholders()` to support async assessment type resolution
+    - Created comprehensive test suite: 11/11 tests passing
+    - See: `docs/design/semantic_layer/task2_22_completion.md`
 
-- [ ] **Task 2.20: Implement field variable resolution**
-  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+- [ ] **Task 2.23: Implement field variable resolution**
+  - **File:** `lib/services/semantic/template-placeholder.service.ts`
   - **Actions:**
-    - [ ] Implement `resolveFieldVariablePlaceholder()`:
-      - [ ] Extract field keywords from question
-      - [ ] Search semantic context for matching field
-      - [ ] Return variable name or null
+    - [ ] Use semantic context to map field placeholders to actual schema fields / enum values
+    - [ ] Support validators/examples defined in `PlaceholdersSpec`
 
-- [ ] **Task 2.21: Implement clarification generation**
-  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+- [x] **Task 2.24: Implement clarification generation**
+  - **Status:** ✅ Complete
+  - **File:** `lib/services/semantic/template-placeholder.service.ts`
   - **Actions:**
-    - [ ] Implement `generateClarification()`:
-      - [ ] Generate user-friendly question for missing placeholder
-      - [ ] Provide examples from placeholder.examples
-      - [ ] For enum fields, fetch enum values from `SemanticIndexFieldEnumValue`
-      - [ ] Return ClarificationRequest object
+    - [x] Generate structured clarification prompts (with examples/options) when placeholders remain unresolved
+  - **Notes:**
+    - Enhanced `buildClarification()` to pull enum values from database
+    - Added `extractFieldNamePatternFromPlaceholder()` helper function
+    - Made `applyValidators()` async to support async clarification
+    - Created comprehensive test suite: 9/9 tests passing
+    - See: docs/design/semantic_layer/task2_24_completion.md
 
-- [ ] **Task 2.22: Implement main resolution logic**
-  - **File:** `lib/services/template/placeholder-resolver.service.ts`
+- [x] **Task 2.25: Implement main resolution logic**
+  - **Status:** ✅ Complete (Already Implemented)
+  - **File:** `lib/services/semantic/template-placeholder.service.ts`
   - **Actions:**
-    - [ ] Implement `resolvePlaceholders()`:
-      - [ ] For each placeholder in template:
-        - [ ] Call appropriate resolver based on semantic type
-        - [ ] If resolved, store in values map
-        - [ ] If not resolved and required, generate clarification
-      - [ ] Check if all required placeholders resolved
-      - [ ] Return ResolvedPlaceholders
+    - [x] For each placeholder, call the appropriate resolver based on semantic type
+    - [x] Collect resolved values and clarifications, mark whether everything is satisfied
+    - [x] Return updated `PlaceholderExtractionResult` that includes clarification requests
+  - **Notes:**
+    - Main resolution logic was already fully implemented during Tasks 2.22-2.24
+    - `extractAndFillPlaceholders()` orchestrates all placeholder resolution
+    - `resolvePlaceholder()` determines which resolver to use based on semantic type
+    - Supports sync resolvers (time window) and async resolvers (assessment type, field variable)
+    - All 33 existing tests confirm functionality
+    - See: docs/design/semantic_layer/task2_25_completion.md
 
-- [ ] **Task 2.23: Add unit tests for placeholder resolver**
-  - **File:** `lib/services/template/placeholder-resolver.service.spec.ts`
+- [x] **Task 2.26: Add placeholder resolver unit tests**
+  - **Status:** ✅ Complete
+  - **File:** `lib/services/semantic/__tests__/template-placeholder.service.test.ts`
   - **Actions:**
-    - [ ] Test time window resolution:
-      - [ ] "4 weeks" → 28 days
-      - [ ] "3 months" → 90 days
-      - [ ] "12 weeks" → 84 days
-    - [ ] Test assessment type resolution
-    - [ ] Test field variable resolution
-    - [ ] Test clarification generation
-    - [ ] Test full resolution with all placeholders
+    - [x] Cover time-window parsing (4 weeks → 28 days, etc.)
+    - [x] Cover assessment type + field resolution (including enums)
+    - [x] Verify clarifications are produced for unresolved placeholders
+  - **Notes:**
+    - Added 9 new integration tests (12 total, all passing)
+    - Comprehensive coverage of all resolver types
+    - Multi-placeholder integration tests for real-world scenarios
+    - Tests edge cases (defaults, no placeholders, full/partial resolution)
+    - See: docs/design/semantic_layer/task2_26_completion.md
 
 ---
 
