@@ -17,6 +17,7 @@ import type {
   TerminologyMapping,
   AssessmentTypeInContext,
 } from "../context-discovery/types";
+import type { QueryTemplate } from "../query-template.service";
 import { executeCustomerQuery } from "./customer-query.service";
 import {
   getFilterValidatorService,
@@ -47,6 +48,7 @@ export async function generateSQLWithLLM(
   customerId: string,
   modelId?: string,
   clarifications?: Record<string, string>,
+  templateReferences?: any[],
   signal?: AbortSignal
 ): Promise<LLMResponse> {
   // Check if already aborted before starting expensive operation
@@ -209,7 +211,8 @@ export async function generateSQLWithLLM(
     context,
     schemaDocumentation,
     customerId,
-    clarifications
+    clarifications,
+    templateReferences
   );
 
   // DEBUG: Log formatted filters section
@@ -292,7 +295,8 @@ async function buildUserPrompt(
   context: ContextBundle,
   schemaDocumentation: string,
   customerId: string,
-  clarifications?: Record<string, string>
+  clarifications?: Record<string, string>,
+  templateReferences?: QueryTemplate[]
 ): Promise<string> {
   let prompt = "";
   const { intent } = context;
@@ -308,6 +312,9 @@ async function buildUserPrompt(
   prompt += formatFiltersSection(intent.filters);
   prompt += formatFormsSection(context.forms || []);
   prompt += formatAssessmentTypesSection(context.assessmentTypes || []); // Phase 5A
+  if (templateReferences && templateReferences.length > 0) {
+    prompt += formatTemplateReferencesSection(templateReferences);
+  }
 
   // IMPORTANT: Skip terminology section if filters have values
   // Filters are the source of truth after terminology mapping
@@ -459,6 +466,34 @@ function formatAssessmentTypesSection(
     "**IMPORTANT:** Use these assessment types to help identify which assessment tables or forms to query."
   );
   lines.push("");
+
+  return `${lines.join("\n")}\n`;
+}
+
+function formatTemplateReferencesSection(
+  templates: QueryTemplate[]
+): string {
+  if (!templates || templates.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = ["# Relevant Query Templates", ""];
+  lines.push(
+    "The following template(s) may be relevant. You can adapt them or use them as guidance for SQL structure:"
+  );
+  lines.push("");
+
+  for (const template of templates) {
+    lines.push(`## Template: ${template.name}`);
+    if (template.description) {
+      lines.push(`- Description: ${template.description}`);
+    }
+    lines.push("- SQL Pattern:");
+    lines.push("```sql");
+    lines.push(template.sqlPattern);
+    lines.push("```");
+    lines.push("");
+  }
 
   return `${lines.join("\n")}\n`;
 }

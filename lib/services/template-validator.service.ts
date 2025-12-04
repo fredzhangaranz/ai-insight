@@ -273,7 +273,7 @@ export function validateSafety(
   const trimmed = sqlPattern.trim();
   const upper = trimmed.toUpperCase();
 
-  const dangerousKeywords = [
+  const wordBoundKeywords = [
     "DROP",
     "DELETE",
     "UPDATE",
@@ -283,11 +283,25 @@ export function validateSafety(
     "CREATE",
     "EXEC",
     "EXECUTE",
-    " SP_",
-    " XP_",
   ];
 
-  for (const keyword of dangerousKeywords) {
+  const prefixKeywords = [" SP_", " XP_"];
+
+  for (const keyword of wordBoundKeywords) {
+    const pattern = new RegExp(`\\b${keyword}\\b`, "i");
+    if (pattern.test(sqlPattern)) {
+      errors.push({
+        code: "sql.dangerousKeyword",
+        message: formatMessage(
+          templateName,
+          `sqlPattern contains potentially dangerous keyword '${keyword}'.`
+        ),
+        meta: { keyword },
+      });
+    }
+  }
+
+  for (const keyword of prefixKeywords) {
     if (upper.includes(keyword)) {
       errors.push({
         code: "sql.dangerousKeyword",

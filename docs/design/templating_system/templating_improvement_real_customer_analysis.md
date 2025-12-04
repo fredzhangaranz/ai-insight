@@ -17,6 +17,14 @@
 
 This document analyzes **production SQL scripts** from three real customers (C1, C2, C3) to identify gaps in our template catalog and semantic layer design. The analysis reveals **critical missing capabilities** in assessment-level semantics, temporal proximity matching, and multi-assessment correlation patterns.
 
+### New Findings (Dec 2025) — Template Strategy Revision
+
+- Current flow executes long templates directly, skipping semantic context and dropping extra user filters; this yields brittle, exact-match behavior.
+- Templates should be **reusable snippets/patterns** (baseline selection, proximity window, anti-join, enum filter, state overlay) that **ground the LLM**, not replace it.
+- Default path should be: template snippets + ontology mappings + extracted placeholders → LLM composition. Direct template execution should be an explicit “canned report” mode only.
+- Residual filters (e.g., gender, unit, date range) must be detected and either appended or clarified—never silently ignored.
+- Observability: log provided snippets, applied constraints, and reject/clarify when the final SQL omits key user constraints.
+
 ### Key Findings
 
 1. **Assessment-Level Semantics Missing**: Our current semantic indexing focuses on form fields and table columns, but customers extensively query by *assessment type* (e.g., "visit documentation", "billing forms", "clinical notes")

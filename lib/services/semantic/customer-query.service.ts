@@ -54,10 +54,18 @@ export async function executeCustomerQuery(
   try {
     await pool.connect();
 
-    // Validate query is read-only
-    const trimmedQuery = sqlQuery.trim().toUpperCase();
+    // Validate query is read-only (ignore leading comments/whitespace)
+    const strippedQuery = stripLeadingComments(sqlQuery).trimStart();
+    // Allow leading semicolons/whitespace before the first statement
+    const normalized = strippedQuery.replace(/^[\\s;]+/, "");
+    const trimmedQuery = normalized.toUpperCase();
     if (!trimmedQuery.startsWith("SELECT") && !trimmedQuery.startsWith("WITH")) {
       throw new Error("Only SELECT and WITH queries are allowed");
+    }
+
+    // Debug aid: log the first part of the query when running in dev to diagnose syntax errors
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[CustomerQuery] Executing SQL (truncated):", normalized.slice(0, 400));
     }
 
     // Execute query
@@ -92,10 +100,30 @@ export function validateAndFixQuery(sqlQuery: string): string {
     }
   }
 
-  // 2. Ensure rpt schema prefix for common tables
+  // 2. Ensure rpt schema prefix for common tables (only when the match is a standalone identifier)
   const tableRegex =
-    /(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
+    /(?<!\w)(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
   fixed = fixed.replace(tableRegex, "rpt.$1");
 
   return fixed;
+}
+
+/**
+ * Remove leading SQL comments (line and block) so validation can inspect the first statement keyword.
+ */
+function stripLeadingComments(sqlQuery: string): string {
+  let result = sqlQuery;
+  let previous: string;
+
+  // Remove consecutive leading comments/blank lines
+  do {
+    previous = result;
+    result = result
+      // Strip leading line comments
+      .replace(/^(?:\s*--.*\n)+/u, "")
+      // Strip leading block comments
+      .replace(/^\s*\/\*[\s\S]*?\*\/\s*/u, "");
+  } while (result !== previous);
+
+  return result;
 }

@@ -6,13 +6,17 @@ import { Pool, PoolClient } from "pg";
 
 interface LegacyTemplate {
   name: string;
+  intent?: string;
   description?: string;
   questionExamples?: string[];
   keywords?: string[];
   tags?: string[];
-  placeholders?: string[];
+  placeholders?: Array<string | PlaceholderSlot>;
+  placeholdersSpec?: PlaceholdersSpec | null;
   sqlPattern: string;
   version?: number;
+  resultShape?: Record<string, unknown> | null;
+  notes?: string | null;
 }
 
 interface LegacyCatalog {
@@ -21,11 +25,14 @@ interface LegacyCatalog {
 
 interface PlaceholderSlot {
   name: string;
-  type: string;
-  semantic: string | null;
-  required: boolean;
-  default: string | null;
-  validators: string[];
+  type?: string | null;
+  semantic?: string | null;
+  required?: boolean;
+  default?: unknown;
+  validators?: string[];
+  description?: string;
+  examples?: unknown[];
+  patterns?: string[];
 }
 
 interface PlaceholdersSpec {
@@ -60,21 +67,69 @@ function ensureArray<T>(value: T[] | undefined | null): T[] {
 }
 
 export function buildPlaceholdersSpec(
-  placeholders: string[] | undefined
+  template: LegacyTemplate
+): PlaceholdersSpec {
+  const structuredSlots = template.placeholdersSpec?.slots ?? [];
+  if (structuredSlots.length > 0) {
+    return {
+      slots: structuredSlots
+        .map((slot) => normalizeStructuredSlot(slot))
+        .filter((slot): slot is PlaceholderSlot => Boolean(slot)),
+    };
+  }
+
+  return buildLegacyPlaceholdersSpec(template.placeholders);
+}
+
+function buildLegacyPlaceholdersSpec(
+  placeholders: Array<string | PlaceholderSlot> | undefined
 ): PlaceholdersSpec {
   const slots: PlaceholderSlot[] = ensureArray(placeholders)
-    .map((rawName) => rawName?.trim())
-    .filter((name): name is string => Boolean(name))
-    .map((name) => ({
-      name,
-      type: inferPlaceholderType(name),
-      semantic: inferPlaceholderSemantic(name),
-      required: true,
-      default: null,
-      validators: [],
-    }));
+    .map((raw) => {
+      if (typeof raw === "string") {
+        const name = raw?.trim();
+        if (!name) return null;
+        return createSlotFromName(name);
+      }
+      return normalizeStructuredSlot(raw);
+    })
+    .filter((slot): slot is PlaceholderSlot => Boolean(slot));
 
   return { slots };
+}
+
+function normalizeStructuredSlot(
+  slot: PlaceholderSlot | undefined | null
+): PlaceholderSlot | null {
+  if (!slot?.name) return null;
+  const name = slot.name.trim();
+  if (!name) return null;
+
+  const normalized: PlaceholderSlot = {
+    ...slot,
+    name,
+    type: slot.type ?? inferPlaceholderType(name),
+    semantic: slot.semantic ?? inferPlaceholderSemantic(name),
+    required: slot.required ?? true,
+    validators: slot.validators ?? [],
+  };
+
+  if (slot.default === undefined) {
+    normalized.default = null;
+  }
+
+  return normalized;
+}
+
+function createSlotFromName(name: string): PlaceholderSlot {
+  return {
+    name,
+    type: inferPlaceholderType(name),
+    semantic: inferPlaceholderSemantic(name),
+    required: true,
+    default: null,
+    validators: [],
+  };
 }
 
 function inferPlaceholderType(name: string): string {
@@ -204,12 +259,14 @@ async function seedTemplate(
   template: LegacyTemplate,
   stats: SeedStats
 ): Promise<void> {
-  const intent = inferIntent(template);
-  const placeholdersSpec = buildPlaceholdersSpec(template.placeholders);
+  const intent = template.intent?.trim() || inferIntent(template);
+  const placeholdersSpec = buildPlaceholdersSpec(template);
   const keywords = ensureArray(template.keywords);
   const tags = ensureArray(template.tags);
   const examples = ensureArray(template.questionExamples);
   const version = template.version ?? 1;
+  const resultShape = template.resultShape ?? null;
+  const notes = template.notes ?? null;
 
   const existingTemplate = await client.query(
     `SELECT id, status, "activeVersionId" FROM "Template" WHERE name = $1 AND intent = $2 LIMIT 1`,
@@ -250,7 +307,7 @@ async function seedTemplate(
     const insertVersion = await client.query(
       `INSERT INTO "TemplateVersion"
          ("templateId", version, "sqlPattern", "placeholdersSpec", keywords, tags, examples, "validationRules", "resultShape", notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, NULL)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9)
        RETURNING id`,
       [
         templateId,
@@ -260,6 +317,8 @@ async function seedTemplate(
         keywords,
         tags,
         examples,
+        resultShape ? JSON.stringify(resultShape) : null,
+        notes ?? null,
       ]
     );
     versionId = insertVersion.rows[0].id;

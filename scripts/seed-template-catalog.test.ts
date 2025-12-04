@@ -7,7 +7,11 @@ import {
 
 describe("seed-template-catalog helpers", () => {
   it("builds placeholder spec with inferred types and semantics", () => {
-    const spec = buildPlaceholdersSpec(["patientId", "windowDays", "endDate"]);
+    const spec = buildPlaceholdersSpec({
+      name: "Test Template",
+      sqlPattern: "SELECT 1",
+      placeholders: ["patientId", "windowDays", "endDate"],
+    });
     expect(spec.slots).toHaveLength(3);
 
     const patientSlot = spec.slots[0];
@@ -22,6 +26,33 @@ describe("seed-template-catalog helpers", () => {
     const endDateSlot = spec.slots[2];
     expect(endDateSlot.type).toBe("date");
     expect(endDateSlot.semantic).toBe("date");
+  });
+
+  it("uses structured placeholder spec when provided", () => {
+    const spec = buildPlaceholdersSpec({
+      name: "Structured Template",
+      sqlPattern: "SELECT 1",
+      placeholdersSpec: {
+        slots: [
+          {
+            name: "timePointDays",
+            type: "int",
+            semantic: "time_window",
+            required: true,
+            default: 28,
+            validators: ["min:1", "max:730"],
+          },
+        ],
+      },
+    });
+
+    expect(spec.slots).toHaveLength(1);
+    const slot = spec.slots[0];
+    expect(slot.name).toBe("timePointDays");
+    expect(slot.type).toBe("int");
+    expect(slot.semantic).toBe("time_window");
+    expect(slot.validators).toEqual(["min:1", "max:730"]);
+    expect(slot.default).toBe(28);
   });
 
   it("infers template intent using keywords and name heuristics", () => {
@@ -66,4 +97,3 @@ describe("seed-template-catalog helpers", () => {
     ).toBe("note_collection");
   });
 });
-

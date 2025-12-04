@@ -5,13 +5,24 @@
 import { matchTemplate } from "./template-matcher.service";
 import { analyzeComplexity } from "./complexity-detector.service";
 import { ContextDiscoveryService } from "../context-discovery/context-discovery.service";
-import { QueryTemplate } from "../query-template.service";
-import { executeCustomerQuery, validateAndFixQuery } from "./customer-query.service";
+import type { QueryTemplate } from "../query-template.service";
+import {
+  executeCustomerQuery,
+  validateAndFixQuery,
+} from "./customer-query.service";
 import { generateSQLWithLLM } from "./llm-sql-generator.service";
 import { extractAndFillPlaceholders } from "./template-placeholder.service";
-import { getModelRouterService, type ModelSelectionInput } from "./model-router.service";
+import { TemplateInjectorService } from "../template/template-injector.service";
+import { TemplateUsageLoggerService } from "../template/template-usage-logger.service";
+import {
+  getModelRouterService,
+  type ModelSelectionInput,
+} from "./model-router.service";
 import type { FieldAssumption } from "./sql-generator.types";
-import type { ClarificationRequest, Assumption } from "@/lib/prompts/generate-query.prompt";
+import type {
+  ClarificationRequest,
+  Assumption,
+} from "@/lib/prompts/generate-query.prompt";
 import {
   collectUnresolvedFilters,
   buildUnresolvedFilterClarificationId,
@@ -21,8 +32,26 @@ import {
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
 import { generateAIClarification } from "./ai-ambiguity-detector.service";
+import { matchSnippets } from "./template-matcher.service";
+import { selectExecutionMode } from "../snippet/execution-mode-selector.service";
+import { extractResidualFiltersWithLLM } from "../snippet/residual-filter-extractor.service";
+import {
+  getResidualFilterValidatorService,
+  type ResidualFilter,
+} from "../snippet/residual-filter-validator.service";
+import type { QueryIntent } from "../intent-classifier/intent-classifier.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
+
+/**
+ * Intents that have snippet support available
+ * When these intents match, snippets should be retrieved and used as LLM context
+ */
+const SNIPPETIZABLE_INTENTS = [
+  "temporal_proximity_query",
+  "assessment_correlation_check",
+  "workflow_status_monitoring",
+];
 
 export interface ThinkingStep {
   id: string;
@@ -91,11 +120,35 @@ export interface OrchestrationResult {
   assumptions?: FieldAssumption[] | Assumption[];
 }
 
+const TEMPLATE_ENABLED_INTENTS = [
+  "temporal_proximity_query",
+  "assessment_correlation_check",
+  "workflow_status_monitoring",
+];
+
+// Threshold for using template-first mode
+// After reweighting template matcher: keywords (0.5), examples (0.25), intent (0.15), tags (0.1)
+// A good match: 3 keywords (min 0.5) × 0.5 + intent (0.667) × 0.15 = 0.25 + 0.1 = 0.35
+// Snippet templates use 0.30 threshold (more flexible, can be composed)
+const TEMPLATE_CONFIDENCE_THRESHOLD = 0.35;
+const SNIPPET_TEMPLATE_THRESHOLD = 0.3;
+
 export class ThreeModeOrchestrator {
   private contextDiscovery: ContextDiscoveryService;
+  private templateInjector: TemplateInjectorService;
+  private templateUsageLogger: TemplateUsageLoggerService;
 
-  constructor() {
-    this.contextDiscovery = new ContextDiscoveryService();
+  constructor(deps?: {
+    contextDiscovery?: ContextDiscoveryService;
+    templateInjector?: TemplateInjectorService;
+    templateUsageLogger?: TemplateUsageLoggerService;
+  }) {
+    this.contextDiscovery =
+      deps?.contextDiscovery ?? new ContextDiscoveryService();
+    this.templateInjector =
+      deps?.templateInjector ?? new TemplateInjectorService();
+    this.templateUsageLogger =
+      deps?.templateUsageLogger ?? new TemplateUsageLoggerService();
   }
 
   /**
@@ -113,7 +166,11 @@ export class ThreeModeOrchestrator {
    * Each expensive step can be aborted early if cheap checks resolve the query.
    * See: docs/design/semantic_layer/PERFORMANCE_OPTIMIZATION.md lines 224-232
    */
-  async ask(question: string, customerId: string, modelId?: string): Promise<OrchestrationResult> {
+  async ask(
+    question: string,
+    customerId: string,
+    modelId?: string
+  ): Promise<OrchestrationResult> {
     const thinking: ThinkingStep[] = [];
     const startTime = Date.now();
 
@@ -141,8 +198,56 @@ export class ThreeModeOrchestrator {
     });
 
     const templateMatch = await matchTemplate(question, customerId);
+    const templateReferences =
+      templateMatch.explanations?.map((exp) => exp.template).slice(0, 2) ?? [];
 
-    if (templateMatch.matched && templateMatch.template) {
+    // Check if best match is a snippet template (even if below full template threshold)
+    // If template matcher returned matched: false, check explanations for snippet templates
+    let matchedTemplate = templateMatch.template;
+    let matchedConfidence = templateMatch.confidence;
+
+    if (!templateMatch.matched && templateMatch.explanations?.length > 0) {
+      const bestExplanation = templateMatch.explanations[0];
+      const bestTemplate = bestExplanation.template;
+      const isSnippetTemplate =
+        bestTemplate.intent?.startsWith("snippet_") ||
+        bestTemplate.tags?.includes("snippet");
+
+      // If it's a snippet template and meets snippet threshold, use it
+      if (
+        isSnippetTemplate &&
+        bestExplanation.confidence >= SNIPPET_TEMPLATE_THRESHOLD
+      ) {
+        matchedTemplate = bestTemplate;
+        matchedConfidence = bestExplanation.confidence;
+        console.log(
+          `[Orchestrator] 📝 Using snippet template "${
+            bestTemplate.name
+          }" with confidence ${matchedConfidence.toFixed(
+            3
+          )} (snippet threshold: ${SNIPPET_TEMPLATE_THRESHOLD})`
+        );
+      }
+    }
+
+    // Allow snippet templates to execute even if not in TEMPLATE_ENABLED_INTENTS
+    // Snippet templates are more flexible and can be composed
+    const isSnippetTemplate =
+      matchedTemplate &&
+      (matchedTemplate.intent?.startsWith("snippet_") ||
+        matchedTemplate.tags?.includes("snippet"));
+    const isFullTemplate =
+      matchedTemplate &&
+      TEMPLATE_ENABLED_INTENTS.includes(matchedTemplate.intent ?? "");
+    const requiredThreshold = isSnippetTemplate
+      ? SNIPPET_TEMPLATE_THRESHOLD
+      : TEMPLATE_CONFIDENCE_THRESHOLD;
+
+    if (
+      matchedTemplate &&
+      (isSnippetTemplate || isFullTemplate) &&
+      matchedConfidence >= requiredThreshold
+    ) {
       thinking[0].status = "complete";
       thinking[0].duration = Date.now() - startTime;
 
@@ -153,16 +258,19 @@ export class ThreeModeOrchestrator {
       // CANCELLATION TELEMETRY (Task 1.1.6)
       // Track that we avoided expensive operations due to template match
       const potentialLatencySaved = 15000; // Typical context discovery + SQL generation time
-      console.log(`[Orchestrator] 🚀 Template match - avoided expensive operations`, {
-        llm_call_canceled_reason: 'template_hit',
-        llm_call_avoided_latency_ms: potentialLatencySaved,
-        template_name: templateMatch.template.name,
-        confidence: templateMatch.confidence,
-      });
+      console.log(
+        `[Orchestrator] 🚀 Template match - avoided expensive operations`,
+        {
+          llm_call_canceled_reason: "template_hit",
+          llm_call_avoided_latency_ms: potentialLatencySaved,
+          template_name: matchedTemplate.name,
+          confidence: matchedConfidence,
+        }
+      );
 
       thinking[0].details = {
-        templateName: templateMatch.template.name,
-        confidence: templateMatch.confidence,
+        templateName: matchedTemplate.name,
+        confidence: matchedConfidence,
         matchedKeywords: templateMatch.matchedKeywords,
         canceledOperations: true, // Flag that we canceled pending operations
         savedLatencyMs: potentialLatencySaved,
@@ -171,8 +279,9 @@ export class ThreeModeOrchestrator {
       return await this.executeTemplate(
         question,
         customerId,
-        templateMatch.template,
-        thinking
+        matchedTemplate,
+        thinking,
+        modelId
       );
     } else {
       thinking[0].status = "complete";
@@ -208,15 +317,40 @@ export class ThreeModeOrchestrator {
     // Route based on complexity level
     if (complexity.complexity === "simple") {
       thinking[1].message = `Simple query detected (${complexity.score}/10), using direct semantic mode`;
-      return await this.executeDirect(question, customerId, thinking, complexity, modelId, undefined, abortController.signal);
+      return await this.executeDirect(
+        question,
+        customerId,
+        thinking,
+        complexity,
+        modelId,
+        undefined,
+        abortController.signal,
+        templateReferences
+      );
     } else if (complexity.complexity === "medium") {
       // Medium complexity: Use direct mode with preview option
       thinking[1].message = `Medium complexity query (${complexity.score}/10), using direct semantic mode with preview`;
-      return await this.executeDirect(question, customerId, thinking, complexity, modelId, undefined, abortController.signal);
+      return await this.executeDirect(
+        question,
+        customerId,
+        thinking,
+        complexity,
+        modelId,
+        undefined,
+        abortController.signal,
+        templateReferences
+      );
     } else {
       // Complex: Use funnel mode with step preview
       thinking[1].message = `Complex query detected (${complexity.score}/10), using funnel mode`;
-      return await this.executeFunnel(question, customerId, thinking, complexity, modelId, abortController.signal);
+      return await this.executeFunnel(
+        question,
+        customerId,
+        thinking,
+        complexity,
+        modelId,
+        abortController.signal
+      );
     }
   }
 
@@ -227,7 +361,8 @@ export class ThreeModeOrchestrator {
     question: string,
     customerId: string,
     template: QueryTemplate,
-    thinking: ThinkingStep[]
+    thinking: ThinkingStep[],
+    modelId?: string
   ): Promise<OrchestrationResult> {
     thinking.push({
       id: "template_execute",
@@ -236,28 +371,240 @@ export class ThreeModeOrchestrator {
     });
 
     const startTime = Date.now();
+    let usageId: number | null = null;
 
     try {
       // Extract placeholder values and fill template SQL
-      const placeholderResult = await extractAndFillPlaceholders(question, template);
+      const placeholderResult = await extractAndFillPlaceholders(
+        question,
+        template,
+        customerId
+      );
+      if (placeholderResult.missingPlaceholders?.length) {
+        const clarifications = placeholderResult.clarifications ?? [];
+        thinking[thinking.length - 1].status = "complete";
+        thinking[thinking.length - 1].message =
+          "Need clarification for template placeholders";
+        return {
+          mode: "clarification",
+          question,
+          thinking,
+          requiresClarification: true,
+          clarifications,
+          clarificationReasoning:
+            "Template placeholders require additional details",
+        };
+      }
 
       thinking[thinking.length - 1].details = {
         placeholders: placeholderResult.values,
         confidence: placeholderResult.confidence,
       };
 
-      // Execute filled SQL against customer database
-      const fixedSQL = validateAndFixQuery(placeholderResult.filledSQL);
+      // Phase 3: Check if snippet-guided mode should be used
+      const intent = template.intent as QueryIntent | undefined;
+      let validatedResidualFilters: ResidualFilter[] = [];
+
+      if (intent && SNIPPETIZABLE_INTENTS.includes(intent)) {
+        thinking.push({
+          id: "snippet_matching",
+          status: "running",
+          message: "Checking for relevant snippets...",
+        });
+
+        // Step 1: Match snippets
+        const semanticContext = await this.contextDiscovery.discover(
+          question,
+          customerId
+        );
+        const snippetMatches = await matchSnippets(
+          question,
+          intent,
+          {
+            fields: semanticContext.fields?.map((f: any) => f.name) || [],
+            assessmentTypes:
+              semanticContext.assessmentTypes?.map((at: any) => at.name) || [],
+          },
+          { topK: 5, minScore: 0.6 }
+        );
+
+        // Step 2: Select execution mode
+        const modeDecision = await selectExecutionMode({
+          intent,
+          matchedSnippets: snippetMatches,
+          placeholdersResolved: true,
+        });
+
+        thinking[thinking.length - 1].status = "complete";
+        thinking[
+          thinking.length - 1
+        ].message = `Execution mode: ${modeDecision.mode}`;
+        thinking[thinking.length - 1].details = {
+          mode: modeDecision.mode,
+          snippetsFound: snippetMatches.length,
+          reason: modeDecision.reason,
+        };
+
+        // Step 3: If snippets mode, extract and validate residual filters
+        if (modeDecision.mode === "snippets" && snippetMatches.length > 0) {
+          thinking.push({
+            id: "residual_filter_extraction",
+            status: "running",
+            message: "Extracting residual filters...",
+          });
+
+          const residualFilters = await extractResidualFiltersWithLLM({
+            query: question,
+            alreadyExtractedPlaceholders: placeholderResult.values,
+            semanticContext: {
+              fields: semanticContext.fields || [],
+              enums: {}, // TODO: Populate from semantic context
+              assessmentTypes:
+                semanticContext.assessmentTypes?.map((at: any) => at.name) ||
+                [],
+            },
+            customerId,
+            modelId, // Pass user's selected model for ModelRouter
+          });
+
+          if (residualFilters.length > 0) {
+            // Validate residual filters
+            const validator = getResidualFilterValidatorService();
+            const validationResult = await validator.validateResidualFilters(
+              residualFilters,
+              semanticContext,
+              customerId
+            );
+
+            thinking[thinking.length - 1].status = "complete";
+            thinking[
+              thinking.length - 1
+            ].message = `Validated ${validationResult.validatedFilters.length}/${residualFilters.length} residual filters`;
+
+            if (!validationResult.valid && validationResult.errors.length > 0) {
+              // Return clarification for invalid filters
+              const clarifications = validationResult.errors.map(
+                (error, idx) => ({
+                  id: `residual_filter_${idx}`,
+                  ambiguousTerm: error.field,
+                  question: error.message,
+                  options: [
+                    {
+                      id: "remove",
+                      label: "Remove this filter",
+                      description: "Proceed without this constraint",
+                      sqlConstraint: "__REMOVE_FILTER__",
+                    },
+                  ],
+                  allowCustom: true,
+                })
+              );
+
+              return {
+                mode: "clarification",
+                question,
+                thinking,
+                requiresClarification: true,
+                clarifications,
+                clarificationReasoning: `${validationResult.statistics.failed} residual filter(s) could not be validated`,
+              };
+            }
+
+            validatedResidualFilters = validationResult.validatedFilters;
+          } else {
+            thinking[thinking.length - 1].status = "complete";
+            thinking[thinking.length - 1].message = "No residual filters found";
+          }
+        }
+      }
+
+      let usageId: number | null = null;
+      if (template.templateVersionId) {
+        usageId = await this.templateUsageLogger.logUsageStart({
+          templateVersionId: template.templateVersionId,
+          subQuestionId: undefined,
+          question,
+          mode: "template_direct",
+          placeholderValues: placeholderResult.values,
+        });
+      }
+
+      // Check if this is a snippet template that's a SQL fragment (not executable directly)
+      // Snippet fragments typically:
+      // 1. Have comments indicating they expect upstream CTEs
+      // 2. Reference CTE names (not rpt. tables) that don't exist
+      // 3. Are marked as snippets in intent or tags
+      const sqlUpper = template.sqlPattern.trim().toUpperCase();
+      const isSnippetTemplate =
+        template.intent?.startsWith("snippet_") ||
+        template.tags?.includes("snippet");
+      const hasUpstreamCTEComment =
+        template.sqlPattern.includes("-- Expects upstream CTE") ||
+        template.sqlPattern.includes("-- Snippet:") ||
+        template.notes?.toLowerCase().includes("compose after") ||
+        template.notes?.toLowerCase().includes("expects");
+      const referencesCTENames =
+        template.sqlPattern.match(/FROM\s+(\w+)/i) &&
+        !template.sqlPattern.match(/FROM\s+rpt\./i);
+
+      const isSnippetFragment =
+        isSnippetTemplate && (hasUpstreamCTEComment || referencesCTENames);
+
+      if (isSnippetFragment) {
+        // Snippet fragments can't be executed directly - use as reference in direct mode
+        console.log(
+          `[Orchestrator] 📝 Snippet template "${template.name}" is a SQL fragment - using as reference in direct mode`
+        );
+        thinking[thinking.length - 1].status = "complete";
+        thinking[thinking.length - 1].message =
+          "Snippet template found - using as reference for SQL generation";
+        thinking[thinking.length - 1].details = {
+          templateName: template.name,
+          reason: "SQL fragment - cannot execute directly",
+          placeholdersExtracted: placeholderResult.values,
+        };
+
+        // Fall back to direct mode with template as reference
+        // Note: We pass placeholders as clarifications, but the system should recognize
+        // they're from template extraction and only suppress clarification for matching filters
+        const complexity = analyzeComplexity(question);
+        return await this.executeDirect(
+          question,
+          customerId,
+          thinking,
+          complexity,
+          modelId,
+          placeholderResult.values, // Pass extracted placeholders as "clarifications"
+          undefined,
+          [template], // Pass snippet template as reference
+          "template_extracted" // Flag indicating these clarifications came from template, not user
+        );
+      }
+
+      const injectedSql = this.templateInjector.injectPlaceholders(
+        template.sqlPattern,
+        placeholderResult.values,
+        template.name
+      );
+      const fixedSQL = validateAndFixQuery(injectedSql);
       const results = await executeCustomerQuery(customerId, fixedSQL);
 
       thinking[thinking.length - 1].status = "complete";
       thinking[thinking.length - 1].duration = Date.now() - startTime;
 
+      if (usageId) {
+        await this.templateUsageLogger.logUsageOutcome({
+          templateUsageId: usageId,
+          success: true,
+          latencyMs: Date.now() - startTime,
+        });
+      }
+
       return {
         mode: "template",
         question,
         thinking,
-        sql: placeholderResult.filledSQL,
+        sql: injectedSql,
         template: template.name,
         results: {
           columns: results.columns,
@@ -273,6 +620,19 @@ export class ThreeModeOrchestrator {
       thinking[thinking.length - 1].message = `Template execution failed: ${
         error instanceof Error ? error.message : "Unknown error"
       }`;
+
+      if (usageId) {
+        await this.templateUsageLogger.logUsageOutcome({
+          templateUsageId: usageId,
+          success: false,
+          errorType:
+            error instanceof Error
+              ? error.name ?? "template_error"
+              : "template_error",
+          latencyMs: Date.now() - startTime,
+        });
+      }
+
       throw error;
     }
   }
@@ -317,7 +677,8 @@ export class ThreeModeOrchestrator {
       complexity,
       modelId,
       clarifications,
-      abortController.signal
+      abortController.signal,
+      undefined
     );
   }
 
@@ -342,10 +703,17 @@ export class ThreeModeOrchestrator {
     question: string,
     customerId: string,
     thinking: ThinkingStep[],
-    complexity?: { complexity: string; score: number; strategy: string; reasons: string[] },
+    complexity?: {
+      complexity: string;
+      score: number;
+      strategy: string;
+      reasons: string[];
+    },
     modelId?: string,
     clarifications?: Record<string, string>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    templateReferences?: QueryTemplate[],
+    clarificationType?: "user_provided" | "template_extracted"
   ): Promise<OrchestrationResult> {
     // EXECUTION ORDER STEP 5: Context Discovery
     // This is the most expensive step (8-12s) and will be optimized in Task 1.1.4
@@ -409,7 +777,8 @@ export class ThreeModeOrchestrator {
           contextDiscoveryStep.subSteps[0].details = {
             confidence: context.intent?.confidence || 0,
           };
-          contextDiscoveryStep.message = "Discovering semantic context... (analyzed intent)";
+          contextDiscoveryStep.message =
+            "Discovering semantic context... (analyzed intent)";
 
           // Semantic search
           contextDiscoveryStep.subSteps[1].status = "complete";
@@ -417,28 +786,33 @@ export class ThreeModeOrchestrator {
             formsFound: context.forms?.length || 0,
             fieldsFound: context.fields?.length || 0,
           };
-          contextDiscoveryStep.message = "Discovering semantic context... (found forms & fields)";
+          contextDiscoveryStep.message =
+            "Discovering semantic context... (found forms & fields)";
 
           // Terminology mapping
           contextDiscoveryStep.subSteps[2].status = "complete";
           contextDiscoveryStep.subSteps[2].details = {
             mappingsCount: context.terminology?.length || 0,
           };
-          contextDiscoveryStep.message = "Discovering semantic context... (mapped terminology)";
+          contextDiscoveryStep.message =
+            "Discovering semantic context... (mapped terminology)";
 
           // Join path planning
           contextDiscoveryStep.subSteps[3].status = "complete";
           contextDiscoveryStep.subSteps[3].details = {
             pathsCount: context.joinPaths?.length || 0,
           };
-          contextDiscoveryStep.message = "Discovering semantic context... (planned joins)";
+          contextDiscoveryStep.message =
+            "Discovering semantic context... (planned joins)";
 
           // Context assembly
           contextDiscoveryStep.subSteps[4].status = "complete";
           contextDiscoveryStep.subSteps[4].details = {
-            confidence: context.overallConfidence || context.intent?.confidence || 0,
+            confidence:
+              context.overallConfidence || context.intent?.confidence || 0,
           };
-          contextDiscoveryStep.message = "Discovering semantic context... (complete)";
+          contextDiscoveryStep.message =
+            "Discovering semantic context... (complete)";
         }
       } catch (discoveryError) {
         // If context discovery fails or times out, mark sub-steps as error
@@ -453,13 +827,17 @@ export class ThreeModeOrchestrator {
         // If context discovery fails or times out, create a minimal context
         // This allows the query to proceed with basic SQL generation
         contextDiscoveryStep.status = "complete";
-        contextDiscoveryStep.message = "Context discovery failed, using fallback";
+        contextDiscoveryStep.message =
+          "Context discovery failed, using fallback";
         contextDiscoveryStep.duration = Date.now() - discoveryStart;
         contextDiscoveryStep.details = {
-          error: discoveryError instanceof Error ? discoveryError.message : "Unknown error",
+          error:
+            discoveryError instanceof Error
+              ? discoveryError.message
+              : "Unknown error",
           fallback: true,
         };
-        
+
         // Create minimal fallback context
         context = {
           intent: {
@@ -491,7 +869,8 @@ export class ThreeModeOrchestrator {
       ) {
         contextDiscoveryStep.status = "error";
         contextDiscoveryStep.duration = Date.now() - discoveryStart;
-        const errorMessage = context.intent.reasoning || "Intent classification failed";
+        const errorMessage =
+          context.intent.reasoning || "Intent classification failed";
         contextDiscoveryStep.message = errorMessage;
 
         // Return error gracefully with thinking steps so UI can show progress
@@ -500,7 +879,8 @@ export class ThreeModeOrchestrator {
           question,
           thinking,
           error: {
-            message: context.intent.reasoning ||
+            message:
+              context.intent.reasoning ||
               "Unable to understand your question. This may be due to missing AI model configuration. Please check Admin > AI Configuration.",
             step: "context_discovery",
             details: {
@@ -559,6 +939,8 @@ export class ThreeModeOrchestrator {
       // Only request clarification for unresolved filters if clarifications were NOT already provided
       // If clarifications were provided by user, we should proceed to SQL generation
       // and let the LLM use the clarifications to resolve the filters
+      // EXCEPTION: If clarifications came from template extraction, they don't map to filter IDs,
+      // so we still need to check for unresolved filters and ask for NEW ones discovered by semantic search
       if (unresolvedNeedingClarification.length > 0 && !clarifications) {
         contextDiscoveryStep.message =
           "Discovering semantic context... (filters unresolved)";
@@ -574,7 +956,8 @@ export class ThreeModeOrchestrator {
         const clarifications = await this.buildUnresolvedClarificationRequests(
           unresolvedNeedingClarification,
           question,
-          customerId
+          customerId,
+          modelId
         );
 
         return {
@@ -593,6 +976,16 @@ export class ThreeModeOrchestrator {
           },
           filterMetrics: unresolvedSummary,
         };
+      }
+
+      // If clarifications came from template extraction, log that we're using them
+      if (clarificationType === "template_extracted" && clarifications) {
+        console.log(
+          `[Orchestrator] 📋 Using template-extracted parameters: ${Object.keys(
+            clarifications
+          ).join(", ")}`
+        );
+        contextDiscoveryStep.details.templateExtractedParams = clarifications;
       }
 
       // EXECUTION ORDER STEP 6: Generate SQL (or request clarification)
@@ -617,7 +1010,7 @@ export class ThreeModeOrchestrator {
         const timeSpentSoFar = Date.now() - startTime;
         const potentialLatencySaved = 5000; // Typical SQL generation time
         console.log(`[Orchestrator] 🚫 SQL generation canceled`, {
-          llm_call_canceled_reason: 'user_abort',
+          llm_call_canceled_reason: "user_abort",
           llm_call_avoided_latency_ms: potentialLatencySaved,
           time_spent_before_cancel_ms: timeSpentSoFar,
         });
@@ -637,9 +1030,9 @@ export class ThreeModeOrchestrator {
       // MODEL SELECTION (Task 1.2) - Select best model within user's provider family
       const modelRouter = getModelRouterService();
       const modelSelection = await modelRouter.selectModel({
-        userSelectedModelId: modelId || 'claude-3-5-sonnet-20241022', // User's choice or default
-        complexity: complexity?.complexity || 'medium',
-        taskType: 'sql',
+        userSelectedModelId: modelId || "claude-3-5-sonnet-20241022", // User's choice or default
+        complexity: complexity?.complexity || "medium",
+        taskType: "sql",
         semanticConfidence: context.overallConfidence,
         hasAmbiguity: false, // TODO: Add ambiguity detection in future
       });
@@ -662,11 +1055,12 @@ export class ThreeModeOrchestrator {
         customerId,
         modelSelection.modelId, // Use router-selected model instead of user's direct choice
         clarificationsForLLM,
+        templateReferences,
         signal // Pass abort signal for early cancellation (Task 1.1.5)
       );
 
       // Check if LLM is requesting clarification
-      if (llmResponse.responseType === 'clarification') {
+      if (llmResponse.responseType === "clarification") {
         thinking[thinking.length - 1].status = "complete";
         thinking[thinking.length - 1].duration = Date.now() - sqlStart;
         thinking[thinking.length - 1].message = "Clarification needed";
@@ -677,11 +1071,14 @@ export class ThreeModeOrchestrator {
         // CANCELLATION TELEMETRY (Task 1.1.6)
         // Clarification request means we skip SQL execution
         const potentialLatencySaved = 1500; // Typical SQL execution time
-        console.log(`[Orchestrator] 🔄 Clarification requested - SQL execution skipped`, {
-          llm_call_canceled_reason: 'clarification_required',
-          llm_call_avoided_latency_ms: potentialLatencySaved,
-          clarifications_count: llmResponse.clarifications.length,
-        });
+        console.log(
+          `[Orchestrator] 🔄 Clarification requested - SQL execution skipped`,
+          {
+            llm_call_canceled_reason: "clarification_required",
+            llm_call_avoided_latency_ms: potentialLatencySaved,
+            clarifications_count: llmResponse.clarifications.length,
+          }
+        );
 
         // Return clarification request to user
         return {
@@ -702,9 +1099,12 @@ export class ThreeModeOrchestrator {
 
       thinking[thinking.length - 1].status = "complete";
       thinking[thinking.length - 1].duration = Date.now() - sqlStart;
-      thinking[thinking.length - 1].message = assumptions.length > 0 
-        ? `Generated SQL query (${assumptions.length} assumption${assumptions.length !== 1 ? 's' : ''})`
-        : "Generated SQL query";
+      thinking[thinking.length - 1].message =
+        assumptions.length > 0
+          ? `Generated SQL query (${assumptions.length} assumption${
+              assumptions.length !== 1 ? "s" : ""
+            })`
+          : "Generated SQL query";
       thinking[thinking.length - 1].details = {
         confidence: llmResponse.confidence,
         assumptions: assumptions.length,
@@ -742,7 +1142,11 @@ export class ThreeModeOrchestrator {
       if (thinking[thinking.length - 1].status !== "error") {
         thinking[thinking.length - 1].status = "complete";
         const rowCount = results?.rows?.length || 0;
-        thinking[thinking.length - 1].message = `Executed query (${rowCount.toLocaleString()} row${rowCount !== 1 ? 's' : ''})`;
+        thinking[
+          thinking.length - 1
+        ].message = `Executed query (${rowCount.toLocaleString()} row${
+          rowCount !== 1 ? "s" : ""
+        })`;
       }
       thinking[thinking.length - 1].duration = Date.now() - executeStart;
       thinking[thinking.length - 1].details = {
@@ -767,14 +1171,21 @@ export class ThreeModeOrchestrator {
         assumptions, // Include field assumptions for Inspection Panel
         // Phase 7C: Add complexity information
         complexityScore: complexity?.score,
-        executionStrategy: complexity?.strategy as "auto" | "preview" | "inspect",
+        executionStrategy: complexity?.strategy as
+          | "auto"
+          | "preview"
+          | "inspect",
         // For medium complexity, suggest preview but auto-execute
-        requiresPreview: complexity?.complexity === "medium" && complexity?.strategy === "preview",
+        requiresPreview:
+          complexity?.complexity === "medium" &&
+          complexity?.strategy === "preview",
         filterMetrics: context.metadata?.filterMetrics,
       };
     } catch (error) {
       thinking[thinking.length - 1].status = "error";
-      thinking[thinking.length - 1].message = `Direct semantic execution failed: ${
+      thinking[
+        thinking.length - 1
+      ].message = `Direct semantic execution failed: ${
         error instanceof Error ? error.message : "Unknown error"
       }`;
       throw error;
@@ -790,7 +1201,12 @@ export class ThreeModeOrchestrator {
     question: string,
     customerId: string,
     thinking: ThinkingStep[],
-    complexity?: { complexity: string; score: number; strategy: string; reasons: string[] },
+    complexity?: {
+      complexity: string;
+      score: number;
+      strategy: string;
+      reasons: string[];
+    },
     modelId?: string,
     signal?: AbortSignal
   ): Promise<OrchestrationResult> {
@@ -808,15 +1224,25 @@ export class ThreeModeOrchestrator {
       const stepPreview = this.generateStepPreview(question);
 
       thinking[thinking.length - 1].status = "complete";
-      thinking[thinking.length - 1].message =
-        `Decomposed into ${stepPreview.length} steps (preview mode)`;
+      thinking[
+        thinking.length - 1
+      ].message = `Decomposed into ${stepPreview.length} steps (preview mode)`;
       thinking[thinking.length - 1].duration = Date.now() - startTime;
       thinking[thinking.length - 1].details = {
         steps: stepPreview.length,
       };
 
       // For now, execute in direct mode but show step preview
-      const result = await this.executeDirect(question, customerId, thinking, complexity, modelId, undefined, signal);
+      const result = await this.executeDirect(
+        question,
+        customerId,
+        thinking,
+        complexity,
+        modelId,
+        undefined,
+        signal,
+        undefined
+      );
 
       // Add step preview information
       return {
@@ -824,7 +1250,10 @@ export class ThreeModeOrchestrator {
         requiresPreview: complexity?.strategy === "inspect",
         stepPreview,
         complexityScore: complexity?.score,
-        executionStrategy: complexity?.strategy as "auto" | "preview" | "inspect",
+        executionStrategy: complexity?.strategy as
+          | "auto"
+          | "preview"
+          | "inspect",
       };
     } catch (error) {
       thinking[thinking.length - 1].status = "error";
@@ -859,7 +1288,11 @@ export class ThreeModeOrchestrator {
     // Detect if question involves aggregation, comparison, or filtering
     const lowerQuestion = question.toLowerCase();
 
-    if (lowerQuestion.includes("compare") || lowerQuestion.includes("vs") || lowerQuestion.includes("versus")) {
+    if (
+      lowerQuestion.includes("compare") ||
+      lowerQuestion.includes("vs") ||
+      lowerQuestion.includes("versus")
+    ) {
       steps.push({
         id: "step-2",
         stepNumber: 2,
@@ -872,7 +1305,11 @@ export class ThreeModeOrchestrator {
       });
     }
 
-    if (lowerQuestion.includes("trend") || lowerQuestion.includes("over time") || lowerQuestion.includes("change")) {
+    if (
+      lowerQuestion.includes("trend") ||
+      lowerQuestion.includes("over time") ||
+      lowerQuestion.includes("change")
+    ) {
       steps.push({
         id: "step-2",
         stepNumber: 2,
@@ -885,7 +1322,11 @@ export class ThreeModeOrchestrator {
       });
     }
 
-    if (lowerQuestion.includes("filter") || lowerQuestion.includes("where") || lowerQuestion.includes("only")) {
+    if (
+      lowerQuestion.includes("filter") ||
+      lowerQuestion.includes("where") ||
+      lowerQuestion.includes("only")
+    ) {
       const lastStep = steps[steps.length - 1];
       steps.push({
         id: `step-${steps.length + 1}`,
@@ -943,7 +1384,8 @@ export class ThreeModeOrchestrator {
   private async buildUnresolvedClarificationRequests(
     unresolved: UnresolvedFilterInfo[],
     originalQuestion: string,
-    customerId: string
+    customerId: string,
+    modelId?: string
   ): Promise<ClarificationRequest[]> {
     const clarifications: ClarificationRequest[] = [];
 
@@ -962,13 +1404,16 @@ export class ThreeModeOrchestrator {
           ambiguousTerm: phrase,
           originalQuestion,
           customerId,
+          modelId, // Pass user's selected model for ModelRouter
           // Pass ambiguous matches if available (for field disambiguation)
           ambiguousMatches: (info.filter as any).ambiguousMatches,
         });
 
         if (aiClarification && aiClarification.options.length > 0) {
           console.log(
-            `[Orchestrator] ✅ AI generated ${aiClarification.options.length - 1} options for "${phrase}"`
+            `[Orchestrator] ✅ AI generated ${
+              aiClarification.options.length - 1
+            } options for "${phrase}"`
           );
           clarifications.push(aiClarification);
           continue;
@@ -1040,13 +1485,17 @@ export class ThreeModeOrchestrator {
       if (removalClarifications?.has(id)) {
         return false;
       }
-      return value != null && value.trim() !== "";
+      // Handle both string and numeric values (from template placeholders)
+      const stringValue = String(value ?? "");
+      return stringValue.trim() !== "";
     });
 
     if (entries.length === 0) {
       return undefined;
     }
 
-    return Object.fromEntries(entries);
+    return Object.fromEntries(
+      entries.map(([id, value]) => [id, String(value)])
+    );
   }
 }

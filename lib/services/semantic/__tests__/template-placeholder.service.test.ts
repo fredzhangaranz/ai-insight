@@ -131,6 +131,58 @@ describe('template-placeholder.service - Time Window Parsing', () => {
   });
 });
 
+describe("template-placeholder.service - Percentage resolution", () => {
+  const template: QueryTemplate = {
+    id: "percentage-test",
+    name: "Percentage Test",
+    version: 1,
+    sqlPattern: "SELECT {reductionThreshold} AS threshold",
+    placeholders: ["reductionThreshold"],
+    placeholdersSpec: {
+      slots: [
+        {
+          name: "reductionThreshold",
+          type: "decimal",
+          semantic: "percentage",
+          required: false,
+          default: 0.75,
+          validators: ["min:0", "max:1"],
+        },
+      ],
+    },
+    questionExamples: [],
+  };
+
+  it("extracts percent expressions and normalizes to decimals", async () => {
+    const result = await extractAndFillPlaceholders(
+      "What percentage of wounds met at least a 25% area reduction?",
+      template
+    );
+
+    expect(result.values.reductionThreshold).toBeCloseTo(0.25);
+    expect(result.missingPlaceholders).toHaveLength(0);
+  });
+
+  it("extracts decimal thresholds when explicitly provided", async () => {
+    const result = await extractAndFillPlaceholders(
+      "Use a reduction threshold of 0.8 for this analysis",
+      template
+    );
+
+    expect(result.values.reductionThreshold).toBeCloseTo(0.8);
+  });
+
+  it("falls back to default when detected percentage exceeds validators", async () => {
+    const result = await extractAndFillPlaceholders(
+      "Highlight only wounds with at least 250% reduction",
+      template
+    );
+
+    // Invalid extraction should fall back to default value (0.75)
+    expect(result.values.reductionThreshold).toBe(0.75);
+  });
+});
+
 describe('template-placeholder.service - Assessment Type Resolution', () => {
   const customerId = 'test-customer-123';
   let mockSearcher: any;

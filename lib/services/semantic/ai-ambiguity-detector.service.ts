@@ -1,7 +1,7 @@
 /**
  * AI-Powered Ambiguity Detection Service
  *
- * Uses Gemini Flash to detect and generate clarification options for ambiguous filter terms
+ * Uses ModelRouterService to detect and generate clarification options for ambiguous filter terms
  * that cannot be mapped to semantic database fields.
  *
  * Examples:
@@ -12,7 +12,12 @@
  */
 
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
-import type { ClarificationRequest, ClarificationOption } from "@/lib/prompts/generate-query.prompt";
+import { getModelRouterService } from "./model-router.service";
+import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
+import type {
+  ClarificationRequest,
+  ClarificationOption,
+} from "@/lib/prompts/generate-query.prompt";
 
 /**
  * Semantic context about available database schema
@@ -33,6 +38,7 @@ export interface AmbiguityDetectionInput {
   ambiguousTerm: string;
   originalQuestion: string;
   customerId: string;
+  modelId?: string; // User's selected model (for ModelRouter)
   semanticContext?: SemanticContext;
   ambiguousMatches?: Array<{
     field: string;
@@ -46,7 +52,14 @@ export interface AmbiguityDetectionInput {
  */
 interface AIAmbiguityResponse {
   isComputable: boolean;
-  category: 'age' | 'temporal' | 'size' | 'severity' | 'status' | 'field_disambiguation' | null;
+  category:
+    | "age"
+    | "temporal"
+    | "size"
+    | "severity"
+    | "status"
+    | "field_disambiguation"
+    | null;
   reasoning: string;
   options: Array<{
     id: string;
@@ -68,14 +81,36 @@ export async function generateAIClarification(
   console.log(`[AIAmbiguity] 🤖 Analyzing ambiguous term: "${ambiguousTerm}"`);
 
   try {
-    // Use Gemini Flash for fast, cheap ambiguity detection
-    const provider = await getAIProvider('gemini-2.5-flash');
+    // Use ModelRouterService to select appropriate model within user's provider family
+    const userModelId = input.modelId || DEFAULT_AI_MODEL_ID;
+    const modelRouter = getModelRouterService();
+
+    let selectedModelId = userModelId;
+    try {
+      const modelSelection = await modelRouter.selectModel({
+        userSelectedModelId: userModelId,
+        complexity: "simple",
+        taskType: "clarification",
+      });
+      selectedModelId = modelSelection.modelId;
+      console.log(
+        `[AIAmbiguity] 🎯 Model selected: ${selectedModelId} (${modelSelection.rationale})`
+      );
+    } catch (error) {
+      console.warn(
+        `[AIAmbiguity] ⚠️ Model router unavailable, using user-selected model: ${userModelId}`,
+        error
+      );
+    }
+
+    const provider = await getAIProvider(selectedModelId);
 
     const prompt = buildAmbiguityDetectionPrompt(input);
 
     const startTime = Date.now();
     const response = await provider.complete({
-      system: "You are a precise healthcare data query analyzer. Return only valid JSON.",
+      system:
+        "You are a precise healthcare data query analyzer. Return only valid JSON.",
       userMessage: prompt,
       maxTokens: 1500,
       temperature: 0.1, // Low temperature for consistent structure
@@ -87,16 +122,25 @@ export async function generateAIClarification(
     // Parse and validate AI response
     const parsed = parseAIResponse(response);
 
-    if (!parsed || !parsed.isComputable || !parsed.options || parsed.options.length === 0) {
-      console.log(`[AIAmbiguity] ⚠️ AI determined "${ambiguousTerm}" is not computable`);
+    if (
+      !parsed ||
+      !parsed.isComputable ||
+      !parsed.options ||
+      parsed.options.length === 0
+    ) {
+      console.log(
+        `[AIAmbiguity] ⚠️ AI determined "${ambiguousTerm}" is not computable`
+      );
       return null;
     }
 
     // Validate SQL constraints for safety
-    const validOptions = parsed.options.filter(option => {
+    const validOptions = parsed.options.filter((option) => {
       const isValid = validateSQLConstraint(option.sqlConstraint);
       if (!isValid) {
-        console.warn(`[AIAmbiguity] ⚠️ Invalid SQL constraint rejected: ${option.sqlConstraint}`);
+        console.warn(
+          `[AIAmbiguity] ⚠️ Invalid SQL constraint rejected: ${option.sqlConstraint}`
+        );
       }
       return isValid;
     });
@@ -108,25 +152,36 @@ export async function generateAIClarification(
 
     // Add custom option
     validOptions.push({
-      id: 'custom',
-      label: 'Something else (enter manually)',
-      description: 'Specify your own SQL constraint',
-      sqlConstraint: '',
+      id: "custom",
+      label: "Something else (enter manually)",
+      description: "Specify your own SQL constraint",
+      sqlConstraint: "",
       isDefault: false,
     });
 
-    console.log(`[AIAmbiguity] ✅ Generated ${validOptions.length - 1} valid options for "${ambiguousTerm}"`);
+    console.log(
+      `[AIAmbiguity] ✅ Generated ${
+        validOptions.length - 1
+      } valid options for "${ambiguousTerm}"`
+    );
 
     // Convert to ClarificationRequest format
     return {
       id: `ai_ambiguity_${normalizeId(ambiguousTerm)}`,
       ambiguousTerm,
-      question: buildClarificationQuestion(ambiguousTerm, parsed.category, ambiguousMatches),
+      question: buildClarificationQuestion(
+        ambiguousTerm,
+        parsed.category,
+        ambiguousMatches
+      ),
       options: validOptions,
       allowCustom: true,
     };
   } catch (error) {
-    console.error('[AIAmbiguity] ❌ Failed to generate AI clarification:', error);
+    console.error(
+      "[AIAmbiguity] ❌ Failed to generate AI clarification:",
+      error
+    );
     return null;
   }
 }
@@ -297,8 +352,13 @@ function buildFieldDisambiguationPrompt(
   ambiguousMatches: Array<{ field: string; value: string; confidence: number }>
 ): string {
   const matchesDescription = ambiguousMatches
-    .map((m, i) => `${i + 1}. Field: "${m.field}", Value: "${m.value}" (confidence: ${m.confidence.toFixed(2)})`)
-    .join('\n');
+    .map(
+      (m, i) =>
+        `${i + 1}. Field: "${m.field}", Value: "${
+          m.value
+        }" (confidence: ${m.confidence.toFixed(2)})`
+    )
+    .join("\n");
 
   return `
 You are helping disambiguate which database field the user meant.
@@ -339,15 +399,17 @@ function parseAIResponse(response: string): AIAmbiguityResponse | null {
   try {
     // Remove markdown code blocks if present
     let cleanedResponse = response.trim();
-    if (cleanedResponse.startsWith('```')) {
-      cleanedResponse = cleanedResponse.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    if (cleanedResponse.startsWith("```")) {
+      cleanedResponse = cleanedResponse
+        .replace(/^```(?:json)?\n?/, "")
+        .replace(/\n?```$/, "");
     }
 
     const parsed = JSON.parse(cleanedResponse);
 
     // Validate required fields
-    if (typeof parsed.isComputable !== 'boolean') {
-      console.warn('[AIAmbiguity] Invalid response: missing isComputable');
+    if (typeof parsed.isComputable !== "boolean") {
+      console.warn("[AIAmbiguity] Invalid response: missing isComputable");
       return null;
     }
 
@@ -357,22 +419,22 @@ function parseAIResponse(response: string): AIAmbiguityResponse | null {
 
     // Validate computable response has options
     if (!Array.isArray(parsed.options) || parsed.options.length === 0) {
-      console.warn('[AIAmbiguity] Invalid response: computable but no options');
+      console.warn("[AIAmbiguity] Invalid response: computable but no options");
       return null;
     }
 
     // Validate each option
     for (const option of parsed.options) {
       if (!option.id || !option.label || !option.sqlConstraint) {
-        console.warn('[AIAmbiguity] Invalid option:', option);
+        console.warn("[AIAmbiguity] Invalid option:", option);
         return null;
       }
     }
 
     return parsed as AIAmbiguityResponse;
   } catch (error) {
-    console.error('[AIAmbiguity] Failed to parse AI response:', error);
-    console.error('[AIAmbiguity] Raw response:', response);
+    console.error("[AIAmbiguity] Failed to parse AI response:", error);
+    console.error("[AIAmbiguity] Raw response:", response);
     return null;
   }
 }
@@ -386,7 +448,7 @@ function parseAIResponse(response: string): AIAmbiguityResponse | null {
  * - Looks like a valid WHERE clause constraint
  */
 function validateSQLConstraint(constraint: string): boolean {
-  if (!constraint || typeof constraint !== 'string') {
+  if (!constraint || typeof constraint !== "string") {
     return false;
   }
 
@@ -399,10 +461,10 @@ function validateSQLConstraint(constraint: string): boolean {
     /EXEC(?:UTE)?/i,
     /xp_cmdshell/i,
     /sp_executesql/i,
-    /;/,  // No command chaining
+    /;/, // No command chaining
   ];
 
-  if (forbidden.some(pattern => pattern.test(constraint))) {
+  if (forbidden.some((pattern) => pattern.test(constraint))) {
     return false;
   }
 
@@ -420,14 +482,14 @@ function validateSQLConstraint(constraint: string): boolean {
     /^[A-Z]\.[a-z_]+ +IN +\(.+\)$/i,
   ];
 
-  return validPatterns.some(pattern => pattern.test(constraint.trim()));
+  return validPatterns.some((pattern) => pattern.test(constraint.trim()));
 }
 
 /**
  * Normalizes ambiguous term to valid ID
  */
 function normalizeId(term: string): string {
-  return term.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  return term.toLowerCase().replace(/[^a-z0-9]+/g, "_");
 }
 
 /**
@@ -435,10 +497,10 @@ function normalizeId(term: string): string {
  */
 function buildClarificationQuestion(
   ambiguousTerm: string,
-  category: AIAmbiguityResponse['category'],
+  category: AIAmbiguityResponse["category"],
   ambiguousMatches?: Array<{ field: string; value: string; confidence: number }>
 ): string {
-  if (category === 'field_disambiguation') {
+  if (category === "field_disambiguation") {
     return `Which field did you mean by "${ambiguousTerm}"?`;
   }
 

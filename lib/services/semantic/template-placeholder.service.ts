@@ -87,18 +87,29 @@ export async function extractAndFillPlaceholders(
       customerId
     );
 
+    console.log(`[PlaceholderResolver] 📝 Resolution for "${placeholder}":`, {
+      value: resolution.value,
+      hasValue: resolution.value !== null && resolution.value !== undefined,
+      required: slot?.required,
+      shouldAddToMissing: slot?.required !== false,
+    });
+
     if (resolution.value !== null && resolution.value !== undefined) {
       values[placeholder] = resolution.value;
+      console.log(`[PlaceholderResolver] ✅ Filled "${placeholder}" = ${resolution.value}`);
 
       // Track resolved assessment types
       if (resolution.assessmentType) {
         resolvedAssessmentTypes.push(resolution.assessmentType);
       }
     } else if (slot?.required !== false) {
+      console.log(`[PlaceholderResolver] ❌ Adding "${placeholder}" to missing (required=${slot?.required})`);
       missingPlaceholders.push(placeholder);
       if (resolution.clarification) {
         clarifications.push(resolution.clarification);
       }
+    } else {
+      console.log(`[PlaceholderResolver] ⏭️  Skipping "${placeholder}" (optional and no value)`);
     }
   }
 
@@ -232,6 +243,8 @@ async function resolvePlaceholder(
   clarification?: ClarificationRequest;
   assessmentType?: ResolvedAssessmentType;
 }> {
+  console.log(`[PlaceholderResolver] 🔄 Starting resolution for "${placeholder}"`);
+  
   // Try specialized resolvers first (sync)
   const specialized = resolveWithSpecializedResolvers(
     question,
@@ -239,6 +252,7 @@ async function resolvePlaceholder(
     slot
   );
   if (specialized) {
+    console.log(`[PlaceholderResolver] 📍 Specialized resolver found: value=${specialized.value}`);
     const checked = await applyValidators(
       specialized.value,
       placeholder,
@@ -246,13 +260,18 @@ async function resolvePlaceholder(
       specialized.clarification,
       customerId
     );
-    if (checked) {
+    // Only return early if we got a valid value (not null)
+    // If validation failed (checked.value === null), continue to try other resolvers/default
+    if (checked && checked.value !== null && checked.value !== undefined) {
+      console.log(`[PlaceholderResolver] ✅ Specialized resolver validated`);
       return checked;
     }
+    console.log(`[PlaceholderResolver] ❌ Specialized resolver failed validation, will try other resolvers`);
   }
 
   // Try assessment type resolution (async)
   if (customerId && shouldUseAssessmentTypeResolver(slot, placeholder)) {
+    console.log(`[PlaceholderResolver] 🏷️  Trying assessment type resolver for "${placeholder}"`);
     const assessmentResolution = await resolveAssessmentTypePlaceholder(
       question,
       placeholder,
@@ -260,12 +279,15 @@ async function resolvePlaceholder(
       slot
     );
     if (assessmentResolution.value !== null) {
+      console.log(`[PlaceholderResolver] ✅ Assessment type resolved: ${assessmentResolution.value}`);
       return assessmentResolution;
     }
+    console.log(`[PlaceholderResolver] ❌ Assessment type resolver returned null`);
   }
 
   // Try field variable resolution (async)
   if (customerId && shouldUseFieldVariableResolver(slot, placeholder)) {
+    console.log(`[PlaceholderResolver] 🔍 Trying field variable resolver for "${placeholder}"`);
     const fieldResolution = await resolveFieldVariablePlaceholder(
       question,
       placeholder,
@@ -273,12 +295,16 @@ async function resolvePlaceholder(
       slot
     );
     if (fieldResolution.value !== null) {
+      console.log(`[PlaceholderResolver] ✅ Field variable resolved: ${fieldResolution.value}`);
       return fieldResolution;
     }
+    console.log(`[PlaceholderResolver] ❌ Field variable resolver returned null`);
   }
 
   // Try generic extraction (sync)
+  console.log(`[PlaceholderResolver] 🔎 Trying generic extraction for "${placeholder}"`);
   const value = extractPlaceholderValue(question, placeholder, template, slot);
+  console.log(`[PlaceholderResolver] 📊 Generic extraction result: ${value}`);
   if (value !== null && value !== undefined) {
     const checked = await applyValidators(
       value,
@@ -287,13 +313,22 @@ async function resolvePlaceholder(
       undefined,
       customerId
     );
-    if (checked) {
+    // Only return early if we got a valid value (not null)
+    // If validation failed (checked.value === null), continue to try default
+    if (checked && checked.value !== null && checked.value !== undefined) {
+      console.log(`[PlaceholderResolver] ✅ Generic extraction validated: ${checked.value}`);
       return checked;
     }
+    console.log(`[PlaceholderResolver] ❌ Generic extraction failed validation, will try default`);
   }
 
   // Try default value
   if (slot?.default !== undefined && slot.default !== null) {
+    console.log(`[PlaceholderResolver] 🔧 Using default for "${placeholder}":`, {
+      defaultValue: slot.default,
+      slotName: slot.name,
+      slotRequired: slot.required,
+    });
     const checked = await applyValidators(
       slot.default as string | number,
       placeholder,
@@ -302,7 +337,12 @@ async function resolvePlaceholder(
       customerId
     );
     if (checked) {
+      console.log(`[PlaceholderResolver] ✅ Default validated for "${placeholder}":`, {
+        value: checked.value,
+      });
       return checked;
+    } else {
+      console.log(`[PlaceholderResolver] ❌ Default failed validation for "${placeholder}"`);
     }
   }
 
@@ -315,17 +355,38 @@ async function resolvePlaceholder(
 
 function buildPlaceholderSlots(template: QueryTemplate): NormalizedSlot[] {
   const spec = template.placeholdersSpec as PlaceholdersSpec | null | undefined;
+  
+  console.log(`[PlaceholderSlots] Building slots for template "${template.name}":`, {
+    hasSpec: !!spec,
+    specType: typeof spec,
+    specString: typeof spec === 'string' ? spec : undefined,
+    slotCount: spec?.slots?.length || 0,
+  });
+
   if (!spec?.slots || spec.slots.length === 0) return [];
-  return spec.slots
+  
+  const slots = spec.slots
     .map((slot) => {
       if (!slot?.name) return null;
-      return {
+      const normalized = {
         ...slot,
         rawName: slot.name,
         normalizedName: normalizePlaceholderName(slot.name),
       } as NormalizedSlot;
+      
+      console.log(`[PlaceholderSlots] Slot "${slot.name}":`, {
+        name: slot.name,
+        type: slot.type,
+        required: slot.required,
+        default: slot.default,
+        semantic: slot.semantic,
+      });
+      
+      return normalized;
     })
     .filter((slot): slot is NormalizedSlot => Boolean(slot));
+    
+  return slots;
 }
 
 interface NormalizedSlot extends PlaceholdersSpecSlot {
@@ -775,6 +836,25 @@ const TIME_UNIT_MULTIPLIERS: Record<string, number> = {
   qtrs: 90,
 };
 
+const PERCENTAGE_SEMANTICS = new Set([
+  "percentage",
+  "percent",
+  "percent_threshold",
+  "percentage_threshold",
+  "ratio",
+  "decimal",
+]);
+
+const PERCENTAGE_KEYWORDS = [
+  "percent",
+  "percentage",
+  "pct",
+  "threshold",
+  "ratio",
+  "reduction",
+  "improvement",
+];
+
 async function buildClarification(
   placeholder: string,
   slot?: NormalizedSlot,
@@ -864,6 +944,12 @@ function resolveWithSpecializedResolvers(
       return { value: detected };
     }
   }
+  if (shouldUsePercentageResolver(slot, placeholder)) {
+    const detectedPercentage = detectPercentageValue(question);
+    if (detectedPercentage !== null) {
+      return { value: detectedPercentage };
+    }
+  }
   return null;
 }
 
@@ -935,6 +1021,65 @@ function isTolerancePlaceholder(
   const normalized =
     placeholder?.toLowerCase() ?? slot?.rawName?.toLowerCase() ?? "";
   return normalized.includes("tolerance") || normalized.includes("window");
+}
+
+function shouldUsePercentageResolver(
+  slot: NormalizedSlot | undefined,
+  placeholder?: string
+): boolean {
+  const semantic = slot?.semantic?.toLowerCase();
+  if (semantic && PERCENTAGE_SEMANTICS.has(semantic)) {
+    return true;
+  }
+  const normalized =
+    placeholder?.toLowerCase() ?? slot?.rawName?.toLowerCase() ?? "";
+  return PERCENTAGE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
+function detectPercentageValue(question: string): number | null {
+  const percentRegex =
+    /(\d+(?:\.\d+)?)\s*(?:%|percent(?:age)?|pct)/i;
+  const percentMatch = question.match(percentRegex);
+  if (percentMatch) {
+    const normalized = normalizePercentageValue(
+      parseFloat(percentMatch[1]),
+      true
+    );
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+
+  const decimalRegex = /(?:^|[^0-9])(0?\.\d+)/;
+  const decimalMatch = question.match(decimalRegex);
+  if (decimalMatch) {
+    const normalized = normalizePercentageValue(
+      parseFloat(decimalMatch[1]),
+      false
+    );
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function normalizePercentageValue(
+  raw: number,
+  fromPercent: boolean
+): number | null {
+  if (!Number.isFinite(raw)) {
+    return null;
+  }
+  let value = raw;
+  if (fromPercent) {
+    value = raw / 100;
+  }
+  if (value < 0 || value > 1) {
+    return null;
+  }
+  return Number(value);
 }
 
 async function applyValidators(

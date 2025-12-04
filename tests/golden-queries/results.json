@@ -1,183 +1,197 @@
 {
   "suiteVersion": "1.0.0",
-  "executedAt": "2025-11-19T20:19:42.552Z",
+  "executedAt": "2025-12-02T01:59:47.334Z",
   "totalQueries": 12,
-  "passed": 7,
-  "failed": 5,
-  "passRate": 58.333333333333336,
-  "avgLatency": 943.25,
-  "p50Latency": 649,
-  "p95Latency": 2146.449999999998,
-  "p99Latency": 3185.2900000000013,
+  "passed": 0,
+  "failed": 12,
+  "passRate": 0,
+  "avgLatency": 7.833333333333333,
+  "p50Latency": 6,
+  "p95Latency": 18.099999999999987,
+  "p99Latency": 26.02000000000001,
   "templateHitRate": 0,
   "results": [
     {
       "queryId": "tp_001",
       "passed": false,
-      "actualMode": "direct",
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 3445,
+      "actualLatency": 28,
       "errors": [
-        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
       ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:34.676Z"
+      "executedAt": "2025-12-02T01:59:47.266Z"
     },
     {
       "queryId": "tp_002",
       "passed": false,
-      "actualMode": "direct",
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 960,
+      "actualLatency": 7,
       "errors": [
-        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
       ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:35.636Z"
+      "executedAt": "2025-12-02T01:59:47.273Z"
     },
     {
       "queryId": "tp_003",
       "passed": false,
-      "actualMode": "direct",
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 633,
+      "actualLatency": 10,
       "errors": [
-        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
       ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:36.269Z"
+      "executedAt": "2025-12-02T01:59:47.283Z"
     },
     {
       "queryId": "tp_004",
       "passed": false,
-      "actualMode": "direct",
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 1025,
+      "actualLatency": 7,
       "errors": [
-        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
       ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:37.294Z"
+      "executedAt": "2025-12-02T01:59:47.290Z"
     },
     {
       "queryId": "tp_005",
       "passed": false,
-      "actualMode": "direct",
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 660,
+      "actualLatency": 5,
       "errors": [
-        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
       ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:37.954Z"
+      "executedAt": "2025-12-02T01:59:47.296Z"
     },
     {
       "queryId": "sa_001",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 1041,
-      "errors": [],
+      "actualLatency": 3,
+      "errors": [
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
+      ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:38.995Z"
+      "executedAt": "2025-12-02T01:59:47.299Z"
     },
     {
       "queryId": "sa_002",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 638,
-      "errors": [],
+      "actualLatency": 5,
+      "errors": [
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
+      ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:39.633Z"
+      "executedAt": "2025-12-02T01:59:47.304Z"
     },
     {
       "queryId": "sa_003",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 479,
-      "errors": [],
+      "actualLatency": 8,
+      "errors": [
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
+      ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:40.112Z"
+      "executedAt": "2025-12-02T01:59:47.312Z"
     },
     {
       "queryId": "sa_004",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 440,
-      "errors": [],
+      "actualLatency": 3,
+      "errors": [
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
+      ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:40.552Z"
+      "executedAt": "2025-12-02T01:59:47.315Z"
     },
     {
       "queryId": "sa_005",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 479,
-      "errors": [],
+      "actualLatency": 9,
+      "errors": [
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
+      ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:41.031Z"
+      "executedAt": "2025-12-02T01:59:47.324Z"
     },
     {
       "queryId": "cl_001",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 435,
-      "errors": [],
+      "actualLatency": 5,
+      "errors": [
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
+      ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:41.467Z"
+      "executedAt": "2025-12-02T01:59:47.330Z"
     },
     {
       "queryId": "cl_002",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 1084,
-      "errors": [],
+      "actualLatency": 4,
+      "errors": [
+        "Execution error: connect EPERM 127.0.0.1:5432 - Local (0.0.0.0:0)"
+      ],
       "warnings": [],
-      "executedAt": "2025-11-19T20:19:42.551Z"
+      "executedAt": "2025-12-02T01:59:47.334Z"
     }
   ],
   "byComplexity": {
     "simple": {
       "total": 3,
-      "passed": 3,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 3,
+      "passRate": 0
     },
     "medium": {
       "total": 2,
-      "passed": 2,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 2,
+      "passRate": 0
     },
     "complex": {
       "total": 5,
@@ -187,9 +201,9 @@
     },
     "clarification": {
       "total": 2,
-      "passed": 2,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 2,
+      "passRate": 0
     }
   },
   "byTag": {
@@ -225,57 +239,57 @@
     },
     "simple_aggregation": {
       "total": 5,
-      "passed": 5,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 5,
+      "passRate": 0
     },
     "patient_count": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     },
     "wound_type_filtering": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     },
     "measurement": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     },
     "grouping": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     },
     "window_function": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     },
     "clarification": {
       "total": 2,
-      "passed": 2,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 2,
+      "passRate": 0
     },
     "ambiguous": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     },
     "missing_context": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     }
   }
 }
