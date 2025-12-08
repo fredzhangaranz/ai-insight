@@ -97,6 +97,18 @@ describe("LLM Response Validation", () => {
 
       expect(validateLLMResponse(validResponse)).toBe(true);
     });
+
+    it("should accept SQL response starting with WITH (CTE)", () => {
+      const validResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql:
+          "WITH cte AS (SELECT 1 AS id) SELECT * FROM cte",
+        explanation: "Valid explanation",
+        confidence: 0.9,
+      };
+
+      expect(validateLLMResponse(validResponse)).toBe(true);
+    });
   });
 
   describe("validateLLMResponse - Clarification Response", () => {
@@ -230,9 +242,8 @@ describe("LLM Response Validation", () => {
             question: "Test question?",
             options: [
               {
-                id: "opt1",
-                label: "Option 1",
-                // Missing sqlConstraint
+                // Invalid option missing required fields
+                sqlConstraint: "col = 1",
               },
             ],
             allowCustom: true,
@@ -283,6 +294,35 @@ describe("LLM Response Validation", () => {
       };
 
       expect(validateLLMResponse(invalidResponse)).toBe(false);
+    });
+
+    it("should accept clarification options with nullable sqlConstraint", () => {
+      const validClarificationResponse: LLMClarificationResponse = {
+        responseType: "clarification",
+        reasoning: "Need starting point",
+        clarifications: [
+          {
+            id: "clarify_start",
+            ambiguousTerm: "52 weeks",
+            question: "What is the starting point?",
+            options: [
+              {
+                id: "baseline",
+                label: "Baseline",
+                sqlConstraint: "datediff(week, baseline, date) <= 52",
+              },
+              {
+                id: "admission",
+                label: "Admission",
+                sqlConstraint: null,
+              },
+            ],
+            allowCustom: true,
+          },
+        ],
+      };
+
+      expect(validateLLMResponse(validClarificationResponse)).toBe(true);
     });
   });
 

@@ -25,6 +25,10 @@ import { getSemanticSearcherService } from "./semantic-searcher.service";
 import { getTerminologyMapperService } from "./terminology-mapper.service";
 import { getJoinPathPlannerService } from "./join-path-planner.service";
 import { getContextAssemblerService } from "./context-assembler.service";
+import {
+  ConceptSource,
+  ExpandedConceptBuilder,
+} from "./expanded-concept-builder.service";
 import { getParallelExecutorService } from "../semantic/parallel-executor.service";
 import { getModelRouterService } from "../semantic/model-router.service";
 import { createAssessmentTypeSearcher } from "./assessment-type-searcher.service";
@@ -46,6 +50,8 @@ interface PipelineMetrics {
   contextAssembly: { duration: number; confidence: number };
   totalDuration: number;
 }
+
+const expandedConceptBuilder = new ExpandedConceptBuilder();
 
 export class ContextDiscoveryService {
   async discoverContext(
@@ -385,26 +391,123 @@ export class ContextDiscoveryService {
   ) {
     try {
       const semanticSearcher = getSemanticSearcherService();
-      const concepts = intentResult.metrics || [];
+      const expansionStart = Date.now();
+      const expandedConcepts = expandedConceptBuilder.build(
+        intentResult?.type,
+        intentResult?.metrics || [],
+        intentResult?.filters || []
+      );
+      const expansionDuration = Date.now() - expansionStart;
 
-      if (concepts.length === 0) {
+      // Validate expansion overhead (Task 4.S18 requirement: <50ms)
+      if (expansionDuration > 50) {
         logger.warn(
           "context_discovery",
           "semantic_searcher",
-          "No metrics/concepts found in intent"
+          `Concept expansion overhead exceeded target: ${expansionDuration}ms (target: <50ms)`,
+          { expansion_ms: expansionDuration }
+        );
+      }
+
+      if (expandedConcepts.concepts.length === 0) {
+        logger.warn(
+          "context_discovery",
+          "semantic_searcher",
+          "No metrics or filter phrases available for semantic search"
         );
         return [];
       }
 
+      logger.info(
+        "context_discovery",
+        "semantic_searcher",
+        `Expanded concepts prepared (${expandedConcepts.concepts.length})`,
+        {
+          expansion_ms: expansionDuration,
+          source_breakdown: this.summarizeConceptSources(
+            expandedConcepts.sources
+          ),
+          sample: expandedConcepts.concepts.slice(0, 10),
+          rationale: expandedConcepts.explanations.slice(0, 10),
+        }
+      );
+
+      const searchStart = Date.now();
       const results = await semanticSearcher.searchFormFields(
         customerId,
-        concepts,
+        expandedConcepts.concepts,
         {
           includeNonForm: true,
           minConfidence: 0.7,
           limit: 20,
         }
       );
+      const searchDuration = Date.now() - searchStart;
+      const totalDuration = expansionDuration + searchDuration;
+
+      // Task 4.S18: Latency guard with fallback to original concepts
+      if (totalDuration > 600) {
+        logger.warn(
+          "context_discovery",
+          "semantic_searcher",
+          `Semantic search exceeded latency guard (${totalDuration}ms). Falling back to original concepts.`,
+          {
+            expansion_ms: expansionDuration,
+            search_ms: searchDuration,
+            exceeded_by_ms: totalDuration - 600,
+          }
+        );
+
+        // Fallback: Use original metrics only (no filter phrases)
+        const originalConcepts = intentResult?.metrics || [];
+        if (originalConcepts.length === 0) {
+          logger.warn(
+            "context_discovery",
+            "semantic_searcher",
+            "No fallback concepts available (no original metrics)"
+          );
+          return results; // Return expanded results even if slow
+        }
+
+        // Retry with original concepts only
+        const fallbackStart = Date.now();
+        const fallbackResults = await semanticSearcher.searchFormFields(
+          customerId,
+          originalConcepts,
+          {
+            includeNonForm: true,
+            minConfidence: 0.7,
+            limit: 20,
+          }
+        );
+        const fallbackDuration = Date.now() - fallbackStart;
+
+        logger.info(
+          "context_discovery",
+          "semantic_searcher",
+          `Fallback search completed with original concepts (${fallbackResults.length} results)`,
+          {
+            original_concepts_count: originalConcepts.length,
+            fallback_duration_ms: fallbackDuration,
+            expanded_results: results.length,
+            fallback_results: fallbackResults.length,
+          }
+        );
+
+        return fallbackResults;
+      }
+
+      logger.debug(
+        "context_discovery",
+        "semantic_searcher",
+        `Semantic search completed in ${totalDuration}ms`,
+        {
+          expansion_ms: expansionDuration,
+          search_ms: searchDuration,
+          result_count: results.length,
+        }
+      );
+
       return results;
     } catch (error) {
       logger.error(
@@ -416,6 +519,21 @@ export class ContextDiscoveryService {
       );
       throw error;
     }
+  }
+
+  private summarizeConceptSources(
+    sources: ConceptSource[]
+  ): Record<ConceptSource, number> {
+    const initial: Record<ConceptSource, number> = {
+      metric: 0,
+      filter: 0,
+      intent_type: 0,
+    };
+
+    return sources.reduce((acc, source) => {
+      acc[source] = (acc[source] ?? 0) + 1;
+      return acc;
+    }, initial);
   }
 
   private async runTerminologyMapping(
@@ -563,8 +681,11 @@ export class ContextDiscoveryService {
     // Extract from filters
     if (Array.isArray(intentResult.filters)) {
       for (const filter of intentResult.filters) {
-        if (filter.userTerm) {
-          terms.add(filter.userTerm);
+        if (filter.userPhrase) {
+          terms.add(filter.userPhrase);
+        }
+        if ((filter as any).userTerm) {
+          terms.add((filter as any).userTerm);
         }
         if (filter.value) {
           terms.add(filter.value);

@@ -474,7 +474,7 @@ export function validateLLMResponse(response: unknown): response is LLMResponse 
       typeof obj.confidence === 'number' &&
       obj.confidence >= 0 &&
       obj.confidence <= 1 &&
-      /^[\s\n]*SELECT/i.test(obj.generatedSql) // Must be SELECT statement
+      /^[\s\n]*(SELECT|WITH)/i.test(obj.generatedSql) // Allow SELECT or CTE (WITH ...)
     );
   }
 
@@ -500,7 +500,7 @@ export function validateLLMResponse(response: unknown): response is LLMResponse 
       c.options.every((opt: any) =>
         typeof opt.id === 'string' &&
         typeof opt.label === 'string' &&
-        typeof opt.sqlConstraint === 'string'
+        (typeof opt.sqlConstraint === 'string' || opt.sqlConstraint === null || opt.sqlConstraint === undefined)
       )
     );
   }

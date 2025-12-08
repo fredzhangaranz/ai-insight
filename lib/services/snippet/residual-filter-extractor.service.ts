@@ -2,7 +2,7 @@
  * Residual Filter Extractor Service (Phase 3)
  *
  * Extracts residual filters from user queries using LLM semantic understanding.
- * This extracts filters NOT already captured by placeholder extraction.
+ * This extracts filters NOT already satisfied by merged filter state (template/semantic/placeholder signals).
  *
  * Philosophy: LLM-based semantic extraction (not pattern-based)
  * Uses ModelRouterService to respect user's provider selection and admin configuration.
@@ -12,10 +12,16 @@ import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import { getModelRouterService } from "@/lib/services/semantic/model-router.service";
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
 import type { ResidualFilter } from "./residual-filter-validator.service";
+import {
+  filterResidualsAgainstMerged,
+  type MergedFilterState,
+} from "../semantic/filter-state-merger.service";
+
+const RESOLVED_CONFIDENCE_THRESHOLD = 0.7;
 
 export interface ResidualFilterExtractionInput {
   query: string;
-  alreadyExtractedPlaceholders: Record<string, any>; // Placeholders already extracted
+  mergedFilterState: MergedFilterState[];
   semanticContext: {
     fields?: Array<{ name: string; type?: string }>;
     enums?: Record<string, string[]>;
@@ -45,25 +51,24 @@ interface LLMExtractionResponse {
 export async function extractResidualFiltersWithLLM(
   input: ResidualFilterExtractionInput
 ): Promise<ResidualFilter[]> {
-  const { query, alreadyExtractedPlaceholders, semanticContext } = input;
+  const { query, mergedFilterState, semanticContext } = input;
 
   console.log(
     `[ResidualFilterExtractor] 🤖 Extracting residual filters from query`
   );
 
-  // If no placeholders extracted, all filters are "residual"
-  const placeholderKeys = Object.keys(alreadyExtractedPlaceholders);
-  if (placeholderKeys.length === 0) {
-    console.log(
-      `[ResidualFilterExtractor] ⚠️ No placeholders extracted, skipping residual extraction`
-    );
-    return [];
-  }
+  const resolvedFilters = (mergedFilterState || []).filter(
+    (f) => f.resolved && f.confidence >= RESOLVED_CONFIDENCE_THRESHOLD
+  );
+  const unresolvedFilters = (mergedFilterState || []).filter(
+    (f) => !f.resolved || f.confidence < RESOLVED_CONFIDENCE_THRESHOLD
+  );
 
   // Build prompt for LLM
   const prompt = buildResidualFilterExtractionPrompt(
     query,
-    placeholderKeys,
+    resolvedFilters,
+    unresolvedFilters,
     semanticContext
   );
 
@@ -123,11 +128,16 @@ export async function extractResidualFiltersWithLLM(
       confidence: f.confidence || 0.8,
     }));
 
-    console.log(
-      `[ResidualFilterExtractor] ✅ Extracted ${residualFilters.length} residual filter(s)`
+    const deduped = filterResidualsAgainstMerged(
+      residualFilters,
+      mergedFilterState
     );
 
-    return residualFilters;
+    console.log(
+      `[ResidualFilterExtractor] ✅ Extracted ${residualFilters.length} residual filter(s), ${deduped.length} after deduplication`
+    );
+
+    return deduped;
   } catch (error) {
     console.error(`[ResidualFilterExtractor] ❌ Extraction failed:`, error);
     // Return empty array on error (graceful degradation)
@@ -140,7 +150,8 @@ export async function extractResidualFiltersWithLLM(
  */
 function buildResidualFilterExtractionPrompt(
   query: string,
-  alreadyExtractedKeys: string[],
+  resolvedFilters: MergedFilterState[],
+  unresolvedFilters: MergedFilterState[],
   semanticContext: ResidualFilterExtractionInput["semanticContext"]
 ): string {
   const availableFields =
@@ -149,14 +160,42 @@ function buildResidualFilterExtractionPrompt(
   const enumFields = semanticContext.enums
     ? Object.keys(semanticContext.enums)
     : [];
+  const resolvedSummary =
+    resolvedFilters.length > 0
+      ? resolvedFilters
+          .map(
+            (f) =>
+              `- ${f.field || "unknown"} ${f.operator || "="} ${
+                f.value ?? "null"
+              } (from: ${f.resolvedVia.join(", ") || "unknown"})`
+          )
+          .join("\n")
+      : "- None";
+
+  const unresolvedSummary =
+    unresolvedFilters.length > 0
+      ? unresolvedFilters
+          .map(
+            (f) =>
+              `- ${f.originalText} ${
+                f.field ? `→ field: ${f.field}` : ""
+              }${f.value !== undefined ? ` value: ${f.value}` : ""} (confidence: ${f.confidence.toFixed(
+                2
+              )})`
+          )
+          .join("\n")
+      : "- None";
 
   return `
-Extract data constraints (filters) from this user query that are NOT already captured by these placeholders:
+Extract data constraints (filters) from this user query that are NOT already resolved above.
 
 **User Query:** "${query}"
 
-**Already Extracted Placeholders:**
-${alreadyExtractedKeys.map((k) => `- ${k}`).join("\n")}
+**Resolved Filters (already handled):**
+${resolvedSummary}
+
+**Unresolved Filters (need help):**
+${unresolvedSummary}
 
 **Available Database Fields:**
 ${
@@ -175,15 +214,15 @@ ${
 }
 
 **Task:**
-Identify any filters/constraints in the query that are NOT in the "Already Extracted Placeholders" list.
+Identify any additional filters/constraints mentioned in the query that are NOT already in the resolved list above. If a filter is partially resolved (listed under "Unresolved Filters"), try to complete it.
 
 **Examples:**
 - Query: "Show area reduction at 12 weeks for female patients"
-  - Already extracted: timePointDays=84
+  - Resolved: timePointDays=84
   - Residual: patient_gender = "F" (from "female patients")
 
 - Query: "Visits in ICU without billing"
-  - Already extracted: assessment_type="visit"
+  - Resolved: assessment_type="visit"
   - Residual: care_unit = "ICU" (from "in ICU")
 
 **Return Format (JSON only):**
@@ -201,7 +240,7 @@ Identify any filters/constraints in the query that are NOT in the "Already Extra
 }
 
 **Rules:**
-1. Only extract filters NOT in already-extracted placeholders
+1. Do NOT duplicate any resolved filters shown above
 2. Use field names from "Available Database Fields"
 3. For enum fields, use values from allowed values list
 4. Mark as "required" if user used emphasis words (only, for, in, specifically)

@@ -285,6 +285,85 @@ docker-compose logs db
 docker-compose exec db psql -U user -d insight_gen_db
 ```
 
+### Migration Management
+
+#### Running Migrations
+
+```bash
+# Run all pending migrations (standard)
+pnpm migrate
+
+# View migration help
+pnpm migrate -- --help
+```
+
+#### Re-running Migrations (Development Only)
+
+During development, you may need to re-run migrations after making changes:
+
+```bash
+# Re-run a specific migration
+pnpm migrate -- --rerun=035_seed_measurement_field_concepts.sql
+
+# Re-run multiple migrations
+pnpm migrate -- --rerun=035_seed_measurement_field_concepts.sql,036_fix_measurement_field_concepts.sql
+
+# Remove migration record (allows re-run on next migrate)
+pnpm migrate -- --remove=035_seed_measurement_field_concepts.sql
+pnpm migrate  # Then run normally
+
+# Force re-run all migrations (use with caution)
+pnpm migrate -- --force
+
+# Start from a specific migration
+pnpm migrate -- --from=034_audit_measurement_fields.sql
+```
+
+**Common Development Workflow:**
+
+```bash
+# 1. Make changes to a migration file
+# Edit database/migration/035_seed_measurement_field_concepts.sql
+
+# 2. Remove the migration record
+pnpm migrate -- --remove=035_seed_measurement_field_concepts.sql
+
+# 3. Re-run migrations
+pnpm migrate
+```
+
+#### Consolidating Migrations (Before Production)
+
+Before deploying to production, consolidate multiple related migrations into a single migration:
+
+```bash
+# Consolidate migrations 034-037 into one file
+pnpm consolidate-migrations -- --from=034 --to=037 --output=038_consolidated_measurement_fields.sql
+```
+
+This creates a single migration file that combines the SQL from all migrations in the range. After consolidation:
+
+1. Test the consolidated migration on a development database
+2. Update `scripts/run-migrations.js` to remove individual migrations and add the consolidated one
+3. Delete individual migration files (optional - keep for history)
+
+**Example Consolidation Workflow:**
+
+```bash
+# 1. Consolidate related migrations
+pnpm consolidate-migrations -- --from=034 --to=037 --output=038_consolidated_measurement_fields.sql
+
+# 2. Test the consolidated migration
+pnpm migrate -- --remove=034_audit_measurement_fields.sql
+pnpm migrate -- --remove=035_seed_measurement_field_concepts.sql
+pnpm migrate -- --remove=036_fix_measurement_field_concepts.sql
+pnpm migrate -- --remove=037_force_fix_measurement_field_concepts.sql
+pnpm migrate  # Should run the consolidated migration
+
+# 3. Update run-migrations.js to use consolidated migration
+# 4. Commit changes
+```
+
 ### Project Structure
 
 ```

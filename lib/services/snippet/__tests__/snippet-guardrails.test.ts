@@ -11,13 +11,26 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { extractAndFillPlaceholders } from "../../semantic/template-placeholder.service";
-import { extractResidualFiltersWithLLM } from "../residual-filter-extractor.service";
+import * as ResidualExtractor from "../residual-filter-extractor.service";
 import { getResidualFilterValidatorService } from "../residual-filter-validator.service";
 import { getSQLValidatorService } from "../sql-validator.service";
 import { getSnippetComposerService } from "../snippet-composer.service";
 import type { QueryTemplate } from "../../query-template.service";
 import type { ResidualFilter } from "../residual-filter-validator.service";
 import type { SnippetMatch } from "../../semantic/template-matcher.service";
+
+vi.mock("@/lib/db", () => ({
+  getInsightGenDbPool: vi.fn(async () => ({
+    query: vi.fn().mockResolvedValue({
+      rows: [
+        { option_value: "F" },
+        { option_value: "M" },
+        { option_value: "ICU" },
+        { option_value: "DFU" },
+      ],
+    }),
+  })),
+}));
 
 describe("Snippet Guardrails - End-to-End Edge Cases", () => {
   const mockCustomerId = "test-customer-123";
@@ -153,7 +166,7 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
 
       // Mock LLM extraction response
       vi.spyOn(
-        require("../residual-filter-extractor.service"),
+        ResidualExtractor,
         "extractResidualFiltersWithLLM"
       ).mockResolvedValue([
         {
@@ -176,9 +189,9 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
         },
       ] as ResidualFilter[]);
 
-      const residuals = await extractResidualFiltersWithLLM({
+      const residuals = await ResidualExtractor.extractResidualFiltersWithLLM({
         query,
-        alreadyExtractedPlaceholders: placeholders,
+        mergedFilterState: [],
         semanticContext: mockSemanticContext as any,
         customerId: mockCustomerId,
       });
@@ -201,7 +214,7 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
       };
 
       vi.spyOn(
-        require("../residual-filter-extractor.service"),
+        ResidualExtractor,
         "extractResidualFiltersWithLLM"
       ).mockResolvedValue([
         {
@@ -238,9 +251,9 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
         },
       ] as ResidualFilter[]);
 
-      const residuals = await extractResidualFiltersWithLLM({
+      const residuals = await ResidualExtractor.extractResidualFiltersWithLLM({
         query,
-        alreadyExtractedPlaceholders: placeholders,
+        mergedFilterState: [],
         semanticContext: mockSemanticContext as any,
         customerId: mockCustomerId,
       });
@@ -454,7 +467,7 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
 
       // Mock comprehensive filter extraction
       vi.spyOn(
-        require("../residual-filter-extractor.service"),
+        ResidualExtractor,
         "extractResidualFiltersWithLLM"
       ).mockResolvedValue([
         {
@@ -491,9 +504,9 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
         },
       ] as ResidualFilter[]);
 
-      const residuals = await extractResidualFiltersWithLLM({
+      const residuals = await ResidualExtractor.extractResidualFiltersWithLLM({
         query,
-        alreadyExtractedPlaceholders: placeholders,
+        mergedFilterState: [],
         semanticContext: mockSemanticContext as any,
         customerId: mockCustomerId,
       });
@@ -546,7 +559,7 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
 
       // Extract residual filters
       vi.spyOn(
-        require("../residual-filter-extractor.service"),
+        ResidualExtractor,
         "extractResidualFiltersWithLLM"
       ).mockResolvedValue([
         {
@@ -567,9 +580,9 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
         },
       ] as ResidualFilter[]);
 
-      const residuals = await extractResidualFiltersWithLLM({
+      const residuals = await ResidualExtractor.extractResidualFiltersWithLLM({
         query,
-        alreadyExtractedPlaceholders: placeholderResult.values,
+        mergedFilterState: [],
         semanticContext: mockSemanticContext as any,
         customerId: mockCustomerId,
       });
@@ -622,13 +635,13 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
       };
 
       vi.spyOn(
-        require("../residual-filter-extractor.service"),
+        ResidualExtractor,
         "extractResidualFiltersWithLLM"
       ).mockResolvedValue([]);
 
-      const residuals = await extractResidualFiltersWithLLM({
+      const residuals = await ResidualExtractor.extractResidualFiltersWithLLM({
         query,
-        alreadyExtractedPlaceholders: placeholders,
+        mergedFilterState: [],
         semanticContext: mockSemanticContext as any,
         customerId: mockCustomerId,
       });
@@ -695,7 +708,7 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
 
       // Step 2: Extract residual filters
       vi.spyOn(
-        require("../residual-filter-extractor.service"),
+        ResidualExtractor,
         "extractResidualFiltersWithLLM"
       ).mockResolvedValue([
         {
@@ -708,9 +721,9 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
         },
       ] as ResidualFilter[]);
 
-      const residuals = await extractResidualFiltersWithLLM({
+      const residuals = await ResidualExtractor.extractResidualFiltersWithLLM({
         query,
-        alreadyExtractedPlaceholders: placeholderResult.values,
+        mergedFilterState: [],
         semanticContext: mockSemanticContext as any,
         customerId: mockCustomerId,
       });

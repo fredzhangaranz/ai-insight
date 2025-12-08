@@ -69,6 +69,10 @@ export interface IntentFilter {
   field?: string; // Optional: Assigned AFTER semantic search (NOT by LLM)
   operator: string; // Comparison operator ("equals", "contains", "greater_than", "less_than", "in")
   userPhrase: string; // User's exact phrasing (e.g., "simple bandages", "diabetic wounds")
+  /**
+   * Legacy alias preserved for backward compatibility with older payloads.
+   */
+  userTerm?: string;
   value: null; // ALWAYS null - terminology mapper populates from semantic database
 }
 

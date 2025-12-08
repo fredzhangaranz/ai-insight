@@ -176,6 +176,8 @@ export class SemanticSearcherService {
       throw new Error("customerId and at least one concept are required");
     }
 
+    console.log(`[SemanticSearcher DEBUG] searchFormFields called with customerId="${customerId}" (length: ${customerId.length}, type: ${typeof customerId})`);
+
     // Check cache
     const cachedResults = this.cache.getResults(
       concepts,
@@ -355,6 +357,18 @@ export class SemanticSearcherService {
         ORDER BY f.confidence DESC, f.field_name
       `;
 
+      console.log(`[SemanticSearcher DEBUG] Executing form fields query with:`);
+      console.log(`  - customerId: "${customerId}" (length: ${customerId.length})`);
+      console.log(`  - customerId bytes: [${Array.from(customerId).map(c => c.charCodeAt(0)).join(', ')}]`);
+      console.log(`  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`);
+      console.log(`  - minConfidence: ${minConfidence}`);
+
+      // Ensure concepts array is properly formatted for PostgreSQL ANY() operator
+      // pg library has issues with certain array serializations, so we validate here
+      if (!Array.isArray(concepts) || concepts.some(c => typeof c !== 'string')) {
+        throw new Error(`Invalid concepts array: must be array of strings, got ${JSON.stringify(concepts)}`);
+      }
+
       const result = await pool.query(query, [
         customerId,
         concepts,
@@ -394,6 +408,7 @@ export class SemanticSearcherService {
 
     try {
       // Query non-form columns with confidence >= minConfidence
+      // Check both primary semantic_concept and additional concepts in metadata
       const query = `
         SELECT 
           n.id,
@@ -406,10 +421,30 @@ export class SemanticSearcherService {
           n.confidence
         FROM "SemanticIndexNonForm" n
         WHERE n.customer_id = $1
-          AND n.semantic_concept = ANY($2)
           AND n.confidence >= $3
+          AND (
+            n.semantic_concept = ANY($2)
+            OR (n.metadata->'concepts' IS NOT NULL 
+                AND EXISTS (
+                  SELECT 1 
+                  FROM jsonb_array_elements_text(n.metadata->'concepts') AS concept
+                  WHERE concept = ANY($2)
+                ))
+          )
         ORDER BY n.confidence DESC, n.table_name, n.column_name
       `;
+
+      console.log(`[SemanticSearcher DEBUG] Executing non-form columns query with:`);
+      console.log(`  - customerId: "${customerId}" (length: ${customerId.length})`);
+      console.log(`  - customerId bytes: [${Array.from(customerId).map(c => c.charCodeAt(0)).join(', ')}]`);
+      console.log(`  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`);
+      console.log(`  - minConfidence: ${minConfidence}`);
+
+      // Ensure concepts array is properly formatted for PostgreSQL ANY() operator
+      // pg library has issues with certain array serializations, so we validate here
+      if (!Array.isArray(concepts) || concepts.some(c => typeof c !== 'string')) {
+        throw new Error(`Invalid concepts array: must be array of strings, got ${JSON.stringify(concepts)}`);
+      }
 
       const result = await pool.query(query, [
         customerId,

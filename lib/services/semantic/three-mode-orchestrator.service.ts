@@ -40,6 +40,13 @@ import {
   type ResidualFilter,
 } from "../snippet/residual-filter-validator.service";
 import type { QueryIntent } from "../intent-classifier/intent-classifier.service";
+import type { PlaceholderValues } from "./template-placeholder.service";
+import {
+  type FilterStateSource,
+  type MergedFilterState,
+  filterResidualsAgainstMerged,
+  mergeFilterStates,
+} from "./filter-state-merger.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -404,6 +411,7 @@ export class ThreeModeOrchestrator {
       // Phase 3: Check if snippet-guided mode should be used
       const intent = template.intent as QueryIntent | undefined;
       let validatedResidualFilters: ResidualFilter[] = [];
+      let mergedFilterStates: MergedFilterState[] = [];
 
       if (intent && SNIPPETIZABLE_INTENTS.includes(intent)) {
         thinking.push({
@@ -416,6 +424,13 @@ export class ThreeModeOrchestrator {
         const semanticContext = await this.contextDiscovery.discover(
           question,
           customerId
+        );
+        mergedFilterStates = mergeFilterStates(
+          this.buildFilterSourcesFromTemplate(
+            placeholderResult.values,
+            semanticContext,
+            question
+          )
         );
         const snippetMatches = await matchSnippets(
           question,
@@ -455,7 +470,7 @@ export class ThreeModeOrchestrator {
 
           const residualFilters = await extractResidualFiltersWithLLM({
             query: question,
-            alreadyExtractedPlaceholders: placeholderResult.values,
+            mergedFilterState: mergedFilterStates,
             semanticContext: {
               fields: semanticContext.fields || [],
               enums: {}, // TODO: Populate from semantic context
@@ -467,11 +482,16 @@ export class ThreeModeOrchestrator {
             modelId, // Pass user's selected model for ModelRouter
           });
 
-          if (residualFilters.length > 0) {
+          const residualsToValidate = filterResidualsAgainstMerged(
+            residualFilters,
+            mergedFilterStates
+          );
+
+          if (residualsToValidate.length > 0) {
             // Validate residual filters
             const validator = getResidualFilterValidatorService();
             const validationResult = await validator.validateResidualFilters(
-              residualFilters,
+              residualsToValidate,
               semanticContext,
               customerId
             );
@@ -479,7 +499,14 @@ export class ThreeModeOrchestrator {
             thinking[thinking.length - 1].status = "complete";
             thinking[
               thinking.length - 1
-            ].message = `Validated ${validationResult.validatedFilters.length}/${residualFilters.length} residual filters`;
+            ].message = `Validated ${validationResult.validatedFilters.length}/${residualsToValidate.length} residual filters`;
+            if (residualsToValidate.length !== residualFilters.length) {
+              thinking[thinking.length - 1].details = {
+                filteredOut:
+                  residualFilters.length - residualsToValidate.length,
+                reason: "Matched resolved filters",
+              };
+            }
 
             if (!validationResult.valid && validationResult.errors.length > 0) {
               // Return clarification for invalid filters
@@ -513,7 +540,10 @@ export class ThreeModeOrchestrator {
             validatedResidualFilters = validationResult.validatedFilters;
           } else {
             thinking[thinking.length - 1].status = "complete";
-            thinking[thinking.length - 1].message = "No residual filters found";
+            thinking[thinking.length - 1].message =
+              residualFilters.length === 0
+                ? "No residual filters found"
+                : "Residual filters already satisfied by resolved inputs";
           }
         }
       }
@@ -680,6 +710,158 @@ export class ThreeModeOrchestrator {
       abortController.signal,
       undefined
     );
+  }
+
+  private buildFilterSourcesFromTemplate(
+    placeholders: PlaceholderValues,
+    semanticContext: any,
+    question?: string
+  ): FilterStateSource[] {
+    const sources: FilterStateSource[] = [];
+
+    Object.entries(placeholders || {}).forEach(([name, value]) => {
+      // Extract original text from question by matching value
+      // For template params, we try to find the value in the question
+      // If not found, use placeholder name as fallback
+      let originalText = name;
+      if (question && value !== null && value !== undefined) {
+        const valueStr = String(value);
+        const escapedValue = valueStr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Look for value with surrounding context (e.g., "30%" or "30% area reduction")
+        const contextMatch = question.match(
+          new RegExp(`.{0,30}${escapedValue}.{0,30}`, "i")
+        );
+        if (contextMatch) {
+          originalText = contextMatch[0].trim();
+        }
+      }
+
+      sources.push({
+        source: "template_param",
+        value,
+        confidence: 0.95,
+        field: this.resolveFieldName(
+          semanticContext,
+          name,
+          ["areaReduction", "area_reduction"]
+        ),
+        operator: "=",
+        originalText,
+      });
+    });
+
+    const terminology = (semanticContext as any)?.terminology;
+    if (Array.isArray(terminology)) {
+      terminology.forEach((term: any) => {
+        sources.push({
+          source: "semantic_mapping",
+          value: term.fieldValue,
+          confidence:
+            typeof term.confidence === "number" ? term.confidence : 0.75,
+          field: term.fieldName,
+          operator: term.operator || "=",
+          originalText: term.userTerm || term.fieldName || "terminology",
+        });
+      });
+    }
+
+    const intentFilters = (semanticContext as any)?.intent?.filters;
+    if (Array.isArray(intentFilters)) {
+      intentFilters.forEach((filter: any, idx: number) => {
+        if (filter?.value === null || filter?.value === undefined) return;
+        sources.push({
+          source: "placeholder_extraction",
+          value: filter.value,
+          confidence:
+            typeof filter.confidence === "number" ? filter.confidence : 0.8,
+          field: filter.field,
+          operator: filter.operator,
+          originalText: filter.userPhrase || filter.field || `filter_${idx}`,
+          warnings: filter.warnings,
+        });
+      });
+    }
+
+    return sources;
+  }
+
+  private applyTemplateClarificationsToFilters(
+    filters: MappedFilter[],
+    clarifications: Record<string, any>,
+    semanticContext?: any
+  ): MappedFilter[] {
+    const resolvedFilters: MappedFilter[] = [];
+    const reductionValue =
+      clarifications.reductionThreshold ?? clarifications.reductionthreshold;
+    const timeValue =
+      clarifications.timePointDays ??
+      clarifications.timepointdays ??
+      clarifications.time_point_days;
+
+    for (const filter of filters) {
+      const phrase = (filter.userPhrase || "").toLowerCase();
+
+      // If template already provided reduction threshold, treat reduction filters as resolved
+      if (
+        reductionValue !== undefined &&
+        (phrase.includes("reduction") || phrase.includes("%"))
+      ) {
+        resolvedFilters.push({
+          ...filter,
+          value: reductionValue,
+          field:
+            filter.field ||
+            this.resolveFieldName(
+              semanticContext,
+              "areaReduction",
+              ["areaReduction", "area_reduction"]
+            ),
+          mappingConfidence: 1,
+          mappingError: undefined,
+          validationWarning: undefined,
+        } as MappedFilter);
+        continue;
+      }
+
+      // If template provided a time point, apply it to temporal filters
+      if (
+        timeValue !== undefined &&
+        (phrase.includes("week") ||
+          phrase.includes("day") ||
+          phrase.includes("month") ||
+          phrase.includes("year"))
+      ) {
+        resolvedFilters.push({
+          ...filter,
+          value: timeValue,
+          mappingConfidence: 1,
+          mappingError: undefined,
+          validationWarning: undefined,
+        } as MappedFilter);
+        continue;
+      }
+
+      resolvedFilters.push(filter);
+    }
+
+    return resolvedFilters;
+  }
+
+  private resolveFieldName(
+    semanticContext: any,
+    placeholderName: string,
+    candidates?: string[]
+  ): string | undefined {
+    const normalizedCandidates = (candidates || [placeholderName]).map((c) =>
+      c.toLowerCase()
+    );
+    const fields: Array<{ name?: string }> = semanticContext?.fields || [];
+    const matchedField = fields.find((f) =>
+      normalizedCandidates.includes((f.name || "").toLowerCase())
+    );
+    if (matchedField?.name) return matchedField.name;
+
+    return candidates?.[0] || placeholderName;
   }
 
   /**
@@ -941,6 +1123,17 @@ export class ThreeModeOrchestrator {
       // and let the LLM use the clarifications to resolve the filters
       // EXCEPTION: If clarifications came from template extraction, they don't map to filter IDs,
       // so we still need to check for unresolved filters and ask for NEW ones discovered by semantic search
+      if (
+        clarificationType === "template_extracted" &&
+        clarifications &&
+        context.intent.filters?.length
+      ) {
+        context.intent.filters = this.applyTemplateClarificationsToFilters(
+          context.intent.filters as MappedFilter[],
+          clarifications,
+          context
+        );
+      }
       if (unresolvedNeedingClarification.length > 0 && !clarifications) {
         contextDiscoveryStep.message =
           "Discovering semantic context... (filters unresolved)";
@@ -1050,8 +1243,16 @@ export class ThreeModeOrchestrator {
         removalClarificationIds
       );
 
+      const contextForLLM = {
+        ...context,
+        mergedFilterState:
+          (context as any).mergedFilterState ||
+          (context as any).mergedFilterStates ||
+          [],
+      };
+
       const llmResponse = await generateSQLWithLLM(
-        context,
+        contextForLLM,
         customerId,
         modelSelection.modelId, // Use router-selected model instead of user's direct choice
         clarificationsForLLM,

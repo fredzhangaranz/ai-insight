@@ -12,6 +12,7 @@ import { discoverNonFormSchema } from "@/lib/services/non-form-schema-discovery.
 import { discoverEntityRelationships } from "@/lib/services/relationship-discovery.service";
 import { AssessmentTypeIndexer } from "@/lib/services/context-discovery/assessment-type-indexer.service";
 import { EnumFieldIndexer } from "@/lib/services/context-discovery/enum-field-indexer.service";
+import { correctSemanticConcepts } from "@/lib/services/context-discovery/semantic-concept-corrector.service";
 import { closeSqlServerPool } from "@/lib/services/sqlserver/client";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
 import {
@@ -501,6 +502,30 @@ export async function runFullDiscovery(
       );
       aggregateWarnings.push(...nonFormSchemaResult.warnings);
       aggregateErrors.push(...nonFormSchemaResult.errors);
+
+      // Stage 2.1: Semantic Concept Correction (post-processing)
+      // Fixes known wrong mappings from embedding-based discovery
+      try {
+        logger.startTimer("semantic_concept_correction");
+        const correctionResult = await correctSemanticConcepts(customerRow.id);
+        logger.endTimer(
+          "semantic_concept_correction",
+          "semantic_concept_correction",
+          "orchestrator",
+          `Semantic concepts corrected: ${correctionResult.corrected} fields`,
+          { corrected: correctionResult.corrected, skipped: correctionResult.skipped }
+        );
+        if (correctionResult.errors.length > 0) {
+          aggregateWarnings.push(...correctionResult.errors);
+        }
+      } catch (error: any) {
+        logger.error(
+          "semantic_concept_correction",
+          "orchestrator",
+          `Semantic concept correction failed: ${error.message}`
+        );
+        aggregateWarnings.push(`Semantic concept correction failed: ${error.message}`);
+      }
     }
 
     // Stage 2.5: Enum Field Detection (Phase 5A - Day 3)

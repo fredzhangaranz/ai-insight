@@ -174,6 +174,63 @@ describe("generateSQLWithLLM", () => {
     ).rejects.toThrowError(/valid JSON/);
   });
 
+  it("formats resolved vs unresolved filters using merged filter state", async () => {
+    const contextWithMerged: ContextBundle & {
+      mergedFilterState: any[];
+    } = {
+      ...baseContext,
+      intent: { ...baseContext.intent, filters: [] as any },
+      mergedFilterState: [
+        {
+          originalText: "30% area reduction",
+          normalizedText: "30% area reduction",
+          field: "areaReduction",
+          operator: "=",
+          value: 0.3,
+          resolved: true,
+          confidence: 0.92,
+          resolvedVia: ["template_param"],
+          allSources: [],
+          warnings: [],
+          conflicts: [],
+        },
+        {
+          originalText: "gender",
+          normalizedText: "gender",
+          field: "gender",
+          operator: "=",
+          value: null,
+          resolved: false,
+          confidence: 0.6,
+          resolvedVia: [],
+          allSources: [],
+          warnings: [],
+          conflicts: [],
+        },
+      ],
+    };
+
+    mocks.mockComplete.mockResolvedValueOnce(
+      JSON.stringify({
+        responseType: "sql",
+        explanation: "Count patients filtered by gender.",
+        generatedSql:
+          "SELECT COUNT(*) AS totalPatients FROM rpt.Patient WHERE gender = 'Female';",
+        confidence: 0.9,
+        assumptions: [],
+      })
+    );
+
+    await generateSQLWithLLM(contextWithMerged, "customer-1");
+
+    const userMessage =
+      (mocks.mockComplete.mock.calls[0][0] as any).userMessage || "";
+    expect(userMessage).toContain("Already Resolved");
+    expect(userMessage).toContain("30% area reduction");
+    expect(userMessage).toContain("Filters Needing Clarification");
+    expect(userMessage).toContain("gender");
+  });
+
   // ========================================
   // Fix 3: Simple Query Test Coverage
   // Tests for simple queries with empty semantic context

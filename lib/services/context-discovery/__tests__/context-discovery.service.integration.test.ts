@@ -71,7 +71,13 @@ describe("ContextDiscoveryService Integration", () => {
     type: "outcome_analysis" as const,
     scope: "patient_cohort" as const,
     metrics: ["healing_rate"],
-    filters: [{ concept: "wound_classification", userTerm: "diabetic wounds" }],
+    filters: [
+      {
+        operator: "equals",
+        userPhrase: "diabetic wounds",
+        value: null,
+      },
+    ],
     confidence: 0.92,
     reasoning: "User is asking about outcomes for a specific cohort",
   };
@@ -133,6 +139,10 @@ describe("ContextDiscoveryService Integration", () => {
       query: vi.fn().mockResolvedValue({ rows: [] }),
     };
     vi.mocked(getInsightGenDbPool).mockResolvedValue(mockPool as any);
+    vi.mocked(getTerminologyMapperService).mockReturnValue({
+      mapFilters: vi.fn().mockResolvedValue([]),
+      mapUserTerms: vi.fn().mockResolvedValue([]),
+    } as any);
   });
 
   afterEach(() => {
@@ -148,6 +158,7 @@ describe("ContextDiscoveryService Integration", () => {
     };
     const mockTerminologyMapper = {
       mapUserTerms: vi.fn().mockResolvedValue(MOCK_TERMINOLOGY),
+      mapFilters: vi.fn().mockResolvedValue(MOCK_INTENT.filters),
     };
     const mockJoinPathPlanner = {
       planJoinPath: vi.fn().mockResolvedValue(MOCK_JOIN_PATHS),
@@ -211,14 +222,18 @@ describe("ContextDiscoveryService Integration", () => {
     expect(result.overallConfidence).toBeGreaterThan(0.7);
     expect(result.metadata.durationMs).toBeGreaterThan(0);
 
-    expect(mockIntentClassifier.classifyIntent).toHaveBeenCalledWith({
-      customerId: "STMARYS",
-      question: BASE_REQUEST.question,
-      modelId: undefined,
-    });
-    expect(mockSemanticSearcher.searchFormFields).toHaveBeenCalled();
-    expect(mockTerminologyMapper.mapUserTerms).toHaveBeenCalled();
-    expect(mockJoinPathPlanner.planJoinPath).toHaveBeenCalled();
+    expect(mockIntentClassifier.classifyIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: "STMARYS",
+        question: BASE_REQUEST.question,
+        modelId: "claude-3-5-sonnet-20241022",
+      })
+    );
+    expect(mockSemanticSearcher.searchFormFields).toHaveBeenCalledWith(
+      "STMARYS",
+      expect.arrayContaining(["healing_rate", "diabetic wounds"]),
+      expect.objectContaining({ includeNonForm: true })
+    );
     expect(mockContextAssembler.assembleContextBundle).toHaveBeenCalled();
   });
 
@@ -247,6 +262,7 @@ describe("ContextDiscoveryService Integration", () => {
     };
     const mockTerminologyMapper = {
       mapUserTerms: vi.fn().mockResolvedValue(MOCK_TERMINOLOGY),
+      mapFilters: vi.fn().mockResolvedValue(MOCK_INTENT.filters),
     };
     const mockJoinPathPlanner = {
       planJoinPath: vi.fn().mockResolvedValue(MOCK_JOIN_PATHS),
@@ -307,6 +323,7 @@ describe("ContextDiscoveryService Integration", () => {
     };
     const mockTerminologyMapper = {
       mapUserTerms: vi.fn().mockResolvedValue([]),
+      mapFilters: vi.fn().mockResolvedValue(MOCK_INTENT.filters),
     };
     const mockJoinPathPlanner = {
       planJoinPath: vi.fn().mockResolvedValue([]),
@@ -423,6 +440,7 @@ describe("ContextDiscoveryService Integration", () => {
     };
     const mockTerminologyMapper = {
       mapUserTerms: vi.fn().mockResolvedValue(MOCK_TERMINOLOGY),
+      mapFilters: vi.fn().mockResolvedValue(MOCK_INTENT.filters),
     };
     const mockJoinPathPlanner = {
       planJoinPath: vi.fn(),
@@ -477,6 +495,7 @@ describe("ContextDiscoveryService Integration", () => {
     };
     const mockTerminologyMapper = {
       mapUserTerms: vi.fn().mockResolvedValue(MOCK_TERMINOLOGY),
+      mapFilters: vi.fn().mockResolvedValue(MOCK_INTENT.filters),
     };
     const mockJoinPathPlanner = {
       planJoinPath: vi.fn().mockResolvedValue(MOCK_JOIN_PATHS),

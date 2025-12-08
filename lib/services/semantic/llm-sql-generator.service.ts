@@ -17,6 +17,7 @@ import type {
   TerminologyMapping,
   AssessmentTypeInContext,
 } from "../context-discovery/types";
+import type { MergedFilterState } from "./filter-state-merger.service";
 import type { QueryTemplate } from "../query-template.service";
 import { executeCustomerQuery } from "./customer-query.service";
 import {
@@ -44,7 +45,7 @@ const SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * @returns LLM response (SQL or clarification request)
  */
 export async function generateSQLWithLLM(
-  context: ContextBundle,
+  context: ContextBundle & { mergedFilterState?: MergedFilterState[] },
   customerId: string,
   modelId?: string,
   clarifications?: Record<string, string>,
@@ -309,7 +310,7 @@ async function buildUserPrompt(
   prompt += `- Metrics: ${intent.metrics?.join(", ") || "None"}\n`;
   prompt += `- Confidence: ${(intent.confidence ?? 0).toFixed(2)}\n\n`;
 
-  prompt += formatFiltersSection(intent.filters);
+  prompt += formatFiltersSection(intent.filters, context.mergedFilterState);
   prompt += formatFormsSection(context.forms || []);
   prompt += formatAssessmentTypesSection(context.assessmentTypes || []); // Phase 5A
   if (templateReferences && templateReferences.length > 0) {
@@ -373,29 +374,98 @@ async function buildUserPrompt(
 }
 
 function formatFiltersSection(
-  filters?: ContextBundle["intent"]["filters"]
+  filters: ContextBundle["intent"]["filters"] | undefined,
+  mergedFilterState?: MergedFilterState[],
+  options?: { confidenceThreshold?: number }
 ): string {
-  if (!filters || filters.length === 0) {
+  const threshold = options?.confidenceThreshold ?? 0.7;
+  const merged =
+    mergedFilterState && mergedFilterState.length > 0
+      ? mergedFilterState
+      : mapFiltersToMerged(filters || []);
+
+  if (!merged || merged.length === 0) {
     return "";
   }
 
-  let section = `**Filters:**\n`;
-  for (const filter of filters) {
-    const field = filter.field || "unassigned";
-    const userPhrase = filter.userPhrase || "unknown";
-    const value = filter.value || null;
-    const operator = filter.operator || "equals";
+  const resolved = merged.filter(
+    (f) => f.resolved && f.confidence >= threshold
+  );
+  const unresolved = merged.filter(
+    (f) => !f.resolved || f.confidence < threshold
+  );
 
-    // Format: Field: userPhrase → value (operator)
-    if (value) {
-      section += `- ${field}: "${userPhrase}" → **"${value}"** (${operator})\n`;
-    } else {
-      section += `- ${field}: "${userPhrase}" (${operator}, value not resolved)\n`;
-    }
+  let section = `# Filters\n\n`;
+
+  if (resolved.length > 0) {
+    section += `## Already Resolved (DO NOT RE-ASK)\n`;
+    resolved.forEach((f) => {
+      const field = f.field || "unknown_field";
+      const value = f.value ?? "unknown";
+      const via = (f.resolvedVia || []).join(", ") || "unknown";
+      section += `- ${field}: "${f.originalText}" → ${value} (confidence: ${f.confidence.toFixed(
+        2
+      )}, via ${via})\n`;
+    });
+    section += `\n## REQUIRED: Apply these filters in SQL WHERE clause\n`;
+    resolved.forEach((f) => {
+      const field = f.field || "unknown_field";
+      section += `- ${field} = {{${field}}}  (from "${f.originalText}")\n`;
+    });
+    section += `\n`;
   }
-  section += `\n**IMPORTANT:** Use the exact value shown after → in your SQL WHERE clause. Do NOT modify or substitute these values.\n\n`;
+
+  if (unresolved.length > 0) {
+    section += `## Filters Needing Clarification\n`;
+    unresolved.forEach((f) => {
+      const field = f.field || "unknown_field";
+      section += `- ${field}: "${f.originalText}" (confidence: ${f.confidence.toFixed(
+        2
+      )})\n`;
+    });
+    section += `\n`;
+  }
 
   return section;
+}
+
+function mapFiltersToMerged(
+  filters: NonNullable<ContextBundle["intent"]["filters"]>
+): MergedFilterState[] {
+  return filters.map((filter) => {
+    const originalText =
+      filter.userPhrase || (filter as any).userTerm || filter.field || "filter";
+    const valueResolved = filter.value !== null && filter.value !== undefined;
+    const confidence =
+      typeof (filter as any).confidence === "number"
+        ? (filter as any).confidence
+        : valueResolved
+        ? 0.8
+        : 0.5;
+
+    return {
+      originalText,
+      normalizedText: originalText.toLowerCase(),
+      field: filter.field,
+      operator: filter.operator,
+      value: filter.value,
+      resolved: valueResolved,
+      confidence,
+      resolvedVia: valueResolved ? ["semantic_mapping"] : [],
+      allSources: [
+        {
+          source: "semantic_mapping",
+          value: filter.value,
+          confidence,
+          field: filter.field,
+          operator: filter.operator,
+          originalText,
+        },
+      ],
+      warnings: [],
+      conflicts: [],
+    };
+  });
 }
 
 function formatFormsSection(forms: FormInContext[]): string {
