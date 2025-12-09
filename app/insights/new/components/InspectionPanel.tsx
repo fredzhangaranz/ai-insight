@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, AlertCircle, Database, Code, Lightbulb, MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertCircle, Code, Lightbulb, MessageSquare } from "lucide-react";
 import { InsightResult } from "@/lib/hooks/useInsights";
 
 interface InspectionPanelProps {
@@ -14,7 +14,7 @@ interface InspectionPanelProps {
   onChallengeAssumption?: (assumption: string, explanation: string) => void;
 }
 
-type TabId = "understanding" | "sql" | "tables" | "context";
+type TabId = "understanding" | "sql" | "context";
 
 export function InspectionPanel({ result, onChallengeAssumption }: InspectionPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -23,7 +23,6 @@ export function InspectionPanel({ result, onChallengeAssumption }: InspectionPan
   const tabs = [
     { id: "understanding" as TabId, label: "Understanding", icon: Lightbulb },
     { id: "sql" as TabId, label: "SQL", icon: Code },
-    { id: "tables" as TabId, label: "Tables/Fields", icon: Database },
     { id: "context" as TabId, label: "Context", icon: MessageSquare },
   ];
 
@@ -87,7 +86,6 @@ export function InspectionPanel({ result, onChallengeAssumption }: InspectionPan
           <UnderstandingTab result={result} onChallenge={onChallengeAssumption} />
         )}
         {activeTab === "sql" && <SQLTab result={result} />}
-        {activeTab === "tables" && <TablesFieldsTab result={result} onChallenge={onChallengeAssumption} />}
         {activeTab === "context" && <ContextTab result={result} />}
       </div>
     </div>
@@ -337,112 +335,6 @@ function SQLTab({ result }: { result: InsightResult }) {
              "Auto-Funnel"}
           </span>
         </div>
-      )}
-    </div>
-  );
-}
-
-function TablesFieldsTab({ result, onChallenge }: {
-  result: InsightResult;
-  onChallenge?: (assumption: string, explanation: string) => void;
-}) {
-  const forms = result.context?.forms || [];
-  const fields = result.context?.fields || [];
-  const joinPaths = result.context?.joinPaths || [];
-
-  return (
-    <div className="space-y-4">
-      {/* Forms/Tables Used */}
-      {forms.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-slate-700 mb-2">Tables Used</h4>
-          <div className="flex flex-wrap gap-2">
-            {forms.map((form: string, i: number) => (
-              <span key={i} className="text-sm px-3 py-1 bg-blue-50 text-blue-700 rounded border border-blue-200">
-                {form}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Fields Used */}
-      {fields.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-slate-700 mb-2">Fields Used</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {fields.map((field: string, i: number) => (
-              <div key={i} className="text-sm px-3 py-1 bg-green-50 text-green-700 rounded border border-green-200 font-mono">
-                {field}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Join Paths */}
-      {joinPaths.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-slate-700 mb-2">Join Paths</h4>
-          <div className="space-y-2">
-            {joinPaths.map((path: string, i: number) => (
-              <div key={i} className="text-sm px-3 py-2 bg-purple-50 text-purple-700 rounded border border-purple-200 font-mono">
-                {path}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Field Assumptions in Tables/Fields context */}
-      {result.assumptions && result.assumptions.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-slate-700 mb-2">
-            Field Mapping Decisions
-          </h4>
-          <div className="text-xs text-slate-600 mb-2">
-            These are the field names I chose from the actual database schema:
-          </div>
-          <div className="space-y-2">
-            {result.assumptions.map((assumption, i) => (
-              <div key={i} className="text-sm bg-slate-50 border rounded p-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <span className="text-slate-600">{assumption.intent}:</span>{" "}
-                    {assumption.actual ? (
-                      <>
-                        <span className="line-through text-slate-400">{assumption.assumed}</span>
-                        {" → "}
-                        <span className="font-mono font-semibold text-green-700">{assumption.actual}</span>
-                      </>
-                    ) : (
-                      <span className="font-mono text-red-700">
-                        ❌ {assumption.assumed} (not found)
-                      </span>
-                    )}
-                  </div>
-                  {onChallenge && (
-                    <Button
-                      onClick={() => onChallenge(
-                        assumption.assumed,
-                        `I used "${assumption.actual || assumption.assumed}" for ${assumption.intent}`
-                      )}
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                    >
-                      Challenge
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {forms.length === 0 && fields.length === 0 && joinPaths.length === 0 && (
-        <p className="text-sm text-slate-500">No table/field information available</p>
       )}
     </div>
   );

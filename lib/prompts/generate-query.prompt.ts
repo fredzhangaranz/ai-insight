@@ -8,7 +8,7 @@ import type { AIAnalysisPlan, PromptContext } from "./types";
 /**
  * Response type indicator for LLM output
  */
-export type LLMResponseType = 'sql' | 'clarification';
+export type LLMResponseType = "sql" | "clarification";
 
 /**
  * Assumption made by LLM during SQL generation
@@ -24,7 +24,7 @@ export interface Assumption {
  * SQL generation response (when LLM is confident)
  */
 export interface LLMSQLResponse {
-  responseType: 'sql';
+  responseType: "sql";
   generatedSql: string;
   explanation: string;
   confidence: number;
@@ -57,7 +57,7 @@ export interface ClarificationRequest {
  * Clarification response (when LLM needs user input)
  */
 export interface LLMClarificationResponse {
-  responseType: 'clarification';
+  responseType: "clarification";
   clarifications: ClarificationRequest[];
   reasoning: string;
   partialContext?: {
@@ -334,6 +334,47 @@ Generated clarification response:
 
 # SQL Generation Rules (When Generating SQL)
 
+## 0. SQL GROUP BY / ORDER BY Correctness (CRITICAL)
+
+**PREVENT GROUP BY / ORDER BY SCOPING VIOLATIONS - This is the most common error pattern.**
+
+### ✅ Valid Patterns:
+- ORDER BY column when column is in the GROUP BY clause
+- ORDER BY aggregate_func(column) (e.g., ORDER BY COUNT(id), ORDER BY SUM(value))
+- ORDER BY CASE(same_expr) where the CASE expression matches a grouped expression
+- ORDER BY min_value when min_value is a computed column in SELECT and GROUP BY
+
+### ❌ Invalid Patterns (NEVER DO THIS):
+- GROUP BY CASE(...) ... ORDER BY ungrouped_column — Column not in GROUP BY
+- GROUP BY CASE(...) ... ORDER BY table.column — Direct column reference when using CASE grouping
+- GROUP BY column ... ORDER BY different_column — ORDER BY column must be in GROUP BY
+- COUNT(MAX(column)) — Nested aggregates are invalid
+
+### ✅ Correct Solution for Age Group Aggregations:
+
+When grouping by age categories using CASE, use explicit sort order:
+
+**Step 1:** Add a numeric sort column to SELECT:
+- SELECT ... CASE(...) AS AgeGroup, 1 AS SortOrder, COUNT(*) AS PatientCount
+
+**Step 2:** Include both the CASE and sort column in GROUP BY:
+- GROUP BY CASE(...), 1
+
+**Step 3:** Order by the sort column:
+- ORDER BY SortOrder
+
+**Example Structure:**
+SELECT CASE WHEN age < 20 THEN '<20 years old' ... END AS AgeGroup, 1 AS SortOrder, COUNT(*) AS PatientCount
+FROM table
+GROUP BY CASE WHEN age < 20 THEN '<20 years old' ... END, 1
+ORDER BY SortOrder
+
+**Validation Checklist Before Outputting SQL:**
+- Every column in ORDER BY is either in GROUP BY or wrapped in an aggregate function
+- CASE expressions in ORDER BY match (or reference) grouped expressions
+- No nested aggregates (e.g., COUNT(MAX(...)))
+- All non-aggregate columns in ORDER BY are listed in GROUP BY
+
 ## 1. Schema Prefix Rules
 
 - All tables MUST be prefixed with 'rpt.' (e.g., rpt.Note, rpt.Assessment)
@@ -454,24 +495,29 @@ Return JSON in the appropriate format (clarification OR sql).
 /**
  * Validates LLM response for both SQL and clarification modes
  */
-export function validateLLMResponse(response: unknown): response is LLMResponse {
-  if (typeof response !== 'object' || response === null) {
+export function validateLLMResponse(
+  response: unknown
+): response is LLMResponse {
+  if (typeof response !== "object" || response === null) {
     return false;
   }
 
   const obj = response as any;
 
   // Check for responseType field
-  if (!obj.responseType || !['sql', 'clarification'].includes(obj.responseType)) {
+  if (
+    !obj.responseType ||
+    !["sql", "clarification"].includes(obj.responseType)
+  ) {
     return false;
   }
 
   // Validate SQL response
-  if (obj.responseType === 'sql') {
+  if (obj.responseType === "sql") {
     return (
-      typeof obj.generatedSql === 'string' &&
-      typeof obj.explanation === 'string' &&
-      typeof obj.confidence === 'number' &&
+      typeof obj.generatedSql === "string" &&
+      typeof obj.explanation === "string" &&
+      typeof obj.confidence === "number" &&
       obj.confidence >= 0 &&
       obj.confidence <= 1 &&
       /^[\s\n]*(SELECT|WITH)/i.test(obj.generatedSql) // Allow SELECT or CTE (WITH ...)
@@ -479,8 +525,11 @@ export function validateLLMResponse(response: unknown): response is LLMResponse 
   }
 
   // Validate clarification response
-  if (obj.responseType === 'clarification') {
-    if (!Array.isArray(obj.clarifications) || typeof obj.reasoning !== 'string') {
+  if (obj.responseType === "clarification") {
+    if (
+      !Array.isArray(obj.clarifications) ||
+      typeof obj.reasoning !== "string"
+    ) {
       return false;
     }
 
@@ -490,18 +539,22 @@ export function validateLLMResponse(response: unknown): response is LLMResponse 
     }
 
     // Validate each clarification request
-    return obj.clarifications.every((c: any) =>
-      typeof c.id === 'string' &&
-      typeof c.ambiguousTerm === 'string' &&
-      typeof c.question === 'string' &&
-      Array.isArray(c.options) &&
-      typeof c.allowCustom === 'boolean' &&
-      c.options.length > 0 &&
-      c.options.every((opt: any) =>
-        typeof opt.id === 'string' &&
-        typeof opt.label === 'string' &&
-        (typeof opt.sqlConstraint === 'string' || opt.sqlConstraint === null || opt.sqlConstraint === undefined)
-      )
+    return obj.clarifications.every(
+      (c: any) =>
+        typeof c.id === "string" &&
+        typeof c.ambiguousTerm === "string" &&
+        typeof c.question === "string" &&
+        Array.isArray(c.options) &&
+        typeof c.allowCustom === "boolean" &&
+        c.options.length > 0 &&
+        c.options.every(
+          (opt: any) =>
+            typeof opt.id === "string" &&
+            typeof opt.label === "string" &&
+            (typeof opt.sqlConstraint === "string" ||
+              opt.sqlConstraint === null ||
+              opt.sqlConstraint === undefined)
+        )
     );
   }
 

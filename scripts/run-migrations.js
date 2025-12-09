@@ -65,6 +65,9 @@ const migrations = [
   "037_force_fix_measurement_field_concepts.sql",
   "038_add_multiple_concepts_to_fields.sql",
   "039_correct_measurement_field_concepts.sql",
+  "040_ontology_data_sources.sql",
+  "041_remove_faulty_data_sources_index.sql",
+  "042_semantic_index_concept_id.sql",
 ];
 
 /**

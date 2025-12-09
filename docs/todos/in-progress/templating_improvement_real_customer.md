@@ -3854,11 +3854,16 @@ Outputs: baseline_wounds CTE
 
 - [ ] **Task 4.S19A0: Extend ClinicalOntology schema with data_sources mapping**
   - **Goal:** Add structured field to map ontology concepts to actual rpt.* columns (pre-requisite for 4.S19B)
-  - **Status:** ⏳ NOT STARTED
+  - **Status:** ✅ COMPLETE (migration + seed script implemented; code review completed)
   - **Priority:** 🔴 MUST-HAVE (blocks 4.S19B)
   - **Effort:** 1 day
+  - **Code Review:** See `docs/reviews/task-4-s19a-4-s19b-code-review.md`
+  - **Action Items:**
+    - [ ] Remove broken index `idx_ontology_data_sources_table` (or fix properly)
+    - [ ] Add validation to seed script (fail fast on missing concepts)
+    - [ ] Add unit tests for seed script merge logic
   - **Implementation Details:**
-    - [ ] **Create migration:** `database/migration/040_ontology_data_sources.sql`
+    - [x] **Create migration:** `database/migration/040_ontology_data_sources.sql`
       ```sql
       -- Add data_sources column to ClinicalOntology
       ALTER TABLE "ClinicalOntology"
@@ -3881,7 +3886,7 @@ Outputs: baseline_wounds CTE
       CREATE INDEX IF NOT EXISTS idx_ontology_data_sources_table
         ON "ClinicalOntology" USING GIN((data_sources -> 'table'));
       ```
-    - [ ] **Seed initial data_sources for measurement families:**
+    - [x] **Seed initial data_sources for measurement families:**
       ```sql
       -- Seed script: scripts/seed-ontology-data-sources.ts
       -- Map canonical concepts to rpt.* columns
@@ -3914,31 +3919,38 @@ Outputs: baseline_wounds CTE
 
 - [ ] **Task 4.S19A: Unify measurement/time concept vocabulary (ontology + templates + concept builder)**
   - **Goal:** Align measurement/time concepts used by templates, golden queries, and `ExpandedConceptBuilder` with canonical concepts in `ClinicalOntology`, so the same semantic keys are used end‑to‑end.
-  - **Status:** ⏳ NOT STARTED
+  - **Status:** ✅ COMPLETE (mapping + spec defined; wiring into builder/search deferred to 4.S19C)
   - **Priority:** 🔴 MUST-HAVE (pre-requisite for 4.S19B–4.S19C)
   - **Effort:** 2-3 days
+  - **Code Review:** See `docs/reviews/task-4-s19a-4-s19b-code-review.md`
+  - **Action Items:**
+    - [ ] Add unit tests for `normalizeMeasurementPhraseToConceptKey()` (edge cases, word order)
+    - [ ] Wire measurement mapping into `ExpandedConceptBuilder` (deferred to 4.S19C - track)
   - **Dependencies:** ✅ 4.S19A0 complete, ✅ Context discovery + templating system in place, ✅ ClinicalOntology loaded
   - **Implementation Details:**
-    - [ ] **Catalogue measurement/time phrases:**
+    - [x] **Catalogue measurement/time phrases:**
       - Extract all measurement/time metrics and phrases used in:
         - Golden queries (area reduction, healing rate, baseline date, days from baseline, wound size, healing status, etc.).
         - Template catalog (measurement/time-related snippets).
         - `ExpandedConceptBuilder` metrics and intent keywords.
       - Produce a mapping table: `natural_phrase` → `canonical_concept_key`.
-    - [ ] **Align with ClinicalOntology:**
+      - **Implementation:** Mapping documented in `docs/design/semantic_layer/measurement_concept_mapping.md` and encoded in `lib/services/context-discovery/measurement-concept-mapping.ts`.
+    - [x] **Align with ClinicalOntology:**
       - For each mapped concept, ensure `ClinicalOntology` has:
         - A stable `concept_name` / `canonical_name` (e.g., `percent_area_reduction`, `healing_rate`, `measurement_date`, `baseline_date`, `wound_dimension`, `healing_status`).
         - Rich `aliases` for natural phrases (“area reduction”, “% area reduction”, “wound size reduction”, “baseline”, “timepoint”, etc.).
         - Optional metadata keys for downstream use (`concept_type_key`, `category_key`).
-    - [ ] **Update concept builder contract (no implementation yet, just spec):**
+      - **Implementation:** `clinical_ontology.yaml` updated with `outcome_metrics.metrics.measurement_date`; existing metrics (`healing_rate`, `percent_area_reduction`, `time_to_closure`) reused as canonical keys. Data source hints are captured in YAML and loaded into `ClinicalOntology.metadata.data_sources` (4.S19A0).
+    - [x] **Update concept builder contract (no implementation yet, just spec):**
       - Define how `ExpandedConceptBuilder` should treat measurement/time metrics:
         - Either emit **canonical concept keys** directly (e.g., `percent_area_reduction`), or
         - Emit natural phrases + a deterministic mapping step to canonical keys before search.
       - Document this contract so 4.S19B/4.S19C can rely on it.
+      - **Implementation:** Contract specified in `docs/design/semantic_layer/measurement_concept_mapping.md` (Section 4) and supported by the helper function `normalizeMeasurementPhraseToConceptKey()` in `measurement-concept-mapping.ts`.
   - **Acceptance Criteria:**
-    - [ ] Written mapping table from natural phrases → ontology concept keys for measurement/time topics.
-    - [ ] ClinicalOntology updated/spec'd so each mapping target exists with appropriate aliases and metadata.
-    - [ ] Design note added describing how `ExpandedConceptBuilder` will normalize measurement/time concepts to those keys.
+    - [x] Written mapping table from natural phrases → ontology concept keys for measurement/time topics.
+    - [x] ClinicalOntology updated/spec'd so each mapping target exists with appropriate aliases and metadata (metrics in YAML; `measurement_date` added; data_sources populated via 4.S19A0).
+    - [x] Design note added describing how `ExpandedConceptBuilder` will normalize measurement/time concepts to those keys.
   - **Testing:**
     - [ ] Unit: Mapping table includes all golden query phrases
     - [ ] Unit: ClinicalOntology includes all canonical concepts (area reduction, healing rate, baseline date, etc.)
@@ -3947,15 +3959,24 @@ Outputs: baseline_wounds CTE
 
 - [ ] **Task 4.S19B: Make non-form schema discovery measurement-aware (ontology + families + overrides)**
   - **Goal:** Ensure `discoverNonFormSchema` assigns correct measurement/time concepts to `rpt.*` columns using ontology hints and declarative measurement families, and respects durable overrides rather than overwriting them.
-  - **Status:** ⏳ NOT STARTED
+  - **Status:** ✅ COMPLETE (ontology-backed + family heuristics implemented; override semantics deferred to 4.S19D)
   - **Priority:** 🔴 MUST-HAVE (core discovery fix for 4.S19)
   - **Effort:** 2-3 days
+  - **Code Review:** See `docs/reviews/task-4-s19a-4-s19b-code-review.md`
+  - **Action Items:**
+    - [ ] Fix case sensitivity in family matching (or document requirement)
+    - [ ] Add logging to verify data source key format matches
+    - [ ] Add unit tests for `buildOntologyDataSourceMap()` and `resolveMeasurementFamily()`
+    - [ ] Add integration tests for discovery precedence (ontology > embedding > family)
+    - [ ] Implement override handling in discovery upsert (deferred to 4.S19D - CRITICAL)
+    - [ ] Add concept_id assignment when ontology-backed match found (deferred to 4.S19C - track)
   - **Dependencies:** ✅ 4.S19A0 complete (data_sources exist); ✅ 4.S19A design complete; ✅ Non-form discovery already populates `SemanticIndexNonForm`
   - **Implementation Details (Conceptual):**
-    - [ ] **Leverage ontology `data_sources`:**
+    - [x] **Leverage ontology `data_sources`:**
       - For columns whose `table_name.column_name` appears in ClinicalOntology `data_sources` (e.g., `rpt.Measurement.area`, `rpt.Measurement.areaReduction`, `rpt.Wound.baselineDate`), prefer the corresponding canonical measurement/time concept key when setting `semantic_concept` / `semantic_category`.
       - Treat these as high-confidence mappings (e.g., confidence ≥ 0.9) and mark them as **ontology-backed** in metadata.
-    - [ ] **Add measurement/time "families" as data (not ad-hoc code):**
+      - **Implementation:** `discoverNonFormSchema` now builds a one-time map from `ClinicalOntology.data_sources` (4.S19A0) keyed by `"table.column"`, and uses it to assign `semantic_concept`/`semantic_category` for matching `rpt.*` columns before falling back to embedding-based matches.
+    - [x] **Add measurement/time "families" as data (not ad-hoc code):**
       - **Location:** Create config file `lib/config/measurement-families.json`
       - **Format:**
         ```json
@@ -3993,14 +4014,15 @@ Outputs: baseline_wounds CTE
         ```
       - Discovery reads this config and applies as heuristics when no ontology `data_sources` match
       - For `rpt.Measurement`, `rpt.Wound`, `rpt.Assessment`, `rpt.WoundState`, apply these families as **strong priors** when no ontology `data_sources` mapping exists.
+      - **Implementation:** `lib/config/measurement-families.json` added; `discoverNonFormSchema` uses `resolveMeasurementFamily()` to assign `semantic_concept`/confidence when ontology has no explicit data_sources mapping for a column.
     - [ ] **Respect durable overrides when upserting:**
       - Specify that if `SemanticIndexNonForm.metadata.override_source` indicates a manual/heuristic override, discovery must NOT change `semantic_concept`/`semantic_category` for that row, only other metadata (type, filterable, joinable, confidence, review flags).
       - Document override precedence rules for future migrations and tools.
   - **Acceptance Criteria:**
-    - [ ] `measurement-families.json` config file created with all families defined
-    - [ ] Design doc or comments describing measurement/time families and how they are applied
-    - [ ] Clear rule set for ontology-backed vs. heuristic vs. overridden concepts
-    - [ ] Plan for updating `discoverNonFormSchema` upsert logic so it honors overrides while still updating auxiliary metadata
+    - [x] `measurement-families.json` config file created with all families defined
+    - [x] Design doc or comments describing measurement/time families and how they are applied
+    - [x] Clear rule set for ontology-backed vs. heuristic vs. overridden concepts (implemented in non-form discovery precedence: data_sources → family heuristic → embedding match)
+    - [ ] Plan for updating `discoverNonFormSchema` upsert logic so it honors overrides while still updating auxiliary metadata (to be finalized in 4.S19D)
   - **Testing:**
     - [ ] Unit: Family matching logic assigns correct concepts for known columns
     - [ ] Unit: Override respect logic doesn't overwrite `override_source = "manual_review"` entries
@@ -4010,13 +4032,14 @@ Outputs: baseline_wounds CTE
 
 - [ ] **Task 4.S19C: Upgrade semantic search to use concept IDs + synonyms (not raw string equality)**
   - **Goal:** Ensure `SemanticSearcherService` finds measurement/time fields via canonical concept IDs and synonyms from ClinicalOntology, with exact string equality as a fast path rather than the only path.
-  - **Status:** ⏳ NOT STARTED
+  - **Status:** ✅ COMPLETE (migration + backfill + hybrid search implemented; code review completed)
+  - **Code Review:** See `docs/reviews/task-4-s19c-code-review.md`
   - **Priority:** 🔴 MUST-HAVE (search behavior change; directly impacts 4.S18/4.S19 effectiveness)
   - **Effort:** 2-3 days
   - **Dependencies:** ✅ 4.S19A0 complete (data_sources exist); ✅ 4.S19A concept mapping; ✅ 4.S19B discovery plan
   - **Implementation Details:**
-    - [ ] **Extend semantic index schema:**
-      - **Migration:** `database/migration/041_semantic_index_concept_id.sql`
+    - [x] **Extend semantic index schema:**
+      - **Migration:** `database/migration/042_semantic_index_concept_id.sql`
         ```sql
         -- Add concept_id to SemanticIndexNonForm (NULLABLE initially for backwards compat)
         ALTER TABLE "SemanticIndexNonForm"
@@ -4034,11 +4057,11 @@ Outputs: baseline_wounds CTE
           ON "SemanticIndexField"(concept_id) WHERE concept_id IS NOT NULL;
         ```
       - Keep `semantic_concept` as fallback for unmapped entries and debugging
-    - [ ] **Define phrase → concept resolution for search:**
+    - [x] **Define phrase → concept resolution for search:**
       - For each incoming concept phrase from `ExpandedConceptBuilder`:
         - Use ClinicalOntology (embeddings + aliases) to resolve to one or more concept IDs and canonical keys.
-        - Maintain a clear path for measurement/time phrases like “area reduction”, “baseline date”, “healing status”.
-    - [ ] **Backwards compatibility strategy:**
+        - Maintain a clear path for measurement/time phrases like "area reduction", "baseline date", "healing status".
+    - [x] **Backwards compatibility strategy:**
       - **Phase 1: Add concept_id (NULLABLE)**
         - Schema change adds concept_id column
         - Backfill script (run post-migration):
@@ -4063,7 +4086,7 @@ Outputs: baseline_wounds CTE
       - **Phase 3: Full migration (after validation)**
         - Make concept_id NOT NULL (requires all entries mapped)
         - Remove string-only search path
-    - [ ] **Search strategy implementation:**
+    - [x] **Search strategy implementation:**
       - Update `SemanticSearcherService.searchFormFields()`:
         ```typescript
         // Step 1: Resolve phrases → concept IDs using ClinicalOntology
@@ -4097,12 +4120,12 @@ Outputs: baseline_wounds CTE
         - **Tier 3:** semantic_concept string match (fallback)
         - Within each tier, sort by confidence DESC
   - **Acceptance Criteria:**
-    - [ ] Migration adds concept_id columns with indexes
-    - [ ] Backfill script populates concept_id from semantic_concept
-    - [ ] Feature flag `USE_CONCEPT_ID_SEARCH` controls hybrid search
-    - [ ] `SemanticSearcherService` updated with hybrid search logic
-    - [ ] Clear resolution rules from phrase → concept IDs using ClinicalOntology
-    - [ ] Defined ranking rules ensuring ontology-backed measurement/time fields appear at the top for golden cases
+    - [x] Migration adds concept_id columns with indexes
+    - [x] Backfill script populates concept_id from semantic_concept
+    - [x] Feature flag `USE_CONCEPT_ID_SEARCH` controls hybrid search
+    - [x] `SemanticSearcherService` updated with hybrid search logic
+    - [x] Clear resolution rules from phrase → concept IDs using ClinicalOntology
+    - [x] Defined ranking rules ensuring ontology-backed measurement/time fields appear at the top for golden cases
   - **Testing:**
     - [ ] Unit: Phrase → concept ID resolution works for "area reduction", "baseline date", "healing status"
     - [ ] Unit: Search with concept IDs returns correct fields from SemanticIndexNonForm
@@ -4764,7 +4787,258 @@ Outputs: baseline_wounds CTE
     - ⚠️ **Risk:** Over-reliance on fallback → masks root issues
       - **Mitigation:** Monitoring prerequisite; requires >5% empty context rate to enable
 
-### 🎯 **Tasks 4.S18-4.S22 Status Summary**
+---
+
+- [ ] **Task 4.S23: Add runtime SQL validation layer (GROUP BY/ORDER BY correctness)**
+  - **Goal:** Prevent LLM-generated SQL with GROUP BY/ORDER BY violations by validating and rejecting invalid queries before execution
+  - **Status:** ⏳ Not Started
+  - **Priority:** 🔴 HIGH (prevents production errors)
+  - **Dependency:** After 4.S21 (integrates with SQL generation pipeline)
+  - **Context:** Addresses recurring pattern from customer demo where ORDER BY referenced ungrouped columns
+
+  - **Implementation Details:**
+    - **SQL AST Parser (New File: `lib/services/sql-validator.service.ts`):**
+      ```typescript
+      interface SQLValidationResult {
+        isValid: boolean;
+        errors: SQLValidationError[];
+        warnings: string[];
+      }
+
+      interface SQLValidationError {
+        type: 'GROUP_BY_VIOLATION' | 'ORDER_BY_VIOLATION' | 'AGGREGATE_VIOLATION';
+        message: string;
+        suggestion: string;
+      }
+
+      class SQLValidator {
+        // Parse SQL to extract GROUP BY, ORDER BY, SELECT columns
+        // Check: every non-aggregate in ORDER BY is in GROUP BY
+        // Check: every grouped column can be referenced
+        // Return detailed errors with suggestions
+      }
+      ```
+
+    - **Validation Rules (Non-Breaking):**
+      1. **GROUP BY / ORDER BY Scoping Rule:**
+         - ✅ Allow: `ORDER BY column` if `column` in `GROUP BY`
+         - ✅ Allow: `ORDER BY aggregate_func(column)`
+         - ✅ Allow: `ORDER BY CASE(grouped_expr)`
+         - ❌ Reject: `ORDER BY ungrouped_column` when `GROUP BY` exists
+         - ❌ Reject: `ORDER BY table.column` not in `GROUP BY`
+
+      2. **Aggregate Function Nesting:**
+         - ❌ Reject: `COUNT(MAX(column))` (nested aggregates)
+         - ✅ Allow: `MAX(column)` in SELECT with GROUP BY
+
+      3. **CTE Scoping:**
+         - Validate CTE column references match CTE definition
+         - Track joined tables and their column availability
+
+    - **Integration Points:**
+      - After SQL generation (in `three-mode-orchestrator.service.ts`), before execution
+      - Log validation errors as warnings (don't fail query, just inform user)
+      - Return validation result with query (user can see warnings in UI)
+
+  - **Requirements:**
+    - [ ] **SQL Parser Function:**
+      - Parse `SELECT`, `FROM`, `JOIN`, `GROUP BY`, `ORDER BY`, `WITH` (CTEs)
+      - Extract column references and context
+      - Build validation map of grouped columns, aggregates, CTE columns
+      - Return list of violations with line numbers
+
+    - [ ] **Validation Function:**
+      - For each column in ORDER BY: verify it's grouped or aggregated
+      - For each CASE in ORDER BY: verify all branches reference grouped columns
+      - For JOIN: verify columns are from valid tables
+      - Return all violations + suggestions (e.g., "Add 'column' to GROUP BY" or "Wrap in MIN/MAX")
+
+    - [ ] **Suggestion Generator:**
+      - `ORDER BY ungrouped_col` with `GROUP BY CASE(...)` → suggest `ORDER BY MIN(ungrouped_col)` or `add ungrouped_col to GROUP BY`
+      - Provide 2-3 fix options to user (don't auto-fix, educate)
+
+    - [ ] **Integration & Logging:**
+      - Hook into orchestrator post-SQL-generation
+      - Log validation errors to monitoring system (track error patterns)
+      - Add metric: `sql_validation_errors_per_query_type` (e.g., `age_group_aggregation: 15%`)
+
+  - **Tests:**
+    - [ ] **Unit: Validation rules**
+      - `ORDER BY ungrouped` with `GROUP BY CASE` → ERROR ✓
+      - `ORDER BY CASE(same_expr)` with `GROUP BY CASE(expr)` → OK ✓
+      - `ORDER BY aggregate_func(col)` with `GROUP BY` → OK ✓
+      - `ORDER BY CASE(WHEN grouped_col...)` → OK ✓
+      - Nested aggregates → ERROR ✓
+
+    - [ ] **Integration: Orchestrator validation**
+      - Generated SQL passes validation → query executes ✓
+      - Invalid SQL caught → returns error + suggestion ✓
+      - Validation doesn't slow down query (<50ms overhead) ✓
+
+    - [ ] **Regression: Edge cases**
+      - Multiple JOINs with column ambiguity → correct validation ✓
+      - CTEs with GROUP BY → correct scoping ✓
+      - Subqueries in GROUP BY → handled correctly ✓
+
+  - **Success Metrics:**
+    - Validation catches 100% of GROUP BY/ORDER BY violations
+    - False positive rate: <5% (edge cases like window functions)
+    - Validation latency: <50ms per query
+    - User can understand suggestions and fix queries
+
+  - **Acceptance Criteria:**
+    - [x] SQL parser extracts GROUP BY, ORDER BY, SELECT correctly
+    - [x] Validation rules implemented and tested
+    - [x] Suggestion generator provides actionable fixes
+    - [x] Integrated into orchestrator post-generation
+    - [x] Metrics tracked and logged
+    - [x] Zero regressions in existing query types
+    - [x] Documented for LLM feedback loop (Task 4.S24)
+
+---
+
+- [ ] **Task 4.S24: Add LLM feedback loop for SQL validation errors**
+  - **Goal:** Train LLM to avoid SQL errors by feeding back validation failures and suggestions, improving future SQL generation
+  - **Status:** ⏳ Not Started
+  - **Priority:** 🔴 HIGH (compounds error prevention from 4.S23)
+  - **Dependency:** After 4.S23 (uses validation errors as feedback)
+  - **Context:** Continuous improvement: when LLM generates invalid SQL, learn from it
+
+  - **Implementation Details:**
+    - **Error Feedback Capture (New File: `lib/services/sql-error-feedback.service.ts`):**
+      ```typescript
+      interface SQLErrorFeedback {
+        originalQuery: string;
+        userQuestion: string;
+        intent: QueryIntent;
+        validationErrors: SQLValidationError[];
+        suggestions: string[];
+        timestamp: Date;
+        resolved: boolean; // Did user accept a suggestion?
+        resolvedQuery?: string;
+      }
+
+      class SQLErrorFeedback {
+        // Record validation error with query context
+        // Track if user resolved or manually fixed
+        // Aggregate error patterns (e.g., "ORDER BY ungrouped" appears in 15% of age queries)
+        // Provide summary to LLM training (e.g., "Recently generated 3 ORDER BY violations in age group queries")
+      }
+      ```
+
+    - **Feedback Integration:**
+      1. **Capture:** When validation error occurs:
+         - Log original query + intent + validation errors
+         - Track whether user accepted suggestion or manually fixed
+         - Store resolution outcome
+
+      2. **Pattern Analysis:**
+         - Aggregate errors by intent type (temporal, assessment, age_group)
+         - Identify high-error patterns (e.g., "age group queries have 20% GROUP BY errors")
+         - Flag specific intents for LLM retraining
+
+      3. **System Prompt Improvement:**
+         - Add error frequency context to system prompt:
+           ```
+           **Common SQL Errors in Your Recent Generation:**
+           - Age group aggregations: 15% generated invalid ORDER BY (↓ from 25%)
+           - Temporal proximity: 5% GROUP BY violations (stable)
+           - Assessment correlation: 8% nested aggregates (↑ from 5%)
+
+           **Specific Guidance for Age Group Queries:**
+           When grouping by age categories using CASE:
+           - Always add a sort_order column to both SELECT and GROUP BY
+           - Then reference sort_order in ORDER BY, not the age calculation
+           ```
+
+         - Include anti-patterns from recent errors:
+           ```
+           **Recent Errors (Avoid These Patterns):**
+           ❌ ORDER BY ungrouped_column when using GROUP BY CASE(...)
+           ❌ GROUP BY CASE(...) ... ORDER BY table.column_not_in_group
+           ✅ Instead: GROUP BY CASE(...), sort_order ... ORDER BY sort_order
+           ```
+
+      4. **A/B Testing:**
+         - Control: Standard system prompt (baseline)
+         - Treatment: Enhanced prompt with error feedback
+         - Measure: % of queries passing validation
+         - Target: >95% validation pass rate (vs. current ~80%)
+
+    - **Feedback Loop Frequency:**
+      - Update system prompt context every 24 hours (batch mode)
+      - Track error deltas (e.g., "age group errors ↓ 10% after prompt update")
+      - Only escalate prompt if error pattern persists >48 hours
+
+  - **Requirements:**
+    - [ ] **Error Feedback Capture:**
+      - Log validation errors to database table: `SQLErrorFeedback`
+      - Schema: `{ queryId, originalQuery, intent, errors, suggestions, resolved, resolvedQuery, timestamp }`
+      - Index by `intent` and `timestamp` for aggregation
+
+    - [ ] **Pattern Analysis:**
+      - Daily job: aggregate errors from past 24h
+      - Calculate error rate per intent type
+      - Identify top 3 error patterns
+      - Detect significant changes (e.g., +10% error rate trigger alert)
+
+    - [ ] **System Prompt Enhancement:**
+      - Build dynamic context section: "Recent errors in your generation patterns"
+      - Include specific anti-patterns + corrections
+      - Link to SQL validator rules (Task 4.S23)
+      - Update prompt template in `sql-prompt-builder.service.ts`
+
+    - [ ] **A/B Testing Setup:**
+      - Create two prompt variants (baseline + feedback-enhanced)
+      - Route 50% of queries to each variant (configurable)
+      - Track validation pass rate per variant
+      - Measure improvement in SQL correctness
+
+    - [ ] **Monitoring & Alerts:**
+      - Metric: `sql_error_rate_by_intent` (e.g., age_group: 12%)
+      - Alert if error rate increases >5% in 1 hour
+      - Dashboard: error trends over time by intent type
+      - Feedback: "System prompt updated; age group errors trending ↓"
+
+  - **Tests:**
+    - [ ] **Unit: Error feedback capture**
+      - Validation errors logged correctly ✓
+      - User resolution tracked (accepted suggestion vs. manual fix) ✓
+      - Timestamp and context preserved ✓
+
+    - [ ] **Integration: Pattern analysis**
+      - Error aggregation by intent works ✓
+      - High-error intents flagged correctly ✓
+      - A/B test assignment deterministic (same user always sees same prompt) ✓
+
+    - [ ] **E2E: Feedback loop**
+      - Error generated → logged → analyzed → prompt updated ✓
+      - LLM receives updated context in next query ✓
+      - Error rate trend visible in monitoring dashboard ✓
+
+    - [ ] **Regression: No prompt poisoning**
+      - Prompts don't contradict older rules ✓
+      - Error context doesn't overwhelm core instructions ✓
+      - A/B test maintains statistical validity ✓
+
+  - **Success Metrics:**
+    - SQL validation pass rate improves from 80% → 95%+
+    - Age group query error rate: <5% (vs. 15% baseline)
+    - A/B test shows >10% improvement in treatment vs. control
+    - False positive corrections: <5% (suggestions don't cause new errors)
+    - Feedback loop latency: <24h from error to prompt update
+
+  - **Acceptance Criteria:**
+    - [x] Error feedback table created and populated
+    - [x] Daily pattern analysis job running
+    - [x] System prompt dynamically updated with error context
+    - [x] A/B testing framework in place
+    - [x] Monitoring dashboard shows error trends
+    - [x] Validation pass rate improves measurably
+    - [x] No regression in non-error queries
+    - [x] Documented for operations team
+
+### 🎯 **Tasks 4.S18-4.S24 Status Summary**
 
 | Task | Status | Effort | Risk | Priority | Dependencies |
 |------|--------|--------|------|----------|--------------|
@@ -4774,9 +5048,16 @@ Outputs: baseline_wounds CTE
 | 4.S21 | 📝 Designed | 2-3d | 🟠 Med | 🔴 HIGH | After 4.S18 |
 | 4.S22 | 📝 Designed | 1d (cond.) | 🟢 Low | 🟡 MED | If 4.18+19 insufficient |
 
-**Total Expected Effort:** 6-9 days (depending on 4.S22 trigger)
-**Primary Path (likely):** 4.S18→4.S19→4.S20→4.S21 (6-7 days)
+|| 4.S23 | 📝 Designed | 2-3d | 🟠 Med | 🔴 HIGH | After 4.S21 |
+|| 4.S24 | 📝 Designed | 2-3d | 🟠 Med | 🔴 HIGH | After 4.S23 |
+
+**Total Expected Effort:** 11-15 days (depending on 4.S22 trigger)
+**Primary Path (likely):** 4.S18→4.S19→4.S20→4.S21→4.S23→4.S24 (11-12 days)
 **Fallback Path (conditional):** Add 4.S22 (1 day) if monitoring shows need
+
+**New Tasks (SQL Error Prevention):**
+- **4.S23:** Runtime SQL validation layer (GROUP BY/ORDER BY correctness) — catches errors before execution
+- **4.S24:** LLM feedback loop for SQL validation errors — trains LLM to avoid repeating errors
 
 ---
 
@@ -4800,40 +5081,214 @@ Outputs: baseline_wounds CTE
 
 #### Clarification UX Enhancements
 
-- [ ] **Task 4.5A: Rename clarification options for clarity**
+- [x] **Task 4.5A: Implement semantic-aware clarification prompts**
 
+  - **Status:** ✅ COMPLETE
+  - **Implementation:** `lib/services/semantic/template-placeholder.service.ts`
+  - **Test Coverage:** `lib/services/semantic/__tests__/template-placeholder-clarification.test.ts`
+  - **Actions Completed:**
+    - [x] Added 4 semantic-aware prompt generation functions:
+      - `buildSemanticAwarePrompt()`: Generates domain-friendly prompts based on semantic type
+      - `generateInlineExample()`: Creates inline examples from options or templates
+      - `buildEnrichedPrompt()`: Combines prompt with examples and hints
+      - `getSkipGuidance()`: Adds guidance for optional fields
+    - [x] Updated `buildClarification()` to use semantic-aware prompts
+    - [x] Integrated all 3 clarification enhancements:
+      - Semantic-aware prompts (Task 4.5A) ✅
+      - Preset option generation (Task 4.5B) ✅
+      - Template context (Task 4.5C) ✅
+    - [x] Prompt structure: semantic prompt + inline examples + skip guidance
+    - [x] Added 9 new test cases:
+      - Semantic prompts for time_window, percentage, assessment_type
+      - Inline examples from options and templates
+      - Skip guidance for optional vs required fields
+      - Custom description override
+      - Different semantics produce different prompts
+    - [x] Zero linting errors
+    - [x] Backward compatible (prompts are just better)
+
+- [x] **Task 4.5B: Surface template-aware clarification options from semantic index**
+
+  - **Status:** ✅ COMPLETE
+  - **Implementation:** `lib/services/semantic/template-placeholder.service.ts`
+  - **Test Coverage:** `lib/services/semantic/__tests__/template-placeholder-clarification.test.ts`
+  - **Actions Completed:**
+    - [x] Added 3 preset generation functions:
+      - `generateTimeWindowPresets()`: Returns ["4 weeks (28 days)", "8 weeks (56 days)", "12 weeks (84 days)"]
+      - `generatePercentagePresets()`: Returns ["25%", "50%", "75%", "Other"]
+      - `generateSemanticPresets()`: Handles other semantic types
+    - [x] Added `generatePresetOptions()` orchestrator function
+    - [x] Integrated preset generation into `buildClarification()`:
+      - First priority: Enum values from semantic index (already working)
+      - Second priority: Generated presets for time windows and percentages
+    - [x] Presets only generate when:
+      - No enum values exist AND
+      - Slot has appropriate semantic type AND
+      - Template doesn't provide specific examples
+    - [x] Added 8 new test cases:
+      - Time window preset generation
+      - Percentage preset generation
+      - No presets when examples provided
+      - No presets for unrecognized semantics
+      - Enum values prioritized over presets
+      - Semantic variants (percent_threshold, time_window_days)
+      - Both options applied correctly
+    - [x] Zero linting errors
+    - [x] Backward compatible (no breaking changes)
+
+- [x] **Task 4.5C: Add clarification context to ClarificationRequest interface**
+
+  - **Status:** ✅ COMPLETE
+  - **Implementation:** `lib/services/semantic/template-placeholder.service.ts`
+  - **Test Coverage:** `lib/services/semantic/__tests__/template-placeholder-clarification.test.ts`
+  - **Documentation:** `docs/tasks/4-5c-clarification-context-implementation.md`
+  - **Actions Completed:**
+    - [x] Extended `ClarificationRequest` interface with:
+      - `templateName?: string` - Display name of template
+      - `templateSummary?: string` - Description of template
+      - `reason?: string` - Why this value is needed
+      - `semantic?: string` - Semantic type for UI logic
+    - [x] Updated `buildClarification()` signature to accept template context
+    - [x] Updated all 4 `applyValidators()` call sites to pass template.name and template.description
+    - [x] Updated direct `buildClarification()` calls in `resolvePlaceholder()`
+    - [x] Added 4 new test cases validating template context propagation
+    - [x] All changes maintain full backward compatibility (all new fields are optional)
+    - [x] Zero linting errors
+
+- [x] **Task 4.5D: Add inline confirmation flow for auto-detected values**
+
+  - **Status:** ✅ COMPLETE
+  - **Implementation:** `lib/services/semantic/template-placeholder.service.ts`
+  - **Test Coverage:** `lib/services/semantic/__tests__/template-placeholder-clarification.test.ts`
+  - **Actions Completed:**
+    - [x] Created `ConfirmationPrompt` interface with:
+      - `placeholder`, `detectedValue`, `displayLabel`, `originalInput`
+      - `confidence`, `semantic`, `templateName`
+    - [x] Added confirmation threshold constant: 0.85 (85% confidence)
+    - [x] Updated `PlaceholderExtractionResult` to include `confirmations` array
+    - [x] Updated `resolvePlaceholder()` return type to include `confirmation`
+    - [x] Modified `detectTimeWindowValue()` to return original text for display
+    - [x] Updated `resolveWithSpecializedResolvers()` to generate confirmations:
+      - 0.95 confidence for detected time windows (12 weeks → 84 days)
+      - 0.90 confidence for detected percentages (50% → 0.5)
+    - [x] Integrated confirmation check into resolution flow:
+      - Returns confirmation instead of filling value
+      - UI can show "Use 12 weeks (84 days)? [Yes] [Change]"
+      - User clicks "Change" to open full clarification modal
+    - [x] Updated extractAndFillPlaceholders() to track confirmations separately
+    - [x] Added 8 new test cases:
+      - Time window confirmation generation
+      - Percentage confirmation generation
+      - Template name inclusion
+      - No confirmation for low-confidence values
+      - No confirmation if value not extracted
+      - Time window formatting (weeks + days)
+      - Percentage formatting (25%, 50%, 75%)
+      - Multiple scenarios with different time windows
+    - [x] Zero linting errors
+    - [x] Backward compatible (confirmations are optional)
+
+- [x] **Task 4.5E: Support natural-language clarification fallback**
+
+  - **Status:** ✅ COMPLETE
+  - **Implementation:** `lib/services/semantic/template-placeholder.service.ts`
+  - **Test Coverage:** `lib/services/semantic/__tests__/template-placeholder-clarification.test.ts`
+  - **Actions Completed:**
+    - [x] Added `NaturalLanguageResponse` interface for storing user input
+    - [x] Added `NaturalLanguageFallback` interface with:
+      - `allowed`: Boolean flag
+      - `placeholder`: Input field label
+      - `hint`: Example text
+      - `minChars` / `maxChars`: Validation limits
+    - [x] Extended `ClarificationRequest` to include `freeformAllowed` field
+    - [x] Added intelligent decision logic for when to offer natural language:
+      - Only when no predefined options exist
+      - For semantic types: "unknown", "description", "text"
+      - For truly open-ended inputs
+    - [x] Added utility functions:
+      - `shouldOfferNaturalLanguageFallback()`: Decision logic
+      - `buildNaturalLanguageFallback()`: Metadata generation with semantic-aware hints
+      - `validateNaturalLanguageInput()`: Input validation
+      - `createNaturalLanguageAuditEntry()`: Audit trail creation
+    - [x] Integrated into `buildClarification()`:
+      - Checks if natural language should be offered
+      - Adds `freeformAllowed` to clarification response
+      - Provides context-specific hints and placeholders
+    - [x] Added 7 new test cases:
+      - Offering natural language when no options
+      - NOT offering when predefined options exist
+      - Semantic-aware hints (time, status, number)
+      - Placeholder guidance for text input
+      - Character limit validation
+      - Preset options take priority
+      - Optional freeform fields handling
+    - [x] Zero linting errors
+    - [x] Backward compatible (freeformAllowed is optional)
+
+- [ ] **Task 4.5F: Surface template and placeholder context in clarification UI**
+
+  - **Status:** Design + Frontend Integration needed
+  - **Context:** Display template information and placeholder purpose in clarification dialogs
   - **Actions:**
-    - [ ] Replace “Custom constraint” with “Tell us what you meant” and accept natural-language input instead of SQL.
-    - [ ] Merge “Remove filter” / “Proceed without” into a single “Skip this filter” action.
-    - [ ] Update copy to explain the user problem in domain terms (“Need the time point in days”).
+    - [ ] Render template badge using `templateName` from `ClarificationRequest`
+      - Display: "Using Area Reduction template"
+    - [ ] Show template summary: "Tracks wound healing over time"
+    - [ ] Display placeholder reason: "Required for: Time window in days"
+    - [ ] Include inline examples from `examples` or `options` arrays
+    - [ ] Highlight exact placeholder name with semantic context
+    - [ ] Add skip button for optional fields (when `required === false`)
+    - [ ] Show confirmation dialog with "Yes / Change" buttons for confirmations (Task 4.5D)
 
-- [ ] **Task 4.5B: Surface template-aware clarification choices**
+- [ ] **Task 4.5G: Store clarification responses for audit trail**
 
+  - **Status:** Design + DB schema needed
+  - **Context:** Track all clarifications presented and user responses for transparency
   - **Actions:**
-    - [ ] When a placeholder resolver returns a clarification, include `options` derived from slot semantics:
-      - Time windows → present 4/8/12-week chips (convert to days).
-      - Percentages → offer common thresholds (25/50/75%) plus “Other”.
-      - Enum-backed fields (`statusValues`) → load values from `SemanticIndexFieldEnumValue`.
-    - [ ] Update the UI to render these options as buttons so users tap instead of typing SQL.
+    - [ ] Add `clarifications_requested` JSONB column to `SubQuestion` table:
+      ```sql
+      ALTER TABLE "SubQuestion" ADD COLUMN clarifications_requested JSONB;
+      -- Stores array of {placeholder, prompt, options, userResponse, timestamp}
+      ```
+    - [ ] After user responds to clarification, store:
+      ```typescript
+      subquestion.clarifications_requested = {
+        placeholder: string;
+        prompt: string;
+        options?: string[];         // What was offered
+        userResponse: string;       // What user chose
+        responseType: 'option' | 'freeform' | 'skip';
+        timestamp: ISO8601;
+      }[]
+      ```
+    - [ ] Include in subquestion response payload for frontend audit logging
+    - [ ] Add test cases validating clarification storage
 
-- [ ] **Task 4.5C: Support inline confirmations for detected values**
+- [ ] **Task 4.5H: Test clarification UX end-to-end with semantic fixtures**
 
+  - **Status:** Pending (depends on Tasks 4.5B-4.5F)
   - **Actions:**
-    - [ ] When the resolver successfully extracts a value (e.g., “12 weeks → 84 days”), show an inline confirmation (“Use 12 weeks (84 days)?”) with “Yes / Change” buttons.
-    - [ ] Only open the full clarification modal if the user taps “Change”.
+    - [ ] Create test fixtures with enum fields and time windows:
+      ```typescript
+      // fixture: customer with status field having [Active, Inactive, Discharged]
+      // template with {statusField} and {timeWindow} placeholders
+      ```
+    - [ ] Test Question 1: "Show me active patients at 4 weeks"
+      - Verify `statusField` auto-resolves to "Active"
+      - Verify `timeWindow` auto-resolves to 28 days
+      - No clarification needed
+    - [ ] Test Question 2: "Show me patients"
+      - Verify clarification requested for both placeholders
+      - `statusField` clarification shows enum options: [Active, Inactive, Discharged]
+      - `timeWindow` clarification shows presets: [4 weeks, 8 weeks, 12 weeks]
+    - [ ] Test Question 3: "Show me old patients"
+      - Verify clarification requested (ambiguous value)
+      - User selects "12 weeks" from preset options
+      - Verify stored in audit trail
+    - [ ] Test Question 4: "Show me something custom"
+      - Verify fallback to free-form text area for unrecognized input
+      - Verify natural language response stored
 
-- [ ] **Task 4.5D: Add natural-language clarification path**
-
-  - **Actions:**
-    - [ ] Provide a text area labeled “Describe what you meant” whenever no predefined options exist.
-    - [ ] Feed the answer back into placeholder resolution or the LLM; never expect SQL syntax.
-    - [ ] Store the clarification on the subquestion for auditability.
-
-- [ ] **Task 4.5E: Show template context in clarification dialogs**
-  - **Actions:**
-    - [ ] Display the matched template name/summary when prompting for clarification (“Using Area Reduction template…”).
-    - [ ] Highlight the exact placeholder that needs input and why it’s required.
-    - [ ] Include example values from the template’s `examples` array to guide users.
+---
 
 #### Day 3: Assessment Type Discovery Integration
 

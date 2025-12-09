@@ -12,6 +12,10 @@ import { resolve } from "path";
 config({ path: resolve(process.cwd(), ".env.local") });
 
 import { getInsightGenDbPool } from "../lib/db";
+import {
+  createOverrideMetadata,
+  formatOriginalValue,
+} from "../lib/types/semantic-index";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -73,18 +77,38 @@ async function main() {
     for (const field of measurementFields) {
       // Check if field exists
       const checkResult = await pool.query(
-        `SELECT id FROM "SemanticIndexNonForm" 
+        `SELECT id, semantic_concept, semantic_category FROM "SemanticIndexNonForm" 
          WHERE customer_id = $1 AND table_name = $2 AND column_name = $3`,
         [customerId, field.table, field.column]
       );
 
+      const overrideMetadata = createOverrideMetadata({
+        source: "4.S19_heuristic",
+        reason: `fix-field-concepts:${field.table}.${field.column}`,
+        overriddenBy: "fix-field-concepts.ts",
+      });
+
       if (checkResult.rows.length > 0) {
         // Update existing field
+        overrideMetadata.original_value = formatOriginalValue(
+          checkResult.rows[0].semantic_concept,
+          checkResult.rows[0].semantic_category
+        );
+
         await pool.query(
           `UPDATE "SemanticIndexNonForm" 
-           SET semantic_concept = $4, confidence = 0.95, is_review_required = false
+           SET semantic_concept = $4,
+               confidence = 0.95,
+               is_review_required = false,
+               metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb
            WHERE customer_id = $1 AND table_name = $2 AND column_name = $3`,
-          [customerId, field.table, field.column, field.concept]
+          [
+            customerId,
+            field.table,
+            field.column,
+            field.concept,
+            JSON.stringify(overrideMetadata),
+          ]
         );
         console.log(`✅ Updated: ${field.table}.${field.column} → "${field.concept}"`);
         updated++;
@@ -93,9 +117,16 @@ async function main() {
         try {
           await pool.query(
             `INSERT INTO "SemanticIndexNonForm" 
-             (customer_id, table_name, column_name, semantic_concept, confidence, is_filterable, is_joinable, is_review_required, discovered_at)
-             VALUES ($1, $2, $3, $4, $5, true, false, false, NOW())`,
-            [customerId, field.table, field.column, field.concept, 0.95]
+             (customer_id, table_name, column_name, semantic_concept, confidence, is_filterable, is_joinable, is_review_required, discovered_at, metadata)
+             VALUES ($1, $2, $3, $4, $5, true, false, false, NOW(), $6::jsonb)`,
+            [
+              customerId,
+              field.table,
+              field.column,
+              field.concept,
+              0.95,
+              JSON.stringify(overrideMetadata),
+            ]
           );
           console.log(`➕ Inserted: ${field.table}.${field.column} → "${field.concept}"`);
           inserted++;
@@ -126,4 +157,3 @@ async function main() {
 }
 
 main();
-

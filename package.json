@@ -29,6 +29,8 @@
     "verify-migration-037": "tsx scripts/verify-migration-037.ts",
     "ontology:load": "node scripts/ontology-loader.js",
     "ontology:load-synonyms": "node scripts/load-ontology-synonyms.js",
+    "backfill-concept-ids": "tsx scripts/backfill-concept-ids.ts",
+    "ontology:seed-data-sources": "tsx scripts/seed-ontology-data-sources.ts",
     "ontology:export": "node scripts/ontology-exporter.js",
     "ontology:validate": "node scripts/ontology-validator.js"
   },

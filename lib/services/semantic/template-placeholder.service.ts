@@ -22,6 +22,7 @@ export interface PlaceholderExtractionResult {
   filledSQL: string;
   missingPlaceholders: string[];
   clarifications: ClarificationRequest[];
+  confirmations?: ConfirmationPrompt[];           // Task 4.5D: High-confidence confirmations
   resolvedAssessmentTypes?: ResolvedAssessmentType[]; // For audit/debugging
 }
 
@@ -39,9 +40,96 @@ export interface ClarificationRequest {
   prompt: string;
   examples?: string[];
   options?: string[];
+  // Template context (added in Task 4.5C)
+  templateName?: string;        // e.g., "Area Reduction Template"
+  templateSummary?: string;     // e.g., "Tracks wound healing over time"
+  reason?: string;              // e.g., "Required to calculate the healing rate"
+  semantic?: string;            // e.g., "time_window", "percentage", "field_name"
+  // Natural language fallback (added in Task 4.5E)
+  freeformAllowed?: {
+    allowed: boolean;           // Is free-form input allowed?
+    placeholder?: string;       // Input field label/placeholder
+    hint?: string;              // Example or guidance text
+    minChars?: number;          // Minimum characters required
+    maxChars?: number;          // Maximum characters allowed
+  };
+}
+
+// ============================================================================
+// Inline Confirmation for Auto-Detected Values (Task 4.5D)
+// ============================================================================
+
+/**
+ * Confirmation prompt for auto-detected values with high confidence
+ * Presented to user for quick approval before proceeding
+ * 
+ * @example
+ * {
+ *   placeholder: "timeWindow",
+ *   detectedValue: 84,
+ *   displayLabel: "12 weeks (84 days)",
+ *   originalInput: "12 weeks",
+ *   confidence: 0.95,
+ *   semantic: "time_window"
+ * }
+ */
+export interface ConfirmationPrompt {
+  placeholder: string;
+  detectedValue: string | number;        // Actual value (e.g., 84)
+  displayLabel: string;                  // User-friendly label (e.g., "12 weeks (84 days)")
+  originalInput: string;                 // What user said (e.g., "12 weeks")
+  confidence: number;                    // 0-1 confidence score
+  semantic?: string;                     // Semantic type for context
+  templateName?: string;                 // Which template (for context)
 }
 
 /**
+ * Result of placeholder resolution - can be confirmation or clarification
+ */
+export type ResolutionResponse = 
+  | { type: 'confirmed'; value: string | number; confirmationPrompt?: never }
+  | { type: 'confirmation'; confirmationPrompt: ConfirmationPrompt; value?: never }
+  | { type: 'clarification'; clarificationRequest: ClarificationRequest; value?: never };
+
+// ============================================================================
+// Natural-Language Clarification Fallback (Task 4.5E)
+// ============================================================================
+
+/**
+ * Natural language response from user when no predefined options exist
+ * Stored for auditability and potential LLM re-parsing
+ */
+export interface NaturalLanguageResponse {
+  placeholder: string;
+  userInput: string;              // User's free-form text
+  timestamp: string;              // ISO8601 timestamp
+  confidence?: number;            // If re-parsed by LLM
+  extractedValue?: string | number; // If successfully extracted
+  extractionMethod?: 'user_direct' | 'llm_reparsed'; // How value was obtained
+}
+
+/**
+ * Metadata about when natural language input is expected
+ * Attached to ClarificationRequest to signal frontend to show text area
+ */
+export interface NaturalLanguageFallback {
+  allowed: boolean;               // Is free-form input allowed for this clarification?
+  placeholder?: string;           // e.g., "Please describe what you meant..."
+  hint?: string;                  // e.g., "e.g., 'first week' or 'patients over 65'"
+  minChars?: number;              // Minimum character input (default: 1)
+  maxChars?: number;              // Maximum character input (default: 500)
+}
+
+/**
+ * Extended ClarificationRequest to include natural language options (Task 4.5E)
+ */
+export interface ClarificationRequestExtended extends ClarificationRequest {
+  freeformAllowed?: NaturalLanguageFallback;  // Metadata for free-form input
+}
+
+/**
+ *
+
  * Extract placeholder values from user question and fill template
  *
  * @param question - User's natural language question
@@ -62,6 +150,7 @@ export async function extractAndFillPlaceholders(
   const values: PlaceholderValues = {};
   const missingPlaceholders: string[] = [];
   const clarifications: ClarificationRequest[] = [];
+  const confirmations: ConfirmationPrompt[] = [];     // Task 4.5D
   const resolvedAssessmentTypes: ResolvedAssessmentType[] = [];
 
   if (!placeholderNames || placeholderNames.length === 0) {
@@ -71,6 +160,7 @@ export async function extractAndFillPlaceholders(
       filledSQL: template.sqlPattern,
       missingPlaceholders,
       clarifications,
+      confirmations: confirmations.length > 0 ? confirmations : undefined,  // Task 4.5D
       resolvedAssessmentTypes,
     };
   }
@@ -92,15 +182,24 @@ export async function extractAndFillPlaceholders(
       hasValue: resolution.value !== null && resolution.value !== undefined,
       required: slot?.required,
       shouldAddToMissing: slot?.required !== false,
+      confirmation: resolution.confirmation,
     });
 
     if (resolution.value !== null && resolution.value !== undefined) {
-      values[placeholder] = resolution.value;
-      console.log(`[PlaceholderResolver] ✅ Filled "${placeholder}" = ${resolution.value}`);
+      // Task 4.5D: Check if we should show confirmation for high-confidence values
+      if (resolution.confirmation) {
+        confirmations.push(resolution.confirmation);
+        console.log(`[PlaceholderResolver] ⏳ Confirmation needed for "${placeholder}"`);
+        // Don't fill value yet - wait for user confirmation
+      } else {
+        // No confirmation needed, fill value directly
+        values[placeholder] = resolution.value;
+        console.log(`[PlaceholderResolver] ✅ Filled "${placeholder}" = ${resolution.value}`);
 
-      // Track resolved assessment types
-      if (resolution.assessmentType) {
-        resolvedAssessmentTypes.push(resolution.assessmentType);
+        // Track resolved assessment types
+        if (resolution.assessmentType) {
+          resolvedAssessmentTypes.push(resolution.assessmentType);
+        }
       }
     } else if (slot?.required !== false) {
       console.log(`[PlaceholderResolver] ❌ Adding "${placeholder}" to missing (required=${slot?.required})`);
@@ -124,6 +223,7 @@ export async function extractAndFillPlaceholders(
     filledSQL,
     missingPlaceholders,
     clarifications,
+    confirmations: confirmations.length > 0 ? confirmations : undefined,  // Task 4.5D
     resolvedAssessmentTypes: resolvedAssessmentTypes.length > 0 ? resolvedAssessmentTypes : undefined,
   };
 }
@@ -241,6 +341,7 @@ async function resolvePlaceholder(
 ): Promise<{
   value: string | number | null;
   clarification?: ClarificationRequest;
+  confirmation?: ConfirmationPrompt;    // Task 4.5D: High-confidence inline confirmation
   assessmentType?: ResolvedAssessmentType;
 }> {
   console.log(`[PlaceholderResolver] 🔄 Starting resolution for "${placeholder}"`);
@@ -252,13 +353,25 @@ async function resolvePlaceholder(
     slot
   );
   if (specialized) {
-    console.log(`[PlaceholderResolver] 📍 Specialized resolver found: value=${specialized.value}`);
+    console.log(`[PlaceholderResolver] 📍 Specialized resolver found: value=${specialized.value}, confirmation=${!!specialized.confirmation}`);
+    
+    // Task 4.5D: Check if we have a high-confidence confirmation
+    if (specialized.confirmation) {
+      console.log(`[PlaceholderResolver] ⏳ High-confidence value detected, requesting user confirmation`);
+      return {
+        value: specialized.value,
+        confirmation: specialized.confirmation,
+      };
+    }
+    
     const checked = await applyValidators(
       specialized.value,
       placeholder,
       slot,
       specialized.clarification,
-      customerId
+      customerId,
+      template.name,
+      template.description
     );
     // Only return early if we got a valid value (not null)
     // If validation failed (checked.value === null), continue to try other resolvers/default
@@ -311,7 +424,9 @@ async function resolvePlaceholder(
       placeholder,
       slot,
       undefined,
-      customerId
+      customerId,
+      template.name,
+      template.description
     );
     // Only return early if we got a valid value (not null)
     // If validation failed (checked.value === null), continue to try default
@@ -334,7 +449,9 @@ async function resolvePlaceholder(
       placeholder,
       slot,
       undefined,
-      customerId
+      customerId,
+      template.name,
+      template.description
     );
     if (checked) {
       console.log(`[PlaceholderResolver] ✅ Default validated for "${placeholder}":`, {
@@ -348,8 +465,8 @@ async function resolvePlaceholder(
 
   // Generate clarification
   const clarification = slot
-    ? await buildClarification(placeholder, slot, undefined, customerId)
-    : await buildClarification(placeholder, undefined, undefined, customerId);
+    ? await buildClarification(placeholder, slot, undefined, customerId, template.name, template.description)
+    : await buildClarification(placeholder, undefined, undefined, customerId, template.name, template.description);
   return { value: null, clarification };
 }
 
@@ -397,6 +514,8 @@ interface NormalizedSlot extends PlaceholdersSpecSlot {
 interface SpecializedResolution {
   value: string | number | null;
   clarification?: ClarificationRequest;
+  confirmation?: ConfirmationPrompt;  // Task 4.5D
+  originalText?: string;              // For confirmation display
 }
 
 // ============================================================================
@@ -855,24 +974,495 @@ const PERCENTAGE_KEYWORDS = [
   "improvement",
 ];
 
+/**
+ * Confidence threshold for showing inline confirmation
+ * Only show confirmation if confidence >= this threshold
+ */
+const CONFIRMATION_CONFIDENCE_THRESHOLD = 0.85;
+
+/**
+ * Build confirmation prompt for high-confidence auto-detected value
+ * 
+ * @param placeholder - Name of the placeholder
+ * @param detectedValue - The detected value
+ * @param originalInput - What the user said
+ * @param confidence - Confidence score (0-1)
+ * @param semantic - Semantic type for formatting
+ * @param templateName - Name of template (for context)
+ * @returns ConfirmationPrompt if confidence is high enough, undefined otherwise
+ */
+function buildConfirmationPrompt(
+  placeholder: string,
+  detectedValue: string | number,
+  originalInput: string,
+  confidence: number,
+  semantic?: string,
+  templateName?: string
+): ConfirmationPrompt | undefined {
+  // Only show confirmation if confidence is high enough
+  if (confidence < CONFIRMATION_CONFIDENCE_THRESHOLD) {
+    return undefined;
+  }
+
+  // Format the display label based on semantic type
+  let displayLabel: string;
+
+  switch (semantic?.toLowerCase()) {
+    case "time_window":
+    case "time_window_days":
+      // If originalInput is like "12 weeks", keep it and add days
+      if (typeof detectedValue === "number") {
+        const weeks = Math.round(detectedValue / 7);
+        displayLabel = `${weeks} weeks (${detectedValue} days)`;
+      } else {
+        displayLabel = String(detectedValue);
+      }
+      break;
+
+    case "percentage":
+    case "percent":
+    case "percent_threshold":
+    case "percentage_threshold":
+      // Format as percentage
+      if (typeof detectedValue === "number") {
+        const percentValue = Math.round(detectedValue * 100);
+        displayLabel = `${percentValue}%`;
+      } else {
+        displayLabel = String(detectedValue);
+      }
+      break;
+
+    default:
+      displayLabel = String(detectedValue);
+  }
+
+  console.log(`[ConfirmationPrompt] Built confirmation for "${placeholder}":`, {
+    detectedValue,
+    displayLabel,
+    confidence,
+  });
+
+  return {
+    placeholder,
+    detectedValue,
+    displayLabel,
+    originalInput,
+    confidence,
+    semantic,
+    templateName,
+  };
+}
+
+/**
+ * Determine if a value should trigger confirmation
+ * Returns true if confidence is high and value came from auto-detection
+ */
+function shouldShowConfirmation(confidence: number): boolean {
+  return confidence >= CONFIRMATION_CONFIDENCE_THRESHOLD;
+}
+
+// ============================================================================
+// Natural-Language Fallback Support (Task 4.5E)
+// ============================================================================
+
+/**
+ * Determine if natural language fallback should be offered
+ * Offered when:
+ * - No predefined options exist (enum values or presets)
+ * - Placeholder has no clear semantic pattern
+ * - User might need to describe intention in free text
+ */
+function shouldOfferNaturalLanguageFallback(
+  options?: string[],
+  semantic?: string,
+  slot?: NormalizedSlot
+): boolean {
+  // If we have options, don't need natural language
+  if (options && options.length > 0) {
+    return false;
+  }
+
+  // If placeholder has clear semantic meaning, user can understand what's needed
+  // Only offer natural language for truly open-ended cases
+  const openEndedSemantics = [
+    "unknown",
+    "generic",
+    "custom",
+    "text",
+    "description",
+  ];
+
+  if (semantic && openEndedSemantics.some((s) => semantic.toLowerCase().includes(s))) {
+    return true;
+  }
+
+  // If slot has no semantic or is description-like, offer natural language
+  if (!semantic || semantic.toLowerCase() === "unknown") {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Build natural language fallback metadata for clarification
+ */
+function buildNaturalLanguageFallback(
+  semantic?: string,
+  placeholder?: string
+): typeof ClarificationRequest.prototype.freeformAllowed | undefined {
+  // Determine if natural language should be offered for this placeholder
+  const shouldOffer = semantic === "unknown" || !semantic;
+
+  if (!shouldOffer) {
+    return undefined;
+  }
+
+  // Create helpful metadata based on semantic type
+  let hint: string;
+  let label: string;
+
+  switch (semantic?.toLowerCase()) {
+    case "time":
+    case "date":
+    case "duration":
+      hint = "e.g., 'first week', '2 weeks in', 'at the start'";
+      label = "Describe the time period...";
+      break;
+
+    case "status":
+    case "state":
+    case "condition":
+      hint = "e.g., 'fully healed', 'not discharged', 'in treatment'";
+      label = "Describe the status...";
+      break;
+
+    case "value":
+    case "number":
+    case "quantity":
+      hint = "e.g., 'greater than 50', 'between 100-200'";
+      label = "Describe the value...";
+      break;
+
+    default:
+      hint = "e.g., 'something specific', 'with these characteristics'";
+      label = "Describe what you meant...";
+  }
+
+  return {
+    allowed: true,
+    placeholder: label,
+    hint,
+    minChars: 3,
+    maxChars: 500,
+  };
+}
+
+/**
+ * Validate natural language input before storage
+ */
+function validateNaturalLanguageInput(input: string, maxChars: number = 500): boolean {
+  if (!input || typeof input !== "string") {
+    return false;
+  }
+
+  const trimmed = input.trim();
+  if (trimmed.length === 0 || trimmed.length > maxChars) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Create audit trail entry for natural language input
+ */
+function createNaturalLanguageAuditEntry(
+  placeholder: string,
+  userInput: string
+): NaturalLanguageResponse {
+  return {
+    placeholder,
+    userInput: userInput.trim(),
+    timestamp: new Date().toISOString(),
+    extractionMethod: "user_direct",
+  };
+}
+
+// ============================================================================
+// Semantic-Aware Prompt Generation for Clarifications (Task 4.5A)
+// ============================================================================
+
+/**
+ * Build a semantic-aware prompt based on slot type and context
+ * Transforms generic prompts into domain-friendly ones
+ * 
+ * @param placeholder - Name of the placeholder
+ * @param slot - Slot definition with semantic info
+ * @returns User-friendly prompt string
+ */
+function buildSemanticAwarePrompt(
+  placeholder: string,
+  slot?: NormalizedSlot
+): string {
+  const semantic = slot?.semantic?.toLowerCase();
+
+  // If slot has a good description, use that as basis
+  if (slot?.description) {
+    return slot.description;
+  }
+
+  // Build semantic-specific prompts
+  switch (semantic) {
+    case "time_window":
+    case "time_window_days":
+      return "Please select a time window (e.g., 4 weeks, 8 weeks, 12 weeks)";
+
+    case "percentage":
+    case "percent":
+    case "percent_threshold":
+    case "percentage_threshold":
+      return "Please select a percentage threshold (e.g., 25%, 50%, 75%)";
+
+    case "field_name":
+    case "columnname":
+    case "column_name":
+      return "Please select a field or column name";
+
+    case "assessment_type":
+    case "assessmenttype":
+    case "form_type":
+    case "formtype":
+      return "Please select the type of assessment or form";
+
+    case "status":
+    case "state":
+      return "Please select a status or state";
+
+    case "choice":
+    case "option":
+    case "enum":
+      return "Please select an option";
+
+    case "date":
+    case "datetime":
+    case "timestamp":
+      return "Please select a date or time";
+
+    case "number":
+    case "integer":
+    case "decimal":
+      return "Please enter a numeric value";
+
+    default:
+      // Generic fallback
+      return `Please provide a value for "${placeholder}"`;
+  }
+}
+
+/**
+ * Generate an inline example string based on options or semantic type
+ * Helps guide user without taking up space
+ * 
+ * @param options - Available options for this clarification
+ * @param semantic - Semantic type of the placeholder
+ * @param examples - Template-provided examples
+ * @returns Example string like "(e.g., Active, Inactive)" or undefined
+ */
+function generateInlineExample(
+  options?: string[],
+  semantic?: string,
+  examples?: (string | number)[]
+): string | undefined {
+  // If we have options, use first 3 as examples
+  if (options && options.length > 0) {
+    const exampleCount = Math.min(3, options.length);
+    const exampleList = options.slice(0, exampleCount).join(", ");
+    return `(e.g., ${exampleList}${exampleCount < options.length ? ", ..." : ""})`;
+  }
+
+  // If we have template examples, use those
+  if (examples && examples.length > 0) {
+    const exampleCount = Math.min(3, examples.length);
+    const exampleList = examples
+      .slice(0, exampleCount)
+      .map((ex) => String(ex))
+      .join(", ");
+    return `(e.g., ${exampleList}${exampleCount < examples.length ? ", ..." : ""})`;
+  }
+
+  return undefined;
+}
+
+/**
+ * Build enriched prompt combining semantic awareness with examples
+ * 
+ * @param basePrompt - Core semantic-aware prompt
+ * @param inlineExample - Optional inline example string
+ * @param extraHint - Additional context hint
+ * @returns Formatted prompt ready for UI
+ */
+function buildEnrichedPrompt(
+  basePrompt: string,
+  inlineExample?: string,
+  extraHint?: string
+): string {
+  let prompt = basePrompt;
+
+  if (inlineExample) {
+    prompt += ` ${inlineExample}`;
+  }
+
+  if (extraHint) {
+    prompt += ` ${extraHint}`;
+  }
+
+  return prompt;
+}
+
+/**
+ * Determine if placeholder can be skipped (optional) and generate skip guidance
+ * 
+ * @param slot - Slot definition
+ * @returns Guidance string for skip option, or undefined if required
+ */
+function getSkipGuidance(slot?: NormalizedSlot): string | undefined {
+  // Only optional fields can be skipped
+  if (slot?.required === false) {
+    return "(Optional - you can skip this and continue)";
+  }
+
+  return undefined;
+}
+
+// ============================================================================
+// Preset Option Generation for Clarifications (Task 4.5B)
+// ============================================================================
+
+/**
+ * Generate preset options for time window placeholders
+ * Returns labels like "4 weeks (28 days)" that UI can render as buttons
+ * 
+ * @param slot - The placeholder slot definition
+ * @returns Array of preset time window labels, or undefined if not applicable
+ */
+function generateTimeWindowPresets(slot?: NormalizedSlot): string[] | undefined {
+  // Only generate presets if:
+  // 1. Slot has time_window semantic, AND
+  // 2. No specific examples are provided by the template
+  const semantic = slot?.semantic?.toLowerCase();
+  if (semantic !== "time_window" && semantic !== "time_window_days") {
+    return undefined;
+  }
+
+  // If template provides specific examples, use those instead
+  if (slot?.examples && slot.examples.length > 0) {
+    return undefined;
+  }
+
+  // Standard time window presets (in weeks with day conversion)
+  const presets = [
+    { weeks: 4, days: 28 },
+    { weeks: 8, days: 56 },
+    { weeks: 12, days: 84 },
+  ];
+
+  return presets.map((preset) => `${preset.weeks} weeks (${preset.days} days)`);
+}
+
+/**
+ * Generate preset options for percentage placeholders
+ * Returns labels like "25%", "50%", "75%", "Other"
+ * 
+ * @param slot - The placeholder slot definition
+ * @returns Array of preset percentage labels, or undefined if not applicable
+ */
+function generatePercentagePresets(slot?: NormalizedSlot): string[] | undefined {
+  // Only generate presets if:
+  // 1. Slot has percentage semantic, AND
+  // 2. No specific examples are provided by the template
+  const semantic = slot?.semantic?.toLowerCase();
+  if (
+    semantic !== "percentage" &&
+    semantic !== "percent" &&
+    semantic !== "percent_threshold" &&
+    semantic !== "percentage_threshold"
+  ) {
+    return undefined;
+  }
+
+  // If template provides specific examples, use those instead
+  if (slot?.examples && slot.examples.length > 0) {
+    return undefined;
+  }
+
+  // Standard percentage presets
+  return ["25%", "50%", "75%", "Other"];
+}
+
+/**
+ * Generate preset options for other semantic types
+ * 
+ * @param slot - The placeholder slot definition
+ * @returns Array of preset labels, or undefined if not applicable
+ */
+function generateSemanticPresets(slot?: NormalizedSlot): string[] | undefined {
+  const semantic = slot?.semantic?.toLowerCase();
+
+  // For enum or choice-like semantics without specific examples
+  if (semantic === "choice" || semantic === "option" || semantic === "enum") {
+    if (slot?.examples && slot.examples.length > 0) {
+      return slot.examples.map((ex) => String(ex));
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Generate all applicable preset options for a slot
+ * Tries in order: enum values, time windows, percentages, semantic presets
+ * 
+ * @param slot - The placeholder slot definition
+ * @returns Array of preset labels, or undefined if none applicable
+ */
+function generatePresetOptions(slot?: NormalizedSlot): string[] | undefined {
+  // Try time windows first
+  const timeWindowPresets = generateTimeWindowPresets(slot);
+  if (timeWindowPresets) {
+    return timeWindowPresets;
+  }
+
+  // Try percentages
+  const percentagePresets = generatePercentagePresets(slot);
+  if (percentagePresets) {
+    return percentagePresets;
+  }
+
+  // Try other semantic presets
+  const semanticPresets = generateSemanticPresets(slot);
+  if (semanticPresets) {
+    return semanticPresets;
+  }
+
+  return undefined;
+}
+
 async function buildClarification(
   placeholder: string,
   slot?: NormalizedSlot,
   extraHint?: string,
-  customerId?: string
+  customerId?: string,
+  templateName?: string,
+  templateSummary?: string
 ): Promise<ClarificationRequest> {
-  const promptParts = [`Please provide a value for "${placeholder}"`];
-  if (slot?.description) {
-    promptParts.push(`(${slot.description})`);
-  } else if (slot?.semantic) {
-    promptParts.push(`(${slot.semantic})`);
-  }
-  if (extraHint) {
-    promptParts.push(extraHint);
-  }
+  // Task 4.5A: Generate semantic-aware prompt
+  const basePrompt = buildSemanticAwarePrompt(placeholder, slot);
 
-  // Try to pull enum values if this is a field variable placeholder
+  // Task 4.5B: Generate preset options
   let options: string[] | undefined;
+
+  // First, try to pull enum values for field variables
   if (customerId && shouldUseFieldVariableResolver(slot, placeholder)) {
     try {
       // Extract field name pattern from placeholder name
@@ -898,11 +1488,52 @@ async function buildClarification(
     }
   }
 
+  // If no enum values found, try generating preset options (Task 4.5B)
+  if (!options) {
+    const presetOptions = generatePresetOptions(slot);
+    if (presetOptions) {
+      options = presetOptions;
+      console.log(
+        `[buildClarification] Generated ${options.length} preset options for "${placeholder}" (semantic: ${slot?.semantic}): ${options.join(", ")}`
+      );
+    }
+  }
+
+  // Task 4.5A: Generate inline examples to guide users
+  const inlineExample = generateInlineExample(options, slot?.semantic, slot?.examples);
+
+  // Task 4.5A: Build enriched prompt with examples and hints
+  const enrichedPrompt = buildEnrichedPrompt(basePrompt, inlineExample, extraHint);
+
+  // Task 4.5A: Add skip guidance for optional fields
+  const skipGuidance = getSkipGuidance(slot);
+  const finalPrompt = skipGuidance ? `${enrichedPrompt} ${skipGuidance}` : enrichedPrompt;
+
+  console.log(`[buildClarification] Built prompt for "${placeholder}":`, {
+    placeholder,
+    basePrompt,
+    inlineExample,
+    skipGuidance,
+    finalPrompt,
+  });
+
+  // Task 4.5E: Add natural language fallback option when no predefined options exist
+  const freeformAllowed = shouldOfferNaturalLanguageFallback(options, slot?.semantic, slot)
+    ? buildNaturalLanguageFallback(slot?.semantic, placeholder)
+    : undefined;
+
   return {
     placeholder,
-    prompt: promptParts.join(" "),
+    prompt: finalPrompt,
     examples: slot?.examples?.map((example) => String(example)),
     options,
+    // Template context (added in Task 4.5C)
+    templateName,
+    templateSummary,
+    reason: slot?.description || slot?.semantic,
+    semantic: slot?.semantic,
+    // Natural language fallback (added in Task 4.5E)
+    freeformAllowed,
   };
 }
 
@@ -941,13 +1572,38 @@ function resolveWithSpecializedResolvers(
   if (shouldUseTimeWindowResolver(slot, placeholder)) {
     const detected = detectTimeWindowValue(question, slot, placeholder);
     if (detected !== null) {
-      return { value: detected };
+      // Task 4.5D: Generate confirmation for high-confidence time detection
+      const confirmation = buildConfirmationPrompt(
+        placeholder,
+        detected.days,
+        detected.originalText,
+        0.95,  // High confidence for detected time windows
+        slot?.semantic,
+        undefined
+      );
+      return {
+        value: detected.days,
+        originalText: detected.originalText,
+        confirmation,  // Task 4.5D
+      };
     }
   }
   if (shouldUsePercentageResolver(slot, placeholder)) {
     const detectedPercentage = detectPercentageValue(question);
     if (detectedPercentage !== null) {
-      return { value: detectedPercentage };
+      // Task 4.5D: Generate confirmation for detected percentage
+      const confirmation = buildConfirmationPrompt(
+        placeholder,
+        detectedPercentage,
+        question,
+        0.90,  // High confidence for detected percentages
+        slot?.semantic,
+        undefined
+      );
+      return {
+        value: detectedPercentage,
+        confirmation,  // Task 4.5D
+      };
     }
   }
   return null;
@@ -972,11 +1628,20 @@ function shouldUseTimeWindowResolver(
   );
 }
 
+/**
+ * Detect time window value and return both numeric value and original text
+ * for confirmation prompts
+ */
+interface TimeWindowDetection {
+  days: number;
+  originalText: string;  // e.g., "12 weeks"
+}
+
 function detectTimeWindowValue(
   question: string,
   slot?: NormalizedSlot,
   placeholder?: string
-): number | null {
+): TimeWindowDetection | null {
   const isTolerance = isTolerancePlaceholder(slot, placeholder);
   const patterns = isTolerance
     ? [
@@ -1008,7 +1673,13 @@ function detectTimeWindowValue(
     if (!multiplier) continue;
     const days = Math.round(amount * multiplier);
     if (days <= 0) continue;
-    return days;
+    
+    // Extract original text from question for display
+    const originalText = question.match(
+      new RegExp(`(${amount}\\s*[- ]?${unit})`, "i")
+    )?.[1] || `${amount} ${unit}`;
+    
+    return { days, originalText };
   }
 
   return null;
@@ -1087,7 +1758,9 @@ async function applyValidators(
   placeholder: string,
   slot?: NormalizedSlot,
   fallbackClarification?: ClarificationRequest,
-  customerId?: string
+  customerId?: string,
+  templateName?: string,
+  templateSummary?: string
 ): Promise<{
   value: string | number | null;
   clarification?: ClarificationRequest;
@@ -1110,7 +1783,9 @@ async function applyValidators(
         placeholder,
         slot,
         validation.message,
-        customerId
+        customerId,
+        templateName,
+        templateSummary
       ),
     };
   }

@@ -24,6 +24,7 @@ export interface FunnelStep {
   sql?: string;
 }
 
+// Old clarification format (Phase 7D, kept for backward compatibility)
 export interface ClarificationOption {
   id: string;
   label: string;
@@ -32,12 +33,40 @@ export interface ClarificationOption {
   isDefault?: boolean;
 }
 
-export interface ClarificationRequest {
+export interface OldClarificationRequest {
   id: string;
   ambiguousTerm: string;
   question: string;
   options: ClarificationOption[];
   allowCustom: boolean;
+}
+
+// New clarification format (Task 4.5E onwards, user-friendly UI)
+export interface ClarificationRequest {
+  placeholder: string;
+  prompt: string;
+  examples?: string[];
+  options?: string[];
+  templateName?: string;        // Template context
+  templateSummary?: string;
+  reason?: string;
+  semantic?: string;            // e.g., "time_window", "percentage"
+  freeformAllowed?: {
+    allowed: boolean;
+    placeholder?: string;
+    hint?: string;
+    minChars?: number;
+    maxChars?: number;
+  };
+}
+
+export interface ConfirmationPrompt {
+  placeholder: string;
+  detectedValue: string | number;
+  displayLabel: string;
+  originalInput: string;
+  confidence?: number;
+  semantic?: string;
 }
 
 export interface InsightResult {
@@ -56,6 +85,7 @@ export interface InsightResult {
   // Clarification fields (when mode IS clarification)
   requiresClarification?: boolean;
   clarifications?: ClarificationRequest[];
+  confirmations?: ConfirmationPrompt[];    // Task 4.5D: Pre-detected values
   clarificationReasoning?: string;
   partialContext?: {
     intent: string;

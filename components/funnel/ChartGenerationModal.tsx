@@ -376,10 +376,11 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = (
                           {field}:
                         </label>
                         <select
-                          value={chartMapping[field] || ""}
-                          onChange={(e) =>
-                            handleMappingChange(field, e.target.value)
-                          }
+                          key={`select-${field}`}
+                          value={chartMapping[field] ?? ""}
+                          onChange={(e) => {
+                            handleMappingChange(field, e.target.value);
+                          }}
                           className="flex-1 text-sm border border-gray-300 rounded px-3 py-2 bg-white"
                         >
                           <option value="">Select field...</option>

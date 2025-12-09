@@ -3,6 +3,16 @@ import type { Pool } from "pg";
 import { getInsightGenDbPool } from "@/lib/db";
 import { getEmbeddingService } from "@/lib/services/embeddings/gemini-embedding";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
+import measurementFamilies from "@/lib/config/measurement-families.json";
+import {
+  applyOverrideMetadataFields,
+  createOverrideMetadata,
+  formatOriginalValue,
+  normalizeOverrideMetadata,
+  shouldUseIncomingValue,
+  type OverrideMetadata,
+  type OverrideSource,
+} from "@/lib/types/semantic-index";
 
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;
 const REVIEW_THRESHOLD = 0.7;
@@ -29,6 +39,18 @@ type OntologyMatch = {
   similarity: number;
 };
 
+type MeasurementFamilyConfig = {
+  tables: string[];
+  columns: string[];
+  canonical_concept: string;
+  confidence: number;
+  unit?: string;
+};
+
+type MeasurementFamiliesConfig = {
+  families: Record<string, MeasurementFamilyConfig>;
+};
+
 export type NonFormSchemaDiscoveryOptions = {
   customerId: string;
   connectionString: string;
@@ -41,6 +63,7 @@ export type NonFormSchemaDiscoveryColumn = {
   dataType: string | null;
   semanticConcept: string | null;
   semanticCategory: string | null;
+  conceptId: string | null;
   confidence: number | null;
   isFilterable: boolean;
   isJoinable: boolean;
@@ -210,6 +233,174 @@ function extractSemanticCategory(
   return conceptName;
 }
 
+/**
+ * Build a lookup map from ClinicalOntology.data_sources for measurement/time
+ * aware discovery (4.S19B).
+ *
+ * Map key: "table.column" (e.g. "rpt.Measurement.area")
+ * Value: { conceptName, conceptType, conceptId, confidence }
+ */
+async function buildOntologyDataSourceMap(
+  pool: Pool
+): Promise<
+  Map<
+    string,
+    { conceptName: string; conceptType: string; conceptId: string; confidence?: number }
+  >
+> {
+  const map = new Map<
+    string,
+    { conceptName: string; conceptType: string; conceptId: string; confidence?: number }
+  >();
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT
+          id,
+          concept_name,
+          concept_type,
+          data_sources
+        FROM "ClinicalOntology"
+        WHERE data_sources IS NOT NULL
+          AND jsonb_array_length(data_sources) > 0
+      `
+    );
+
+    for (const row of result.rows) {
+      const conceptId: string = row.id;
+      const conceptName: string = row.concept_name;
+      const conceptType: string = row.concept_type;
+      const dataSources: any[] = Array.isArray(row.data_sources)
+        ? row.data_sources
+        : [];
+
+      for (const entry of dataSources) {
+        let table: string | null = null;
+        let column: string | null = null;
+        let confidence: number | undefined;
+
+        if (typeof entry === "string") {
+          const parts = entry.split(".");
+          if (parts.length >= 2) {
+            table = parts.slice(0, parts.length - 1).join(".").trim();
+            column = parts[parts.length - 1].trim();
+          }
+        } else if (entry && typeof entry === "object") {
+          table =
+            typeof entry.table === "string" ? entry.table.trim() : null;
+          column =
+            typeof entry.column === "string" ? entry.column.trim() : null;
+          confidence =
+            typeof entry.confidence === "number"
+              ? entry.confidence
+              : undefined;
+        }
+
+        if (table) {
+          table = table.toLowerCase();
+        }
+        if (column) {
+          column = column.toLowerCase();
+        }
+
+        if (!table || !column) continue;
+
+        const key = `${table}.${column}`;
+        const existing = map.get(key);
+
+        // Prefer higher confidence if multiple concepts reference same column
+        if (!existing || (confidence ?? 0) > (existing.confidence ?? 0)) {
+          map.set(key, {
+            conceptName,
+            conceptType,
+            conceptId,
+            confidence,
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(
+      "[NonFormSchemaDiscovery] Failed to build ontology data_sources map:",
+      error instanceof Error ? error.message : error
+    );
+  }
+
+  return map;
+}
+
+async function buildOntologyConceptNameMap(
+  pool: Pool
+): Promise<Map<string, { id: string; conceptType: string | null }>> {
+  const conceptMap = new Map<
+    string,
+    { id: string; conceptType: string | null }
+  >();
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT id, concept_name, concept_type
+        FROM "ClinicalOntology"
+      `
+    );
+
+    for (const row of result.rows) {
+      if (!row.concept_name) continue;
+      const key = String(row.concept_name).toLowerCase();
+      conceptMap.set(key, {
+        id: row.id,
+        conceptType: row.concept_type ?? null,
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "[NonFormSchemaDiscovery] Failed to build ontology concept map:",
+      error instanceof Error ? error.message : error
+    );
+  }
+
+  return conceptMap;
+}
+
+/**
+ * Resolve measurement family heuristic for a given rpt.* column using
+ * lib/config/measurement-families.json (4.S19B).
+ */
+function resolveMeasurementFamily(
+  tableNameQualified: string,
+  columnName: string
+): { concept: string; confidence: number; familyKey: string } | null {
+  const config = measurementFamilies as MeasurementFamiliesConfig;
+  const familyEntries = Object.entries(config.families || {});
+
+  const [schema, table] = tableNameQualified.split(".");
+  const qualifiedTable =
+    schema && table ? `${schema}.${table}` : tableNameQualified;
+  const normalizedTable = qualifiedTable.toLowerCase();
+  const normalizedColumn = columnName.toLowerCase();
+
+  for (const [familyKey, family] of familyEntries) {
+    const tableMatches = family.tables.some(
+      (t) => t.toLowerCase() === normalizedTable
+    );
+    const columnMatches = family.columns.some(
+      (c) => c.toLowerCase() === normalizedColumn
+    );
+
+    if (tableMatches && columnMatches) {
+      return {
+        concept: family.canonical_concept,
+        confidence: family.confidence,
+        familyKey,
+      };
+    }
+  }
+
+  return null;
+}
+
 async function fetchOntologyMatch(
   embedding: number[],
   pool: Pool
@@ -297,6 +488,10 @@ export async function discoverNonFormSchema(
   const pgPool = await getInsightGenDbPool();
   const embeddingService = getEmbeddingService();
 
+  // Pre-compute ontology data_sources map for measurement-aware discovery (4.S19B)
+  const ontologyDataSourceMap = await buildOntologyDataSourceMap(pgPool);
+  const ontologyConceptNameMap = await buildOntologyConceptNameMap(pgPool);
+
   const columnResult = await sqlServerPool.request().query<ColumnRecord>(`
       SELECT
         c.TABLE_SCHEMA AS tableSchema,
@@ -329,6 +524,8 @@ export async function discoverNonFormSchema(
 
   for (const column of columns) {
     const tableNameQualified = `${column.tableSchema}.${column.tableName}`;
+    const normalizedTableName = tableNameQualified.toLowerCase();
+    const normalizedColumnName = column.columnName.toLowerCase();
     const columnKey = `${tableNameQualified}::${column.columnName}`;
     processedKeys.push(columnKey);
 
@@ -336,11 +533,14 @@ export async function discoverNonFormSchema(
 
     let semanticConcept: string | null = null;
     let semanticCategory: string | null = null;
+    let semanticConceptId: string | null = null;
     let confidence: number | null = null;
     let isFilterable = false;
     let isJoinable = false;
     let isReviewRequired = true;
     let reviewNote: string | null = null;
+    let assignmentSource: OverrideSource | null = null;
+    let assignmentReason: string | undefined;
 
     const filterableHeuristic = inferFilterable(
       column.columnName,
@@ -353,8 +553,31 @@ export async function discoverNonFormSchema(
         embeddingPrompt
       );
       const match = await fetchOntologyMatch(embedding, pgPool);
+      const reviewSources: string[] = [];
 
-      if (match) {
+      // First, check if this column is explicitly referenced in ClinicalOntology.data_sources
+      const dataSourceKey = `${normalizedTableName}.${normalizedColumnName}`;
+      const ontologySource = ontologyDataSourceMap.get(dataSourceKey);
+
+      if (ontologySource) {
+        // Ontology-backed mapping (highest precedence for measurement/time fields)
+        semanticConcept = ontologySource.conceptName;
+        semanticCategory = ontologySource.conceptType;
+        semanticConceptId = ontologySource.conceptId;
+        assignmentSource = "ontology_backed";
+        assignmentReason = `ontology_data_sources:${dataSourceKey}`;
+        console.log(
+          `[NonFormDiscovery] ${tableNameQualified}.${column.columnName} → ${semanticConcept} via ontology data_sources`
+        );
+        confidence =
+          typeof ontologySource.confidence === "number"
+            ? clamp(ontologySource.confidence, 0, 1)
+            : 0.95;
+        confidenceValues.push(confidence);
+
+        reviewSources.push(`ontology_data_sources:${dataSourceKey}`);
+      } else if (match) {
+        // Fall back to embedding-based ontology match
         semanticConcept = extractSemanticConcept(
           match.metadata,
           match.conceptType
@@ -363,58 +586,91 @@ export async function discoverNonFormSchema(
           match.metadata,
           match.conceptName
         );
+        semanticConceptId = match.conceptId;
+        assignmentSource = "discovery_inferred";
+        assignmentReason = `ontology_embedding:${match.conceptName}`;
+        console.log(
+          `[NonFormDiscovery] ${tableNameQualified}.${column.columnName} → ${semanticConcept} via embedding (${assignmentReason})`
+        );
         confidence = Math.round(match.similarity * 100) / 100;
         confidenceValues.push(confidence);
+        reviewSources.push(
+          `ontology_embedding:${match.conceptName}`
+        );
+      } else {
+        warnings.push(
+          `${tableNameQualified}.${column.columnName} has no ontology match`
+        );
+      }
 
+      // Apply measurement family heuristic only if we still don't have a concept
+      if (!semanticConcept) {
+        const familyMatch = resolveMeasurementFamily(
+          tableNameQualified,
+          column.columnName
+        );
+        if (familyMatch) {
+          semanticConcept = familyMatch.concept;
+          semanticCategory = familyMatch.familyKey;
+          const conceptLookup = ontologyConceptNameMap.get(
+            familyMatch.concept.toLowerCase()
+          );
+          semanticConceptId = conceptLookup?.id ?? null;
+          assignmentSource = "4.S19_heuristic";
+          assignmentReason = `measurement_family:${familyMatch.familyKey}`;
+          console.log(
+            `[NonFormDiscovery] ${tableNameQualified}.${column.columnName} → ${semanticConcept} via measurement family ${familyMatch.familyKey}`
+          );
+          confidence = familyMatch.confidence;
+          confidenceValues.push(confidence);
+          reviewSources.push(
+            `measurement_family:${familyMatch.familyKey}`
+          );
+        }
+      }
+
+      if (confidence !== null) {
         const isHighConfidence = confidence >= HIGH_CONFIDENCE_THRESHOLD;
         if (isHighConfidence) {
           highConfidenceColumns++;
         }
+      }
 
-        // FIXED: Mark columns as filterable/joinable based on data type, not confidence.
-        // Confidence only affects whether the column requires review, not whether it's suitable for filtering/joining.
-        isFilterable = filterableHeuristic.value;
-        isJoinable = joinableHeuristic.value;
-        isReviewRequired = confidence < REVIEW_THRESHOLD;
+      // Mark columns as filterable/joinable based on data type, not confidence.
+      isFilterable = filterableHeuristic.value;
+      isJoinable = joinableHeuristic.value;
+      isReviewRequired =
+        confidence === null ? true : confidence < REVIEW_THRESHOLD;
 
-        // Debug logging for high-confidence columns
-        if (isHighConfidence) {
-          console.log(
-            `🔍 High-confidence column: ${tableNameQualified}.${column.columnName}`
-          );
-          console.log(`   Data type: ${column.dataType}`);
-          console.log(`   Confidence: ${confidence}`);
-          console.log(
-            `   Filterable heuristic: ${filterableHeuristic.value} (${filterableHeuristic.reason})`
-          );
-          console.log(`   Is filterable: ${isFilterable}`);
-        }
-
-        if (isFilterable) {
-          filterableColumns++;
-        }
-        if (isJoinable) {
-          joinableColumns++;
-        }
-        if (isReviewRequired) {
-          const displayConfidence = confidence ?? 0;
-          reviewRequiredColumns++;
-          warnings.push(
-            `${tableNameQualified}.${
-              column.columnName
-            } flagged for review (confidence ${displayConfidence.toFixed(2)})`
-          );
-          if (!reviewNote) {
-            reviewNote = `Confidence ${displayConfidence.toFixed(
-              2
-            )} below review threshold ${REVIEW_THRESHOLD}`;
-          }
-        }
-      } else {
-        reviewNote = "No ontology match found";
+      if (confidence !== null && isReviewRequired) {
+        const displayConfidence = confidence;
+        reviewRequiredColumns++;
         warnings.push(
-          `${tableNameQualified}.${column.columnName} has no ontology match`
+          `${tableNameQualified}.${
+            column.columnName
+          } flagged for review (confidence ${displayConfidence.toFixed(
+            2
+          )})`
         );
+        if (!reviewNote) {
+          reviewNote = `Confidence ${displayConfidence.toFixed(
+            2
+          )} below review threshold ${REVIEW_THRESHOLD}`;
+        }
+      }
+
+      if (reviewSources.length > 0) {
+        const sourceTag = `[SOURCE:${reviewSources.join("|")}]`;
+        reviewNote = reviewNote
+          ? `${sourceTag} ${reviewNote}`
+          : sourceTag;
+      }
+
+      if (isFilterable) {
+        filterableColumns++;
+      }
+      if (isJoinable) {
+        joinableColumns++;
       }
     } catch (error) {
       const message =
@@ -437,7 +693,120 @@ export async function discoverNonFormSchema(
       joinable: joinableHeuristic,
       highConfidenceThreshold: HIGH_CONFIDENCE_THRESHOLD,
       reviewThreshold: REVIEW_THRESHOLD,
-    });
+    }) as Record<string, any>;
+
+    let semanticConceptToPersist = semanticConcept;
+    let semanticCategoryToPersist = semanticCategory;
+    let conceptIdToPersist = semanticConceptId;
+    let metadataToPersist: Record<string, any> = metadata;
+    const incomingOverride =
+      assignmentSource && semanticConceptToPersist
+        ? createOverrideMetadata({
+            source: assignmentSource,
+            reason: assignmentReason,
+          })
+        : null;
+    let overrideMetadataToPersist: OverrideMetadata | null = null;
+    let overrideBlocked = false;
+
+    try {
+      const existingRow = await pgPool.query(
+        `
+          SELECT semantic_concept, semantic_category, concept_id, metadata
+          FROM "SemanticIndexNonForm"
+          WHERE customer_id = $1
+            AND table_name = $2
+            AND column_name = $3
+        `,
+        [options.customerId, tableNameQualified, column.columnName]
+      );
+
+      if (existingRow.rows.length > 0) {
+        const row = existingRow.rows[0];
+        const existingMetadata =
+          row.metadata && typeof row.metadata === "object"
+            ? (row.metadata as Record<string, unknown>)
+            : {};
+        const existingOverride = normalizeOverrideMetadata(existingMetadata);
+
+        metadataToPersist = {
+          ...existingMetadata,
+          ...metadata,
+        };
+
+        if (incomingOverride) {
+          const canUpdateConcept = shouldUseIncomingValue({
+            existing: existingOverride,
+            incoming: incomingOverride,
+            field: "semantic_concept",
+          });
+
+          if (!canUpdateConcept) {
+            semanticConceptToPersist = row.semantic_concept;
+            conceptIdToPersist = row.concept_id;
+            overrideMetadataToPersist = existingOverride;
+            overrideBlocked = true;
+          } else {
+            incomingOverride.original_value = formatOriginalValue(
+              row.semantic_concept,
+              row.semantic_category
+            );
+            overrideMetadataToPersist = incomingOverride;
+          }
+
+          const canUpdateCategory = shouldUseIncomingValue({
+            existing: existingOverride,
+            incoming: incomingOverride,
+            field: "semantic_category",
+          });
+
+          if (!canUpdateCategory) {
+            semanticCategoryToPersist = row.semantic_category;
+            overrideMetadataToPersist =
+              overrideMetadataToPersist ?? existingOverride;
+            overrideBlocked = true;
+          } else if (
+            overrideMetadataToPersist === incomingOverride &&
+            !incomingOverride.original_value
+          ) {
+            incomingOverride.original_value = formatOriginalValue(
+              row.semantic_concept,
+              row.semantic_category
+            );
+          }
+        } else if (existingOverride) {
+          overrideMetadataToPersist = existingOverride;
+        }
+      } else {
+        metadataToPersist = metadata;
+        overrideMetadataToPersist = incomingOverride;
+      }
+    } catch (error) {
+      metadataToPersist = metadata;
+      console.warn(
+        `[NonFormSchemaDiscovery] Failed to check overrides for ${tableNameQualified}.${column.columnName}:`,
+        error instanceof Error ? error.message : error
+      );
+      if (incomingOverride) {
+        overrideMetadataToPersist = incomingOverride;
+      }
+    }
+
+    metadataToPersist = applyOverrideMetadataFields(
+      metadataToPersist,
+      overrideMetadataToPersist
+    );
+
+    if (overrideBlocked) {
+      const sourceLabel =
+        overrideMetadataToPersist?.override_source ?? "manual_review";
+      reviewNote = reviewNote
+        ? `${reviewNote} [override preserved:${sourceLabel}]`
+        : `[override preserved:${sourceLabel}]`;
+      console.log(
+        `[NonFormDiscovery] Override preserved for ${tableNameQualified}.${column.columnName} (source=${sourceLabel})`
+      );
+    }
 
     try {
       await pgPool.query(
@@ -449,6 +818,7 @@ export async function discoverNonFormSchema(
             data_type,
             semantic_concept,
             semantic_category,
+            concept_id,
             is_filterable,
             is_joinable,
             confidence,
@@ -466,6 +836,7 @@ export async function discoverNonFormSchema(
             data_type = EXCLUDED.data_type,
             semantic_concept = EXCLUDED.semantic_concept,
             semantic_category = EXCLUDED.semantic_category,
+            concept_id = EXCLUDED.concept_id,
             is_filterable = EXCLUDED.is_filterable,
             is_joinable = EXCLUDED.is_joinable,
             confidence = EXCLUDED.confidence,
@@ -480,15 +851,16 @@ export async function discoverNonFormSchema(
           tableNameQualified,
           column.columnName,
           column.dataType,
-          semanticConcept,
-          semanticCategory,
+          semanticConceptToPersist,
+          semanticCategoryToPersist,
+          conceptIdToPersist,
           isFilterable,
           isJoinable,
           confidence,
           isReviewRequired,
           reviewNote,
           options.discoveryRunId ?? null,
-          metadata,
+          metadataToPersist,
         ]
       );
     } catch (error) {
@@ -506,8 +878,9 @@ export async function discoverNonFormSchema(
       tableName: tableNameQualified,
       columnName: column.columnName,
       dataType: column.dataType,
-      semanticConcept,
-      semanticCategory,
+      semanticConcept: semanticConceptToPersist,
+      semanticCategory: semanticCategoryToPersist,
+      conceptId: conceptIdToPersist,
       confidence,
       isFilterable,
       isJoinable,

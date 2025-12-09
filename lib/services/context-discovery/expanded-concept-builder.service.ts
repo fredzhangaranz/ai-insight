@@ -1,4 +1,5 @@
 import type { IntentFilter, IntentType } from "./types";
+import { normalizeMeasurementPhraseToConceptKey } from "./measurement-concept-mapping";
 
 export type ConceptSource = "metric" | "filter" | "intent_type";
 
@@ -131,11 +132,15 @@ export class ExpandedConceptBuilder {
         return;
       }
 
-      const existing = counts.get(normalized);
+      const canonicalMeasurementConcept =
+        this.mapMeasurementConcept(phrase);
+      const conceptKey = canonicalMeasurementConcept ?? normalized;
+
+      const existing = counts.get(conceptKey);
       if (existing) {
         existing.count = Math.min(existing.count + 1, maxPhraseFreq);
       } else {
-        counts.set(normalized, {
+        counts.set(conceptKey, {
           count: 1,
           firstIndex: index,
           raw: phrase,
@@ -321,5 +326,12 @@ export class ExpandedConceptBuilder {
     }
 
     return intentKeywords[intentType];
+  }
+
+  private mapMeasurementConcept(phrase: string): string | null {
+    // Use raw phrase (pre-normalization) so synonyms like "Rate of Healing"
+    // are matched before we lose casing/punctuation.
+    const canonical = normalizeMeasurementPhraseToConceptKey(phrase);
+    return canonical;
   }
 }

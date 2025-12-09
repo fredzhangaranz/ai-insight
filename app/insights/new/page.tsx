@@ -10,7 +10,7 @@ import { QuestionInput } from "./components/QuestionInput";
 import { SuggestedQuestions } from "./components/SuggestedQuestions";
 import { QueryHistory } from "./components/QueryHistory";
 import { InsightResults } from "./components/InsightResults";
-import { ClarificationPanel } from "./components/ClarificationPanel";
+import { ClarificationDialog } from "./components/ClarificationDialog";
 import { useInsights } from "@/lib/hooks/useInsights";
 import { AnalysisProgressCard } from "./components/AnalysisProgressCard";
 
@@ -238,10 +238,9 @@ export default function NewInsightPage() {
           )}
 
           {result && result.mode === "clarification" && result.clarifications && (
-            <ClarificationPanel
+            <ClarificationDialog
               question={result.question || question}
               clarifications={result.clarifications}
-              reasoning={result.clarificationReasoning || ""}
               onSubmit={handleClarificationSubmit}
               isSubmitting={isLoading}
             />

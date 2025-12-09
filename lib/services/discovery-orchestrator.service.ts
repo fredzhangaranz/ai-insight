@@ -396,6 +396,11 @@ export async function runFullDiscovery(
   const { customerCode, stages: userStages } = options;
   const stages = getDiscoveryStages(userStages);
 
+  console.log(
+    `[DiscoveryOrchestrator] runFullDiscovery invoked for ${customerCode}`,
+    stages
+  );
+
   const pool = await getInsightGenDbPool();
 
   const customer = await getCustomer(customerCode);
@@ -753,6 +758,11 @@ export async function runFullDiscoveryWithProgress(
 ): Promise<DiscoveryRunResponse> {
   const { customerCode, stages: userStages } = options;
   const stages = getDiscoveryStages(userStages);
+
+  console.log(
+    `[DiscoveryOrchestrator] runFullDiscoveryWithProgress invoked for ${customerCode}`,
+    stages
+  );
 
   const pool = await getInsightGenDbPool();
 

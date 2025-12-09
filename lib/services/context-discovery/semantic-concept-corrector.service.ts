@@ -13,6 +13,10 @@
  */
 
 import { getInsightGenDbPool } from "@/lib/db";
+import {
+  createOverrideMetadata,
+  formatOriginalValue,
+} from "@/lib/types/semantic-index";
 
 type ConceptCorrection = {
   tableName: string;
@@ -172,12 +176,35 @@ export async function correctSemanticConcepts(customerId: string): Promise<{
       try {
         const fullTableName = `rpt.${correction.tableName}`;
 
+        const existing = await pool.query(
+          `SELECT semantic_concept, semantic_category, metadata
+           FROM "SemanticIndexNonForm"
+           WHERE customer_id = $1
+             AND table_name = $2
+             AND column_name = $3`,
+          [customerId, fullTableName, correction.columnName]
+        );
+
+        const overrideMetadata = createOverrideMetadata({
+          source: "4.S19_heuristic",
+          reason: `semantic-concept-corrector:${correction.columnName}`,
+          overriddenBy: "semantic_concept_corrector",
+        });
+
+        if (existing.rows.length > 0) {
+          overrideMetadata.original_value = formatOriginalValue(
+            existing.rows[0].semantic_concept,
+            existing.rows[0].semantic_category
+          );
+        }
+
         // Update the semantic concept for this field
         const result = await pool.query(
           `UPDATE "SemanticIndexNonForm"
            SET semantic_concept = $4,
                confidence = $5,
-               is_review_required = false
+               is_review_required = false,
+               metadata = COALESCE(metadata, '{}'::jsonb) || $6::jsonb
            WHERE customer_id = $1
              AND table_name = $2
              AND column_name = $3`,
@@ -187,6 +214,7 @@ export async function correctSemanticConcepts(customerId: string): Promise<{
             correction.columnName,
             correction.correctConcept,
             correction.confidence,
+            JSON.stringify(overrideMetadata),
           ]
         );
 

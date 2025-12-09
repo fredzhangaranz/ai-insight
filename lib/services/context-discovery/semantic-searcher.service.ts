@@ -10,6 +10,10 @@ import { getInsightGenDbPool } from "@/lib/db";
 import { getEmbeddingService } from "@/lib/services/embeddings/gemini-embedding";
 import type { SemanticSearchResult } from "./types";
 import { createHash } from "crypto";
+import { normalizeMeasurementPhraseToConceptKey } from "./measurement-concept-mapping";
+
+const USE_CONCEPT_ID_SEARCH =
+  process.env.USE_CONCEPT_ID_SEARCH === "true";
 
 /**
  * Single search result from database
@@ -20,6 +24,7 @@ interface RawSearchResult {
   fieldName?: string;
   formName?: string;
   tableName?: string;
+  conceptId?: string | null;
   semanticConcept: string;
   dataType: string;
   confidence: number;
@@ -189,6 +194,12 @@ export class SemanticSearcherService {
       return cachedResults.slice(0, limit);
     }
 
+    const {
+      fallbackConcepts,
+      conceptIds,
+      useConceptIdSearch,
+    } = await this.resolveConceptSearchInputs(concepts);
+
     try {
       // Generate embeddings for concepts
       const conceptEmbeddings = await Promise.all(
@@ -207,13 +218,17 @@ export class SemanticSearcherService {
           this.searchFormFieldsInDB(
             customerId,
             conceptEmbeddings,
-            concepts,
+            fallbackConcepts,
+            conceptIds,
+            useConceptIdSearch,
             minConfidence
           ),
           this.searchNonFormColumnsInDB(
             customerId,
             conceptEmbeddings,
-            concepts,
+            fallbackConcepts,
+            conceptIds,
+            useConceptIdSearch,
             minConfidence
           ),
         ]);
@@ -222,7 +237,9 @@ export class SemanticSearcherService {
         formResults = await this.searchFormFieldsInDB(
           customerId,
           conceptEmbeddings,
-          concepts,
+          fallbackConcepts,
+          conceptIds,
+          useConceptIdSearch,
           minConfidence
         );
       }
@@ -269,6 +286,12 @@ export class SemanticSearcherService {
       throw new Error("customerId and at least one concept are required");
     }
 
+    const {
+      fallbackConcepts,
+      conceptIds,
+      useConceptIdSearch,
+    } = await this.resolveConceptSearchInputs(concepts);
+
     try {
       // Generate embeddings
       const conceptEmbeddings = await Promise.all(
@@ -279,7 +302,9 @@ export class SemanticSearcherService {
       const results = await this.searchNonFormColumnsInDB(
         customerId,
         conceptEmbeddings,
-        concepts,
+        fallbackConcepts,
+        conceptIds,
+        useConceptIdSearch,
         minConfidence
       );
 
@@ -324,6 +349,112 @@ export class SemanticSearcherService {
     }
   }
 
+  private async resolveConceptSearchInputs(
+    concepts: string[]
+  ): Promise<{
+    fallbackConcepts: string[];
+    conceptIds: string[];
+    useConceptIdSearch: boolean;
+  }> {
+    const fallbackConcepts = this.expandConceptPhrases(concepts);
+
+    if (fallbackConcepts.length === 0) {
+      throw new Error("At least one valid concept is required for search");
+    }
+
+    if (!USE_CONCEPT_ID_SEARCH) {
+      return {
+        fallbackConcepts,
+        conceptIds: [],
+        useConceptIdSearch: false,
+      };
+    }
+
+    const normalized = fallbackConcepts
+      .map((concept) => concept.toLowerCase().trim())
+      .filter((value) => value.length > 0);
+
+    if (normalized.length === 0) {
+      return {
+        fallbackConcepts,
+        conceptIds: [],
+        useConceptIdSearch: false,
+      };
+    }
+
+    try {
+      const pool = await getInsightGenDbPool();
+      const result = await pool.query<{ id: string }>(
+        `
+          SELECT id
+          FROM "ClinicalOntology"
+          WHERE
+            lower(concept_name) = ANY($1)
+            OR lower(canonical_name) = ANY($1)
+            OR lower(preferred_term) = ANY($1)
+            OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(COALESCE(synonyms, '[]'::jsonb)) syn
+              WHERE syn ? 'value' AND lower(syn->>'value') = ANY($1)
+            )
+        `,
+        [normalized]
+      );
+
+      const conceptIds = Array.from(
+        new Set(result.rows.map((row) => row.id))
+      );
+
+      return {
+        fallbackConcepts,
+        conceptIds,
+        useConceptIdSearch: conceptIds.length > 0,
+      };
+    } catch (error) {
+      console.warn(
+        `[SemanticSearcher] Failed to resolve concept IDs: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return {
+        fallbackConcepts,
+        conceptIds: [],
+        useConceptIdSearch: false,
+      };
+    }
+  }
+
+  private expandConceptPhrases(concepts: string[]): string[] {
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+
+    const addConcept = (value: string | null | undefined) => {
+      if (!value || typeof value !== "string") {
+        return;
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed || seen.has(trimmed)) {
+        return;
+      }
+
+      seen.add(trimmed);
+      ordered.push(trimmed);
+    };
+
+    for (const concept of concepts) {
+      addConcept(concept);
+      if (typeof concept === "string") {
+        const canonical = normalizeMeasurementPhraseToConceptKey(concept);
+        if (canonical) {
+          addConcept(canonical);
+        }
+      }
+    }
+
+    return ordered;
+  }
+
   /**
    * Search form fields in database using vector similarity
    */
@@ -331,6 +462,8 @@ export class SemanticSearcherService {
     customerId: string,
     conceptEmbeddings: number[][],
     concepts: string[],
+    conceptIds: string[],
+    useConceptIdSearch: boolean,
     minConfidence: number
   ): Promise<SemanticSearchResult[]> {
     const pool = await getInsightGenDbPool();
@@ -348,13 +481,24 @@ export class SemanticSearcherService {
           NULL::text as table_name,
           f.semantic_concept,
           f.data_type,
-          f.confidence
+          f.confidence,
+          f.concept_id
         FROM "SemanticIndexField" f
         JOIN "SemanticIndex" si ON f.semantic_index_id = si.id
         WHERE si.customer_id = $1
-          AND f.semantic_concept = ANY($2)
-          AND f.confidence >= $3
-        ORDER BY f.confidence DESC, f.field_name
+          AND f.confidence >= $4
+          AND (
+            ($5 AND f.concept_id = ANY($2::uuid[]))
+            OR f.semantic_concept = ANY($3::text[])
+          )
+        ORDER BY
+          CASE
+            WHEN $5 AND f.concept_id = ANY($2::uuid[]) THEN 1
+            WHEN f.semantic_concept = ANY($3::text[]) THEN 2
+            ELSE 3
+          END,
+          f.confidence DESC,
+          f.field_name
       `;
 
       console.log(`[SemanticSearcher DEBUG] Executing form fields query with:`);
@@ -362,6 +506,7 @@ export class SemanticSearcherService {
       console.log(`  - customerId bytes: [${Array.from(customerId).map(c => c.charCodeAt(0)).join(', ')}]`);
       console.log(`  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`);
       console.log(`  - minConfidence: ${minConfidence}`);
+      console.log(`  - conceptIdSearch: ${useConceptIdSearch} (resolved IDs: ${conceptIds.length})`);
 
       // Ensure concepts array is properly formatted for PostgreSQL ANY() operator
       // pg library has issues with certain array serializations, so we validate here
@@ -371,8 +516,10 @@ export class SemanticSearcherService {
 
       const result = await pool.query(query, [
         customerId,
+        conceptIds,
         concepts,
         minConfidence,
+        useConceptIdSearch,
       ]);
 
       return result.rows.map((row: any) => ({
@@ -382,6 +529,7 @@ export class SemanticSearcherService {
         formName: row.form_name,
         semanticConcept: row.semantic_concept,
         dataType: row.data_type,
+        conceptId: row.concept_id,
         confidence: parseFloat(row.confidence),
         similarityScore: undefined, // No embedding-based similarity in this version
       }));
@@ -402,6 +550,8 @@ export class SemanticSearcherService {
     customerId: string,
     conceptEmbeddings: number[][],
     concepts: string[],
+    conceptIds: string[],
+    useConceptIdSearch: boolean,
     minConfidence: number
   ): Promise<SemanticSearchResult[]> {
     const pool = await getInsightGenDbPool();
@@ -418,20 +568,30 @@ export class SemanticSearcherService {
           n.table_name,
           n.semantic_concept,
           n.data_type,
-          n.confidence
+          n.confidence,
+          n.concept_id
         FROM "SemanticIndexNonForm" n
         WHERE n.customer_id = $1
-          AND n.confidence >= $3
+          AND n.confidence >= $4
           AND (
-            n.semantic_concept = ANY($2)
+            ($5 AND n.concept_id = ANY($2::uuid[]))
+            OR n.semantic_concept = ANY($3::text[])
             OR (n.metadata->'concepts' IS NOT NULL 
                 AND EXISTS (
                   SELECT 1 
                   FROM jsonb_array_elements_text(n.metadata->'concepts') AS concept
-                  WHERE concept = ANY($2)
+                  WHERE concept = ANY($3::text[])
                 ))
           )
-        ORDER BY n.confidence DESC, n.table_name, n.column_name
+        ORDER BY
+          CASE
+            WHEN $5 AND n.concept_id = ANY($2::uuid[]) THEN 1
+            WHEN n.semantic_concept = ANY($3::text[]) THEN 2
+            ELSE 3
+          END,
+          n.confidence DESC,
+          n.table_name,
+          n.column_name
       `;
 
       console.log(`[SemanticSearcher DEBUG] Executing non-form columns query with:`);
@@ -439,6 +599,7 @@ export class SemanticSearcherService {
       console.log(`  - customerId bytes: [${Array.from(customerId).map(c => c.charCodeAt(0)).join(', ')}]`);
       console.log(`  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`);
       console.log(`  - minConfidence: ${minConfidence}`);
+      console.log(`  - conceptIdSearch: ${useConceptIdSearch} (resolved IDs: ${conceptIds.length})`);
 
       // Ensure concepts array is properly formatted for PostgreSQL ANY() operator
       // pg library has issues with certain array serializations, so we validate here
@@ -448,8 +609,10 @@ export class SemanticSearcherService {
 
       const result = await pool.query(query, [
         customerId,
+        conceptIds,
         concepts,
         minConfidence,
+        useConceptIdSearch,
       ]);
 
       return result.rows.map((row: any) => ({
@@ -459,6 +622,7 @@ export class SemanticSearcherService {
         tableName: row.table_name,
         semanticConcept: row.semantic_concept,
         dataType: row.data_type,
+        conceptId: row.concept_id,
         confidence: parseFloat(row.confidence),
       }));
     } catch (error) {

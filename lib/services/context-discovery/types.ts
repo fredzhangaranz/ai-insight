@@ -86,6 +86,7 @@ export interface SemanticSearchResult {
   fieldName: string;
   formName?: string; // Only for form fields
   tableName?: string; // Only for non-form columns
+  conceptId?: string | null;
   semanticConcept: string;
   dataType: string;
   confidence: number;

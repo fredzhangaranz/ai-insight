@@ -19,6 +19,9 @@ interface ConceptType {
   type: string;
   description: string;
   categories?: Record<string, ConceptCategory>;
+  // Some concept types (e.g. outcome_metrics) expose a nested metrics collection
+  // which we also want to flatten into individual concepts.
+  metrics?: Record<string, ConceptCategory>;
   [key: string]: any;
 }
 
@@ -98,8 +101,38 @@ function parseOntologyYAML(filePath: string): FlatConcept[] {
           },
         });
       }
-    } else {
-      // Handle flat concept entries (without categories)
+    }
+
+    // Handle concepts with metrics (e.g. outcome_metrics.metrics.*)
+    if (conceptTypeData.metrics) {
+      for (const [metricKey, metricData] of Object.entries(
+        conceptTypeData.metrics as Record<string, ConceptCategory>
+      )) {
+        const metric = metricData as ConceptCategory;
+        const aliases = metric.aliases || [];
+
+        concepts.push({
+          concept_name: metricKey,
+          canonical_name: metric.canonical_name,
+          concept_type: conceptType,
+          description: metric.description,
+          aliases,
+          metadata: {
+            category_key: metricKey,
+            concept_type_key: conceptTypeKey,
+            icd_codes: (metric as any).icd_codes || [],
+            prevalence: (metric as any).prevalence || null,
+            // Preserve any data_sources defined in YAML so later stages
+            // (e.g. 4.S19B) can read them from metadata or copy into
+            // ClinicalOntology.data_sources.
+            data_sources: (metric as any).data_sources || [],
+          },
+        });
+      }
+    }
+
+    // Handle flat concept entries (no categories/metrics)
+    if (!conceptTypeData.categories && !conceptTypeData.metrics) {
       concepts.push({
         concept_name: conceptTypeKey,
         canonical_name: conceptTypeData.canonical_name || conceptTypeKey,
@@ -167,9 +200,15 @@ async function upsertConcepts(
 ): Promise<{ new: number; updated: number }> {
   const query = `
     INSERT INTO "ClinicalOntology" (
-      concept_name, canonical_name, concept_type, description, 
-      metadata, embedding
-    ) VALUES ($1, $2, $3, $4, $5, $6)
+      concept_name,
+      canonical_name,
+      concept_type,
+      description,
+      metadata,
+      embedding,
+      preferred_term,
+      category
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (concept_name, concept_type)
     DO UPDATE SET
       embedding = EXCLUDED.embedding,
@@ -194,6 +233,10 @@ async function upsertConcepts(
         concept.description,
         JSON.stringify(concept.metadata),
         `[${embedding.join(",")}]`,
+        // preferred_term / category (added in migration 029)
+        // default behaviour: mirror concept_name/concept_type
+        concept.concept_name,
+        concept.concept_type,
       ]);
 
       if (result.rows[0].is_new) {

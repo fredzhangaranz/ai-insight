@@ -11,6 +11,15 @@ import {
   type DiscoveryLogger,
 } from "@/lib/services/discovery-logger";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
+import {
+  applyOverrideMetadataFields,
+  createOverrideMetadata,
+  formatOriginalValue,
+  normalizeOverrideMetadata,
+  shouldUseIncomingValue,
+  type OverrideMetadata,
+  type OverrideSource,
+} from "@/lib/types/semantic-index";
 
 export type FormDiscoveryOptions = {
   customerId: string;
@@ -362,11 +371,14 @@ export async function discoverFormMetadata(
           dataType: string;
           semanticConcept: string | null;
           semanticCategory: string | null;
+          conceptId: string | null;
           confidence: number | null;
           isReviewRequired: boolean;
           reviewNote: string | null;
           ordinal: number;
           variableName: string | null;
+          assignmentSource: OverrideSource | null;
+          assignmentReason?: string;
         }> = [];
 
         for (let i = 0; i < fields.length; i++) {
@@ -396,9 +408,12 @@ export async function discoverFormMetadata(
 
           let semanticConcept: string | null = null;
           let semanticCategory: string | null = null;
+          let semanticConceptId: string | null = null;
           let confidence: number | null = null;
           let isReviewRequired = true;
           let reviewNote: string | null = null;
+          let assignmentSource: OverrideSource | null = null;
+          let assignmentReason: string | undefined;
 
           try {
             // Generate embedding
@@ -417,6 +432,12 @@ export async function discoverFormMetadata(
               semanticCategory = extractSemanticCategory(
                 match.metadata,
                 match.conceptName
+              );
+              semanticConceptId = match.id;
+              assignmentSource = "discovery_inferred";
+              assignmentReason = `form_embedding:${match.conceptName}`;
+              console.log(
+                `[FormDiscovery] ${form.name}.${fieldName} → ${semanticConcept} (${assignmentReason})`
               );
               confidence = Math.round(match.similarity * 100) / 100;
               confidenceValues.push(confidence);
@@ -470,11 +491,14 @@ export async function discoverFormMetadata(
             dataType: mappedDataType,
             semanticConcept,
             semanticCategory,
+            conceptId: semanticConceptId,
             confidence,
             isReviewRequired,
             reviewNote,
             ordinal: i,
             variableName: field.variableName,
+            assignmentSource,
+            assignmentReason,
           });
 
           fieldsProcessed++;
@@ -566,6 +590,118 @@ export async function discoverFormMetadata(
             variableName: fieldResult.variableName,
             attributeTypeId: fieldResult.fieldId,
           };
+          let semanticConceptToPersist = fieldResult.semanticConcept;
+          let semanticCategoryToPersist = fieldResult.semanticCategory;
+          let conceptIdToPersist = fieldResult.conceptId;
+          let reviewNote = fieldResult.reviewNote;
+          let metadataToPersist: Record<string, any> = fieldMetadata;
+          const incomingOverride =
+            fieldResult.assignmentSource && fieldResult.semanticConcept
+              ? createOverrideMetadata({
+                  source: fieldResult.assignmentSource,
+                  reason: fieldResult.assignmentReason,
+                })
+              : null;
+          let overrideMetadataToPersist: OverrideMetadata | null = null;
+          let overrideBlocked = false;
+
+          try {
+            const existingField = await pgPool.query(
+              `
+                SELECT semantic_concept, semantic_category, concept_id, metadata
+                FROM "SemanticIndexField"
+                WHERE semantic_index_id = $1
+                  AND attribute_type_id = $2
+              `,
+              [semanticIndexId, fieldResult.fieldId]
+            );
+
+            if (existingField.rows.length > 0) {
+              const existingRow = existingField.rows[0];
+              const existingMetadata =
+                existingRow.metadata && typeof existingRow.metadata === "object"
+                  ? (existingRow.metadata as Record<string, unknown>)
+                  : {};
+              metadataToPersist = {
+                ...existingMetadata,
+                ...fieldMetadata,
+              };
+
+              const existingOverride = normalizeOverrideMetadata(
+                existingMetadata
+              );
+
+              if (incomingOverride) {
+                const canUpdateConcept = shouldUseIncomingValue({
+                  existing: existingOverride,
+                  incoming: incomingOverride,
+                  field: "semantic_concept",
+                });
+
+                if (!canUpdateConcept) {
+                  semanticConceptToPersist = existingRow.semantic_concept;
+                  conceptIdToPersist = existingRow.concept_id;
+                  overrideMetadataToPersist = existingOverride;
+                  overrideBlocked = true;
+                } else {
+                  incomingOverride.original_value = formatOriginalValue(
+                    existingRow.semantic_concept,
+                    existingRow.semantic_category
+                  );
+                  overrideMetadataToPersist = incomingOverride;
+                }
+
+                const canUpdateCategory = shouldUseIncomingValue({
+                  existing: existingOverride,
+                  incoming: incomingOverride,
+                  field: "semantic_category",
+                });
+
+                if (!canUpdateCategory) {
+                  semanticCategoryToPersist = existingRow.semantic_category;
+                  overrideMetadataToPersist =
+                    overrideMetadataToPersist ?? existingOverride;
+                  overrideBlocked = true;
+                } else if (
+                  overrideMetadataToPersist === incomingOverride &&
+                  !incomingOverride.original_value
+                ) {
+                  incomingOverride.original_value = formatOriginalValue(
+                    existingRow.semantic_concept,
+                    existingRow.semantic_category
+                  );
+                }
+              } else if (existingOverride) {
+                overrideMetadataToPersist = existingOverride;
+              }
+            } else {
+              metadataToPersist = fieldMetadata;
+              overrideMetadataToPersist = incomingOverride;
+            }
+          } catch (error) {
+            metadataToPersist = fieldMetadata;
+            overrideMetadataToPersist = incomingOverride;
+            console.warn(
+              `[FormDiscovery] Failed to check overrides for field ${fieldResult.fieldName}:`,
+              error instanceof Error ? error.message : error
+            );
+          }
+
+          metadataToPersist = applyOverrideMetadataFields(
+            metadataToPersist,
+            overrideMetadataToPersist
+          );
+
+          if (overrideBlocked) {
+            const sourceLabel =
+              overrideMetadataToPersist?.override_source ?? "manual_review";
+            reviewNote = reviewNote
+              ? `${reviewNote} [override preserved:${sourceLabel}]`
+              : `[override preserved:${sourceLabel}]`;
+            console.log(
+              `[FormDiscovery] Override preserved for ${form.name}.${fieldResult.fieldName} (source=${sourceLabel})`
+            );
+          }
 
           await pgPool.query(
             `
@@ -577,11 +713,12 @@ export async function discoverFormMetadata(
                 ordinal,
                 semantic_concept,
                 semantic_category,
+                concept_id,
                 confidence,
                 is_review_required,
                 review_note,
                 metadata
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
               ON CONFLICT (semantic_index_id, attribute_type_id)
               DO UPDATE SET
                 field_name = EXCLUDED.field_name,
@@ -589,6 +726,7 @@ export async function discoverFormMetadata(
                 ordinal = EXCLUDED.ordinal,
                 semantic_concept = EXCLUDED.semantic_concept,
                 semantic_category = EXCLUDED.semantic_category,
+                concept_id = EXCLUDED.concept_id,
                 confidence = EXCLUDED.confidence,
                 is_review_required = EXCLUDED.is_review_required,
                 review_note = EXCLUDED.review_note,
@@ -600,12 +738,13 @@ export async function discoverFormMetadata(
               fieldResult.fieldName,
               fieldResult.dataType,
               fieldResult.ordinal,
-              fieldResult.semanticConcept,
-              fieldResult.semanticCategory,
+              semanticConceptToPersist,
+              semanticCategoryToPersist,
+              conceptIdToPersist,
               fieldResult.confidence,
               fieldResult.isReviewRequired,
-              fieldResult.reviewNote,
-              fieldMetadata,
+              reviewNote,
+              metadataToPersist,
             ]
           );
 

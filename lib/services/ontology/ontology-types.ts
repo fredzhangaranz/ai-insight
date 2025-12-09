@@ -28,6 +28,18 @@ export interface ClinicalAbbreviation {
 }
 
 /**
+ * Data source mapping for an ontology concept
+ * (introduced in migration 040_ontology_data_sources.sql)
+ */
+export interface ClinicalDataSource {
+  table: string;
+  column: string;
+  confidence?: number;
+  measurement_type?: string;
+  unit?: string;
+}
+
+/**
  * Complete ontology entry from database
  */
 export interface ClinicalOntologyEntry {
@@ -49,8 +61,9 @@ export interface ClinicalOntologyEntry {
   abbreviations: ClinicalAbbreviation[];
   related_terms: string[];
 
-  // Metadata
+  // Metadata and data sources
   metadata: Record<string, any>;
+  data_sources?: ClinicalDataSource[];
   created_at: Date;
   updated_at: Date;
 }
