@@ -10,7 +10,7 @@ import {
   createAssessmentTypeSearcher,
   type AssessmentTypeSearchResult,
 } from "../context-discovery/assessment-type-searcher.service";
-import { ClarificationBuilder } from "./clarification-builder.service";
+import { ClarificationBuilder, type ContextGroundedClarification } from "./clarification-builder.service";
 import type { ContextBundle } from "@/lib/services/context-discovery/types";
 import { getInsightGenDbPool } from "@/lib/db";
 
@@ -1695,7 +1695,7 @@ export async function buildContextGroundedClarification(
   customerId: string,
   templateName?: string,
   templateDescription?: string
-): Promise<ClarificationRequest> {
+): Promise<ContextGroundedClarification> {
   try {
     // Task 4.S21: Use ClarificationBuilder for context-grounded options
     const contextGroundedClarification =

@@ -24,7 +24,8 @@ export interface ClarificationOption {
 /**
  * Full clarification response with context and options
  */
-export interface ContextGroundedClarification extends ClarificationRequest {
+export interface ContextGroundedClarification
+  extends Omit<ClarificationRequest, "options"> {
   field?: string;
   dataType?:
     | "numeric"
