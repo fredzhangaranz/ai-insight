@@ -340,7 +340,9 @@ describe("ClarificationBuilder Integration", () => {
       // All should have template context
       clarifications.forEach((c) => {
         expect(c.templateName).toBe("Area Reduction at Fixed Time Point");
-        expect(c.templateSummary).toBe("Measure wound healing progress over time");
+        expect(c.templateSummary).toBe(
+          "Measure wound healing progress over time"
+        );
       });
     });
   });
@@ -393,12 +395,13 @@ describe("ClarificationBuilder Integration", () => {
         examples: ["25%", "50%", "75%"],
       };
 
-      const contextGroundedClarification = await buildContextGroundedClarification(
-        "minAreaReduction",
-        slot,
-        context,
-        "cust_wound_care"
-      );
+      const contextGroundedClarification =
+        await buildContextGroundedClarification(
+          "minAreaReduction",
+          slot,
+          context,
+          "cust_wound_care"
+        );
 
       // Context-grounded version has rich options
       expect(contextGroundedClarification.options).toBeDefined();

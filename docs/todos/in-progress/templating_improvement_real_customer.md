@@ -17,12 +17,14 @@
 ## 🚀 LATEST STATUS (2025-01-16)
 
 ✅ **Task 4.S21 COMPLETE** - Clarification options grounded in semantic context
+
 - ClarificationBuilder service with 28 passing tests
 - Semantic-aware clarifications for percentage, time_window, enum, numeric, text fields
 - Database integration for enum value loading
 - Ready for frontend UI integration (Task 4.5F)
 
 🔴 **NEXT PRIORITIES:**
+
 1. Task 4.S19 - Improve semantic index coverage for measurement/time fields (11-14 days)
 2. Task 4.S23 - Runtime SQL validation layer (2-3 days)
 3. Task 4.S24 - LLM feedback loop for SQL validation (2-3 days)

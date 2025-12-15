@@ -13,6 +13,7 @@ Implemented context-grounded clarification options that leverage semantic contex
 ## Problem Statement
 
 **Current behavior (BAD):**
+
 ```typescript
 // Generic clarification, no context
 {
@@ -23,6 +24,7 @@ Implemented context-grounded clarification options that leverage semantic contex
 ```
 
 **Target behavior (GOOD):**
+
 ```typescript
 // Context-grounded clarification with options
 {
@@ -41,6 +43,7 @@ Implemented context-grounded clarification options that leverage semantic contex
 ```
 
 **Expected UX Improvements:**
+
 - Clarification acceptance rate: ~40% → >85% (target)
 - Time on clarification modal: ~2 minutes → <30 seconds
 - SQL correctness: ~70% → >90%
@@ -63,11 +66,12 @@ class ClarificationBuilder {
     customerId: string,
     templateName?: string,
     templateDescription?: string
-  ): Promise<ContextGroundedClarification>
+  ): Promise<ContextGroundedClarification>;
 }
 ```
 
 **Key Features:**
+
 - Semantic type detection (percentage, time_window, enum, numeric, text)
 - Context-grounded option generation
 - Fallback to minimal clarification when context unavailable
@@ -77,6 +81,7 @@ class ClarificationBuilder {
 ### 2. Supported Semantic Types
 
 #### Percentage / Percent Threshold
+
 ```typescript
 dataType: "percentage"
 options: [
@@ -90,38 +95,40 @@ unit: "%"
 ```
 
 #### Time Window / Time Window Days
+
 ```typescript
-dataType: "time_window"
+dataType: "time_window";
 options: [
   { label: "4 weeks", value: 28, unit: "days" },
   { label: "8 weeks", value: 56, unit: "days" },
   { label: "12 weeks", value: 84, unit: "days" },
-  { label: "Custom timepoint", value: null }
-]
-availableFields: ["assessmentDate", "baselineDate"]
+  { label: "Custom timepoint", value: null },
+];
+availableFields: ["assessmentDate", "baselineDate"];
 ```
 
 #### Enum / Status / Field Enum
+
 ```typescript
-dataType: "enum"
+dataType: "enum";
 options: [
   { label: "Pending", value: "pending", count: 42 },
   { label: "In Progress", value: "in_progress", count: 156 },
-  { label: "Completed", value: "completed", count: 89 }
-]
-multiple: true
+  { label: "Completed", value: "completed", count: 89 },
+];
+multiple: true;
 ```
 
 #### Numeric / Measurement / Count
+
 ```typescript
-dataType: "numeric"
-options: [
-  { label: "Custom value", value: null }
-]
-examples: ["0", "100", "500"]
+dataType: "numeric";
+options: [{ label: "Custom value", value: null }];
+examples: ["0", "100", "500"];
 ```
 
 #### Text / Default Fallback
+
 ```typescript
 dataType: "text"
 freeformAllowed: {
@@ -145,16 +152,17 @@ export async function buildContextGroundedClarification(
   customerId: string,
   templateName?: string,
   templateDescription?: string
-): Promise<ClarificationRequest>
+): Promise<ClarificationRequest>;
 ```
 
 **Usage in orchestrator:**
+
 ```typescript
 // In three-mode-orchestrator.service.ts
 const clarification = await buildContextGroundedClarification(
   placeholder,
   slot,
-  semanticContext,  // From context discovery
+  semanticContext, // From context discovery
   customerId,
   template.name,
   template.description
@@ -166,7 +174,7 @@ const clarification = await buildContextGroundedClarification(
 Loads enum values from `SemanticIndexFieldEnumValue`:
 
 ```sql
-SELECT 
+SELECT
   fev.value,
   fev.label,
   COUNT(*) as usage_count
@@ -187,6 +195,7 @@ LIMIT 20
 ## Test Coverage
 
 ### Unit Tests (20 tests)
+
 - ✅ Percentage field clarifications with presets
 - ✅ Time window clarifications with date field context
 - ✅ Enum field clarifications with database values
@@ -197,6 +206,7 @@ LIMIT 20
 - ✅ Backward compatibility with existing interface
 
 ### Integration Tests (8 tests)
+
 - ✅ Realistic percentage clarification scenario
 - ✅ Time window clarification with date field discovery
 - ✅ Enum field clarification with context lookup
@@ -210,16 +220,18 @@ LIMIT 20
 ## Files Created
 
 1. **lib/services/semantic/clarification-builder.service.ts**
+
    - ClarificationBuilder class with semantic-aware option generation
    - Factory function for singleton instance
    - Database integration for enum values
 
-2. **lib/services/semantic/__tests__/clarification-builder.service.test.ts**
+2. **lib/services/semantic/**tests**/clarification-builder.service.test.ts**
+
    - 20 unit tests covering all semantic types
    - Context and template propagation tests
    - Backward compatibility tests
 
-3. **lib/services/semantic/__tests__/clarification-builder-integration.test.ts**
+3. **lib/services/semantic/**tests**/clarification-builder-integration.test.ts**
    - 8 integration tests with realistic scenarios
    - Wound care template workflow tests
    - A/B testing readiness verification
@@ -235,11 +247,13 @@ LIMIT 20
 ## Architecture Decisions
 
 ### 1. Semantic Type Routing
+
 - Routes clarifications based on `PlaceholdersSpecSlot.semantic` field
 - Falls back to text clarification for unknown semantic types
 - Extensible for future semantic types
 
 ### 2. Option Generation
+
 - **Percentage:** Hardcoded sensible defaults (25%, 50%, 75%)
 - **Time window:** Hardcoded common intervals (4, 8, 12 weeks)
 - **Enum:** Database-driven from `SemanticIndexFieldEnumValue`
@@ -247,18 +261,21 @@ LIMIT 20
 - **Text:** Natural language fallback with guidance
 
 ### 3. Context Handling
+
 - Uses `ContextBundle` from context discovery
 - Searches form fields for field metadata
 - Optional - system works without context (graceful degradation)
 - Can be extended with assessment types, terminology, join paths
 
 ### 4. Database Integration
+
 - Queries `SemanticIndexFieldEnumValue` for enum values
 - Tracks usage counts to show popularity
 - Limits results to 20 most common values
 - Graceful error handling (returns empty on failure)
 
 ### 5. Singleton Pattern
+
 - Factory function `createClarificationBuilder()` for consistent instance
 - Stateless service (no side effects)
 - Can be refactored to dependency injection if needed
@@ -266,31 +283,37 @@ LIMIT 20
 ## Success Criteria
 
 ✅ **Clarification options derived from semantic context** (not hard-coded)
+
 - ClarificationBuilder extracts field info from ContextBundle
 - Options generated based on discovered field types and values
 - Database values used for enum fields
 
 ✅ **Numeric/percentage/time/enum fields have context-specific options**
+
 - Percentage: 3 preset options + custom
 - Time window: 3 common intervals + custom
 - Enum: Database values with usage counts
 - Numeric: Custom value input with examples
 
 ✅ **Empty context handled gracefully**
+
 - Falls back to minimal text clarification
 - Still functional for user input
 - Provides natural language fallback
 
 ✅ **Template examples included when available**
+
 - Examples from PlaceholdersSpecSlot propagated to clarification
 - Template context (name, description) included in response
 
 ✅ **All tests passing (28 tests)**
+
 - Unit test coverage for all semantic types
 - Integration tests for realistic workflows
 - Backward compatibility verified
 
 ✅ **Backward compatible**
+
 - Extends existing ClarificationRequest interface
 - New fields are optional
 - Can be adopted incrementally
@@ -300,6 +323,7 @@ LIMIT 20
 The implementation is ready for A/B testing to measure UX improvement:
 
 **Control Group:** Basic clarifications (no options)
+
 ```typescript
 {
   message: "What do you mean by 'area reduction'?",
@@ -309,6 +333,7 @@ The implementation is ready for A/B testing to measure UX improvement:
 ```
 
 **Test Group:** Context-grounded clarifications (with options)
+
 ```typescript
 {
   message: "What % area reduction are you looking for?",
@@ -322,6 +347,7 @@ The implementation is ready for A/B testing to measure UX improvement:
 ```
 
 **Metrics to Track:**
+
 1. **Acceptance Rate:** % of users selecting offered option vs typing custom (target: >85%)
 2. **Time on Modal:** Duration spent on clarification (target: <30 seconds)
 3. **SQL Correctness:** % of clarified queries generating valid SQL (target: >90%)
@@ -338,29 +364,35 @@ The implementation is ready for A/B testing to measure UX improvement:
 ## Risk Mitigation
 
 ✅ **Risk:** Empty context still common
+
 - Fallback: Minimal clarification still works
 - Mitigation: 4.S18+4.S19 expand semantic coverage first
 
 ✅ **Risk:** Context-grounded options are domain-specific
+
 - Mitigation: Design is generic (numeric range, enum list, time intervals)
 - Same principles apply to any schema
 
 ✅ **Risk:** A/B test shows no improvement
+
 - Mitigation: Investigate user behavior - are options visible? Clear messaging?
 - Iterate on UX design based on feedback
 
 ## Next Steps
 
 1. **Frontend Integration (Task 4.5F):**
+
    - Render template badge using templateName
    - Show context-grounded options in UI
    - Implement "Yes / Change" flow for confirmations
 
 2. **Audit Trail (Task 4.5G):**
+
    - Store clarification responses with user choices
    - Track which option was selected vs custom input
 
 3. **E2E Testing (Task 4.5H):**
+
    - Test clarification UX with semantic fixtures
    - Measure real-world adoption and effectiveness
 
@@ -372,6 +404,7 @@ The implementation is ready for A/B testing to measure UX improvement:
 ## Integration Points
 
 ### From Context Discovery
+
 ```typescript
 // ContextBundle provides:
 contextBundle.forms[].fields[].semanticConcept  // For field type detection
@@ -380,21 +413,23 @@ contextBundle.forms[].fields[].fieldId           // For enum value lookup
 ```
 
 ### From Template System
+
 ```typescript
 // PlaceholdersSpecSlot provides:
-slot.semantic        // For clarification type routing
-slot.description     // For prompt generation
-slot.examples        // For option/hint generation
-slot.required        // For skip guidance
+slot.semantic; // For clarification type routing
+slot.description; // For prompt generation
+slot.examples; // For option/hint generation
+slot.required; // For skip guidance
 ```
 
 ### From Database
+
 ```typescript
 // SemanticIndexFieldEnumValue provides:
-fieldId              // FK to field
-value                // Enum value (e.g., "pending")
-label                // Human label (e.g., "Pending")
-usage_count          // Popularity metric
+fieldId; // FK to field
+value; // Enum value (e.g., "pending")
+label; // Human label (e.g., "Pending")
+usage_count; // Popularity metric
 ```
 
 ## Backward Compatibility

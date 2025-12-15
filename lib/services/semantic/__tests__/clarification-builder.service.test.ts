@@ -7,7 +7,9 @@ import type { PlaceholdersSpecSlot } from "../template-validator.service";
 import type { ContextBundle } from "@/lib/services/context-discovery/types";
 
 describe("ClarificationBuilder", () => {
-  const mockSlot = (overrides?: Partial<PlaceholdersSpecSlot>): PlaceholdersSpecSlot => ({
+  const mockSlot = (
+    overrides?: Partial<PlaceholdersSpecSlot>
+  ): PlaceholdersSpecSlot => ({
     rawName: "timeWindow",
     name: "timeWindow",
     placeholder: "{{timeWindow}}",
@@ -18,7 +20,9 @@ describe("ClarificationBuilder", () => {
     ...overrides,
   });
 
-  const mockContextBundle = (overrides?: Partial<ContextBundle>): ContextBundle => ({
+  const mockContextBundle = (
+    overrides?: Partial<ContextBundle>
+  ): ContextBundle => ({
     customerId: "cust_123",
     question: "What is the healing rate?",
     intent: {
