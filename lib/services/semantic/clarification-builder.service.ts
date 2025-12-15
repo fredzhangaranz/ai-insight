@@ -4,7 +4,7 @@
 
 import { getInsightGenDbPool } from "@/lib/db";
 import type { ClarificationRequest } from "./template-placeholder.service";
-import type { PlaceholdersSpecSlot } from "./template-validator.service";
+import type { PlaceholdersSpecSlot } from "../template-validator.service";
 import type {
   FieldInContext,
   AssessmentTypeInContext,
