@@ -352,8 +352,12 @@ export class ClarificationBuilder {
     customerId: string
   ): Promise<ClarificationOption[]> {
     try {
-      const pool = getInsightGenDbPool();
-      const result = await pool.query(
+      const pool = await getInsightGenDbPool();
+      const result = await pool.query<{
+        value: string;
+        label: string | null;
+        usage_count: string;
+      }>(
         `
         SELECT 
           fev.value,
