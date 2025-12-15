@@ -1839,7 +1839,27 @@ LLM SQL Composition → SQL Validation → Final SQL
   - **Estimated effort:** 1-2 days
   - **Dependency:** After 4.S18 (use semantic search results to discover field gaps)
 
-- **Task 4.S21: Clarification options grounded in semantic context** 🔴 **HIGH PRIORITY**
+- ✅ **Task 4.S21: Clarification options grounded in semantic context** 🟢 **COMPLETE (2025-01-16)**
+  - **Status:** ✅ COMPLETE
+  - **Implementation:** ClarificationBuilder service with semantic-aware option generation
+  - **Test Coverage:** 28 tests (20 unit + 8 integration), all passing
+  - **What was implemented:**
+    - ClarificationBuilder service with 5 semantic type handlers (percentage, time_window, enum, numeric, text)
+    - Database integration for loading enum values from SemanticIndexFieldEnumValue
+    - Integration with ContextBundle from context discovery
+    - Graceful fallback when context unavailable
+    - buildContextGroundedClarification() exported from template-placeholder.service.ts
+  - **UX Improvements Expected:**
+    - Acceptance rate: ~40% → >85%
+    - Time on modal: ~2 min → <30 seconds
+    - SQL correctness: ~70% → >90%
+    - User satisfaction: ~2.5/5 → >4.0/5
+  - **Files Created:**
+    - `lib/services/semantic/clarification-builder.service.ts`
+    - `lib/services/semantic/__tests__/clarification-builder.service.test.ts` (20 tests)
+    - `lib/services/semantic/__tests__/clarification-builder-integration.test.ts` (8 tests)
+    - `docs/tasks/4-s21-context-grounded-clarifications.md`
+  - **Ready For:** Task 4.5F (Frontend UI integration)
   - **Why needed:** Generate clarification options using available schema/ontology context; avoid generic guesses
   - **What's missing:**
     - ClarificationBuilder service for numeric/percentage/time/enum fields
@@ -4365,9 +4385,9 @@ Outputs: baseline_wounds CTE
     - ⚠️ **Risk:** Doesn't account for conflicts
       - **Mitigation:** Include conflicts in unresolved section (show both sources, confidence)
 
-- [ ] **Task 4.S21: Clarification options grounded in semantic context (HIGH UX IMPACT)**
+- [x] **Task 4.S21: Clarification options grounded in semantic context (HIGH UX IMPACT)**
   - **Goal:** Generate clarification options using available schema/ontology context; avoid generic guesses or hard-coding. Include A/B testing to measure UX improvement.
-  - **Status:** ⏳ NOT STARTED (4.S18+4.S20 complete, ready to proceed)
+  - **Status:** ✅ COMPLETE (2025-01-16)
   - **Priority:** 🔴 HIGH (measurable UX improvement)
   - **Dependency:** ✅ 4.S18 COMPLETE, ✅ 4.S20 COMPLETE - Ready to proceed
   - **MUST DO:** Critical for UX - current clarification acceptance rate ~40%, target >85%

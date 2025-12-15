@@ -10,6 +10,8 @@ import {
   createAssessmentTypeSearcher,
   type AssessmentTypeSearchResult,
 } from "../context-discovery/assessment-type-searcher.service";
+import { ClarificationBuilder } from "./clarification-builder.service";
+import type { ContextBundle } from "@/lib/services/context-discovery/types";
 import { getInsightGenDbPool } from "@/lib/db";
 
 export interface PlaceholderValues {
@@ -1535,6 +1537,72 @@ async function buildClarification(
     // Natural language fallback (added in Task 4.5E)
     freeformAllowed,
   };
+}
+
+/**
+ * Build context-grounded clarification using semantic context (Task 4.S21)
+ * 
+ * Uses semantic context to generate rich, data-aware clarification options
+ * that help users select from available fields/values in the schema.
+ * 
+ * This is the enhanced version that uses ContextBundle from context discovery.
+ * Falls back to buildClarification if context is unavailable.
+ * 
+ * @param placeholder - Placeholder name
+ * @param slot - Template slot specification
+ * @param semanticContext - Semantic context from discovery (may be undefined)
+ * @param customerId - Customer ID for database lookups
+ * @param templateName - Template name for context
+ * @param templateDescription - Template description for context
+ * @returns Context-grounded clarification request
+ */
+export async function buildContextGroundedClarification(
+  placeholder: string,
+  slot: PlaceholdersSpecSlot | undefined,
+  semanticContext: ContextBundle | undefined,
+  customerId: string,
+  templateName?: string,
+  templateDescription?: string
+): Promise<ClarificationRequest> {
+  try {
+    // Task 4.S21: Use ClarificationBuilder for context-grounded options
+    const contextGroundedClarification = await ClarificationBuilder.buildClarification(
+      placeholder,
+      slot,
+      semanticContext,
+      customerId,
+      templateName,
+      templateDescription
+    );
+
+    console.log(
+      `[buildContextGroundedClarification] Built context-grounded clarification for "${placeholder}":`,
+      {
+        dataType: contextGroundedClarification.dataType,
+        optionCount: contextGroundedClarification.options?.length,
+        hasContext: !!semanticContext,
+      }
+    );
+
+    // Return the context-grounded version (which extends ClarificationRequest)
+    return contextGroundedClarification;
+  } catch (err) {
+    console.warn(
+      `[buildContextGroundedClarification] Error building context-grounded clarification for "${placeholder}":`,
+      err
+    );
+
+    // Fallback to original buildClarification if ClarificationBuilder fails
+    // This ensures graceful degradation
+    return buildClarification(
+      placeholder,
+      slot,
+      undefined,
+      customerId,
+      templateName,
+      templateDescription
+    );
+  }
 }
 
 /**
