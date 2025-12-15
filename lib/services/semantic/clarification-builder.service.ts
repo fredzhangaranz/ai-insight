@@ -5,7 +5,11 @@
 import { getInsightGenDbPool } from "@/lib/db";
 import type { ClarificationRequest } from "./template-placeholder.service";
 import type { PlaceholdersSpecSlot } from "./template-validator.service";
-import type { FieldInContext, AssessmentTypeInContext, ContextBundle } from "@/lib/services/context-discovery/types";
+import type {
+  FieldInContext,
+  AssessmentTypeInContext,
+  ContextBundle,
+} from "@/lib/services/context-discovery/types";
 
 /**
  * Clarification option with metadata
@@ -13,8 +17,8 @@ import type { FieldInContext, AssessmentTypeInContext, ContextBundle } from "@/l
 export interface ClarificationOption {
   label: string;
   value: any;
-  count?: number;  // For enum values - usage count
-  unit?: string;   // For numeric values - e.g., "days", "%"
+  count?: number; // For enum values - usage count
+  unit?: string; // For numeric values - e.g., "days", "%"
 }
 
 /**
@@ -22,7 +26,13 @@ export interface ClarificationOption {
  */
 export interface ContextGroundedClarification extends ClarificationRequest {
   field?: string;
-  dataType?: "numeric" | "percentage" | "time_window" | "enum" | "date" | "text";
+  dataType?:
+    | "numeric"
+    | "percentage"
+    | "time_window"
+    | "enum"
+    | "date"
+    | "text";
   options?: ClarificationOption[];
   recommendedOptions?: any[];
   range?: { min: number; max: number };
@@ -33,20 +43,20 @@ export interface ContextGroundedClarification extends ClarificationRequest {
 
 /**
  * ClarificationBuilder service for generating context-grounded clarification options
- * 
+ *
  * Transforms generic clarifications into rich, semantic-aware clarifications
  * that guide users toward valid database values and field contexts.
  */
 export class ClarificationBuilder {
   /**
    * Build context-grounded clarification for an unresolved placeholder
-   * 
+   *
    * Detects field type and semantic category to generate appropriate options:
    * - Numeric/Percentage: Range hints + preset options
    * - Time window: Date fields + common time intervals
    * - Enum: Database values with usage counts
    * - Text: Natural language fallback with semantic guidance
-   * 
+   *
    * @param placeholder - Placeholder name
    * @param slot - Template slot specification (includes semantic type)
    * @param contextBundle - Semantic context with discovered fields
@@ -72,23 +82,62 @@ export class ClarificationBuilder {
 
     // Route based on semantic type
     if (semantic === "percentage" || semantic === "percent_threshold") {
-      return this.buildPercentageClarification(slot, contextBundle, templateName, templateDescription);
+      return this.buildPercentageClarification(
+        slot,
+        contextBundle,
+        templateName,
+        templateDescription
+      );
     }
 
-    if (semantic === "time_window" || semantic === "time_window_days" || semantic === "time_point") {
-      return this.buildTimeWindowClarification(slot, contextBundle, customerId, templateName, templateDescription);
+    if (
+      semantic === "time_window" ||
+      semantic === "time_window_days" ||
+      semantic === "time_point"
+    ) {
+      return this.buildTimeWindowClarification(
+        slot,
+        contextBundle,
+        customerId,
+        templateName,
+        templateDescription
+      );
     }
 
-    if (semantic === "enum" || semantic === "status" || semantic === "field_enum") {
-      return this.buildEnumClarification(slot, contextBundle, customerId, templateName, templateDescription);
+    if (
+      semantic === "enum" ||
+      semantic === "status" ||
+      semantic === "field_enum"
+    ) {
+      return await this.buildEnumClarification(
+        slot,
+        contextBundle,
+        customerId,
+        templateName,
+        templateDescription
+      );
     }
 
-    if (semantic === "numeric" || semantic === "measurement" || semantic === "count") {
-      return this.buildNumericClarification(slot, contextBundle, templateName, templateDescription);
+    if (
+      semantic === "numeric" ||
+      semantic === "measurement" ||
+      semantic === "count"
+    ) {
+      return this.buildNumericClarification(
+        slot,
+        contextBundle,
+        templateName,
+        templateDescription
+      );
     }
 
     // Default: text-based clarification
-    return this.buildTextClarification(slot, contextBundle, templateName, templateDescription);
+    return this.buildTextClarification(
+      slot,
+      contextBundle,
+      templateName,
+      templateDescription
+    );
   }
 
   /**
@@ -102,18 +151,20 @@ export class ClarificationBuilder {
   ): ContextGroundedClarification {
     return {
       placeholder: slot.rawName,
-      prompt: `What percentage ${slot.description?.toLowerCase() || "value"} are you looking for?`,
+      prompt: `What percentage ${
+        slot.description?.toLowerCase() || "value"
+      } are you looking for?`,
       field: slot.name,
       dataType: "percentage",
       range: { min: 0, max: 100 },
       unit: "%",
       options: [
         { label: "25% (minor improvement)", value: 0.25 },
-        { label: "50% (moderate improvement)", value: 0.50 },
+        { label: "50% (moderate improvement)", value: 0.5 },
         { label: "75% (significant improvement)", value: 0.75 },
         { label: "Custom value", value: null },
       ],
-      recommendedOptions: [0.25, 0.50, 0.75],
+      recommendedOptions: [0.25, 0.5, 0.75],
       examples: slot.examples || ["25%", "50%", "75%"],
       semantic: slot.semantic,
       templateName,
@@ -136,7 +187,11 @@ export class ClarificationBuilder {
     if (contextBundle?.forms) {
       for (const form of contextBundle.forms) {
         for (const field of form.fields) {
-          if (field.dataType === "date" || field.semanticConcept?.includes("date") || field.semanticConcept?.includes("time")) {
+          if (
+            field.dataType === "date" ||
+            field.semanticConcept?.includes("date") ||
+            field.semanticConcept?.includes("time")
+          ) {
             availableFields.push(field.fieldName);
           }
         }
@@ -146,7 +201,9 @@ export class ClarificationBuilder {
     return {
       placeholder: slot.rawName,
       prompt: `What time point would you like to analyze?${
-        availableFields.length > 0 ? ` (from ${availableFields.join(", ")})` : ""
+        availableFields.length > 0
+          ? ` (from ${availableFields.join(", ")})`
+          : ""
       }`,
       field: slot.name,
       dataType: "time_window",
@@ -175,14 +232,14 @@ export class ClarificationBuilder {
     templateDescription?: string
   ): Promise<ContextGroundedClarification> {
     const fieldName = slot.name || slot.rawName;
-    
+
     // Try to find matching field in context for enum values
     let enumValues: ClarificationOption[] = [];
-    
+
     if (contextBundle?.forms) {
       for (const form of contextBundle.forms) {
-        const field = form.fields.find((f) =>
-          f.fieldName.toLowerCase() === fieldName.toLowerCase()
+        const field = form.fields.find(
+          (f) => f.fieldName.toLowerCase() === fieldName.toLowerCase()
         );
         if (field) {
           // Load enum values from database for this field
@@ -206,7 +263,7 @@ export class ClarificationBuilder {
       dataType: "enum",
       options: enumValues.length > 0 ? enumValues : undefined,
       multiple: true,
-      examples: slot.examples || (enumValues.slice(0, 3).map((v) => v.label)),
+      examples: slot.examples || enumValues.slice(0, 3).map((v) => v.label),
       semantic: slot.semantic,
       templateName,
       templateSummary: templateDescription,
@@ -224,12 +281,12 @@ export class ClarificationBuilder {
   ): ContextGroundedClarification {
     return {
       placeholder: slot.rawName,
-      prompt: `What ${slot.description?.toLowerCase() || "value"} are you looking for?`,
+      prompt: `What ${
+        slot.description?.toLowerCase() || "value"
+      } are you looking for?`,
       field: slot.name,
       dataType: "numeric",
-      options: [
-        { label: "Custom value", value: null },
-      ],
+      options: [{ label: "Custom value", value: null }],
       examples: slot.examples || ["0", "100", "500"],
       semantic: slot.semantic,
       templateName,
@@ -267,7 +324,9 @@ export class ClarificationBuilder {
   /**
    * Build minimal clarification when context is unavailable
    */
-  private static buildMinimalClarification(placeholder: string): ContextGroundedClarification {
+  private static buildMinimalClarification(
+    placeholder: string
+  ): ContextGroundedClarification {
     return {
       placeholder,
       prompt: `Can you clarify what you mean by "${placeholder}"?`,
@@ -287,7 +346,10 @@ export class ClarificationBuilder {
    * Load enum values for a field from the database
    * Queries SemanticIndexFieldEnumValue for matching field ID
    */
-  private static async loadEnumValues(fieldId: string, customerId: string): Promise<ClarificationOption[]> {
+  private static async loadEnumValues(
+    fieldId: string,
+    customerId: string
+  ): Promise<ClarificationOption[]> {
     try {
       const pool = getInsightGenDbPool();
       const result = await pool.query(
