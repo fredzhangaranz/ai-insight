@@ -4,9 +4,19 @@
 
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, AlertCircle, Code, Lightbulb, MessageSquare } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Code,
+  Info,
+  Lightbulb,
+  MessageSquare,
+} from "lucide-react";
 import { InsightResult } from "@/lib/hooks/useInsights";
 
 interface InspectionPanelProps {
@@ -306,6 +316,15 @@ function AssumptionCard({
 
 function SQLTab({ result }: { result: InsightResult }) {
   const [copied, setCopied] = useState(false);
+  const validation = result.sqlValidation;
+  const hasErrors = Boolean(validation && !validation.isValid && validation.errors.length > 0);
+  const hasWarnings = Boolean(validation && validation.warnings.length > 0);
+  const validationIcon = useMemo(() => {
+    if (!validation) return null;
+    if (hasErrors) return <AlertTriangle className="h-4 w-4 text-red-600" />;
+    if (hasWarnings) return <Info className="h-4 w-4 text-amber-600" />;
+    return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  }, [validation, hasErrors, hasWarnings]);
 
   const handleCopy = () => {
     if (result.sql) {
@@ -327,6 +346,78 @@ function SQLTab({ result }: { result: InsightResult }) {
       <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm">
         <code>{result.sql}</code>
       </pre>
+
+      {validation && (
+        <div
+          className={`rounded-lg border px-4 py-3 ${
+            hasErrors
+              ? "bg-red-50 border-red-200"
+              : hasWarnings
+              ? "bg-amber-50 border-amber-200"
+              : "bg-emerald-50 border-emerald-200"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            {validationIcon}
+            <div>
+              <p className="text-sm font-semibold text-slate-800">
+                {hasErrors
+                  ? "SQL validation detected issues"
+                  : hasWarnings
+                  ? "SQL validation completed with warnings"
+                  : "SQL validation passed"}
+              </p>
+              <p className="text-xs text-slate-600">
+                Checked at {new Date(validation.analyzedAt).toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          {hasErrors && (
+            <ul className="space-y-2 text-sm text-red-800">
+              {validation.errors.map((error, idx) => (
+                <li key={`${error.type}-${idx}`}>
+                  <div className="font-medium">{error.message}</div>
+                  <div className="text-xs text-red-700 mt-1">
+                    Suggestion: {error.suggestion}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {!hasErrors && hasWarnings && (
+            <ul className="space-y-1 text-sm text-amber-800">
+              {validation.warnings.map((warning, idx) => (
+                <li key={`warning-${idx}`}>• {warning}</li>
+              ))}
+            </ul>
+          )}
+
+          {validation.metadata && (
+            <div className="mt-3 text-xs text-slate-600 space-y-1">
+              {validation.metadata.groupedExpressions.length > 0 && (
+                <div>
+                  <span className="font-semibold text-slate-700">GROUP BY:</span>{" "}
+                  {validation.metadata.groupedExpressions.join(", ")}
+                </div>
+              )}
+              {validation.metadata.orderByExpressions.length > 0 && (
+                <div>
+                  <span className="font-semibold text-slate-700">ORDER BY:</span>{" "}
+                  {validation.metadata.orderByExpressions.join(", ")}
+                </div>
+              )}
+              {validation.metadata.selectAliases.length > 0 && (
+                <div>
+                  <span className="font-semibold text-slate-700">Aliases:</span>{" "}
+                  {validation.metadata.selectAliases.join(", ")}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {result.mode && (
         <div className="text-sm text-slate-600">

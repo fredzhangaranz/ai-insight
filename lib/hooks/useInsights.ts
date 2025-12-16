@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FieldAssumption } from "@/lib/services/semantic/sql-generator.types";
+import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
 
 export interface ThinkingStep {
@@ -81,6 +82,8 @@ export interface InsightResult {
     rows: any[];
     columns: string[];
   };
+  sqlValidation?: SQLValidationResult;
+  sqlValidation?: SQLValidationResult;
 
   // Clarification fields (when mode IS clarification)
   requiresClarification?: boolean;

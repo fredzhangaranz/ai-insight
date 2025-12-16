@@ -31,6 +31,7 @@ vi.mock("../../context-discovery/context-discovery.service", () => ({
   ContextDiscoveryService: vi.fn().mockImplementation(() => ({
     discoverContext: vi.fn(() =>
       Promise.resolve({
+        customerId: "test-customer-id",
         question: "test question",
         intent: {
           type: "query",
@@ -77,16 +78,65 @@ vi.mock("../customer-query.service", () => ({
   validateAndFixQuery: vi.fn((sql: string) => sql),
 }));
 
+const mockSqlValidatorValidate = vi.fn(() => ({
+  isValid: true,
+  errors: [],
+  warnings: [],
+  analyzedAt: new Date().toISOString(),
+}));
+
+vi.mock("../sql-validator.service", () => ({
+  getSQLValidator: vi.fn(() => ({
+    validate: mockSqlValidatorValidate,
+  })),
+}));
+
+const mockGenerateAIClarification = vi.fn();
+
+vi.mock("../ai-ambiguity-detector.service", () => ({
+  generateAIClarification: vi.fn((...args: any[]) =>
+    mockGenerateAIClarification(...args)
+  ),
+}));
+
+const mockSelectModel = vi.fn();
+
+vi.mock("../model-router.service", () => ({
+  getModelRouterService: () => ({
+    selectModel: (...args: any[]) => mockSelectModel(...args),
+  }),
+}));
+
 const getLatestContextInstance = () =>
   (ContextDiscoveryService as unknown as vi.Mock).mock.results.at(-1)?.value;
 
 describe("ThreeModeOrchestrator - Clarification Flow", () => {
   let orchestrator: ThreeModeOrchestrator;
 
-  beforeEach(() => {
-    orchestrator = new ThreeModeOrchestrator();
-    vi.clearAllMocks();
+beforeEach(() => {
+  vi.clearAllMocks();
+
+  mockGenerateAIClarification.mockReset();
+  mockGenerateAIClarification.mockImplementation(() => Promise.resolve(null));
+
+  mockSelectModel.mockReset();
+  mockSelectModel.mockResolvedValue({
+    modelId: "test-model-id",
+    rationale: "mocked",
+    expectedLatency: 1000,
+    costTier: "standard",
   });
+
+  mockSqlValidatorValidate.mockReset();
+  mockSqlValidatorValidate.mockImplementation(() => ({
+    isValid: true,
+    errors: [],
+    warnings: [],
+    analyzedAt: new Date().toISOString(),
+  }));
+
+  orchestrator = new ThreeModeOrchestrator();
+});
 
   afterEach(() => {
     vi.resetAllMocks();
@@ -437,6 +487,7 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
 
     it("should stop before SQL generation when filters remain unresolved", async () => {
       const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
         question: "test question",
         intent: {
           type: "query",
@@ -484,6 +535,7 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
 
     it("should respect user removal selection for unresolved filters", async () => {
       const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
         question: "test question",
         intent: {
           type: "query",
@@ -549,6 +601,7 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
 
     it("should forward custom constraint selections to SQL generation", async () => {
       const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
         question: "test question",
         intent: {
           type: "query",

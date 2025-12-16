@@ -2,7 +2,8 @@
 
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { ThinkingStream, ThinkingStep } from "./ThinkingStream";
 import { ActionsPanel } from "./ActionsPanel";
 import { StepPreview } from "./StepPreview";
@@ -25,6 +26,34 @@ export function InsightResults({
 }: InsightResultsProps) {
   const [stepPreviewApproved, setStepPreviewApproved] = useState(false);
   const [refinementInput, setRefinementInput] = useState("");
+  const validation = result.sqlValidation;
+  const hasErrors = Boolean(validation && !validation.isValid && validation.errors.length > 0);
+  const hasWarnings = Boolean(validation && validation.warnings.length > 0);
+  const validationBadge = useMemo(() => {
+    if (!validation) return null;
+    if (hasErrors) {
+      return (
+        <span className="inline-flex items-center gap-1 text-sm font-medium text-red-700">
+          <AlertTriangle className="h-4 w-4" />
+          Issues detected
+        </span>
+      );
+    }
+    if (hasWarnings) {
+      return (
+        <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-700">
+          <Info className="h-4 w-4" />
+          Warnings
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700">
+        <CheckCircle2 className="h-4 w-4" />
+        Looks good
+      </span>
+    );
+  }, [validation, hasErrors, hasWarnings]);
 
   // Handle step preview approval
   const handleApprove = () => {
@@ -58,6 +87,49 @@ export function InsightResults({
       {result.mode === "template" && result.template && (
         <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-50 px-3 py-2 rounded-lg">
           📋 Used template: <strong>{result.template}</strong>
+        </div>
+      )}
+
+      {validation && (
+        <div
+          className={`rounded-lg border px-4 py-3 ${
+            hasErrors
+              ? "bg-red-50 border-red-200"
+              : hasWarnings
+              ? "bg-amber-50 border-amber-200"
+              : "bg-emerald-50 border-emerald-200"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-sm text-slate-800">
+              SQL validation {hasErrors ? "failed" : "completed"}
+            </div>
+            {validationBadge}
+          </div>
+          {hasErrors && (
+            <ul className="space-y-2 text-sm text-red-800">
+              {validation.errors.map((error, idx) => (
+                <li key={`${error.type}-${idx}`}>
+                  <div className="font-medium">{error.message}</div>
+                  <div className="text-xs text-red-700 mt-1">
+                    Suggestion: {error.suggestion}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!hasErrors && hasWarnings && (
+            <ul className="space-y-1 text-sm text-amber-800">
+              {validation.warnings.map((warning, idx) => (
+                <li key={`warning-${idx}`}>• {warning}</li>
+              ))}
+            </ul>
+          )}
+          {!hasErrors && !hasWarnings && (
+            <p className="text-sm text-emerald-800">
+              No issues detected. Query is ready to run.
+            </p>
+          )}
         </div>
       )}
 

@@ -48,6 +48,10 @@ import {
   filterResidualsAgainstMerged,
   mergeFilterStates,
 } from "./filter-state-merger.service";
+import {
+  getSQLValidator,
+  type SQLValidationResult,
+} from "../sql-validator.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -95,6 +99,7 @@ export interface OrchestrationResult {
     rows: any[];
     columns: string[];
   };
+  sqlValidation?: SQLValidationResult;
 
   // Clarification fields (when mode IS clarification)
   requiresClarification?: boolean;
@@ -380,6 +385,8 @@ export class ThreeModeOrchestrator {
 
     const startTime = Date.now();
     let usageId: number | null = null;
+    let injectedSql = "";
+    let sqlValidation: SQLValidationResult | undefined;
 
     try {
       // Extract placeholder values and fill template SQL
@@ -612,13 +619,20 @@ export class ThreeModeOrchestrator {
         );
       }
 
-      const injectedSql = this.templateInjector.injectPlaceholders(
+      injectedSql = this.templateInjector.injectPlaceholders(
         template.sqlPattern,
         placeholderResult.values,
         template.name
       );
-      const fixedSQL = validateAndFixQuery(injectedSql);
-      const results = await executeCustomerQuery(customerId, fixedSQL);
+      const execution = await this.executeSQL(injectedSql, customerId, {
+        source: "template",
+        intent: template.intent,
+      });
+      sqlValidation = execution.validation;
+      const results = {
+        columns: execution.columns,
+        rows: execution.rows,
+      };
 
       thinking[thinking.length - 1].status = "complete";
       thinking[thinking.length - 1].duration = Date.now() - startTime;
@@ -637,10 +651,8 @@ export class ThreeModeOrchestrator {
         thinking,
         sql: injectedSql,
         template: template.name,
-        results: {
-          columns: results.columns,
-          rows: results.rows,
-        },
+        results,
+        sqlValidation,
         // Templates are simple/optimized queries
         complexityScore: 2,
         executionStrategy: "auto",
@@ -662,6 +674,33 @@ export class ThreeModeOrchestrator {
               : "template_error",
           latencyMs: Date.now() - startTime,
         });
+      }
+
+      if (error instanceof RuntimeSQLValidationError) {
+        thinking[thinking.length - 1].message = `SQL validation failed: ${error.message}`;
+        thinking[thinking.length - 1].details = {
+          validationErrors: error.validation.errors,
+        };
+        return {
+          mode: "template",
+          question,
+          thinking,
+          sql: injectedSql || template.sqlPattern,
+          template: template.name,
+          results: {
+            columns: [],
+            rows: [],
+          },
+          sqlValidation: error.validation,
+          error: {
+            message: error.message,
+            step: "sql_validation",
+            details: { validation: error.validation },
+          },
+          complexityScore: 2,
+          executionStrategy: "auto",
+          requiresPreview: false,
+        };
       }
 
       throw error;
@@ -1335,19 +1374,35 @@ export class ThreeModeOrchestrator {
       });
 
       const executeStart = Date.now();
-      let results;
+      let results: { columns: any[]; rows: any[] };
+      let sqlValidation: SQLValidationResult | undefined;
+      let validationError: RuntimeSQLValidationError | null = null;
       try {
-        results = await this.executeSQL(sql, customerId);
+        const execution = await this.executeSQL(sql, customerId, {
+          source: "direct",
+          intent: context.intent?.type,
+        });
+        results = {
+          columns: execution.columns,
+          rows: execution.rows,
+        };
+        sqlValidation = execution.validation;
       } catch (executeError) {
-        // If SQL execution fails, return graceful fallback
-        // This handles cases where generated SQL has invalid columns
-        thinking[thinking.length - 1].status = "error";
-        thinking[thinking.length - 1].message = `Query execution failed: ${
-          executeError instanceof Error ? executeError.message : "Unknown error"
-        }. Using mock results.`;
-        thinking[thinking.length - 1].duration = Date.now() - executeStart;
+        if (executeError instanceof RuntimeSQLValidationError) {
+          validationError = executeError;
+          sqlValidation = executeError.validation;
+          thinking[thinking.length - 1].status = "error";
+          thinking[thinking.length - 1].message = `SQL validation failed: ${executeError.message}`;
+          thinking[thinking.length - 1].details = {
+            validationErrors: executeError.validation.errors,
+          };
+        } else {
+          thinking[thinking.length - 1].status = "error";
+          thinking[thinking.length - 1].message = `Query execution failed: ${
+            executeError instanceof Error ? executeError.message : "Unknown error"
+          }. Using mock results.`;
+        }
 
-        // Return empty results to allow UI to show error
         results = {
           columns: [],
           rows: [],
@@ -1364,16 +1419,26 @@ export class ThreeModeOrchestrator {
         })`;
       }
       thinking[thinking.length - 1].duration = Date.now() - executeStart;
-      thinking[thinking.length - 1].details = {
-        rowCount: results?.rows?.length || 0,
-      };
+      const rowCount = results?.rows?.length || 0;
+      const existingDetails = thinking[thinking.length - 1].details;
+      if (existingDetails && thinking[thinking.length - 1].status === "error") {
+        thinking[thinking.length - 1].details = {
+          ...existingDetails,
+          rowCount,
+        };
+      } else {
+        thinking[thinking.length - 1].details = {
+          rowCount,
+        };
+      }
 
-      return {
+      const orchestrationResult: OrchestrationResult = {
         mode: "direct",
         question,
         thinking,
         sql,
         results,
+        sqlValidation,
         context: {
           intent: context.intent,
           forms: context.forms?.map((f: any) => f.formName) || [],
@@ -1396,6 +1461,15 @@ export class ThreeModeOrchestrator {
           complexity?.strategy === "preview",
         filterMetrics: context.metadata?.filterMetrics,
       };
+      if (validationError) {
+        orchestrationResult.error = {
+          message: validationError.message,
+          step: "sql_validation",
+          details: { validation: validationError.validation },
+        };
+      }
+
+      return orchestrationResult;
     } catch (error) {
       thinking[thinking.length - 1].status = "error";
       thinking[
@@ -1576,13 +1650,53 @@ export class ThreeModeOrchestrator {
    */
   private async executeSQL(
     sql: string,
-    customerId: string
-  ): Promise<{ rows: any[]; columns: string[] }> {
-    // Validate and fix the SQL query for SQL Server compatibility
-    const fixedSql = validateAndFixQuery(sql);
+    customerId: string,
+    metadata?: { source: QueryMode; intent?: string }
+  ): Promise<{ rows: any[]; columns: string[]; validation: SQLValidationResult }> {
+    const validator = getSQLValidator();
+    const validation = validator.validate(sql);
+    this.logSqlValidationResult(validation, metadata);
 
-    // Execute against customer's database
-    return await executeCustomerQuery(customerId, fixedSql);
+    if (!validation.isValid) {
+      throw new RuntimeSQLValidationError(validation);
+    }
+
+    const fixedSql = validateAndFixQuery(sql);
+    const execution = await executeCustomerQuery(customerId, fixedSql);
+    return {
+      rows: execution.rows,
+      columns: execution.columns,
+      validation,
+    };
+  }
+
+  private logSqlValidationResult(
+    validation: SQLValidationResult,
+    metadata?: { source: QueryMode; intent?: string }
+  ): void {
+    const context = {
+      source: metadata?.source ?? "direct",
+      intent: metadata?.intent ?? "unknown",
+      warnings: validation.warnings.length,
+      errors: validation.errors.length,
+    };
+
+    if (!validation.isValid) {
+      console.warn("[SQLValidator] ❌ Query blocked before execution", {
+        ...context,
+        violations: validation.errors.map((err) => err.type),
+      });
+      return;
+    }
+
+    if (validation.warnings.length > 0) {
+      console.warn("[SQLValidator] ⚠️ Query passed with warnings", {
+        ...context,
+        warnings_detail: validation.warnings,
+      });
+    } else {
+      console.log("[SQLValidator] ✅ Query passed SQL validation", context);
+    }
   }
 
   /**
@@ -1712,5 +1826,18 @@ export class ThreeModeOrchestrator {
     return Object.fromEntries(
       entries.map(([id, value]) => [id, String(value)])
     );
+  }
+}
+
+class RuntimeSQLValidationError extends Error {
+  validation: SQLValidationResult;
+
+  constructor(validation: SQLValidationResult) {
+    super(
+      validation.errors.map((err) => err.message).join("; ") ||
+        "SQL validation failed"
+    );
+    this.validation = validation;
+    this.name = "RuntimeSQLValidationError";
   }
 }
