@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/auth/auth-options", () => ({
@@ -17,14 +17,21 @@ vi.mock("@/lib/services/user-service", () => ({
   },
 }));
 
-const { getServerSession } = await import("next-auth");
-const { POST } = await import("./route");
+// Use dynamic imports inside the test functions instead of top-level await
+let getServerSession: any;
+let POST: any;
 
-const getServerSessionMock = getServerSession as unknown as vi.Mock;
+// Initialize in beforeEach
+let getServerSessionMock: Mock;
 
 describe("POST /api/auth/change-password", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const module = await import("next-auth");
+    getServerSession = module.getServerSession;
+    const routeModule = await import("./route");
+    POST = routeModule.POST;
+    getServerSessionMock = getServerSession as unknown as Mock;
   });
 
   it("returns 401 when user is not authenticated", async () => {

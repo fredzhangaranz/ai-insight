@@ -10,7 +10,11 @@ import {
   createAssessmentTypeSearcher,
   type AssessmentTypeSearchResult,
 } from "../context-discovery/assessment-type-searcher.service";
-import { ClarificationBuilder, type ContextGroundedClarification } from "./clarification-builder.service";
+import {
+  ClarificationBuilder,
+  type ClarificationOption,
+  type ContextGroundedClarification,
+} from "./clarification-builder.service";
 import type { ContextBundle } from "@/lib/services/context-discovery/types";
 import { getInsightGenDbPool } from "@/lib/db";
 
@@ -603,6 +607,31 @@ function buildPlaceholderSlots(template: QueryTemplate): NormalizedSlot[] {
 interface NormalizedSlot extends PlaceholdersSpecSlot {
   rawName: string;
   normalizedName: string;
+}
+
+function ensureNormalizedSlot(
+  slot: PlaceholdersSpecSlot | undefined,
+  placeholder: string
+): NormalizedSlot | undefined {
+  if (!slot) return undefined;
+  if (
+    typeof (slot as NormalizedSlot).rawName === "string" &&
+    typeof (slot as NormalizedSlot).normalizedName === "string"
+  ) {
+    return slot as NormalizedSlot;
+  }
+
+  const rawName = slot.rawName || slot.name || placeholder;
+  if (!rawName) {
+    return undefined;
+  }
+
+  return {
+    ...slot,
+    name: slot.name ?? rawName,
+    rawName,
+    normalizedName: normalizePlaceholderName(rawName),
+  } as NormalizedSlot;
 }
 
 interface SpecializedResolution {
@@ -1712,7 +1741,7 @@ export async function buildContextGroundedClarification(
       `[buildContextGroundedClarification] Built context-grounded clarification for "${placeholder}":`,
       {
         dataType: contextGroundedClarification.dataType,
-        optionCount: contextGroundedClarification.options?.length,
+        optionCount: contextGroundedClarification.richOptions?.length,
         hasContext: !!semanticContext,
       }
     );
@@ -1727,15 +1756,48 @@ export async function buildContextGroundedClarification(
 
     // Fallback to original buildClarification if ClarificationBuilder fails
     // This ensures graceful degradation
-    return buildClarification(
+    const normalizedSlot = ensureNormalizedSlot(slot, placeholder);
+    const fallbackClarification = await buildClarification(
       placeholder,
-      slot,
+      normalizedSlot,
       undefined,
       customerId,
       templateName,
       templateDescription
     );
+    return adaptLegacyClarification(placeholder, fallbackClarification);
   }
+}
+
+function mapLegacyOptionsToRich(
+  options?: string[]
+): ClarificationOption[] | undefined {
+  if (!options || options.length === 0) {
+    return undefined;
+  }
+
+  const mapped = options
+    .map((label) => {
+      if (!label || !label.trim()) return undefined;
+      return {
+        label,
+        value: label,
+      } as ClarificationOption;
+    })
+    .filter((option): option is ClarificationOption => Boolean(option));
+
+  return mapped.length > 0 ? mapped : undefined;
+}
+
+function adaptLegacyClarification(
+  placeholder: string,
+  clarification: ClarificationRequest
+): ContextGroundedClarification {
+  return {
+    ...clarification,
+    placeholder: clarification.placeholder ?? placeholder,
+    richOptions: mapLegacyOptionsToRich(clarification.options),
+  };
 }
 
 /**

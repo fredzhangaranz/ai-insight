@@ -320,23 +320,24 @@ export class DiscoveryLogger {
       );
     } catch (error) {
       console.error("❌ Failed to persist discovery logs:", error);
+      const err = error as any;
       console.error("❌ Error details:", {
-        message: error.message,
-        code: error.code,
-        detail: error.detail,
-        hint: error.hint,
-        position: error.position,
-        internalPosition: error.internalPosition,
-        internalQuery: error.internalQuery,
-        where: error.where,
-        schema: error.schema,
-        table: error.table,
-        column: error.column,
-        dataType: error.dataType,
-        constraint: error.constraint,
-        file: error.file,
-        line: error.line,
-        routine: error.routine,
+        message: err?.message,
+        code: err?.code,
+        detail: err?.detail,
+        hint: err?.hint,
+        position: err?.position,
+        internalPosition: err?.internalPosition,
+        internalQuery: err?.internalQuery,
+        where: err?.where,
+        schema: err?.schema,
+        table: err?.table,
+        column: err?.column,
+        dataType: err?.dataType,
+        constraint: err?.constraint,
+        file: err?.file,
+        line: err?.line,
+        routine: err?.routine,
       });
     }
   }

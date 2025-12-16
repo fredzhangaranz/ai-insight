@@ -40,10 +40,11 @@ export function ActionsPanel({
       return;
     }
 
+    const results = result.results;
     const csv = [
-      result.results.columns.join(","),
-      ...result.results.rows.map((row) =>
-        result.results.columns.map((col) => {
+      results.columns.join(","),
+      ...results.rows.map((row) =>
+        results.columns.map((col) => {
           const value = row[col];
           // Escape quotes and wrap in quotes if contains comma
           const stringValue = value !== null && value !== undefined ? String(value) : "";
@@ -139,7 +140,7 @@ export function ActionsPanel({
         chartConfig={chartConfig}
       />
 
-      {showChartDialog && (
+      {showChartDialog && result.results && (
         <ChartConfigurationDialog
           isOpen={showChartDialog}
           onClose={() => setShowChartDialog(false)}

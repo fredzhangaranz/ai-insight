@@ -784,7 +784,7 @@ export class AIConfigService {
           max_tokens: 10,
           messages: [{ role: "user", content: "test" }],
         }),
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
       });
 
       if (!simpleResponse.ok) {
@@ -805,7 +805,7 @@ export class AIConfigService {
           max_tokens: 10,
           messages: [{ role: "user", content: "test" }],
         }),
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
       });
 
       if (!complexResponse.ok) {
@@ -932,7 +932,7 @@ export class AIConfigService {
         headers: config.configData.apiKey
           ? { Authorization: `Bearer ${config.configData.apiKey}` }
           : {},
-        signal: AbortSignal.timeout(5000), // 5 second timeout
+        signal: (AbortSignal as any).timeout?.(5000) || undefined, // 5 second timeout
       });
 
       if (!modelsResponse.ok) {
@@ -960,7 +960,7 @@ export class AIConfigService {
           messages: [{ role: "user", content: "test" }],
           max_tokens: 10,
         }),
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
       });
 
       if (!simpleResponse.ok) {
@@ -977,7 +977,7 @@ export class AIConfigService {
           messages: [{ role: "user", content: "test" }],
           max_tokens: 10,
         }),
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
       });
 
       if (!complexResponse.ok) {

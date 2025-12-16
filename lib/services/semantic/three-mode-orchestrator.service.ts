@@ -5,6 +5,7 @@
 import { matchTemplate } from "./template-matcher.service";
 import { analyzeComplexity } from "./complexity-detector.service";
 import { ContextDiscoveryService } from "../context-discovery/context-discovery.service";
+import type { ContextBundle, ContextBundleMetadata } from "../context-discovery/types";
 import type { QueryTemplate } from "../query-template.service";
 import {
   executeCustomerQuery,
@@ -964,9 +965,10 @@ export class ThreeModeOrchestrator {
 
           // Semantic search
           contextDiscoveryStep.subSteps[1].status = "complete";
+          const allFields = context.forms?.flatMap(form => form.fields || []) || [];
           contextDiscoveryStep.subSteps[1].details = {
             formsFound: context.forms?.length || 0,
-            fieldsFound: context.fields?.length || 0,
+            fieldsFound: allFields.length,
           };
           contextDiscoveryStep.message =
             "Discovering semantic context... (found forms & fields)";
@@ -1022,6 +1024,8 @@ export class ThreeModeOrchestrator {
 
         // Create minimal fallback context
         context = {
+          customerId,
+          question,
           intent: {
             type: "query",
             confidence: 0.5,
@@ -1111,9 +1115,10 @@ export class ThreeModeOrchestrator {
 
       contextDiscoveryStep.status = "complete";
       contextDiscoveryStep.duration = Date.now() - discoveryStart;
+      const allFields = context.forms?.flatMap(form => form.fields || []) || [];
       contextDiscoveryStep.details = {
         formsFound: context.forms?.length || 0,
-        fieldsFound: context.fields?.length || 0,
+        fieldsFound: allFields.length,
         joinPaths: context.joinPaths?.length || 0,
         unresolvedFilters: unresolvedInfos.length,
       };
@@ -1143,7 +1148,8 @@ export class ThreeModeOrchestrator {
           undefined,
           unresolvedInfos.length
         );
-        context.metadata.filterMetrics = unresolvedSummary;
+        // Type assertion: context.metadata is ContextBundleMetadata which has optional filterMetrics
+        (context.metadata as ContextBundleMetadata).filterMetrics = unresolvedSummary;
 
         // Generate clarifications (AI-powered or fallback to generic)
         const clarifications = await this.buildUnresolvedClarificationRequests(
@@ -1243,11 +1249,19 @@ export class ThreeModeOrchestrator {
         removalClarificationIds
       );
 
-      const contextForLLM = {
-        ...context,
+      // Ensure context is a valid ContextBundle before creating contextForLLM
+      // Type guard: check if context has required ContextBundle properties
+      if (!('customerId' in context) || !('question' in context)) {
+        throw new Error("Invalid context: missing required properties (customerId or question)");
+      }
+      
+      // Type assertion: at this point we know context is a ContextBundle
+      const validContext = context as ContextBundle;
+      const contextForLLM: ContextBundle & { mergedFilterState?: MergedFilterState[] } = {
+        ...validContext,
         mergedFilterState:
-          (context as any).mergedFilterState ||
-          (context as any).mergedFilterStates ||
+          (validContext as any).mergedFilterState ||
+          (validContext as any).mergedFilterStates ||
           [],
       };
 
@@ -1363,7 +1377,7 @@ export class ThreeModeOrchestrator {
         context: {
           intent: context.intent,
           forms: context.forms?.map((f: any) => f.formName) || [],
-          fields: context.fields?.map((f: any) => f.fieldName) || [],
+          fields: context.forms?.flatMap((f: any) => f.fields?.map((field: any) => field.fieldName) || []) || [],
           joinPaths: context.joinPaths || [],
           // Phase 7D: Include clarification history and assumptions for query history caching
           clarificationsProvided: clarifications || null,

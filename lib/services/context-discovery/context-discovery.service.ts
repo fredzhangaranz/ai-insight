@@ -81,7 +81,7 @@ export class ContextDiscoveryService {
 
     try {
       // Step 1: Intent Classification
-      logger.startTimer("step1", "context_discovery", "intent_classifier");
+      logger.startTimer("step1");
       const intentResult = await this.runIntentClassification(request, logger);
       const intentDuration = logger.endTimer(
         "step1",
@@ -110,7 +110,7 @@ export class ContextDiscoveryService {
       // Step 1.5: Filter Value Mapping (NEW - Phase 2, Task 2.4)
       // Map filter values from intent classification using terminology mapper
       if (intentResult.filters && intentResult.filters.length > 0) {
-        logger.startTimer("step1_5", "context_discovery", "filter_value_mapper");
+        logger.startTimer("step1_5");
         logger.info(
           "context_discovery",
           "orchestrator",
@@ -153,7 +153,7 @@ export class ContextDiscoveryService {
       );
 
       const parallelStart = Date.now();
-      logger.startTimer("step2_3_5a_parallel", "context_discovery", "parallel_bundle");
+      logger.startTimer("step2_3_5a_parallel");
 
       const userTerms = this.extractUserTerms(intentResult);
       const parallelExecutor = getParallelExecutorService();
@@ -223,7 +223,7 @@ export class ContextDiscoveryService {
       );
 
       // Step 4: Join Path Planning
-      logger.startTimer("step4", "context_discovery", "join_path_planner");
+      logger.startTimer("step4");
       const requiredTables = this.extractRequiredTables(forms, semanticResults);
       const joinPaths =
         requiredTables.length > 1
@@ -256,7 +256,7 @@ export class ContextDiscoveryService {
       );
 
       // Step 5: Context Assembly
-      logger.startTimer("step5", "context_discovery", "context_assembler");
+      logger.startTimer("step5");
       const contextAssembler = getContextAssemblerService();
       const bundle = contextAssembler.assembleContextBundle({
         customerId: request.customerId,
@@ -355,7 +355,7 @@ export class ContextDiscoveryService {
         selected_model: modelSelection.modelId,
         user_selected: request.modelId,
         rationale: modelSelection.rationale,
-        cost_tier: modelSelection.costTier,
+        cost_tier: (modelSelection as any).costTier,
       });
 
       const intentClassifier = getIntentClassifierService();
@@ -742,7 +742,7 @@ export class ContextDiscoveryService {
               assessmentTypeId: match.assessmentTypeId,
               assessmentName: match.assessmentName,
               semanticConcept: match.semanticConcept,
-              semanticCategory: match.semanticCategory,
+              semanticCategory: match.semanticCategory as 'clinical' | 'billing' | 'administrative' | 'treatment',
               confidence: match.confidence,
               reason: `Matched keyword: "${keyword}"`,
             });

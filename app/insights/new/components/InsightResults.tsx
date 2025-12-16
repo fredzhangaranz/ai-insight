@@ -131,7 +131,7 @@ export function InsightResults({
             <tbody className="bg-white divide-y divide-gray-200">
               {result.results?.rows.slice(0, 10).map((row, i) => (
                 <tr key={i}>
-                  {result.results.columns.map((col) => (
+                  {result.results?.columns.map((col) => (
                     <td key={col} className="px-4 py-3 text-sm text-gray-900">
                       {row[col] !== null && row[col] !== undefined
                         ? String(row[col])

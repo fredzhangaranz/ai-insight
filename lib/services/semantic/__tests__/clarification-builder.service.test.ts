@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ClarificationBuilder } from "../clarification-builder.service";
-import type { PlaceholdersSpecSlot } from "../template-validator.service";
+import type { PlaceholdersSpecSlot } from "../../template-validator.service";
 import type { ContextBundle } from "@/lib/services/context-discovery/types";
 
 describe("ClarificationBuilder", () => {
@@ -95,8 +95,8 @@ describe("ClarificationBuilder", () => {
       expect(result.dataType).toBe("percentage");
       expect(result.unit).toBe("%");
       expect(result.range).toEqual({ min: 0, max: 100 });
-      expect(result.options).toHaveLength(4);
-      expect(result.options?.[0]).toMatchObject({
+      expect(result.richOptions).toHaveLength(4);
+      expect(result.richOptions?.[0]).toMatchObject({
         label: expect.stringContaining("25%"),
         value: 0.25,
       });
@@ -115,8 +115,8 @@ describe("ClarificationBuilder", () => {
       );
 
       expect(result.dataType).toBe("percentage");
-      expect(result.options).toBeDefined();
-      expect(result.options?.length).toBeGreaterThan(0);
+      expect(result.richOptions).toBeDefined();
+      expect(result.richOptions?.length).toBeGreaterThan(0);
     });
   });
 
@@ -135,8 +135,8 @@ describe("ClarificationBuilder", () => {
       );
 
       expect(result.dataType).toBe("time_window");
-      expect(result.options).toHaveLength(4);
-      expect(result.options?.[0]).toMatchObject({
+      expect(result.richOptions).toHaveLength(4);
+      expect(result.richOptions?.[0]).toMatchObject({
         label: "4 weeks",
         value: 28,
         unit: "days",
@@ -189,7 +189,7 @@ describe("ClarificationBuilder", () => {
 
       expect(result.dataType).toBe("time_window");
       // Still provides preset options even without context
-      expect(result.options).toBeDefined();
+      expect(result.richOptions).toBeDefined();
     });
   });
 
@@ -313,7 +313,7 @@ describe("ClarificationBuilder", () => {
 
       expect(result.placeholder).toBe("timeWindow");
       // Still provides default options even without context
-      expect(result.options).toBeDefined();
+      expect(result.richOptions).toBeDefined();
     });
 
     it("should handle undefined slot with minimal clarification", async () => {
@@ -397,7 +397,7 @@ describe("ClarificationBuilder", () => {
       );
 
       expect(result.dataType).toBe("percentage");
-      expect(result.options?.length).toBeGreaterThan(0);
+      expect(result.richOptions?.length).toBeGreaterThan(0);
       expect(result.recommendedOptions).toContain(0.25);
       expect(result.field).toBe("minAreaReduction");
     });

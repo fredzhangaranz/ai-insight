@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withErrorHandling } from "@/app/api/error-handler";
+import { withErrorHandling, createErrorResponse } from "@/app/api/error-handler";
 import { requireAuth } from "@/lib/middleware/auth-middleware";
 import { listFunnelsByAssessmentKey } from "@/lib/services/funnel-storage.service";
 import { SCHEMA_SCOPE_SENTINEL } from "@/lib/services/funnel-cache.service";

@@ -310,7 +310,7 @@ async function buildUserPrompt(
   prompt += `- Metrics: ${intent.metrics?.join(", ") || "None"}\n`;
   prompt += `- Confidence: ${(intent.confidence ?? 0).toFixed(2)}\n\n`;
 
-  prompt += formatFiltersSection(intent.filters, context.mergedFilterState);
+  prompt += formatFiltersSection(intent.filters, (context as ContextBundle & { mergedFilterState?: MergedFilterState[] }).mergedFilterState);
   prompt += formatFormsSection(context.forms || []);
   prompt += formatAssessmentTypesSection(context.assessmentTypes || []); // Phase 5A
   if (templateReferences && templateReferences.length > 0) {

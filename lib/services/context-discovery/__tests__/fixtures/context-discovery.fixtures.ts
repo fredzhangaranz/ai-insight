@@ -352,9 +352,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
       metrics: ["healing_rate"],
       filters: [
         {
-          concept: "wound_classification",
-          userTerm: "diabetic wounds",
-          value: "diabetic_ulcer",
+          operator: "equals",
+          userPhrase: "diabetic wounds",
+          value: null,
         },
       ],
       timeRange: { unit: "months", value: 6 },
@@ -422,9 +422,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
         metrics: ["healing_rate"],
         filters: [
           {
-            concept: "wound_classification",
-            userTerm: "diabetic wounds",
-            value: "diabetic_ulcer",
+            operator: "equals",
+            userPhrase: "diabetic wounds",
+            value: null,
           },
         ],
         timeRange: { unit: "months", value: 6 },
@@ -609,14 +609,14 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
       metrics: ["healing_rate"],
       filters: [
         {
-          concept: "wound_classification",
-          userTerm: "diabetic wounds",
-          value: "diabetic_ulcer",
+          operator: "equals",
+          userPhrase: "diabetic wounds",
+          value: null,
         },
         {
-          concept: "wound_classification",
-          userTerm: "venous wounds",
-          value: "venous_ulcer",
+          operator: "equals",
+          userPhrase: "venous wounds",
+          value: null,
         },
       ],
       timeRange: { unit: "months", value: 3 },
@@ -692,14 +692,14 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
         metrics: ["healing_rate"],
         filters: [
           {
-            concept: "wound_classification",
-            userTerm: "diabetic wounds",
-            value: "diabetic_ulcer",
+            operator: "equals",
+            userPhrase: "diabetic wounds",
+            value: null,
           },
           {
-            concept: "wound_classification",
-            userTerm: "venous wounds",
-            value: "venous_ulcer",
+            operator: "equals",
+            userPhrase: "venous wounds",
+            value: null,
           },
         ],
         timeRange: { unit: "months", value: 3 },
@@ -782,14 +782,14 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
       metrics: ["infection_risk_score"],
       filters: [
         {
-          concept: "wound_classification",
-          userTerm: "diabetic wounds",
-          value: "diabetic_ulcer",
+          operator: "equals",
+          userPhrase: "diabetic wounds",
+          value: null,
         },
         {
-          concept: "infection_status",
-          userTerm: "high risk",
-          value: "infection_high",
+          operator: "equals",
+          userPhrase: "high risk",
+          value: null,
         },
       ],
       timeRange: { unit: "months", value: 1 },
@@ -865,14 +865,14 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
         metrics: ["infection_risk_score"],
         filters: [
           {
-            concept: "wound_classification",
-            userTerm: "diabetic wounds",
-            value: "diabetic_ulcer",
+            operator: "equals",
+            userPhrase: "diabetic wounds",
+            value: null,
           },
           {
-            concept: "infection_status",
-            userTerm: "high risk",
-            value: "infection_high",
+            operator: "equals",
+            userPhrase: "high risk",
+            value: null,
           },
         ],
         timeRange: { unit: "months", value: 1 },
@@ -1079,8 +1079,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
       metrics: ["assessment_duration"],
       filters: [
         {
-          concept: "organizational_unit",
-          userTerm: "clinic unit",
+          operator: "equals",
+          userPhrase: "clinic unit",
+          value: null,
         },
       ],
       timeRange: { unit: "months", value: 1 },
@@ -1154,8 +1155,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
         metrics: ["assessment_duration"],
         filters: [
           {
-            concept: "organizational_unit",
-            userTerm: "clinic unit",
+            operator: "equals",
+            userPhrase: "clinic unit",
+            value: null,
           },
         ],
         timeRange: { unit: "months", value: 1 },
@@ -1234,9 +1236,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
       metrics: ["healing_rate"],
       filters: [
         {
-          concept: "pressure_injury_stage",
-          userTerm: "stage 3",
-          value: "pressure_stage_3",
+          operator: "equals",
+          userPhrase: "stage 3",
+          value: null,
         },
       ],
       timeRange: { unit: "days", value: 90 },
@@ -1304,9 +1306,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
         metrics: ["healing_rate"],
         filters: [
           {
-            concept: "pressure_injury_stage",
-            userTerm: "stage 3",
-            value: "pressure_stage_3",
+            operator: "equals",
+            userPhrase: "stage 3",
+            value: null,
           },
         ],
         timeRange: { unit: "days", value: 90 },
@@ -1381,9 +1383,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
       metrics: ["assessment_count"],
       filters: [
         {
-          concept: "wound_classification",
-          userTerm: "diabetic wounds",
-          value: "diabetic_ulcer",
+          operator: "equals",
+          userPhrase: "diabetic wounds",
+          value: null,
         },
       ],
       timeRange: { unit: "months", value: 6 },
@@ -1451,9 +1453,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
         metrics: ["assessment_count"],
         filters: [
           {
-            concept: "wound_classification",
-            userTerm: "diabetic wounds",
-            value: "diabetic_ulcer",
+            operator: "equals",
+            userPhrase: "diabetic wounds",
+            value: null,
           },
         ],
         timeRange: { unit: "months", value: 6 },
@@ -1535,9 +1537,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
       metrics: ["encounter_duration"],
       filters: [
         {
-          concept: "wound_classification",
-          userTerm: "diabetic wounds",
-          value: "diabetic_ulcer",
+          operator: "equals",
+          userPhrase: "diabetic wounds",
+          value: null,
         },
       ],
       timeRange: { unit: "months", value: 3 },
@@ -1605,9 +1607,9 @@ export const CONTEXT_DISCOVERY_FIXTURES: ContextDiscoveryFixture[] = [
         metrics: ["encounter_duration"],
         filters: [
           {
-            concept: "wound_classification",
-            userTerm: "diabetic wounds",
-            value: "diabetic_ulcer",
+            operator: "equals",
+            userPhrase: "diabetic wounds",
+            value: null,
           },
         ],
         timeRange: { unit: "months", value: 3 },

@@ -32,7 +32,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('Field variable clarification with enum values', () => {
     it('should include enum values from form field in clarification options', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -88,7 +87,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include enum values from non-form field in clarification options', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusColumn} = 'value'",
@@ -142,7 +140,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should not include options if field has no enum values', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {textField} = 'value'",
@@ -189,7 +186,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should work without customerId (no enum values)', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",
@@ -221,7 +217,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should handle database errors gracefully', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -265,7 +260,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('Non-field variable clarification (no enum values)', () => {
     it('should not fetch enum values for non-field placeholders', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE days_since_start <= {timeWindow}',
@@ -300,7 +294,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include examples from slot definition', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE value > {threshold}',
@@ -334,7 +327,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('extractFieldNamePatternFromPlaceholder', () => {
     it('should extract pattern from statusField placeholder', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -378,7 +370,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should extract pattern from typeColumn placeholder', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {typeColumn} = 'value'",
@@ -424,7 +415,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('Template context in clarifications (Task 4.5C)', () => {
     it('should include templateName and templateSummary in clarifications', async () => {
       const template: QueryTemplate = {
-        id: 'area-reduction-template',
         name: 'Area Reduction Template',
         description: 'Tracks wound healing over time',
         version: 1,
@@ -468,7 +458,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include semantic in clarification for field_name placeholders', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -505,7 +494,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include reason from slot description', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Analysis Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE value > {threshold}',
@@ -534,7 +522,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include reason from semantic if no description', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Time Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE created_at > NOW() - INTERVAL {window} days',
@@ -565,7 +552,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('Preset option generation for range-based slots (Task 4.5B)', () => {
     it('should generate time window presets when no value detected', async () => {
       const template: QueryTemplate = {
-        id: 'healing-rate-template',
         name: 'Healing Rate Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE measured_at > NOW() - INTERVAL {timeWindow} days',
@@ -601,7 +587,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should generate percentage presets when no value detected', async () => {
       const template: QueryTemplate = {
-        id: 'area-reduction-template',
         name: 'Area Reduction Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE area_reduction >= {threshold}',
@@ -638,7 +623,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should NOT generate presets when template provides examples', async () => {
       const template: QueryTemplate = {
-        id: 'custom-time-template',
         name: 'Custom Time Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE days <= {timeWindow}',
@@ -671,7 +655,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should NOT generate presets for non-time-window semantics', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE custom_field = {customValue}',
@@ -700,7 +683,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should prioritize enum values over presets', async () => {
       const template: QueryTemplate = {
-        id: 'field-template',
         name: 'Field Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -748,7 +730,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should handle percent_threshold semantic variant', async () => {
       const template: QueryTemplate = {
-        id: 'threshold-template',
         name: 'Threshold Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE value >= {threshold}',
@@ -782,7 +763,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should handle time_window_days semantic variant', async () => {
       const template: QueryTemplate = {
-        id: 'days-template',
         name: 'Days Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE days > {daysWindow}',
@@ -818,7 +798,6 @@ describe('Clarification Generation with Enum Values', () => {
       // In this case, enum values should take precedence (already tested above)
       // This test just documents the expected behavior
       const template: QueryTemplate = {
-        id: 'mixed-template',
         name: 'Mixed Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE period = {period}',
@@ -854,7 +833,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('Semantic-aware prompt generation (Task 4.5A)', () => {
     it('should generate semantic-aware prompt for time_window', async () => {
       const template: QueryTemplate = {
-        id: 'time-template',
         name: 'Time Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE days > {timeWindow}',
@@ -887,7 +865,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should generate semantic-aware prompt for percentage', async () => {
       const template: QueryTemplate = {
-        id: 'percent-template',
         name: 'Percent Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE reduction >= {threshold}',
@@ -920,7 +897,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should generate semantic-aware prompt for assessment_type', async () => {
       const template: QueryTemplate = {
-        id: 'assessment-template',
         name: 'Assessment Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessments WHERE type = {assessmentType}',
@@ -951,7 +927,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include inline examples from options', async () => {
       const template: QueryTemplate = {
-        id: 'field-template',
         name: 'Field Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -997,7 +972,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include skip guidance for optional fields', async () => {
       const template: QueryTemplate = {
-        id: 'optional-template',
         name: 'Optional Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE value > {minValue}',
@@ -1029,7 +1003,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should NOT add skip guidance for required fields', async () => {
       const template: QueryTemplate = {
-        id: 'required-template',
         name: 'Required Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE value > {minValue}',
@@ -1060,7 +1033,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should use slot description if provided (overrides semantic)', async () => {
       const template: QueryTemplate = {
-        id: 'custom-description-template',
         name: 'Custom Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE value > {threshold}',
@@ -1092,7 +1064,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should handle field_name semantic', async () => {
       const template: QueryTemplate = {
-        id: 'field-name-template',
         name: 'Field Name Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",
@@ -1132,7 +1103,6 @@ describe('Clarification Generation with Enum Values', () => {
 
       for (const { semantic, expected } of semantics) {
         const template: QueryTemplate = {
-          id: `test-${semantic}`,
           name: 'Test Template',
           version: 1,
           sqlPattern: 'SELECT * FROM data',
@@ -1165,7 +1135,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('Inline confirmation prompts for auto-detected values (Task 4.5D)', () => {
     it('should generate confirmation for high-confidence time window detection', async () => {
       const template: QueryTemplate = {
-        id: 'time-confirm-template',
         name: 'Time Confirm Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE days <= {timeWindow}',
@@ -1204,7 +1173,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should generate confirmation for percentage detection', async () => {
       const template: QueryTemplate = {
-        id: 'percent-confirm-template',
         name: 'Percent Confirm Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE improvement >= {threshold}',
@@ -1240,7 +1208,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include template name in confirmation', async () => {
       const template: QueryTemplate = {
-        id: 'named-template',
         name: 'Area Reduction Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE days <= {timeWindow}',
@@ -1273,7 +1240,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should not generate confirmation for low-confidence values', async () => {
       const template: QueryTemplate = {
-        id: 'low-conf-template',
         name: 'Low Conf Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE value > {threshold}',
@@ -1304,7 +1270,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should not generate confirmation if value is not extracted', async () => {
       const template: QueryTemplate = {
-        id: 'no-extract-template',
         name: 'No Extract Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE field = {value}',
@@ -1334,7 +1299,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should format time window confirmation with weeks and days', async () => {
       const template: QueryTemplate = {
-        id: 'time-format-template',
         name: 'Time Format Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE measured_at > NOW() - INTERVAL {timeWindow} days',
@@ -1373,7 +1337,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should format percentage confirmation as percentage', async () => {
       const template: QueryTemplate = {
-        id: 'percent-format-template',
         name: 'Percent Format Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE improvement >= {threshold}',
@@ -1414,7 +1377,6 @@ describe('Clarification Generation with Enum Values', () => {
   describe('Natural-language clarification fallback (Task 4.5E)', () => {
     it('should offer natural language fallback when no options exist', async () => {
       const template: QueryTemplate = {
-        id: 'freeform-template',
         name: 'Freeform Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE custom_filter = {customValue}',
@@ -1451,7 +1413,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should NOT offer natural language when predefined options exist', async () => {
       const template: QueryTemplate = {
-        id: 'options-template',
         name: 'Options Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -1514,7 +1475,6 @@ describe('Clarification Generation with Enum Values', () => {
 
       for (const scenario of scenarios) {
         const template: QueryTemplate = {
-          id: `freeform-${scenario.semantic}`,
           name: `Freeform ${scenario.semantic}`,
           version: 1,
           sqlPattern: 'SELECT * FROM data WHERE value = {customValue}',
@@ -1547,7 +1507,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should include placeholder guidance for text input', async () => {
       const template: QueryTemplate = {
-        id: 'text-template',
         name: 'Text Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE description LIKE {searchTerm}',
@@ -1580,7 +1539,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should set appropriate character limits', async () => {
       const template: QueryTemplate = {
-        id: 'limit-template',
         name: 'Limit Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE notes = {userNotes}',
@@ -1614,7 +1572,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should NOT offer natural language when preset options are available', async () => {
       const template: QueryTemplate = {
-        id: 'preset-template',
         name: 'Preset Template',
         version: 1,
         sqlPattern: 'SELECT * FROM wounds WHERE improvement >= {threshold}',
@@ -1647,7 +1604,6 @@ describe('Clarification Generation with Enum Values', () => {
 
     it('should handle optional freeform fields', async () => {
       const template: QueryTemplate = {
-        id: 'optional-freeform',
         name: 'Optional Freeform',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE filter = {optionalFilter}',

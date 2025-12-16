@@ -210,7 +210,7 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = (
           queryResults,
           {
             chartType: selectedChartType,
-            mapping: normalizedMapping,
+            mapping: normalizedMapping as any,
           },
           selectedChartType
         );

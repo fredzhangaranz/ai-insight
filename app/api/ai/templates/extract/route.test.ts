@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/config/template-flags", () => ({
@@ -15,9 +15,9 @@ import { extractTemplateDraft } from "@/lib/services/template-extraction.service
 import { TemplateServiceError } from "@/lib/services/template.service";
 
 const isTemplateSystemEnabledMock =
-  isTemplateSystemEnabled as unknown as vi.Mock;
+  isTemplateSystemEnabled as unknown as Mock;
 const extractTemplateDraftMock =
-  extractTemplateDraft as unknown as vi.Mock;
+  extractTemplateDraft as unknown as Mock;
 
 describe("POST /api/ai/templates/extract", () => {
   beforeEach(() => {

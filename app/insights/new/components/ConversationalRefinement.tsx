@@ -83,11 +83,11 @@ export function ConversationalRefinement({
       const assistantMessage: RefinementMessage = {
         role: "assistant",
         content: data.explanation || "I've updated the query based on your request.",
-        sqlDiff: data.sqlChanged
+        sqlDiff: data.sqlChanged && latestSql && data.newSql
           ? {
               before: latestSql,
-              after: data.newSql,
-              explanation: data.changeExplanation || "Modified the query as requested",
+              after: String(data.newSql),
+              explanation: String(data.changeExplanation || "Modified the query as requested"),
             }
           : undefined,
         timestamp: new Date(),
@@ -115,8 +115,10 @@ export function ConversationalRefinement({
   };
 
   const handleRerunQuery = () => {
-    onRerun(latestSql, result.question || "");
-    setIsOpen(false);
+    if (latestSql) {
+      onRerun(latestSql, result.question || "");
+      setIsOpen(false);
+    }
   };
 
   const quickActions = [

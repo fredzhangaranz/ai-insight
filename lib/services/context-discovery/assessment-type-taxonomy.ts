@@ -380,7 +380,7 @@ export const ASSESSMENT_TYPE_TAXONOMY: AssessmentTypeConcept[] = [
   {
     concept: 'clinical_medical_history',
     category: 'clinical',
-    subcategory: 'history',
+    subcategory: 'other',
     description: 'Medical history, past medical history, or health background',
     namePatterns: [
       /medical\s*history/i,
@@ -397,7 +397,7 @@ export const ASSESSMENT_TYPE_TAXONOMY: AssessmentTypeConcept[] = [
   {
     concept: 'clinical_medication_record',
     category: 'clinical',
-    subcategory: 'medication',
+    subcategory: 'other',
     description: 'Medication list, prescription record, or drug administration',
     namePatterns: [
       /medication/i,
@@ -414,7 +414,7 @@ export const ASSESSMENT_TYPE_TAXONOMY: AssessmentTypeConcept[] = [
   {
     concept: 'clinical_risk_assessment',
     category: 'clinical',
-    subcategory: 'risk',
+    subcategory: 'other',
     description: 'Risk assessment or screening tool',
     namePatterns: [
       /risk\s*assessment/i,
@@ -431,7 +431,7 @@ export const ASSESSMENT_TYPE_TAXONOMY: AssessmentTypeConcept[] = [
   {
     concept: 'clinical_investigation',
     category: 'clinical',
-    subcategory: 'investigation',
+    subcategory: 'other',
     description: 'Investigation history, diagnostic tests, or lab results',
     namePatterns: [
       /investigation/i,
@@ -448,7 +448,7 @@ export const ASSESSMENT_TYPE_TAXONOMY: AssessmentTypeConcept[] = [
   {
     concept: 'clinical_limb_assessment',
     category: 'clinical',
-    subcategory: 'limb',
+    subcategory: 'other',
     description: 'Lower or upper limb assessment (circulation, sensation, mobility)',
     namePatterns: [
       /limb\s*assessment/i,

@@ -32,7 +32,6 @@ describe('Field Variable Placeholder Resolution', () => {
   describe('shouldUseFieldVariableResolver', () => {
     it('should detect field variable placeholder by semantic', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'pending'",
@@ -74,7 +73,6 @@ describe('Field Variable Placeholder Resolution', () => {
 
     it('should detect field variable placeholder by name keyword', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {stateColumn} = 'active'",
@@ -116,7 +114,6 @@ describe('Field Variable Placeholder Resolution', () => {
   describe('extractFieldNamePattern', () => {
     it('should extract "coding" from "by coding status"', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -160,7 +157,6 @@ describe('Field Variable Placeholder Resolution', () => {
 
     it('should extract "workflow" from "workflow status"', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",
@@ -205,7 +201,6 @@ describe('Field Variable Placeholder Resolution', () => {
   describe('searchFieldByName', () => {
     it('should search form fields first', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",
@@ -246,7 +241,6 @@ describe('Field Variable Placeholder Resolution', () => {
 
     it('should fall back to non-form fields if no form field found', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",
@@ -293,7 +287,6 @@ describe('Field Variable Placeholder Resolution', () => {
 
     it('should return null when no field found', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",
@@ -328,7 +321,6 @@ describe('Field Variable Placeholder Resolution', () => {
   describe('Field with enum values', () => {
     it('should resolve field name for enum field', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE {statusField} IN ({statusValues})',
@@ -379,7 +371,6 @@ describe('Field Variable Placeholder Resolution', () => {
 
     it('should work without customerId (falls back to generic resolution)', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",
@@ -413,7 +404,6 @@ describe('Field Variable Placeholder Resolution', () => {
   describe('Error handling', () => {
     it('should handle database errors gracefully', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: "SELECT * FROM data WHERE {field} = 'value'",

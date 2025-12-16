@@ -23,6 +23,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { TemplateListItem } from "@/lib/services/template.service";
 
 interface TemplateCatalogClientProps {
@@ -146,6 +153,15 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+interface TemplateDetailDialogProps {
+  template: TemplateListItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPublish?: (templateId: string) => void;
+  onDeprecate?: (templateId: string) => void;
+  actionLoading?: boolean;
+}
+
 function TemplateDetailDialog({
   template,
   open,
@@ -207,7 +223,7 @@ function TemplateDetailDialog({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {template.placeholdersSpec.slots.map((slot) => (
+                          {template.placeholdersSpec.slots.map((slot: any) => (
                             <TableRow key={slot.name}>
                               <TableCell>{slot.name}</TableCell>
                               <TableCell>{slot.type ?? "—"}</TableCell>
@@ -235,7 +251,7 @@ function TemplateDetailDialog({
                   </h3>
                   {template.questionExamples?.length ? (
                     <ul className="mt-2 list-disc space-y-2 pl-6">
-                      {template.questionExamples.map((example) => (
+                      {template.questionExamples.map((example: string, idx: number) => (
                         <li key={example}>{example}</li>
                       ))}
                     </ul>
@@ -278,7 +294,7 @@ function TemplateDetailDialog({
                 </h3>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {template.keywords?.length ? (
-                    template.keywords.map((keyword) => (
+                    template.keywords.map((keyword: string) => (
                       <Badge key={keyword} variant="secondary">
                         {keyword}
                       </Badge>
@@ -295,7 +311,7 @@ function TemplateDetailDialog({
                 </h3>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {template.tags?.length ? (
-                    template.tags.map((tag) => (
+                    template.tags.map((tag: string) => (
                       <Badge key={tag} variant="outline">
                         {tag}
                       </Badge>
@@ -323,7 +339,7 @@ function TemplateDetailDialog({
                       </Button>
                       <Button
                         size="sm"
-                        onClick={() => onPublish(template.templateId!)}
+                        onClick={() => onPublish?.(String(template.templateId!))}
                         disabled={actionLoading}
                       >
                         {actionLoading ? "Publishing…" : "Publish"}
@@ -334,7 +350,7 @@ function TemplateDetailDialog({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onDeprecate(template.templateId!)}
+                      onClick={() => onDeprecate?.(String(template.templateId!))}
                       disabled={actionLoading}
                     >
                       {actionLoading ? "Updating…" : "Deprecate"}
@@ -522,7 +538,7 @@ export default function TemplateCatalogClient({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All tags</SelectItem>
-              {availableTags.map((tag) => (
+              {availableTags.map((tag: string) => (
                 <SelectItem key={tag} value={tag}>
                   {tag}
                 </SelectItem>

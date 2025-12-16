@@ -19,6 +19,9 @@ export interface PlaceholdersSpecSlot {
   description?: string;
   examples?: unknown[];
   patterns?: string[];
+  rawName?: string;
+  normalizedName?: string;
+  placeholder?: string;
 }
 
 export interface PlaceholdersSpec {

@@ -19,13 +19,15 @@ export interface ClarificationOption {
   value: any;
   count?: number; // For enum values - usage count
   unit?: string; // For numeric values - e.g., "days", "%"
+  description?: string;
+  sqlConstraint?: string;
+  isDefault?: boolean;
 }
 
 /**
  * Full clarification response with context and options
  */
-export interface ContextGroundedClarification
-  extends Omit<ClarificationRequest, "options"> {
+export interface ContextGroundedClarification extends ClarificationRequest {
   field?: string;
   dataType?:
     | "numeric"
@@ -34,7 +36,7 @@ export interface ContextGroundedClarification
     | "enum"
     | "date"
     | "text";
-  options?: ClarificationOption[];
+  richOptions?: ClarificationOption[];
   recommendedOptions?: any[];
   range?: { min: number; max: number };
   unit?: string;
@@ -84,6 +86,7 @@ export class ClarificationBuilder {
     // Route based on semantic type
     if (semantic === "percentage" || semantic === "percent_threshold") {
       return this.buildPercentageClarification(
+        placeholder,
         slot,
         contextBundle,
         templateName,
@@ -97,6 +100,7 @@ export class ClarificationBuilder {
       semantic === "time_point"
     ) {
       return this.buildTimeWindowClarification(
+        placeholder,
         slot,
         contextBundle,
         customerId,
@@ -111,6 +115,7 @@ export class ClarificationBuilder {
       semantic === "field_enum"
     ) {
       return await this.buildEnumClarification(
+        placeholder,
         slot,
         contextBundle,
         customerId,
@@ -125,6 +130,7 @@ export class ClarificationBuilder {
       semantic === "count"
     ) {
       return this.buildNumericClarification(
+        placeholder,
         slot,
         contextBundle,
         templateName,
@@ -134,6 +140,7 @@ export class ClarificationBuilder {
 
     // Default: text-based clarification
     return this.buildTextClarification(
+      placeholder,
       slot,
       contextBundle,
       templateName,
@@ -145,13 +152,24 @@ export class ClarificationBuilder {
    * Build percentage/reduction clarification with preset options
    */
   private static buildPercentageClarification(
+    placeholder: string,
     slot: PlaceholdersSpecSlot,
     contextBundle: ContextBundle | undefined,
     templateName?: string,
     templateDescription?: string
   ): ContextGroundedClarification {
+    const placeholderName = this.resolvePlaceholderName(slot, placeholder);
+    const examples = this.normalizeExamples(slot.examples);
+
+    const richOptions: ClarificationOption[] = [
+      { label: "25% (minor improvement)", value: 0.25 },
+      { label: "50% (moderate improvement)", value: 0.5 },
+      { label: "75% (significant improvement)", value: 0.75 },
+      { label: "Custom value", value: null },
+    ];
+
     return {
-      placeholder: slot.rawName,
+      placeholder: placeholderName,
       prompt: `What percentage ${
         slot.description?.toLowerCase() || "value"
       } are you looking for?`,
@@ -159,15 +177,11 @@ export class ClarificationBuilder {
       dataType: "percentage",
       range: { min: 0, max: 100 },
       unit: "%",
-      options: [
-        { label: "25% (minor improvement)", value: 0.25 },
-        { label: "50% (moderate improvement)", value: 0.5 },
-        { label: "75% (significant improvement)", value: 0.75 },
-        { label: "Custom value", value: null },
-      ],
+      richOptions,
+      options: this.toLegacyOptions(richOptions),
       recommendedOptions: [0.25, 0.5, 0.75],
-      examples: slot.examples || ["25%", "50%", "75%"],
-      semantic: slot.semantic,
+      examples: examples ?? ["25%", "50%", "75%"],
+      semantic: slot.semantic ?? undefined,
       templateName,
       templateSummary: templateDescription,
     };
@@ -177,12 +191,16 @@ export class ClarificationBuilder {
    * Build time window clarification with field context
    */
   private static buildTimeWindowClarification(
+    placeholder: string,
     slot: PlaceholdersSpecSlot,
     contextBundle: ContextBundle | undefined,
     customerId: string,
     templateName?: string,
     templateDescription?: string
   ): ContextGroundedClarification {
+    const placeholderName = this.resolvePlaceholderName(slot, placeholder);
+    const examples = this.normalizeExamples(slot.examples);
+
     // Find date fields in context for "available fields" list
     const availableFields: string[] = [];
     if (contextBundle?.forms) {
@@ -199,8 +217,15 @@ export class ClarificationBuilder {
       }
     }
 
+    const richOptions: ClarificationOption[] = [
+      { label: "4 weeks", value: 28, unit: "days" },
+      { label: "8 weeks", value: 56, unit: "days" },
+      { label: "12 weeks", value: 84, unit: "days" },
+      { label: "Custom time point", value: null },
+    ];
+
     return {
-      placeholder: slot.rawName,
+      placeholder: placeholderName,
       prompt: `What time point would you like to analyze?${
         availableFields.length > 0
           ? ` (from ${availableFields.join(", ")})`
@@ -208,15 +233,11 @@ export class ClarificationBuilder {
       }`,
       field: slot.name,
       dataType: "time_window",
-      options: [
-        { label: "4 weeks", value: 28, unit: "days" },
-        { label: "8 weeks", value: 56, unit: "days" },
-        { label: "12 weeks", value: 84, unit: "days" },
-        { label: "Custom timepoint", value: null },
-      ],
+      richOptions,
+      options: this.toLegacyOptions(richOptions),
       availableFields: availableFields.length > 0 ? availableFields : undefined,
-      examples: slot.examples || ["4 weeks", "8 weeks", "12 weeks"],
-      semantic: slot.semantic,
+      examples: examples ?? ["4 weeks", "8 weeks", "12 weeks"],
+      semantic: slot.semantic ?? undefined,
       templateName,
       templateSummary: templateDescription,
     };
@@ -226,13 +247,16 @@ export class ClarificationBuilder {
    * Build enum clarification with database values
    */
   private static async buildEnumClarification(
+    placeholder: string,
     slot: PlaceholdersSpecSlot,
     contextBundle: ContextBundle | undefined,
     customerId: string,
     templateName?: string,
     templateDescription?: string
   ): Promise<ContextGroundedClarification> {
-    const fieldName = slot.name || slot.rawName;
+    const placeholderName = this.resolvePlaceholderName(slot, placeholder);
+    const fieldName = slot.name || placeholderName;
+    const examples = this.normalizeExamples(slot.examples);
 
     // Try to find matching field in context for enum values
     let enumValues: ClarificationOption[] = [];
@@ -257,15 +281,20 @@ export class ClarificationBuilder {
       }
     }
 
+    const richOptions =
+      enumValues.length > 0 ? enumValues : undefined;
+
     return {
-      placeholder: slot.rawName,
+      placeholder: placeholderName,
       prompt: `Which value(s) would you like to filter by?`,
       field: fieldName,
       dataType: "enum",
-      options: enumValues.length > 0 ? enumValues : undefined,
+      richOptions,
+      options: this.toLegacyOptions(richOptions),
       multiple: true,
-      examples: slot.examples || enumValues.slice(0, 3).map((v) => v.label),
-      semantic: slot.semantic,
+      examples:
+        examples || enumValues.slice(0, 3).map((v) => v.label ?? ""),
+      semantic: slot.semantic ?? undefined,
       templateName,
       templateSummary: templateDescription,
     };
@@ -275,21 +304,30 @@ export class ClarificationBuilder {
    * Build numeric clarification with range hints
    */
   private static buildNumericClarification(
+    placeholder: string,
     slot: PlaceholdersSpecSlot,
     contextBundle: ContextBundle | undefined,
     templateName?: string,
     templateDescription?: string
   ): ContextGroundedClarification {
+    const placeholderName = this.resolvePlaceholderName(slot, placeholder);
+    const examples = this.normalizeExamples(slot.examples);
+
+    const richOptions: ClarificationOption[] = [
+      { label: "Custom value", value: null },
+    ];
+
     return {
-      placeholder: slot.rawName,
+      placeholder: placeholderName,
       prompt: `What ${
         slot.description?.toLowerCase() || "value"
       } are you looking for?`,
       field: slot.name,
       dataType: "numeric",
-      options: [{ label: "Custom value", value: null }],
-      examples: slot.examples || ["0", "100", "500"],
-      semantic: slot.semantic,
+      richOptions,
+      options: this.toLegacyOptions(richOptions),
+      examples: examples ?? ["0", "100", "500"],
+      semantic: slot.semantic ?? undefined,
       templateName,
       templateSummary: templateDescription,
     };
@@ -299,23 +337,28 @@ export class ClarificationBuilder {
    * Build text-based clarification with semantic guidance
    */
   private static buildTextClarification(
+    placeholder: string,
     slot: PlaceholdersSpecSlot,
     contextBundle: ContextBundle | undefined,
     templateName?: string,
     templateDescription?: string
   ): ContextGroundedClarification {
+    const placeholderName = this.resolvePlaceholderName(slot, placeholder);
+    const examples = this.normalizeExamples(slot.examples);
+
     return {
-      placeholder: slot.rawName,
-      prompt: slot.description || `Please provide a value for ${slot.rawName}`,
+      placeholder: placeholderName,
+      prompt:
+        slot.description || `Please provide a value for ${placeholderName}`,
       dataType: "text",
-      examples: slot.examples,
-      semantic: slot.semantic,
+      examples,
+      semantic: slot.semantic ?? undefined,
       templateName,
       templateSummary: templateDescription,
       freeformAllowed: {
         allowed: true,
         placeholder: "Enter your value here...",
-        hint: slot.examples ? `e.g., ${slot.examples.join(" or ")}` : undefined,
+        hint: examples ? `e.g., ${examples.join(" or ")}` : undefined,
         minChars: 1,
         maxChars: 500,
       },
@@ -341,6 +384,45 @@ export class ClarificationBuilder {
         maxChars: 500,
       },
     };
+  }
+
+  private static toLegacyOptions(
+    options?: ClarificationOption[]
+  ): string[] | undefined {
+    if (!options || options.length === 0) {
+      return undefined;
+    }
+
+    const labels = options
+      .map((option) => option.label || (option.value != null ? String(option.value) : undefined))
+      .filter((label): label is string => Boolean(label && label.trim()));
+
+    return labels.length > 0 ? labels : undefined;
+  }
+
+  private static resolvePlaceholderName(
+    slot: PlaceholdersSpecSlot,
+    fallback: string
+  ): string {
+    return slot.name?.trim() || fallback;
+  }
+
+  private static normalizeExamples(
+    examples: unknown[] | undefined
+  ): string[] | undefined {
+    if (!Array.isArray(examples)) {
+      return undefined;
+    }
+
+    const normalized = examples
+      .map((example) => {
+        if (typeof example === "string") return example;
+        if (example === undefined || example === null) return undefined;
+        return String(example);
+      })
+      .filter((example): example is string => Boolean(example && example.trim()));
+
+    return normalized.length > 0 ? normalized : undefined;
   }
 
   /**

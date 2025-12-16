@@ -37,7 +37,6 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
 
   // Mock template for area reduction queries
   const createAreaReductionTemplate = (): QueryTemplate => ({
-    id: "area-reduction-template",
     name: "Area Reduction at Time Point",
     intent: "temporal_proximity_query",
     description: "Calculate area reduction at specific time point",
@@ -604,7 +603,6 @@ describe("Snippet Guardrails - End-to-End Edge Cases", () => {
   describe("Edge Cases", () => {
     it("should handle queries with no placeholders", async () => {
       const template: QueryTemplate = {
-        id: "simple-template",
         name: "Simple Query",
         intent: "aggregation_by_category",
         description: "Simple aggregation",

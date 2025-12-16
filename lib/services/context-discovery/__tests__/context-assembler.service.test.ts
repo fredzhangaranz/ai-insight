@@ -14,13 +14,13 @@ import {
 } from "../context-assembler.service";
 
 const BASE_INTENT = {
-  type: "outcome_analysis",
-  scope: "patient_cohort",
-  metrics: ["healing_rate"],
-  filters: [],
+  type: "outcome_analysis" as const,
+  scope: "patient_cohort" as const,
+  metrics: ["healing_rate"] as string[],
+  filters: [] as any[],
   confidence: 0.92,
   reasoning: "Mock intent reasoning",
-} as const;
+};
 
 describe("ContextAssemblerService", () => {
   const service = new ContextAssemblerService();

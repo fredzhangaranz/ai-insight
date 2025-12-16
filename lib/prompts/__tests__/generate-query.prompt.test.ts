@@ -314,7 +314,7 @@ describe("LLM Response Validation", () => {
               {
                 id: "admission",
                 label: "Admission",
-                sqlConstraint: null,
+                sqlConstraint: null as any,
               },
             ],
             allowCustom: true,

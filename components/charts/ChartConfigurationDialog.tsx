@@ -136,12 +136,12 @@ export const ChartConfigurationDialog: React.FC<
           queryResults,
           {
             chartType: chartType,
-            mapping: normalizedMapping,
+            mapping: normalizedMapping as any,
           },
           chartType
         );
         setChartData(shapedData);
-        setChartMapping(normalizedMapping);
+        setChartMapping(normalizedMapping as ChartMapping);
       }
 
       setStep("preview");

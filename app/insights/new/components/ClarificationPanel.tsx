@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HelpCircle, CheckCircle2, AlertTriangle } from "lucide-react";
-import type { ClarificationRequest } from "@/lib/hooks/useInsights";
+import type { ClarificationRequest, ClarificationOption } from "@/lib/prompts/generate-query.prompt";
 
 interface ClarificationPanelProps {
   question: string;

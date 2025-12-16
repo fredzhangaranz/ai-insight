@@ -40,7 +40,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const authResult = await requireAdmin(req);
   if (authResult instanceof NextResponse) return authResult;
 
-  let payload: Partial<CreateCustomerInput> & { connectionString?: string };
+  let payload: Partial<CreateCustomerInput> & { connectionString?: string; notes?: string };
   try {
     payload = await req.json();
   } catch {
@@ -76,16 +76,27 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     return createErrorResponse.validationError(errors.join(" "));
   }
 
+  // At this point, we know these fields are defined due to validation above
+  const validatedPayload = payload as {
+    name: string;
+    code: string;
+    silhouetteVersion: string;
+    connectionString: string;
+    deploymentType?: string | null;
+    silhouetteWebUrl?: string | null;
+    notes?: string;
+  };
+
   try {
     const customer = await createCustomer({
-      name: payload.name.trim(),
-      code: payload.code.trim(),
-      silhouetteVersion: payload.silhouetteVersion.trim(),
-      deploymentType: payload.deploymentType ?? null,
-      silhouetteWebUrl: payload.silhouetteWebUrl?.trim() ?? null,
-      connectionString: payload.connectionString.trim(),
+      name: validatedPayload.name.trim(),
+      code: validatedPayload.code.trim(),
+      silhouetteVersion: validatedPayload.silhouetteVersion.trim(),
+      deploymentType: validatedPayload.deploymentType ?? null,
+      silhouetteWebUrl: validatedPayload.silhouetteWebUrl?.trim() ?? null,
+      connectionString: validatedPayload.connectionString.trim(),
       createdBy: authResult.user.username ?? authResult.user.id ?? null,
-      discoveryNote: typeof payload.notes === "string" ? payload.notes.trim() : null,
+      discoveryNote: typeof validatedPayload.notes === "string" ? validatedPayload.notes.trim() : null,
     });
 
     return NextResponse.json(

@@ -78,10 +78,6 @@ async function generateQueryHandler(
       desiredFields: Array.isArray(desiredFields) ? desiredFields : undefined,
       scope,
       subQuestionId: parsedSubQuestionId,
-      userContext: {
-        id: userId,
-        username: authResult.user.username || authResult.user.name || null,
-      },
     });
 
     console.log("✅ SQL generated successfully");

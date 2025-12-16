@@ -308,9 +308,11 @@ function SQLTab({ result }: { result: InsightResult }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(result.sql);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (result.sql) {
+      navigator.clipboard.writeText(result.sql);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (

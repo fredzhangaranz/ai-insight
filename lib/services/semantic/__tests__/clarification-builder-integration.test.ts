@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ClarificationBuilder } from "../clarification-builder.service";
 import { buildContextGroundedClarification } from "../template-placeholder.service";
-import type { PlaceholdersSpecSlot } from "../template-validator.service";
+import type { PlaceholdersSpecSlot } from "../../template-validator.service";
 import type { ContextBundle } from "@/lib/services/context-discovery/types";
 
 describe("ClarificationBuilder Integration", () => {
@@ -145,8 +145,8 @@ describe("ClarificationBuilder Integration", () => {
         templateSummary: "Measure wound healing progress over time",
       });
 
-      expect(result.options).toBeDefined();
-      expect(result.options?.length).toBeGreaterThan(0);
+      expect(result.richOptions).toBeDefined();
+      expect(result.richOptions?.length).toBeGreaterThan(0);
       expect(result.range).toEqual({ min: 0, max: 100 });
     });
   });
@@ -183,9 +183,9 @@ describe("ClarificationBuilder Integration", () => {
       expect(result.availableFields).toContain("baselineDate");
 
       // Should provide preset time window options
-      expect(result.options).toBeDefined();
-      expect(result.options?.some((opt) => opt.value === 28)).toBe(true); // 4 weeks
-      expect(result.options?.some((opt) => opt.value === 84)).toBe(true); // 12 weeks
+      expect(result.richOptions).toBeDefined();
+      expect(result.richOptions?.some((opt) => opt.value === 28)).toBe(true); // 4 weeks
+      expect(result.richOptions?.some((opt) => opt.value === 84)).toBe(true); // 12 weeks
     });
   });
 
@@ -372,7 +372,7 @@ describe("ClarificationBuilder Integration", () => {
       expect(result).toHaveProperty("dataType", "percentage");
       expect(result).toHaveProperty("field");
       expect(result).toHaveProperty("options");
-      expect(result.options?.length).toBeGreaterThan(0);
+      expect(result.richOptions?.length).toBeGreaterThan(0);
 
       // Semantic context provides these enhancements:
       // 1. Percentage field type detection

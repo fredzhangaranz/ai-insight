@@ -83,7 +83,6 @@ describe("template-placeholder.service time window resolution", () => {
 describe('template-placeholder.service - Time Window Parsing', () => {
   it('should parse various time expressions correctly', async () => {
     const template: QueryTemplate = {
-      id: 'time-test',
       name: 'Time Test',
       version: 1,
       sqlPattern: 'SELECT * WHERE days <= {timeWindow}',
@@ -133,7 +132,6 @@ describe('template-placeholder.service - Time Window Parsing', () => {
 
 describe("template-placeholder.service - Percentage resolution", () => {
   const template: QueryTemplate = {
-    id: "percentage-test",
     name: "Percentage Test",
     version: 1,
     sqlPattern: "SELECT {reductionThreshold} AS threshold",
@@ -200,7 +198,6 @@ describe('template-placeholder.service - Assessment Type Resolution', () => {
 
   it('should resolve assessment type placeholder', async () => {
     const template: QueryTemplate = {
-      id: 'assessment-test',
       name: 'Assessment Test',
       version: 1,
       sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -262,7 +259,6 @@ describe('template-placeholder.service - Field Variable Resolution', () => {
 
   it('should resolve field variable placeholder', async () => {
     const template: QueryTemplate = {
-      id: 'field-test',
       name: 'Field Test',
       version: 1,
       sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -320,7 +316,6 @@ describe('template-placeholder.service - Clarification Generation', () => {
 
   it('should generate clarification for unresolved placeholder', async () => {
     const template: QueryTemplate = {
-      id: 'clarification-test',
       name: 'Clarification Test',
       version: 1,
       sqlPattern: 'SELECT * FROM data WHERE status = {statusValue}',
@@ -354,7 +349,6 @@ describe('template-placeholder.service - Clarification Generation', () => {
 
   it('should include enum values in clarification for field variables', async () => {
     const template: QueryTemplate = {
-      id: 'clarification-enum-test',
       name: 'Clarification Enum Test',
       version: 1,
       sqlPattern: "SELECT * FROM data WHERE {statusField} = 'value'",
@@ -425,7 +419,6 @@ describe('template-placeholder.service - Multi-Placeholder Integration', () => {
 
   it('should resolve multiple placeholders of different types', async () => {
     const template: QueryTemplate = {
-      id: 'multi-test',
       name: 'Multi Test',
       version: 1,
       sqlPattern: `
@@ -520,7 +513,6 @@ describe('template-placeholder.service - Multi-Placeholder Integration', () => {
 
   it('should handle fully resolved template', async () => {
     const template: QueryTemplate = {
-      id: 'fully-resolved-test',
       name: 'Fully Resolved Test',
       version: 1,
       sqlPattern: 'SELECT * FROM data WHERE days <= {timeWindow}',
@@ -552,7 +544,6 @@ describe('template-placeholder.service - Multi-Placeholder Integration', () => {
 
   it('should handle template with default values', async () => {
     const template: QueryTemplate = {
-      id: 'default-test',
       name: 'Default Test',
       version: 1,
       sqlPattern: 'SELECT * FROM data WHERE tolerance = {tolerance}',
@@ -583,7 +574,6 @@ describe('template-placeholder.service - Multi-Placeholder Integration', () => {
 
   it('should handle template with no placeholders', async () => {
     const template: QueryTemplate = {
-      id: 'no-placeholder-test',
       name: 'No Placeholder Test',
       version: 1,
       sqlPattern: 'SELECT * FROM data',

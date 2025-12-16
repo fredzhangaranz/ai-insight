@@ -6,9 +6,9 @@ import { AIConfigLoader } from "../../config/ai-config-loader";
  * Open WebUI typically exposes an OpenAI-compatible API.
  */
 export class OpenWebUIProvider extends BaseProvider {
-  private baseUrl: string;
+  private baseUrl!: string;
   private apiKey?: string;
-  private timeout: number;
+  private timeout!: number;
   private configLoaded: boolean = false;
   private configLoadPromise: Promise<void> | null = null;
 

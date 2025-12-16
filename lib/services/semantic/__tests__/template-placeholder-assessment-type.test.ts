@@ -28,7 +28,6 @@ describe('Assessment Type Placeholder Resolution', () => {
   describe('shouldUseAssessmentTypeResolver', () => {
     it('should detect assessment type placeholder by semantic', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentTypeId}',
@@ -78,7 +77,6 @@ describe('Assessment Type Placeholder Resolution', () => {
 
     it('should detect assessment type placeholder by name keyword', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM data WHERE form_type = {formType}',
@@ -123,7 +121,6 @@ describe('Assessment Type Placeholder Resolution', () => {
   describe('extractAssessmentTypeKeywords', () => {
     it('should extract "wound" from "wound assessments"', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -165,7 +162,6 @@ describe('Assessment Type Placeholder Resolution', () => {
 
     it('should extract "visit" from "visit documentation"', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -196,7 +192,6 @@ describe('Assessment Type Placeholder Resolution', () => {
 
     it('should extract "billing" from "billing forms"', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -240,7 +235,6 @@ describe('Assessment Type Placeholder Resolution', () => {
   describe('resolveAssessmentTypePlaceholder', () => {
     it('should resolve to best match when multiple results', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -294,7 +288,6 @@ describe('Assessment Type Placeholder Resolution', () => {
 
     it('should return null when no keywords found', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -327,7 +320,6 @@ describe('Assessment Type Placeholder Resolution', () => {
 
     it('should return null when no matches found', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -362,7 +354,6 @@ describe('Assessment Type Placeholder Resolution', () => {
   describe('ResolvedAssessmentType audit trail', () => {
     it('should store original text and resolved details', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',
@@ -414,7 +405,6 @@ describe('Assessment Type Placeholder Resolution', () => {
   describe('Integration with other placeholder types', () => {
     it('should resolve assessment type alongside time window', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern:
@@ -465,7 +455,6 @@ describe('Assessment Type Placeholder Resolution', () => {
 
     it('should work without customerId (falls back to generic resolution)', async () => {
       const template: QueryTemplate = {
-        id: 'test-template',
         name: 'Test Template',
         version: 1,
         sqlPattern: 'SELECT * FROM assessment WHERE type_id = {assessmentType}',

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { AIConfigService } from "../services/ai-config.service";
+import { AIConfigService, type AIConfiguration } from "../services/ai-config.service";
 
 // Mock the database connection
 const mockQuery = vi.fn();
@@ -75,7 +75,12 @@ describe("AIConfigService", () => {
           providerName: "Local LLM",
           isEnabled: true,
           isDefault: false,
-          configData: { baseUrl: "http://localhost:8080", apiKey: null },
+          configData: { 
+          baseUrl: "http://localhost:8080", 
+          apiKey: null,
+          simpleQueryModelId: "gpt-4",
+          complexQueryModelId: "gpt-4"
+        },
           createdBy: "admin",
           createdDate: new Date("2024-01-01"),
           lastModifiedBy: "admin",
@@ -112,7 +117,11 @@ describe("AIConfigService", () => {
           providerName: "Claude 3.5 Sonnet",
           isEnabled: true,
           isDefault: true,
-          configData: { apiKey: "sk-ant-test" },
+          configData: { 
+          apiKey: "sk-ant-test",
+          simpleQueryModelId: "claude-3-5-sonnet-20241022",
+          complexQueryModelId: "claude-3-5-sonnet-20241022"
+        },
           createdBy: "system",
           createdDate: new Date("2024-01-01"),
           lastModifiedBy: "system",
@@ -177,7 +186,11 @@ describe("AIConfigService", () => {
         providerName: "Claude Test",
         isEnabled: true,
         isDefault: false,
-        configData: { apiKey: "sk-ant-api03-test-key" },
+        configData: { 
+          apiKey: "sk-ant-api03-test-key",
+          simpleQueryModelId: "claude-3-5-sonnet-20241022",
+          complexQueryModelId: "claude-3-5-sonnet-20241022"
+        },
         createdBy: "system",
         createdDate: new Date(),
         lastModifiedBy: "system",
@@ -187,7 +200,7 @@ describe("AIConfigService", () => {
       };
 
       // Mock getConfigurationByType
-      vi.spyOn(service, "getConfigurationByType").mockResolvedValue(mockConfig);
+      vi.spyOn(service, "getConfigurationByType").mockResolvedValue(mockConfig as AIConfiguration);
 
       const result = await service.validateConfiguration("anthropic");
 
@@ -203,7 +216,12 @@ describe("AIConfigService", () => {
         providerName: "Local LLM",
         isEnabled: true,
         isDefault: false,
-        configData: { baseUrl: "http://localhost:8080", apiKey: null },
+        configData: { 
+          baseUrl: "http://localhost:8080", 
+          apiKey: null,
+          simpleQueryModelId: "gpt-4",
+          complexQueryModelId: "gpt-4"
+        },
         createdBy: "system",
         createdDate: new Date(),
         lastModifiedBy: "system",
@@ -213,7 +231,7 @@ describe("AIConfigService", () => {
       };
 
       // Mock getConfigurationByType
-      vi.spyOn(service, "getConfigurationByType").mockResolvedValue(mockConfig);
+      vi.spyOn(service, "getConfigurationByType").mockResolvedValue(mockConfig as AIConfiguration);
 
       // Mock fetch for health check
       global.fetch = vi.fn(() =>
@@ -245,7 +263,12 @@ describe("AIConfigService", () => {
         providerName: "Local LLM",
         isEnabled: true,
         isDefault: false,
-        configData: { baseUrl: "invalid-url", apiKey: null },
+        configData: { 
+          baseUrl: "invalid-url", 
+          apiKey: null,
+          simpleQueryModelId: "gpt-4",
+          complexQueryModelId: "gpt-4"
+        },
         createdBy: "system",
         createdDate: new Date(),
         lastModifiedBy: "system",
@@ -272,7 +295,11 @@ describe("AIConfigService", () => {
           providerName: "Claude",
           isEnabled: true,
           isDefault: true,
-          configData: { apiKey: "sk-ant-test" },
+          configData: { 
+          apiKey: "sk-ant-test",
+          simpleQueryModelId: "claude-3-5-sonnet-20241022",
+          complexQueryModelId: "claude-3-5-sonnet-20241022"
+        },
           createdBy: "system",
           createdDate: new Date(),
           lastModifiedBy: "system",
@@ -283,7 +310,7 @@ describe("AIConfigService", () => {
       ];
 
       vi.spyOn(service, "getEnabledConfigurations").mockResolvedValue(
-        mockConfigs
+        mockConfigs as AIConfiguration[]
       );
       vi.spyOn(service, "validateConfigurationByName").mockResolvedValue({
         providerType: "anthropic",
@@ -310,7 +337,11 @@ describe("AIConfigService", () => {
         providerName: "Claude",
         isEnabled: true,
         isDefault: true,
-        configData: { apiKey: "sk-ant-test" },
+        configData: { 
+          apiKey: "sk-ant-test",
+          simpleQueryModelId: "claude-3-5-sonnet-20241022",
+          complexQueryModelId: "claude-3-5-sonnet-20241022"
+        },
         createdBy: "system",
         createdDate: new Date(),
         lastModifiedBy: "system",
@@ -319,7 +350,7 @@ describe("AIConfigService", () => {
         validationMessage: null,
       };
 
-      vi.spyOn(service, "getDefaultConfiguration").mockResolvedValue(mockConfig);
+      vi.spyOn(service, "getDefaultConfiguration").mockResolvedValue(mockConfig as AIConfiguration);
 
       const result = await service.findBestAvailableProvider();
       expect(result).toEqual(mockConfig);
