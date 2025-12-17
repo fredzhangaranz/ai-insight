@@ -203,7 +203,7 @@
 │ │- Context │ │  │ │- Errors  │ │  │              │
 │ └──────────┘ │  │ └──────────┘ │  │              │
 └──────────────┘  └──────────────┘  └──────────────┘
-          
+
           ▼                ▼                ▼
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
 │/performance  │  │   /users     │  │   /errors    │
@@ -381,71 +381,92 @@ Error Analysis
 
 async function getQueryDetail(queryId: number): Promise<QueryDetail> {
   const pool = await getInsightGenDbPool();
-  
+
   // Get base query
-  const queryResult = await pool.query(`
+  const queryResult = await pool.query(
+    `
     SELECT * FROM "QueryHistory" WHERE id = $1
-  `, [queryId]);
-  
+  `,
+    [queryId]
+  );
+
   if (queryResult.rows.length === 0) {
-    throw new Error('Query not found');
+    throw new Error("Query not found");
   }
-  
+
   const query = queryResult.rows[0];
-  
+
   // Get correlated audit data (all in parallel)
-  const [intent, context, template, clarifications, performance, validation] = 
+  const [intent, context, template, clarifications, performance, validation] =
     await Promise.all([
       // Intent classification
-      pool.query(`
+      pool.query(
+        `
         SELECT * FROM "IntentClassificationLog"
         WHERE customer_id = $1 
           AND question = $2
           AND created_at >= $3 - INTERVAL '5 seconds'
           AND created_at <= $3 + INTERVAL '5 seconds'
         LIMIT 1
-      `, [query.customerId, query.question, query.createdAt]),
-      
+      `,
+        [query.customerId, query.question, query.createdAt]
+      ),
+
       // Context discovery
-      pool.query(`
+      pool.query(
+        `
         SELECT * FROM "ContextDiscoveryRun"
         WHERE customer_id = $1 
           AND question = $2
           AND created_at >= $3 - INTERVAL '5 seconds'
         LIMIT 1
-      `, [query.customerId, query.question, query.createdAt]),
-      
+      `,
+        [query.customerId, query.question, query.createdAt]
+      ),
+
       // Template usage
-      pool.query(`
+      pool.query(
+        `
         SELECT * FROM "TemplateUsage"
         WHERE "questionText" = $1
           AND "matchedAt" >= $2 - INTERVAL '5 seconds'
         LIMIT 1
-      `, [query.question, query.createdAt]),
-      
+      `,
+        [query.question, query.createdAt]
+      ),
+
       // Clarifications (may be multiple)
-      pool.query(`
+      pool.query(
+        `
         SELECT * FROM "ClarificationAudit"
         WHERE query_history_id = $1
         ORDER BY created_at
-      `, [queryId]),
-      
+      `,
+        [queryId]
+      ),
+
       // Performance metrics
-      pool.query(`
+      pool.query(
+        `
         SELECT * FROM "QueryPerformanceMetrics"
         WHERE question = $1
           AND "customerId"::TEXT = $2::TEXT
           AND "createdAt" >= $3 - INTERVAL '5 seconds'
         LIMIT 1
-      `, [query.question, query.customerId, query.createdAt]),
-      
+      `,
+        [query.question, query.customerId, query.createdAt]
+      ),
+
       // SQL validation
-      pool.query(`
+      pool.query(
+        `
         SELECT * FROM "SqlValidationLog"
         WHERE query_history_id = $1
-      `, [queryId])
+      `,
+        [queryId]
+      ),
     ]);
-  
+
   // Assemble complete audit trail
   return {
     query: query,
@@ -454,7 +475,7 @@ async function getQueryDetail(queryId: number): Promise<QueryDetail> {
     template: template.rows[0] || null,
     clarifications: clarifications.rows,
     performance: performance.rows[0] || null,
-    validation: validation.rows[0] || null
+    validation: validation.rows[0] || null,
   };
 }
 ```
@@ -598,11 +619,13 @@ Admin Takes Action
 ### 🔴 CRITICAL (Must have before deployment)
 
 1. **ClarificationAudit** table + service (Task 4.5G)
+
    - Enables UX measurement
    - Validates Task 4.S21 effectiveness
    - Required for A/B testing
 
 2. **SqlValidationLog** table + service (Task 4.S23 Extension)
+
    - Tracks SQL error patterns
    - Identifies prompt improvement opportunities
    - Prevents repeated errors
@@ -616,6 +639,7 @@ Admin Takes Action
 ### 🟡 IMPORTANT (Should have for Phase 2)
 
 4. **SnippetUsageLog** (Task 4.S10)
+
    - Monitors snippet effectiveness
    - Validates LLM compliance
 

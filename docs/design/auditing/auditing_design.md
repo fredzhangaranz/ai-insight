@@ -1,10 +1,31 @@
 # Auditing & Telemetry Architecture
 
-**Document Version:** 1.0  
+**Document Version:** 2.0  
 **Created:** 2025-01-16  
 **Last Updated:** 2025-01-16  
-**Status:** Comprehensive Design  
+**Status:** Comprehensive Design (Updated with 4.S21 and 4.S23 completions)  
 **Purpose:** Unified auditing architecture for production deployment and user feedback collection
+
+---
+
+## 🚀 Latest Updates (2025-01-16)
+
+**Recent Completions:**
+- ✅ **Task 4.S21** - Context-grounded clarifications (rich options ready for audit tracking)
+- ✅ **Task 4.S23** - SQL validation layer (runtime validation ready for logging)
+
+**Current Priority:**
+- 🔴 **Task 4.5G** - Clarification audit trail (blocks UX measurement)
+- 🔴 **Task 4.S23 Extension** - SQL validation logging (blocks error pattern analysis)
+- 🔴 **Task 4.16** - Admin dashboard (blocks visual analytics)
+
+**Deployment Timeline:** 9-11 days to readiness
+
+**📄 Related Documents:**
+- **DEPLOYMENT_READINESS_AUDIT_PLAN.md** - Updated plan with implementation roadmap
+- **AUDIT_QUICK_START.md** - Fast reference for developers
+- **ARCHITECTURE_DIAGRAM.md** - Visual diagrams
+- **IMPLEMENTATION_CHECKLIST.md** - Step-by-step guide
 
 ---
 
@@ -55,6 +76,7 @@ As we prepare to deploy the prototype for internal developers and service consul
 ### Primary Goals
 
 #### 1. Usage Pattern Discovery
+
 - **What queries are developers asking?**
   - Frequency of queries by intent type
   - Common clarification requests
@@ -65,6 +87,7 @@ As we prepare to deploy the prototype for internal developers and service consul
   - Assessment type discovery usage
 
 #### 2. Issue Identification
+
 - **Where are queries failing?**
   - SQL validation errors by type
   - Context discovery empty results
@@ -75,6 +98,7 @@ As we prepare to deploy the prototype for internal developers and service consul
   - Repeated failed queries
 
 #### 3. Effectiveness Measurement
+
 - **Are templates working?**
   - Template match accuracy
   - Template execution success rate
@@ -85,6 +109,7 @@ As we prepare to deploy the prototype for internal developers and service consul
   - Terminology mapping accuracy
 
 #### 4. Improvement Guidance
+
 - **What needs more work?**
   - Ontology gaps (user terms not mapped)
   - Template opportunities (common patterns not templated)
@@ -104,6 +129,7 @@ As we prepare to deploy the prototype for internal developers and service consul
 ### Database Schema (8 Audit Tables)
 
 #### 1. QueryHistory (Migration 023)
+
 **Purpose:** Auto-saved query history (ephemeral, all questions asked)
 
 ```sql
@@ -121,6 +147,7 @@ CREATE TABLE "QueryHistory" (
 ```
 
 **What's tracked:**
+
 - ✅ Every question asked by every user
 - ✅ SQL generated (for quality review)
 - ✅ Execution mode (template/semantic/direct)
@@ -132,6 +159,7 @@ CREATE TABLE "QueryHistory" (
 ---
 
 #### 2. QueryPerformanceMetrics (Migration 028)
+
 **Purpose:** Orchestration telemetry (filter metrics, durations, clarification flags)
 
 ```sql
@@ -152,6 +180,7 @@ CREATE TABLE "QueryPerformanceMetrics" (
 ```
 
 **What's tracked:**
+
 - ✅ Filter resolution metrics (overrides, errors, confidence)
 - ✅ Query duration (total orchestration time)
 - ✅ Clarification requests (flag only, not details)
@@ -162,6 +191,7 @@ CREATE TABLE "QueryPerformanceMetrics" (
 ---
 
 #### 3. TemplateUsage (Migration 011)
+
 **Purpose:** Runtime template usage logging (for learning/analytics)
 
 ```sql
@@ -181,6 +211,7 @@ CREATE TABLE "TemplateUsage" (
 ```
 
 **What's tracked:**
+
 - ✅ Which template was used
 - ✅ Match reason (keywords, examples)
 - ✅ Success/failure outcome
@@ -191,6 +222,7 @@ CREATE TABLE "TemplateUsage" (
 ---
 
 #### 4. ContextDiscoveryRun (Migration 021)
+
 **Purpose:** Store bundled results for each context discovery execution
 
 ```sql
@@ -208,6 +240,7 @@ CREATE TABLE "ContextDiscoveryRun" (
 ```
 
 **What's tracked:**
+
 - ✅ Full semantic context for every query
 - ✅ Intent classification result
 - ✅ Discovery confidence scores
@@ -216,6 +249,7 @@ CREATE TABLE "ContextDiscoveryRun" (
 ---
 
 #### 5. IntentClassificationLog (Migration 033)
+
 **Purpose:** Per-question classification telemetry and observability
 
 ```sql
@@ -234,6 +268,7 @@ CREATE TABLE "IntentClassificationLog" (
 ```
 
 **What's tracked:**
+
 - ✅ Intent classification method (pattern vs AI)
 - ✅ Confidence scores
 - ✅ Reasoning for classification
@@ -242,6 +277,7 @@ CREATE TABLE "IntentClassificationLog" (
 ---
 
 #### 6. IntentClassificationDisagreement (Migration 033)
+
 **Purpose:** Track cases where pattern-based and AI-based classification disagree
 
 ```sql
@@ -260,6 +296,7 @@ CREATE TABLE "IntentClassificationDisagreement" (
 ```
 
 **What's tracked:**
+
 - ✅ Disagreements between classification methods
 - ✅ Resolution status for review
 - ✅ Notes for pattern improvement
@@ -267,6 +304,7 @@ CREATE TABLE "IntentClassificationDisagreement" (
 ---
 
 #### 7. DiscoveryLog (Migration 019)
+
 **Purpose:** Detailed logs for each discovery run (debugging)
 
 ```sql
@@ -284,6 +322,7 @@ CREATE TABLE "DiscoveryLog" (
 ```
 
 **What's tracked:**
+
 - ✅ Step-by-step discovery pipeline logs
 - ✅ Warnings and errors with context
 - ✅ Component-level performance
@@ -293,6 +332,7 @@ CREATE TABLE "DiscoveryLog" (
 ---
 
 #### 8. OntologyAuditLog (Migration 016)
+
 **Purpose:** Track mutations to clinical ontology concepts
 
 ```sql
@@ -307,6 +347,7 @@ CREATE TABLE "OntologyAuditLog" (
 ```
 
 **What's tracked:**
+
 - ✅ Ontology create/update/delete operations
 - ✅ Who made changes
 - ✅ When changes occurred
@@ -316,9 +357,11 @@ CREATE TABLE "OntologyAuditLog" (
 ### Existing Audit Services
 
 #### 1. TemplateUsageLoggerService
+
 **File:** `lib/services/template/template-usage-logger.service.ts`
 
 **Methods:**
+
 - `logUsageStart()` - Records when template is matched
 - `logUsageOutcome()` - Records success/failure result
 
@@ -327,9 +370,11 @@ CREATE TABLE "OntologyAuditLog" (
 ---
 
 #### 2. DiscoveryLogger
+
 **File:** `lib/services/discovery-logger.ts`
 
 **Methods:**
+
 - `debug()`, `info()`, `warn()`, `error()` - Structured logging
 - `startTimer()`, `endTimer()` - Performance tracking
 - `flush()` - Persist logs to database
@@ -339,9 +384,11 @@ CREATE TABLE "OntologyAuditLog" (
 ---
 
 #### 3. MetricsMonitor
+
 **File:** `lib/monitoring.ts`
 
 **Methods:**
+
 - `logQueryMetrics()` - Query execution metrics
 - `logAIMetrics()` - AI model usage metrics
 - `logCacheMetrics()` - Cache performance
@@ -394,12 +441,12 @@ CREATE TABLE "OntologyAuditLog" (
 
 #### 2. Audit Granularity Levels
 
-| Level | Purpose | Retention | Examples |
-|-------|---------|-----------|----------|
-| **Overview** | High-level KPIs | 90 days | Query count, success rate, avg latency |
-| **Pipeline** | End-to-end tracking | 30 days | QueryHistory, mode distribution |
-| **Component** | Detailed debugging | 14 days | Intent classification, context discovery |
-| **Diagnostic** | Troubleshooting | 7 days | DiscoveryLog, stack traces |
+| Level          | Purpose             | Retention | Examples                                 |
+| -------------- | ------------------- | --------- | ---------------------------------------- |
+| **Overview**   | High-level KPIs     | 90 days   | Query count, success rate, avg latency   |
+| **Pipeline**   | End-to-end tracking | 30 days   | QueryHistory, mode distribution          |
+| **Component**  | Detailed debugging  | 14 days   | Intent classification, context discovery |
+| **Diagnostic** | Troubleshooting     | 7 days    | DiscoveryLog, stack traces               |
 
 #### 3. Audit Flow
 
@@ -492,11 +539,13 @@ User Question
 ### Critical Gaps (Must Implement Before Deployment)
 
 #### 1. Clarification Audit Trail (Task 4.5G)
+
 **Status:** ❌ NOT IMPLEMENTED  
 **Priority:** 🔴 HIGH  
 **Impact:** Cannot measure clarification UX or acceptance rate
 
 **What's Missing:**
+
 - No record of clarifications presented to user
 - No record of user responses (selected option vs custom input)
 - No acceptance rate tracking
@@ -510,35 +559,35 @@ CREATE TABLE "ClarificationAudit" (
   query_history_id INTEGER NOT NULL REFERENCES "QueryHistory"(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
-  
+
   -- Template context
   template_version_id INTEGER REFERENCES "TemplateVersion"(id) ON DELETE SET NULL,
   template_name VARCHAR(255),
-  
+
   -- Placeholder context
   placeholder VARCHAR(255) NOT NULL,
   placeholder_semantic VARCHAR(100),  -- 'percentage', 'time_window', 'enum', etc.
   placeholder_required BOOLEAN DEFAULT TRUE,
-  
+
   -- Clarification presented
   clarification_type VARCHAR(50) NOT NULL,  -- 'context_grounded' | 'basic' | 'confirmation'
   prompt_text TEXT NOT NULL,
   options_presented JSONB,  -- Array of { label, value, count }
   examples_shown TEXT[],
-  
+
   -- User response
   response_type VARCHAR(50),  -- 'selected_option' | 'custom_input' | 'skipped' | 'abandoned'
   selected_option_index INTEGER,  -- Which option user clicked (0-based)
   selected_option_value TEXT,
   custom_input_value TEXT,        -- If user typed custom value
-  
+
   -- Outcome
   accepted BOOLEAN,  -- Did user complete clarification?
   time_to_response_ms INTEGER,  -- How long did user take?
-  
+
   -- A/B testing (Task 4.S21)
   ab_variant VARCHAR(50),  -- 'control' | 'context_grounded'
-  
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -550,6 +599,7 @@ CREATE INDEX idx_clarification_audit_response_type ON "ClarificationAudit"(respo
 ```
 
 **Key Metrics Enabled:**
+
 - Clarification acceptance rate by semantic type
 - Time on clarification modal (avg, p50, p95)
 - Option selection distribution
@@ -559,11 +609,13 @@ CREATE INDEX idx_clarification_audit_response_type ON "ClarificationAudit"(respo
 ---
 
 #### 2. Snippet Usage Telemetry (Task 4.S10)
+
 **Status:** ❌ NOT IMPLEMENTED  
 **Priority:** 🟡 MEDIUM  
 **Impact:** Cannot monitor snippet effectiveness or LLM compliance
 
 **What's Missing:**
+
 - No record of which snippets were used
 - No validation of LLM compliance with snippets
 - No snippet success rate tracking
@@ -575,26 +627,26 @@ CREATE TABLE "SnippetUsageLog" (
   id BIGSERIAL PRIMARY KEY,
   query_history_id INTEGER NOT NULL REFERENCES "QueryHistory"(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
-  
+
   -- Snippet context
   snippet_intent VARCHAR(100) NOT NULL,  -- e.g., 'temporal_proximity_query'
   snippet_name VARCHAR(255) NOT NULL,    -- e.g., 'baseline_date_filter'
   snippet_sql TEXT NOT NULL,             -- Actual snippet SQL pattern
-  
+
   -- Usage context
   matched_by VARCHAR(50) NOT NULL,       -- 'intent' | 'keywords' | 'tags'
   relevance_score NUMERIC(4,3),          -- 0-1 match score
   included_in_prompt BOOLEAN DEFAULT TRUE,
-  
+
   -- LLM compliance
   snippet_used_in_sql BOOLEAN,           -- Did LLM actually use the snippet?
   usage_correctness VARCHAR(50),         -- 'correct' | 'partial' | 'incorrect' | 'unknown'
   validation_outcome VARCHAR(50),        -- 'passed' | 'failed'
   validation_errors TEXT[],
-  
+
   -- Outcome
   query_success BOOLEAN,
-  
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -605,6 +657,7 @@ CREATE INDEX idx_snippet_usage_success ON "SnippetUsageLog"(query_success);
 ```
 
 **Key Metrics Enabled:**
+
 - Snippet usage frequency by intent
 - LLM compliance rate (% of times LLM follows snippet)
 - Snippet effectiveness (correlation with query success)
@@ -613,11 +666,13 @@ CREATE INDEX idx_snippet_usage_success ON "SnippetUsageLog"(query_success);
 ---
 
 #### 3. Filter State Merge Telemetry (Task 4.S16)
+
 **Status:** ❌ NOT IMPLEMENTED  
 **Priority:** 🟡 MEDIUM  
 **Impact:** Cannot monitor filter resolution conflicts
 
 **What's Missing:**
+
 - No record of filter merge decisions
 - No conflict tracking
 - No resolution strategy audit
@@ -629,26 +684,26 @@ CREATE TABLE "FilterStateMergeLog" (
   id BIGSERIAL PRIMARY KEY,
   query_history_id INTEGER NOT NULL REFERENCES "QueryHistory"(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
-  
+
   -- Filter context
   filter_field VARCHAR(255) NOT NULL,
   filter_user_phrase TEXT NOT NULL,
-  
+
   -- Merge inputs
   template_value TEXT,               -- Value from template pipeline
   template_confidence NUMERIC(4,3),
   semantic_value TEXT,               -- Value from semantic pipeline
   semantic_confidence NUMERIC(4,3),
-  
+
   -- Merge decision
   has_conflict BOOLEAN DEFAULT FALSE,
   resolution_strategy VARCHAR(50),   -- 'template_wins' | 'semantic_wins' | 'merge' | 'reject'
   final_value TEXT NOT NULL,
   final_confidence NUMERIC(4,3),
-  
+
   -- Outcome
   resolution_correct BOOLEAN,        -- Was merge decision correct? (manual validation)
-  
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -658,6 +713,7 @@ CREATE INDEX idx_filter_merge_strategy ON "FilterStateMergeLog"(resolution_strat
 ```
 
 **Key Metrics Enabled:**
+
 - Filter conflict rate (% of queries with conflicts)
 - Resolution strategy distribution
 - Merge decision correctness (post-hoc review)
@@ -665,11 +721,13 @@ CREATE INDEX idx_filter_merge_strategy ON "FilterStateMergeLog"(resolution_strat
 ---
 
 #### 4. SQL Validation Log (Task 4.S23 Extension)
+
 **Status:** ⚠️ PARTIALLY IMPLEMENTED (validator exists, logging missing)  
 **Priority:** 🔴 HIGH  
 **Impact:** Cannot track SQL error patterns or validation effectiveness
 
 **What's Missing:**
+
 - Validation errors not persisted to database
 - No tracking of which validation rules fail most often
 - No pattern analysis for repeated errors
@@ -681,28 +739,28 @@ CREATE TABLE "SqlValidationLog" (
   id BIGSERIAL PRIMARY KEY,
   query_history_id INTEGER NOT NULL REFERENCES "QueryHistory"(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
-  
+
   -- SQL context
   sql_source VARCHAR(50) NOT NULL,  -- 'template_injection' | 'llm_generation' | 'snippet_guided'
   generated_sql TEXT NOT NULL,
-  
+
   -- Validation results
   is_valid BOOLEAN NOT NULL,
   validation_errors JSONB,  -- Array of { type, message, suggestion }
   validation_warnings JSONB,
-  
+
   -- Error classification
   error_type VARCHAR(100),  -- 'GROUP_BY_VIOLATION' | 'ORDER_BY_VIOLATION' | 'AGGREGATE_VIOLATION'
   error_severity VARCHAR(20),  -- 'blocker' | 'warning' | 'info'
-  
+
   -- Suggestions provided
   suggestions JSONB,  -- Array of suggested fixes
   suggestion_accepted BOOLEAN,  -- Did user apply suggestion?
-  
+
   -- Context for pattern analysis
   intent_type VARCHAR(100),
   template_used BOOLEAN,
-  
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -713,6 +771,7 @@ CREATE INDEX idx_sql_validation_intent ON "SqlValidationLog"(intent_type);
 ```
 
 **Key Metrics Enabled:**
+
 - SQL validation pass rate
 - Most common validation errors by type
 - Error patterns by intent (e.g., "age_group queries have 20% GROUP BY errors")
@@ -724,27 +783,27 @@ CREATE INDEX idx_sql_validation_intent ON "SqlValidationLog"(intent_type);
 
 #### High-Priority Events (Must Track)
 
-| Event | Table | Triggered When | Purpose |
-|-------|-------|----------------|---------|
-| **Query Submitted** | QueryHistory | User asks question | Track all questions |
-| **Intent Classified** | IntentClassificationLog | After intent detection | Monitor intent accuracy |
-| **Context Discovered** | ContextDiscoveryRun | After semantic search | Track discovery effectiveness |
-| **Template Matched** | TemplateUsage | Template selected | Monitor template usage |
-| **Clarification Presented** | ClarificationAudit | Placeholder missing | Track clarification UX |
-| **Clarification Responded** | ClarificationAudit (update) | User provides value | Measure acceptance rate |
-| **SQL Generated** | QueryHistory (update) | LLM returns SQL | Store final SQL |
-| **SQL Validated** | SqlValidationLog | Before execution | Track validation effectiveness |
-| **Query Executed** | TemplateUsage (update) | After SQL execution | Record success/failure |
-| **Performance Logged** | QueryPerformanceMetrics | End of request | Overall metrics |
+| Event                       | Table                       | Triggered When         | Purpose                        |
+| --------------------------- | --------------------------- | ---------------------- | ------------------------------ |
+| **Query Submitted**         | QueryHistory                | User asks question     | Track all questions            |
+| **Intent Classified**       | IntentClassificationLog     | After intent detection | Monitor intent accuracy        |
+| **Context Discovered**      | ContextDiscoveryRun         | After semantic search  | Track discovery effectiveness  |
+| **Template Matched**        | TemplateUsage               | Template selected      | Monitor template usage         |
+| **Clarification Presented** | ClarificationAudit          | Placeholder missing    | Track clarification UX         |
+| **Clarification Responded** | ClarificationAudit (update) | User provides value    | Measure acceptance rate        |
+| **SQL Generated**           | QueryHistory (update)       | LLM returns SQL        | Store final SQL                |
+| **SQL Validated**           | SqlValidationLog            | Before execution       | Track validation effectiveness |
+| **Query Executed**          | TemplateUsage (update)      | After SQL execution    | Record success/failure         |
+| **Performance Logged**      | QueryPerformanceMetrics     | End of request         | Overall metrics                |
 
 #### Medium-Priority Events (Nice to Have)
 
-| Event | Table | Purpose |
-|-------|-------|---------|
-| **Snippet Used** | SnippetUsageLog | Monitor snippet effectiveness |
-| **Filter Conflict** | FilterStateMergeLog | Track merge decisions |
-| **Ontology Modified** | OntologyAuditLog | Audit ontology changes |
-| **Discovery Error** | DiscoveryLog | Debug discovery issues |
+| Event                 | Table               | Purpose                       |
+| --------------------- | ------------------- | ----------------------------- |
+| **Snippet Used**      | SnippetUsageLog     | Monitor snippet effectiveness |
+| **Filter Conflict**   | FilterStateMergeLog | Track merge decisions         |
+| **Ontology Modified** | OntologyAuditLog    | Audit ontology changes        |
+| **Discovery Error**   | DiscoveryLog        | Debug discovery issues        |
 
 ---
 
@@ -794,9 +853,11 @@ CREATE INDEX idx_sql_validation_intent ON "SqlValidationLog"(intent_type);
 ### Dashboard Views (6 Primary Views)
 
 #### View 1: Query Explorer
+
 **Purpose:** Search and drill down into individual queries
 
 **Features:**
+
 - 📋 Query list (searchable, filterable)
   - Filter by: customer, user, date range, mode, success/failure
   - Sort by: recency, duration, result count
@@ -814,7 +875,7 @@ CREATE INDEX idx_sql_validation_intent ON "SqlValidationLog"(intent_type);
 
 ```sql
 -- Query list with aggregated context
-SELECT 
+SELECT
   qh.id,
   qh.question,
   qh.mode,
@@ -825,22 +886,22 @@ SELECT
   qpm."totalDurationMs",
   qpm."clarificationRequested",
   tu.success AS template_success,
-  CASE 
+  CASE
     WHEN tu.success IS NULL THEN 'pending'
     WHEN tu.success = TRUE THEN 'success'
     ELSE 'failed'
   END AS outcome
 FROM "QueryHistory" qh
-LEFT JOIN "IntentClassificationLog" icl 
-  ON icl.question = qh.question 
+LEFT JOIN "IntentClassificationLog" icl
+  ON icl.question = qh.question
   AND icl.customer_id = qh."customerId"
   AND icl.created_at >= qh."createdAt" - INTERVAL '5 seconds'
   AND icl.created_at <= qh."createdAt" + INTERVAL '5 seconds'
-LEFT JOIN "QueryPerformanceMetrics" qpm 
-  ON qpm.question = qh.question 
+LEFT JOIN "QueryPerformanceMetrics" qpm
+  ON qpm.question = qh.question
   AND qpm."customerId"::TEXT = qh."customerId"::TEXT
   AND qpm."createdAt" >= qh."createdAt" - INTERVAL '5 seconds'
-LEFT JOIN "TemplateUsage" tu 
+LEFT JOIN "TemplateUsage" tu
   ON tu."questionText" = qh.question
   AND tu."matchedAt" >= qh."createdAt" - INTERVAL '5 seconds'
 WHERE qh."customerId" = $1
@@ -852,9 +913,11 @@ LIMIT 100;
 ---
 
 #### View 2: Template Analytics
+
 **Purpose:** Monitor template effectiveness and identify improvement opportunities
 
 **Features:**
+
 - 📊 Template usage overview
   - Usage frequency by template
   - Success rate by template
@@ -873,7 +936,7 @@ LIMIT 100;
 
 ```sql
 -- Template effectiveness summary
-SELECT 
+SELECT
   t.name AS template_name,
   tv.version,
   COUNT(tu.id) AS usage_count,
@@ -894,9 +957,11 @@ ORDER BY usage_count DESC;
 ---
 
 #### View 3: Clarification Analytics (NEW)
+
 **Purpose:** Monitor clarification UX and measure Task 4.S21 effectiveness
 
 **Features:**
+
 - 📈 Clarification overview metrics
   - Total clarifications requested
   - Acceptance rate (% completed)
@@ -915,7 +980,7 @@ ORDER BY usage_count DESC;
 
 ```sql
 -- Clarification effectiveness by semantic type
-SELECT 
+SELECT
   placeholder_semantic,
   clarification_type,
   COUNT(*) AS total_presented,
@@ -937,9 +1002,11 @@ ORDER BY total_presented DESC;
 ---
 
 #### View 4: Performance Metrics
+
 **Purpose:** Track system performance and identify bottlenecks
 
 **Features:**
+
 - ⏱️ Latency metrics
   - Avg, p50, p95, p99 query latency
   - Breakdown by mode (template, semantic, direct)
@@ -959,7 +1026,7 @@ ORDER BY total_presented DESC;
 
 ```sql
 -- Performance overview by mode
-SELECT 
+SELECT
   mode,
   COUNT(*) AS query_count,
   AVG("totalDurationMs") AS avg_duration_ms,
@@ -978,9 +1045,11 @@ ORDER BY query_count DESC;
 ---
 
 #### View 5: User Activity
+
 **Purpose:** Track developer/consultant usage patterns
 
 **Features:**
+
 - 👤 User activity overview
   - Queries per user
   - Most active users
@@ -997,7 +1066,7 @@ ORDER BY query_count DESC;
 
 ```sql
 -- User activity summary
-SELECT 
+SELECT
   u.username,
   u.role,
   COUNT(qh.id) AS total_queries,
@@ -1018,9 +1087,11 @@ ORDER BY total_queries DESC;
 ---
 
 #### View 6: Error Analysis
+
 **Purpose:** Identify and triage system issues
 
 **Features:**
+
 - 🚨 Error overview
   - Error count by type
   - Error rate trend
@@ -1040,11 +1111,11 @@ ORDER BY total_queries DESC;
 ```sql
 -- Error summary by category
 WITH error_queries AS (
-  SELECT 
+  SELECT
     qh.id,
     qh.question,
     qh."createdAt",
-    CASE 
+    CASE
       WHEN tu.success = FALSE THEN 'template_execution_failed'
       WHEN qpm."filterValidationErrors" > 0 THEN 'filter_validation_failed'
       WHEN svl.is_valid = FALSE THEN 'sql_validation_failed'
@@ -1062,7 +1133,7 @@ WITH error_queries AS (
     AND qh."createdAt" >= NOW() - INTERVAL '7 days'
     AND (tu.success = FALSE OR qh.sql IS NULL OR svl.is_valid = FALSE)
 )
-SELECT 
+SELECT
   error_category,
   COUNT(*) AS error_count,
   ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS error_percentage,
@@ -1110,23 +1181,24 @@ ORDER BY error_count DESC;
 
 ### Priority Matrix
 
-| Task | Priority | Effort | Impact | Status |
-|------|----------|--------|--------|--------|
-| **4.5G** - Clarification audit trail | 🔴 HIGH | 2-3d | Critical for UX measurement | ⏳ Not started |
-| **4.5F** - Clarification UI with context | 🔴 HIGH | 2-3d | Enables 4.5G data collection | ⏳ Not started |
-| **4.5H** - E2E testing with fixtures | 🔴 HIGH | 1-2d | Validates audit data quality | ⏳ Not started |
-| **4.S10** - Snippet usage telemetry | 🟡 MED | 1-2d | Monitor snippet effectiveness | ⏳ Not started |
-| **4.S16** - Filter merge telemetry | 🟡 MED | 1-2d | Track conflict resolution | ⏳ Not started |
-| **4.S23 Ext** - SQL validation logging | 🔴 HIGH | 1d | Track validation patterns | ⏳ Not started |
-| **4.16** - Metrics dashboard | 🔴 HIGH | 3-5d | Visual analytics (core requirement) | ⏳ Not started |
-| **4.14** - Accuracy metrics | 🔴 HIGH | 2d | Measure SQL quality | ⏳ Not started |
-| **4.15** - Performance metrics | 🟡 MED | 1d | Measure system performance | ⏳ Not started |
+| Task                                     | Priority | Effort | Impact                              | Status         |
+| ---------------------------------------- | -------- | ------ | ----------------------------------- | -------------- |
+| **4.5G** - Clarification audit trail     | 🔴 HIGH  | 2-3d   | Critical for UX measurement         | ⏳ Not started |
+| **4.5F** - Clarification UI with context | 🔴 HIGH  | 2-3d   | Enables 4.5G data collection        | ⏳ Not started |
+| **4.5H** - E2E testing with fixtures     | 🔴 HIGH  | 1-2d   | Validates audit data quality        | ⏳ Not started |
+| **4.S10** - Snippet usage telemetry      | 🟡 MED   | 1-2d   | Monitor snippet effectiveness       | ⏳ Not started |
+| **4.S16** - Filter merge telemetry       | 🟡 MED   | 1-2d   | Track conflict resolution           | ⏳ Not started |
+| **4.S23 Ext** - SQL validation logging   | 🔴 HIGH  | 1d     | Track validation patterns           | ⏳ Not started |
+| **4.16** - Metrics dashboard             | 🔴 HIGH  | 3-5d   | Visual analytics (core requirement) | ⏳ Not started |
+| **4.14** - Accuracy metrics              | 🔴 HIGH  | 2d     | Measure SQL quality                 | ⏳ Not started |
+| **4.15** - Performance metrics           | 🟡 MED   | 1d     | Measure system performance          | ⏳ Not started |
 
 ---
 
 ### Detailed Missing Features
 
 #### 1. Task 4.5G: Clarification Audit Trail
+
 **Database Schema:** See [Missing Audit Features - Clarification Audit](#1-clarification-audit-trail-task-45g)
 
 **Service Implementation:**
@@ -1142,16 +1214,16 @@ export interface ClarificationAuditEntry {
   templateName?: string;
   placeholder: string;
   placeholderSemantic?: string;
-  clarificationType: 'context_grounded' | 'basic' | 'confirmation';
+  clarificationType: "context_grounded" | "basic" | "confirmation";
   promptText: string;
   optionsPresented: ClarificationOption[];
   examplesShown?: string[];
-  abVariant?: 'control' | 'context_grounded';
+  abVariant?: "control" | "context_grounded";
 }
 
 export interface ClarificationResponse {
   clarificationAuditId: number;
-  responseType: 'selected_option' | 'custom_input' | 'skipped' | 'abandoned';
+  responseType: "selected_option" | "custom_input" | "skipped" | "abandoned";
   selectedOptionIndex?: number;
   selectedOptionValue?: string;
   customInputValue?: string;
@@ -1160,13 +1232,21 @@ export interface ClarificationResponse {
 }
 
 export class ClarificationAuditService {
-  async logClarificationPresented(entry: ClarificationAuditEntry): Promise<number>;
-  async logClarificationResponse(response: ClarificationResponse): Promise<void>;
-  async getClarificationMetrics(customerId: string, dateRange: DateRange): Promise<ClarificationMetrics>;
+  async logClarificationPresented(
+    entry: ClarificationAuditEntry
+  ): Promise<number>;
+  async logClarificationResponse(
+    response: ClarificationResponse
+  ): Promise<void>;
+  async getClarificationMetrics(
+    customerId: string,
+    dateRange: DateRange
+  ): Promise<ClarificationMetrics>;
 }
 ```
 
 **Integration Points:**
+
 1. `template-placeholder.service.ts` - Log when clarification is created
 2. Frontend clarification modal - Log when user responds
 3. Admin dashboard - Display clarification metrics
@@ -1174,6 +1254,7 @@ export class ClarificationAuditService {
 ---
 
 #### 2. Task 4.S10: Snippet Usage Telemetry
+
 **Database Schema:** See [Missing Audit Features - Snippet Usage](#2-snippet-usage-telemetry-task-4s10)
 
 **Service Implementation:**
@@ -1187,7 +1268,7 @@ export interface SnippetUsageEntry {
   snippetIntent: string;
   snippetName: string;
   snippetSql: string;
-  matchedBy: 'intent' | 'keywords' | 'tags';
+  matchedBy: "intent" | "keywords" | "tags";
   relevanceScore: number;
   includedInPrompt: boolean;
 }
@@ -1195,8 +1276,8 @@ export interface SnippetUsageEntry {
 export interface SnippetValidationOutcome {
   snippetUsageId: number;
   snippetUsedInSql: boolean;
-  usageCorrectness: 'correct' | 'partial' | 'incorrect' | 'unknown';
-  validationOutcome: 'passed' | 'failed';
+  usageCorrectness: "correct" | "partial" | "incorrect" | "unknown";
+  validationOutcome: "passed" | "failed";
   validationErrors: string[];
   querySuccess: boolean;
 }
@@ -1209,6 +1290,7 @@ export class SnippetUsageLogger {
 ```
 
 **Integration Points:**
+
 1. `three-mode-orchestrator.service.ts` - Log when snippets are matched
 2. `sql-validator.service.ts` - Validate snippet compliance
 3. Admin dashboard - Display snippet effectiveness
@@ -1216,6 +1298,7 @@ export class SnippetUsageLogger {
 ---
 
 #### 3. Task 4.S16: Filter State Merge Telemetry
+
 **Database Schema:** See [Missing Audit Features - Filter State Merge](#3-filter-state-merge-telemetry-task-4s16)
 
 **Service Implementation:**
@@ -1233,7 +1316,7 @@ export interface FilterMergeEntry {
   semanticValue?: string;
   semanticConfidence?: number;
   hasConflict: boolean;
-  resolutionStrategy: 'template_wins' | 'semantic_wins' | 'merge' | 'reject';
+  resolutionStrategy: "template_wins" | "semantic_wins" | "merge" | "reject";
   finalValue: string;
   finalConfidence: number;
 }
@@ -1245,12 +1328,14 @@ export class FilterMergeAuditService {
 ```
 
 **Integration Points:**
+
 1. `filter-state-merger.service.ts` - Log every merge decision
 2. Admin dashboard - Display conflict analysis
 
 ---
 
 #### 4. Task 4.S23 Extension: SQL Validation Logging
+
 **Database Schema:** See [Missing Audit Features - SQL Validation](#4-sql-validation-log-task-4s23-extension)
 
 **Service Implementation:**
@@ -1261,13 +1346,13 @@ export class FilterMergeAuditService {
 export interface SqlValidationEntry {
   queryHistoryId: number;
   customerId: string;
-  sqlSource: 'template_injection' | 'llm_generation' | 'snippet_guided';
+  sqlSource: "template_injection" | "llm_generation" | "snippet_guided";
   generatedSql: string;
   isValid: boolean;
   validationErrors: SqlValidationError[];
   validationWarnings: SqlWarning[];
   errorType?: string;
-  errorSeverity?: 'blocker' | 'warning' | 'info';
+  errorSeverity?: "blocker" | "warning" | "info";
   suggestions: SqlSuggestion[];
   intentType?: string;
   templateUsed: boolean;
@@ -1275,12 +1360,16 @@ export interface SqlValidationEntry {
 
 export class SqlValidationAuditService {
   async logValidation(entry: SqlValidationEntry): Promise<number>;
-  async logSuggestionAcceptance(validationId: number, accepted: boolean): Promise<void>;
+  async logSuggestionAcceptance(
+    validationId: number,
+    accepted: boolean
+  ): Promise<void>;
   async getValidationMetrics(customerId: string): Promise<ValidationMetrics>;
 }
 ```
 
 **Integration Points:**
+
 1. `sql-validator.service.ts` - Log every validation
 2. `three-mode-orchestrator.service.ts` - Record validation results
 3. Admin dashboard - Display validation patterns
@@ -1292,6 +1381,7 @@ export class SqlValidationAuditService {
 ### Phase 1: Critical Audit Features (Week 1-2)
 
 #### Day 1-2: Clarification Audit (Task 4.5G)
+
 - [x] Design database schema
 - [ ] Create migration: `043_create_clarification_audit.sql`
 - [ ] Implement `ClarificationAuditService`
@@ -1300,6 +1390,7 @@ export class SqlValidationAuditService {
 - [ ] Unit tests + integration tests
 
 **Acceptance Criteria:**
+
 - Every clarification presented is logged
 - User responses are captured (option selected, custom input, abandoned)
 - Metrics queries work correctly
@@ -1307,6 +1398,7 @@ export class SqlValidationAuditService {
 ---
 
 #### Day 3: SQL Validation Logging (Task 4.S23 Extension)
+
 - [x] Design database schema
 - [ ] Create migration: `044_create_sql_validation_log.sql`
 - [ ] Implement `SqlValidationAuditService`
@@ -1315,6 +1407,7 @@ export class SqlValidationAuditService {
 - [ ] Unit tests
 
 **Acceptance Criteria:**
+
 - Every SQL validation is logged
 - Validation errors grouped by type
 - Can query error patterns by intent
@@ -1322,6 +1415,7 @@ export class SqlValidationAuditService {
 ---
 
 #### Day 4-5: Admin Dashboard Foundation (Task 4.16)
+
 - [ ] Create `/app/admin/audit` directory structure
 - [ ] Implement dashboard home page with KPIs
 - [ ] Create Query Explorer view
@@ -1330,6 +1424,7 @@ export class SqlValidationAuditService {
 - [ ] Create Error Analysis view
 
 **Acceptance Criteria:**
+
 - Admin can view overall system health
 - Admin can drill down into specific queries
 - Charts render correctly with real data
@@ -1339,6 +1434,7 @@ export class SqlValidationAuditService {
 ### Phase 2: Additional Telemetry (Week 3)
 
 #### Day 6-7: Snippet Usage Telemetry (Task 4.S10)
+
 - [ ] Create migration: `045_create_snippet_usage_log.sql`
 - [ ] Implement `SnippetUsageLogger`
 - [ ] Integrate into orchestrator
@@ -1348,6 +1444,7 @@ export class SqlValidationAuditService {
 ---
 
 #### Day 8: Filter Merge Telemetry (Task 4.S16)
+
 - [ ] Create migration: `046_create_filter_merge_log.sql`
 - [ ] Implement `FilterMergeAuditService`
 - [ ] Integrate into `filter-state-merger.service.ts`
@@ -1358,6 +1455,7 @@ export class SqlValidationAuditService {
 ### Phase 3: Advanced Analytics (Week 4)
 
 #### Day 9-10: Metrics Collection & Reporting (Tasks 4.14, 4.15, 4.17)
+
 - [ ] Implement accuracy metric collection
 - [ ] Implement performance metric collection
 - [ ] Create metrics report generator
@@ -1373,6 +1471,7 @@ export class SqlValidationAuditService {
 #### What We Track (Permitted)
 
 ✅ **Query metadata:**
+
 - Question text (natural language, no PHI)
 - SQL generated (no patient-specific data in SELECT/WHERE)
 - Intent classification
@@ -1380,12 +1479,14 @@ export class SqlValidationAuditService {
 - Performance metrics
 
 ✅ **User behavior:**
+
 - User ID (internal employee ID)
 - Username (company email)
 - Query patterns
 - Feature usage
 
 ✅ **System telemetry:**
+
 - Component performance
 - Error rates
 - Validation outcomes
@@ -1393,16 +1494,19 @@ export class SqlValidationAuditService {
 #### What We Never Track (Prohibited)
 
 ❌ **Protected Health Information (PHI):**
+
 - Patient names, MRNs, dates of birth
 - Diagnosis codes, treatment details
 - Any data matching HIPAA identifiers
 
 ❌ **Query results:**
+
 - Actual data returned from SQL execution
 - Patient records
 - Clinical outcomes data
 
 ❌ **Customer PII:**
+
 - Connection strings with passwords
 - API keys or credentials
 - Customer-specific configuration secrets
@@ -1411,18 +1515,18 @@ export class SqlValidationAuditService {
 
 #### Data Retention Policy
 
-| Data Type | Retention | Rationale |
-|-----------|-----------|-----------|
-| QueryHistory | 30 days | Debugging + pattern analysis |
-| QueryPerformanceMetrics | 90 days (aggregated) | Long-term trend analysis |
-| ContextDiscoveryRun | 30 days | Discovery debugging |
-| IntentClassificationLog | 30 days | Intent classification accuracy |
-| TemplateUsage | 90 days | Template effectiveness measurement |
-| ClarificationAudit | 60 days | UX improvement tracking |
-| SnippetUsageLog | 30 days | Snippet effectiveness |
-| FilterStateMergeLog | 14 days | Conflict resolution debugging |
-| SqlValidationLog | 30 days | Error pattern analysis |
-| DiscoveryLog | 7 days (diagnostics) | Troubleshooting only |
+| Data Type               | Retention            | Rationale                          |
+| ----------------------- | -------------------- | ---------------------------------- |
+| QueryHistory            | 30 days              | Debugging + pattern analysis       |
+| QueryPerformanceMetrics | 90 days (aggregated) | Long-term trend analysis           |
+| ContextDiscoveryRun     | 30 days              | Discovery debugging                |
+| IntentClassificationLog | 30 days              | Intent classification accuracy     |
+| TemplateUsage           | 90 days              | Template effectiveness measurement |
+| ClarificationAudit      | 60 days              | UX improvement tracking            |
+| SnippetUsageLog         | 30 days              | Snippet effectiveness              |
+| FilterStateMergeLog     | 14 days              | Conflict resolution debugging      |
+| SqlValidationLog        | 30 days              | Error pattern analysis             |
+| DiscoveryLog            | 7 days (diagnostics) | Troubleshooting only               |
 
 #### Anonymization
 
@@ -1685,44 +1789,48 @@ Response:
 ### Logging Best Practices
 
 #### 1. Async Logging (Non-Blocking)
+
 ```typescript
 // ❌ BAD: Blocking logging
 await auditService.logEvent(event);
 return result;
 
 // ✅ GOOD: Fire-and-forget logging
-auditService.logEvent(event).catch(err => 
-  console.warn('Audit logging failed:', err)
-);
+auditService
+  .logEvent(event)
+  .catch((err) => console.warn("Audit logging failed:", err));
 return result;
 ```
 
 #### 2. Graceful Degradation
+
 ```typescript
 try {
   await logAuditEvent(event);
 } catch (err) {
   // Don't fail the request if audit logging fails
-  console.error('Audit logging error:', err);
+  console.error("Audit logging error:", err);
   // Continue with normal flow
 }
 ```
 
 #### 3. Structured Logging
+
 ```typescript
 // ✅ GOOD: Structured, queryable
-logger.info('clarification_presented', {
-  placeholder: 'minAreaReduction',
-  semantic: 'percentage',
+logger.info("clarification_presented", {
+  placeholder: "minAreaReduction",
+  semantic: "percentage",
   optionCount: 4,
-  templateName: 'Area Reduction'
+  templateName: "Area Reduction",
 });
 
 // ❌ BAD: Unstructured string
-console.log('Clarification presented for minAreaReduction with 4 options');
+console.log("Clarification presented for minAreaReduction with 4 options");
 ```
 
 #### 4. Sampling (For High-Volume Events)
+
 ```typescript
 // For very high-volume events (>1000/day), use sampling
 const SAMPLE_RATE = 0.1; // Log 10% of events
@@ -1736,6 +1844,7 @@ if (Math.random() < SAMPLE_RATE) {
 ### Query Optimization
 
 #### 1. Indexes (Already Exist)
+
 - ✅ QueryHistory: (customerId, createdAt DESC), (userId, customerId, createdAt)
 - ✅ QueryPerformanceMetrics: (createdAt), (mode), (filterValidationErrors > 0)
 - ✅ IntentClassificationLog: (customer_id), (method), (created_at DESC)
@@ -1746,7 +1855,7 @@ if (Math.random() < SAMPLE_RATE) {
 ```sql
 -- Materialized view for fast dashboard queries
 CREATE MATERIALIZED VIEW "QueryMetricsDaily" AS
-SELECT 
+SELECT
   "customerId",
   DATE("createdAt") AS query_date,
   mode,
@@ -1768,29 +1877,34 @@ CREATE INDEX idx_query_metrics_daily ON "QueryMetricsDaily"(query_date DESC);
 ### Metrics to Track
 
 #### 1. Query Success Metrics
+
 - Overall success rate: >85%
 - Template mode success rate: >90%
 - Semantic mode success rate: >80%
 - Error rate by type: <5% for any single error type
 
 #### 2. Clarification UX Metrics (Task 4.S21 Goals)
+
 - Acceptance rate: >85% (target from Task 4.S21)
 - Time on modal: <30 seconds (target)
 - Custom input vs preset: <15% custom (indicates good presets)
 - Abandonment rate: <10%
 
 #### 3. Performance Metrics
+
 - p95 query latency: <10 seconds
 - Template mode latency: <5 seconds
 - Semantic mode latency: <8 seconds
 - Cache hit rate: >80%
 
 #### 4. Template Effectiveness Metrics
+
 - Template usage rate: >40% of queries
 - Template success rate: >90%
 - Template match accuracy: >85%
 
 #### 5. Discovery Effectiveness Metrics
+
 - Field discovery rate: >85% (queries finding relevant fields)
 - Empty context rate: <5%
 - Terminology mapping confidence: >0.80 avg
@@ -1809,26 +1923,22 @@ CREATE INDEX idx_query_metrics_daily ON "QueryMetricsDaily"(query_date DESC);
   - [x] TemplateUsage ✅
   - [ ] ClarificationAudit (Task 4.5G)
   - [ ] SqlValidationLog (Task 4.S23 Extension)
-  
 - [ ] **Audit Services Implemented:**
   - [x] TemplateUsageLoggerService ✅
   - [x] DiscoveryLogger ✅
   - [x] MetricsMonitor ✅
   - [ ] ClarificationAuditService (Task 4.5G)
   - [ ] SqlValidationAuditService (Task 4.S23 Extension)
-  
 - [ ] **Dashboard Views Created:**
   - [ ] Dashboard Home (KPIs + overview)
   - [ ] Query Explorer
   - [ ] Template Analytics
   - [ ] Clarification Analytics (NEW)
   - [ ] Error Analysis
-  
 - [ ] **Integration Complete:**
   - [ ] Clarification logging in frontend modal
   - [ ] SQL validation logging in orchestrator
   - [ ] Performance metrics in all routes
-  
 - [ ] **Documentation:**
   - [x] Auditing design document (this document)
   - [ ] Admin dashboard user guide
@@ -1890,17 +2000,17 @@ CREATE INDEX idx_query_metrics_daily ON "QueryMetricsDaily"(query_date DESC);
 
 Assuming **10 active users**, **100 queries/day** for **30 days**:
 
-| Table | Rows/Day | 30-Day Total | Est. Size | Retention |
-|-------|----------|--------------|-----------|-----------|
-| QueryHistory | 100 | 3,000 | ~5 MB | 30 days |
-| QueryPerformanceMetrics | 100 | 3,000 | ~2 MB | 90 days (9k rows) |
-| ContextDiscoveryRun | 100 | 3,000 | ~15 MB (JSONB) | 30 days |
-| IntentClassificationLog | 100 | 3,000 | ~3 MB | 30 days |
-| TemplateUsage | 45 | 1,350 | ~1 MB | 90 days (4k rows) |
-| ClarificationAudit | 12 | 360 | ~500 KB | 60 days |
-| SqlValidationLog | 100 | 3,000 | ~10 MB | 30 days |
-| SnippetUsageLog | 50 | 1,500 | ~2 MB | 30 days |
-| **Total** | **~600** | **~18k rows** | **~40 MB** | **Varies** |
+| Table                   | Rows/Day | 30-Day Total  | Est. Size      | Retention         |
+| ----------------------- | -------- | ------------- | -------------- | ----------------- |
+| QueryHistory            | 100      | 3,000         | ~5 MB          | 30 days           |
+| QueryPerformanceMetrics | 100      | 3,000         | ~2 MB          | 90 days (9k rows) |
+| ContextDiscoveryRun     | 100      | 3,000         | ~15 MB (JSONB) | 30 days           |
+| IntentClassificationLog | 100      | 3,000         | ~3 MB          | 30 days           |
+| TemplateUsage           | 45       | 1,350         | ~1 MB          | 90 days (4k rows) |
+| ClarificationAudit      | 12       | 360           | ~500 KB        | 60 days           |
+| SqlValidationLog        | 100      | 3,000         | ~10 MB         | 30 days           |
+| SnippetUsageLog         | 50       | 1,500         | ~2 MB          | 30 days           |
+| **Total**               | **~600** | **~18k rows** | **~40 MB**     | **Varies**        |
 
 **Conclusion:** Very manageable database size, no scalability concerns for internal deployment.
 
@@ -1911,7 +2021,7 @@ Assuming **10 active users**, **100 queries/day** for **30 days**:
 #### Query 1: Clarification Acceptance Rate by Semantic Type
 
 ```sql
-SELECT 
+SELECT
   placeholder_semantic,
   COUNT(*) AS total,
   COUNT(CASE WHEN accepted = TRUE THEN 1 END) AS accepted,
@@ -1929,7 +2039,7 @@ ORDER BY total DESC;
 #### Query 2: Template Success Rate Comparison
 
 ```sql
-SELECT 
+SELECT
   t.name,
   COUNT(tu.id) AS usage_count,
   ROUND(AVG(CASE WHEN tu.success = TRUE THEN 1 ELSE 0 END) * 100, 2) AS success_rate,
@@ -1949,7 +2059,7 @@ ORDER BY usage_count DESC;
 
 ```sql
 -- Find most common SQL validation errors
-SELECT 
+SELECT
   error_type,
   intent_type,
   COUNT(*) AS error_count,
@@ -1970,7 +2080,7 @@ LIMIT 10;
 
 ```sql
 -- Active user patterns
-SELECT 
+SELECT
   u.username,
   u.role,
   COUNT(qh.id) AS query_count,
@@ -2007,6 +2117,7 @@ ORDER BY query_count DESC;
 ### Recommended Approach
 
 **Week 1-2: Critical Path**
+
 1. Implement Task 4.5G (clarification audit) - 2-3 days
 2. Implement Task 4.S23 Extension (SQL validation logging) - 1 day
 3. Build admin dashboard foundation (Task 4.16) - 3-4 days
@@ -2014,10 +2125,7 @@ ORDER BY query_count DESC;
 
 **Total: ~8-10 days to deployment readiness**
 
-**Week 3-4: Enhanced Telemetry**
-5. Implement Task 4.S10 (snippet telemetry) - 1-2 days
-6. Implement Task 4.S16 (filter merge telemetry) - 1-2 days
-7. Add advanced analytics views - 2-3 days
+**Week 3-4: Enhanced Telemetry** 5. Implement Task 4.S10 (snippet telemetry) - 1-2 days 6. Implement Task 4.S16 (filter merge telemetry) - 1-2 days 7. Add advanced analytics views - 2-3 days
 
 ---
 

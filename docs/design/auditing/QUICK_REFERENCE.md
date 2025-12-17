@@ -6,27 +6,27 @@
 
 ## Existing Audit Tables (8)
 
-| Table | Purpose | Logged By | Retention |
-|-------|---------|-----------|-----------|
-| `QueryHistory` | Every query asked | Routes | 30 days |
-| `QueryPerformanceMetrics` | Filter + performance metrics | MetricsMonitor | 90 days |
-| `ContextDiscoveryRun` | Semantic discovery results | ContextDiscoveryService | 30 days |
-| `IntentClassificationLog` | Intent detection results | IntentClassifier | 30 days |
-| `IntentClassificationDisagreement` | Pattern vs AI conflicts | IntentClassifier | 30 days |
-| `TemplateUsage` | Template usage + outcomes | TemplateUsageLogger | 90 days |
-| `DiscoveryLog` | Detailed discovery logs | DiscoveryLogger | 7 days |
-| `OntologyAuditLog` | Ontology change tracking | OntologyService | Indefinite |
+| Table                              | Purpose                      | Logged By               | Retention  |
+| ---------------------------------- | ---------------------------- | ----------------------- | ---------- |
+| `QueryHistory`                     | Every query asked            | Routes                  | 30 days    |
+| `QueryPerformanceMetrics`          | Filter + performance metrics | MetricsMonitor          | 90 days    |
+| `ContextDiscoveryRun`              | Semantic discovery results   | ContextDiscoveryService | 30 days    |
+| `IntentClassificationLog`          | Intent detection results     | IntentClassifier        | 30 days    |
+| `IntentClassificationDisagreement` | Pattern vs AI conflicts      | IntentClassifier        | 30 days    |
+| `TemplateUsage`                    | Template usage + outcomes    | TemplateUsageLogger     | 90 days    |
+| `DiscoveryLog`                     | Detailed discovery logs      | DiscoveryLogger         | 7 days     |
+| `OntologyAuditLog`                 | Ontology change tracking     | OntologyService         | Indefinite |
 
 ---
 
 ## Missing Audit Tables (4 - To Be Implemented)
 
-| Table | Purpose | Task | Priority |
-|-------|---------|------|----------|
-| `ClarificationAudit` | Clarification UX tracking | 4.5G | 🔴 HIGH |
-| `SqlValidationLog` | SQL validation results | 4.S23 Ext | 🔴 HIGH |
-| `SnippetUsageLog` | Snippet effectiveness | 4.S10 | 🟡 MEDIUM |
-| `FilterStateMergeLog` | Filter conflict resolution | 4.S16 | 🟡 MEDIUM |
+| Table                 | Purpose                    | Task      | Priority  |
+| --------------------- | -------------------------- | --------- | --------- |
+| `ClarificationAudit`  | Clarification UX tracking  | 4.5G      | 🔴 HIGH   |
+| `SqlValidationLog`    | SQL validation results     | 4.S23 Ext | 🔴 HIGH   |
+| `SnippetUsageLog`     | Snippet effectiveness      | 4.S10     | 🟡 MEDIUM |
+| `FilterStateMergeLog` | Filter conflict resolution | 4.S16     | 🟡 MEDIUM |
 
 ---
 
@@ -38,17 +38,17 @@
 // ✅ Good: Non-blocking async logging
 async function processQuery(question: string) {
   // ... do work ...
-  
+
   // Log audit event (don't await - fire and forget)
-  auditService.logEvent({
-    question,
-    outcome,
-    metadata
-  }).catch(err => 
-    console.warn('Audit logging failed:', err)
-  );
-  
-  return result;  // Don't wait for audit to complete
+  auditService
+    .logEvent({
+      question,
+      outcome,
+      metadata,
+    })
+    .catch((err) => console.warn("Audit logging failed:", err));
+
+  return result; // Don't wait for audit to complete
 }
 ```
 
@@ -57,16 +57,19 @@ async function processQuery(question: string) {
 ```typescript
 // ✅ Good: Always link audits to QueryHistory for correlation
 async function logClarification(clarification: ClarificationEntry) {
-  await pool.query(`
+  await pool.query(
+    `
     INSERT INTO "ClarificationAudit" 
       (query_history_id, placeholder, prompt_text, options_presented)
     VALUES ($1, $2, $3, $4)
-  `, [
-    clarification.queryHistoryId,  // ← Link to parent query
-    clarification.placeholder,
-    clarification.promptText,
-    JSON.stringify(clarification.options)
-  ]);
+  `,
+    [
+      clarification.queryHistoryId, // ← Link to parent query
+      clarification.placeholder,
+      clarification.promptText,
+      JSON.stringify(clarification.options),
+    ]
+  );
 }
 ```
 
@@ -77,7 +80,7 @@ async function logClarification(clarification: ClarificationEntry) {
 try {
   await auditService.logEvent(event);
 } catch (err) {
-  console.error('Failed to log audit event:', err);
+  console.error("Failed to log audit event:", err);
   // Continue with normal flow - don't fail the request
 }
 ```
@@ -89,7 +92,7 @@ try {
 ### 1. Clarification Acceptance Rate
 
 ```sql
-SELECT 
+SELECT
   placeholder_semantic,
   COUNT(*) AS total,
   COUNT(CASE WHEN accepted = TRUE THEN 1 END) AS accepted,
@@ -106,7 +109,7 @@ ORDER BY total DESC;
 ### 2. Template Success Rate
 
 ```sql
-SELECT 
+SELECT
   t.name,
   COUNT(tu.id) AS usage_count,
   ROUND(AVG(CASE WHEN tu.success = TRUE THEN 1 ELSE 0 END) * 100, 2) AS success_rate
@@ -123,7 +126,7 @@ ORDER BY usage_count DESC;
 ### 3. SQL Validation Error Patterns
 
 ```sql
-SELECT 
+SELECT
   error_type,
   intent_type,
   COUNT(*) AS error_count,
@@ -141,7 +144,7 @@ ORDER BY error_count DESC;
 ### 4. Query Performance by Mode
 
 ```sql
-SELECT 
+SELECT
   mode,
   COUNT(*) AS query_count,
   AVG("totalDurationMs") AS avg_ms,
@@ -156,17 +159,17 @@ GROUP BY mode;
 
 ## Dashboard Routes
 
-| Route | Purpose | Data Source |
-|-------|---------|-------------|
-| `/admin/audit` | Dashboard home | Multiple tables (KPIs) |
-| `/admin/audit/queries` | Query explorer | QueryHistory + joins |
-| `/admin/audit/queries/[id]` | Query detail | QueryHistory + all related |
-| `/admin/audit/templates` | Template analytics | Template + TemplateUsage |
-| `/admin/audit/templates/[id]` | Template detail | TemplateUsage for template |
-| `/admin/audit/clarifications` | Clarification metrics | ClarificationAudit |
-| `/admin/audit/performance` | Performance dashboard | QueryPerformanceMetrics |
-| `/admin/audit/users` | User activity | QueryHistory + Users |
-| `/admin/audit/errors` | Error analysis | Multiple tables (errors) |
+| Route                         | Purpose               | Data Source                |
+| ----------------------------- | --------------------- | -------------------------- |
+| `/admin/audit`                | Dashboard home        | Multiple tables (KPIs)     |
+| `/admin/audit/queries`        | Query explorer        | QueryHistory + joins       |
+| `/admin/audit/queries/[id]`   | Query detail          | QueryHistory + all related |
+| `/admin/audit/templates`      | Template analytics    | Template + TemplateUsage   |
+| `/admin/audit/templates/[id]` | Template detail       | TemplateUsage for template |
+| `/admin/audit/clarifications` | Clarification metrics | ClarificationAudit         |
+| `/admin/audit/performance`    | Performance dashboard | QueryPerformanceMetrics    |
+| `/admin/audit/users`          | User activity         | QueryHistory + Users       |
+| `/admin/audit/errors`         | Error analysis        | Multiple tables (errors)   |
 
 ---
 

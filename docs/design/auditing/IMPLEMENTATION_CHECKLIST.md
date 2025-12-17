@@ -60,7 +60,6 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Log clarification when `buildContextGroundedClarification()` is called
   - [ ] Include A/B test variant tracking
   - [ ] Add try-catch for graceful degradation
-  
 - [ ] **Frontend Integration (Task 4.5F dependency):**
   - [ ] Update clarification modal component
   - [ ] Log when clarification presented (call API)
@@ -104,7 +103,6 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Add call to `SqlValidationAuditService.logValidation()`
   - [ ] Include all validation errors, warnings, suggestions
   - [ ] Add try-catch for graceful degradation
-  
 - [ ] **Update Orchestrator:**
   - [ ] Update `three-mode-orchestrator.service.ts`
   - [ ] Pass validation results to audit service
@@ -164,13 +162,11 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Avg Latency (seconds)
   - [ ] Template Usage Rate (%)
   - [ ] Clarification Rate (%)
-  
 - [ ] **Implement Charts:**
   - [ ] Query volume trend (line chart)
   - [ ] Intent distribution (pie chart)
   - [ ] Template usage distribution (bar chart)
   - [ ] Error rate trend (line chart)
-  
 - [ ] **Implement Recent Issues:**
   - [ ] List recent SQL validation errors (last 24h)
   - [ ] List clarification abandonments (last 24h)
@@ -184,7 +180,6 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Sorting: recency, duration, result count
   - [ ] Pagination (50 queries per page)
   - [ ] Click → navigate to query detail
-  
 - [ ] **Implement Query Detail:**
   - [ ] Display question, SQL, mode, result count
   - [ ] Display intent classification (confidence, reasoning)
@@ -202,7 +197,6 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Display: name, version, usage count, success rate
   - [ ] Sort by: usage count, success rate, avg latency
   - [ ] Click → navigate to template detail
-  
 - [ ] **Implement Template Detail:**
   - [ ] Template info (name, description, SQL pattern)
   - [ ] Usage metrics (count, success rate, latency)
@@ -217,12 +211,10 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Acceptance rate
   - [ ] Abandonment rate
   - [ ] Avg time on modal
-  
 - [ ] **Implement Semantic Type Breakdown:**
   - [ ] Table: semantic type, count, acceptance rate, avg time
   - [ ] Sort by: presentation count
   - [ ] Highlight: low acceptance rate (<70%)
-  
 - [ ] **Implement A/B Test Results:**
   - [ ] Control vs context-grounded comparison
   - [ ] Acceptance rate delta
@@ -236,7 +228,6 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Error count by category
   - [ ] Error rate trend (last 7 days)
   - [ ] Most common error types
-  
 - [ ] **Implement Error Detail:**
   - [ ] List errors by type
   - [ ] Show sample failing queries
@@ -275,13 +266,11 @@ This checklist breaks down the audit implementation into concrete, testable task
   - [ ] Golden queries with expected outcomes
   - [ ] Clarification scenarios (accept, reject, abandon)
   - [ ] Error scenarios (validation failures)
-  
 - [ ] **Implement E2E Tests:**
   - [ ] Test: query → intent → context → template → clarification → SQL → result
   - [ ] Verify audit trail: all tables populated correctly
   - [ ] Verify timestamps are correct
   - [ ] Verify foreign key relationships intact
-  
 - [ ] **Run E2E Suite:**
   - [ ] All tests passing
   - [ ] Audit data quality verified
@@ -366,14 +355,16 @@ After 1 week of internal usage, validate:
 If audit system causes issues:
 
 1. **Disable Audit Logging:**
+
    ```typescript
-   const AUDIT_ENABLED = process.env.ENABLE_AUDIT_LOGGING !== 'false';
+   const AUDIT_ENABLED = process.env.ENABLE_AUDIT_LOGGING !== "false";
    if (AUDIT_ENABLED) {
      await auditService.logEvent(event);
    }
    ```
 
 2. **Rollback Migrations:**
+
    ```bash
    # Rollback in reverse order
    psql -d insight_gen_db -f database/migration/046_rollback_filter_merge_log.sql
@@ -384,26 +375,26 @@ If audit system causes issues:
 
 3. **Feature Flag Dashboard:**
    ```typescript
-   const DASHBOARD_ENABLED = process.env.ENABLE_ADMIN_DASHBOARD !== 'false';
+   const DASHBOARD_ENABLED = process.env.ENABLE_ADMIN_DASHBOARD !== "false";
    ```
 
 ---
 
 ## Status Tracking
 
-| Task | Status | Owner | ETA |
-|------|--------|-------|-----|
-| Migration 043 (Clarification) | ⏳ Not started | - | Day 1 |
-| ClarificationAuditService | ⏳ Not started | - | Day 2 |
-| Migration 044 (SQL Validation) | ⏳ Not started | - | Day 3 |
-| SqlValidationAuditService | ⏳ Not started | - | Day 3 |
-| Admin Dashboard Structure | ⏳ Not started | - | Day 4 |
-| Dashboard Home (KPIs) | ⏳ Not started | - | Day 4 |
-| Query Explorer View | ⏳ Not started | - | Day 5 |
-| Template Analytics View | ⏳ Not started | - | Day 6 |
-| Clarification Analytics View | ⏳ Not started | - | Day 6 |
-| Error Analysis View | ⏳ Not started | - | Day 7 |
-| E2E Testing | ⏳ Not started | - | Day 11-12 |
+| Task                           | Status         | Owner | ETA       |
+| ------------------------------ | -------------- | ----- | --------- |
+| Migration 043 (Clarification)  | ⏳ Not started | -     | Day 1     |
+| ClarificationAuditService      | ⏳ Not started | -     | Day 2     |
+| Migration 044 (SQL Validation) | ⏳ Not started | -     | Day 3     |
+| SqlValidationAuditService      | ⏳ Not started | -     | Day 3     |
+| Admin Dashboard Structure      | ⏳ Not started | -     | Day 4     |
+| Dashboard Home (KPIs)          | ⏳ Not started | -     | Day 4     |
+| Query Explorer View            | ⏳ Not started | -     | Day 5     |
+| Template Analytics View        | ⏳ Not started | -     | Day 6     |
+| Clarification Analytics View   | ⏳ Not started | -     | Day 6     |
+| Error Analysis View            | ⏳ Not started | -     | Day 7     |
+| E2E Testing                    | ⏳ Not started | -     | Day 11-12 |
 
 ---
 
@@ -412,6 +403,7 @@ If audit system causes issues:
 ### Integration Points
 
 **Backend services that need audit integration:**
+
 1. `template-placeholder.service.ts` - Clarification logging
 2. `sql-validator.service.ts` - Validation logging
 3. `three-mode-orchestrator.service.ts` - Link audits to QueryHistory
@@ -419,6 +411,7 @@ If audit system causes issues:
 5. Orchestrator snippet matching - Snippet logging (Phase 2)
 
 **Frontend components that need audit integration:**
+
 1. Clarification modal - Log presented + response
 2. Query execution flow - Link to QueryHistory ID
 
