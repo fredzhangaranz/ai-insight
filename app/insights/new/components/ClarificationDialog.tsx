@@ -1,10 +1,11 @@
 // app/insights/new/components/ClarificationDialog.tsx
 // Enhanced Clarification Dialog (Task 4.5F) - Surfaces template and placeholder context
 // Uses rich clarification data from Tasks 4.5A-4.5E
+// Extended with audit logging (Task P0.1) - Tracks clarification presentation and responses
 
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,6 +98,10 @@ export function ClarificationDialog({
   const [step, setStep] = useState<"confirmation" | "clarification">(
     confirmations && confirmations.length > 0 ? "confirmation" : "clarification"
   );
+  
+  // Track presentation time for audit logging (Task P0.1)
+  const presentedAtRef = useRef<Date>(new Date());
+  const hasLoggedPresentationRef = useRef<boolean>(false);
 
   // Normalize clarifications to handle both old and new formats
   // Use useMemo to prevent recalculating on every render, which was resetting responses
@@ -118,6 +123,41 @@ export function ClarificationDialog({
       }
     });
     setResponses(defaults);
+  }, [normalizedClarifications]);
+  
+  // Log clarification presentation (Task P0.1)
+  // Fire-and-forget: don't block UI on logging failure
+  useEffect(() => {
+    if (hasLoggedPresentationRef.current) return;
+    hasLoggedPresentationRef.current = true;
+    
+    // Log presentation asynchronously (fire-and-forget)
+    const logClarificationPresentation = async () => {
+      try {
+        const clarificationLogs = normalizedClarifications.map((clarification) => ({
+          placeholderSemantic: clarification.semantic || clarification.placeholder,
+          promptText: clarification.prompt,
+          optionsPresented: clarification.options || [],
+          responseType: 'abandoned', // Default to abandoned, will update on submit
+          templateName: clarification.templateName,
+          templateSummary: clarification.templateSummary,
+          presentedAt: presentedAtRef.current.toISOString(),
+        }));
+        
+        // Fire-and-forget API call
+        fetch('/api/admin/audit/clarifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clarifications: clarificationLogs }),
+        }).catch((err) => {
+          console.warn('[ClarificationDialog] Failed to log presentation (non-blocking):', err);
+        });
+      } catch (error) {
+        console.warn('[ClarificationDialog] Error preparing clarification logs:', error);
+      }
+    };
+    
+    logClarificationPresentation();
   }, [normalizedClarifications]);
 
   const handleConfirmationYes = () => {
@@ -154,6 +194,48 @@ export function ClarificationDialog({
   };
 
   const handleSubmit = () => {
+    // Log clarification responses (Task P0.1)
+    // Fire-and-forget: don't block submission
+    const logClarificationResponses = async () => {
+      try {
+        const respondedAt = new Date();
+        const timeSpentMs = respondedAt.getTime() - presentedAtRef.current.getTime();
+        
+        const clarificationLogs = normalizedClarifications.map((clarification) => {
+          const userResponse = responses[clarification.placeholder];
+          const isAccepted = clarification.options?.includes(userResponse);
+          
+          return {
+            placeholderSemantic: clarification.semantic || clarification.placeholder,
+            promptText: clarification.prompt,
+            optionsPresented: clarification.options || [],
+            responseType: isAccepted ? 'accepted' : 'custom',
+            acceptedValue: userResponse,
+            timeSpentMs,
+            presentedAt: presentedAtRef.current.toISOString(),
+            respondedAt: respondedAt.toISOString(),
+            templateName: clarification.templateName,
+            templateSummary: clarification.templateSummary,
+          };
+        });
+        
+        // Fire-and-forget API call
+        fetch('/api/admin/audit/clarifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clarifications: clarificationLogs }),
+        }).catch((err) => {
+          console.warn('[ClarificationDialog] Failed to log responses (non-blocking):', err);
+        });
+      } catch (error) {
+        console.warn('[ClarificationDialog] Error logging clarification responses:', error);
+      }
+    };
+    
+    // Log asynchronously (don't await)
+    logClarificationResponses();
+    
+    // Proceed with submission
     onSubmit(responses);
   };
 
