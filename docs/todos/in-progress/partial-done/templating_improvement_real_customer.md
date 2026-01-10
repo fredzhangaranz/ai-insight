@@ -1,9 +1,12 @@
 # Templating System Improvements: Implementation Plan
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/in-progress/partial-done/`
+**Reason:** Task 4.S21 complete, but high-priority tasks remain (4.S19, 4.S23, 4.S24). Significant progress made but important work still pending.
+
 **Document Version:** 1.1
 **Created:** 2025-11-26
 **Updated:** 2025-11-26
-**Status:** In Progress
+**Status:** In Progress (Partially Complete)
 **Owner:** Engineering Team
 
 **Related Documents:**

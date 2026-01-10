@@ -1,7 +1,10 @@
 # Database Migration Review - Phase 7 & 7.5
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/done/`
+**Reason:** Review document that identified migration issues. Migration 022 was implemented based on this review, addressing the identified issues. This document served its purpose as a review and can be archived.
+
 **Date:** 2025-11-02
-**Status:** Issues Identified - Fixes Required
+**Status:** Issues Identified - Fixes Required (Migration 022 implemented)
 
 ---
 

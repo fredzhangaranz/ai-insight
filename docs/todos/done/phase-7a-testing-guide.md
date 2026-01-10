@@ -1,7 +1,10 @@
 # Phase 7A Testing Guide
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/done/`
+**Reason:** Phase 7A implementation complete. This testing guide served its purpose. Phase 7A has been completed as indicated in the phase-7-semantic_layer_ui_redesign_todos.md document.
+
 **Date:** 2025-11-02  
-**Status:** Ready for Testing  
+**Status:** Ready for Testing (Phase 7A Complete)  
 **Implementation:** Option A (Auto-save on ask)
 
 ---

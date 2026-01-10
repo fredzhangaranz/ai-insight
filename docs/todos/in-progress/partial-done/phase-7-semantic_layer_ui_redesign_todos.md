@@ -1,8 +1,11 @@
 # Phase 7: Semantic Layer UI Redesign - Implementation Guide (Core + Chart)
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/in-progress/partial-done/`
+**Reason:** Phase 7A complete, but Phases 7B-7H remain. Significant foundational work done, but major implementation work still pending.
+
 **Version:** 3.0 (Consolidated with Phase 7.5)
 **Last Updated:** 2025-11-03
-**Status:** Ready for Implementation
+**Status:** Partially Complete (7A done, 7B-7H pending)
 **Timeline:** 11 weeks total (Weeks 10-20)
 
 ---

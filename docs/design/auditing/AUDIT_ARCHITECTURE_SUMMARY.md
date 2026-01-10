@@ -17,15 +17,18 @@
 ### Current State Assessment
 
 **Existing Foundation: Strong ✅**
+
 - 8 audit tables implemented and operational
 - 3 logging services active (MetricsMonitor, TemplateUsageLogger, DiscoveryLogger)
 - Comprehensive data model covering query lifecycle
 
 **Recent Completions: ✅**
+
 - Task 4.S21: Context-grounded clarifications with rich options
 - Task 4.S23: SQL validation layer with runtime checks
 
 **Critical Gaps: 3 Blockers ❌**
+
 1. No clarification audit trail (can't measure Task 4.S21 effectiveness)
 2. No SQL validation logging (can't track error patterns)
 3. No admin dashboard (can't visualize any metrics)
@@ -76,6 +79,7 @@
 ### Core Query Tracking
 
 1. **QueryHistory** ✅ (Migration 023)
+
    - Every question asked
    - SQL generated
    - Execution mode (template/semantic/direct/error)
@@ -83,6 +87,7 @@
    - Retention: 30 days
 
 2. **QueryPerformanceMetrics** ✅ (Migration 028)
+
    - End-to-end duration
    - Filter resolution metrics
    - Clarification flags
@@ -97,12 +102,14 @@
 ### Discovery Pipeline Tracking
 
 4. **ContextDiscoveryRun** ✅ (Migration 021)
+
    - Complete semantic context bundle
    - Intent classification result
    - Discovery confidence scores
    - Retention: 30 days
 
 5. **IntentClassificationLog** ✅ (Migration 033)
+
    - Intent classification method (pattern/AI)
    - Confidence and reasoning
    - Performance metrics
@@ -116,6 +123,7 @@
 ### Detailed Debugging
 
 7. **DiscoveryLog** ✅ (Migration 019)
+
    - Step-by-step pipeline logs
    - Component-level errors/warnings
    - Retention: 7 days
@@ -137,12 +145,14 @@
 **Effort:** 2-3 days
 
 **What It Tracks:**
+
 - Clarifications presented (placeholder, semantic type, rich options from 4.S21)
 - User responses (selected option, custom input, time taken)
 - Acceptance rates by semantic type
 - A/B test results (control vs context-grounded)
 
 **Why Critical:**
+
 - **Task 4.S21 validation:** Expected 87% acceptance rate, <30s response time
 - **UX measurement:** Track which options users select
 - **A/B testing:** Compare control vs context-grounded clarifications
@@ -157,6 +167,7 @@
 **Effort:** 1 day
 
 **What It Tracks:**
+
 - SQL validation results (pass/fail)
 - Validation errors by type (GROUP BY, ORDER BY, AGGREGATE violations)
 - Error patterns by intent (e.g., "age_group queries have 20% GROUP BY errors")
@@ -164,6 +175,7 @@
 - Suggestion effectiveness
 
 **Why Critical:**
+
 - **Error pattern analysis:** Identify which intents have SQL issues
 - **Prompt improvement:** Guide prompt updates based on error patterns
 - **Template validation:** Track template vs LLM SQL quality
@@ -178,6 +190,7 @@
 **Effort:** 4-5 days
 
 **What It Provides:**
+
 - Visual KPIs (query count, success rate, latency, etc.)
 - Query Explorer (search, filter, drill-down)
 - Template Analytics (usage, success rates, errors)
@@ -186,6 +199,7 @@
 - User Activity (engagement, patterns)
 
 **Why Critical:**
+
 - **Admin visibility:** Developers/consultants need dashboards to self-serve
 - **Issue identification:** Visual error patterns easier to spot
 - **Improvement guidance:** Charts show which areas need work
@@ -198,16 +212,19 @@
 
 ✅ **Task 4.9** - AssessmentTypeSearcher service (COMPLETE)
 ✅ **Task 4.8** - Assessment type search integration (ALREADY IMPLEMENTED)
+
 - `context-discovery.service.ts` has `runAssessmentTypeSearch()` method (lines 715-769)
 - Already called in discovery pipeline
 
 ### Remaining Work (Low Priority)
 
 🔄 **Task 4.10** - Verify prompt integration (1 hour)
+
 - Check if `context.assessmentTypes` used in SQL generation prompts
 - If not, add assessment types section to prompt builder
 
 🔄 **Task 4.11** - Add integration test (2-3 hours)
+
 - Test assessment type discovery with realistic questions
 - Verify assessment types included in context bundle
 
@@ -222,12 +239,14 @@
 #### Days 1-2: Task 4.5G - Clarification Audit
 
 **Deliverables:**
+
 1. Migration 043: ClarificationAudit table
 2. Service: ClarificationAuditService
 3. Tests: 20+ unit tests
 4. Integration: Backend logging in template-placeholder.service
 
 **Acceptance Criteria:**
+
 - [ ] Clarifications logged with rich options (from Task 4.S21)
 - [ ] User responses tracked
 - [ ] Acceptance rate queryable by semantic type
@@ -238,11 +257,13 @@
 #### Day 3: Task 4.S23 Extension - SQL Validation Logging
 
 **Deliverables:**
+
 1. Migration 044: SqlValidationLog table
 2. Service: SqlValidationAuditService
 3. Integration: Logging in sql-validator and orchestrator
 
 **Acceptance Criteria:**
+
 - [ ] Every SQL validation logged
 - [ ] Error patterns queryable by intent
 - [ ] Quality scores tracked
@@ -253,12 +274,14 @@
 #### Days 4-7: Task 4.16 - Admin Dashboard
 
 **Deliverables:**
+
 1. Dashboard structure: `/app/admin/audit/`
 2. Components: KPICard, DataTable, ChartCard
 3. Views: Home, Queries, Templates, Clarifications, Errors
 4. API routes: 5 endpoints
 
 **Acceptance Criteria:**
+
 - [ ] KPIs load in <2 seconds
 - [ ] Query Explorer functional (search, filter, pagination)
 - [ ] Template Analytics shows usage stats
@@ -272,6 +295,7 @@
 #### Days 8-9: Task 4.5F - Frontend Integration
 
 **Deliverables:**
+
 1. Updated clarification modal
 2. Rich option rendering
 3. User response logging
@@ -282,6 +306,7 @@
 #### Day 10: Task 4.5H - E2E Testing
 
 **Deliverables:**
+
 1. E2E test suite
 2. Audit data validation
 3. Dashboard query verification
@@ -301,12 +326,13 @@
 ### 1. Non-Blocking Audit Logging
 
 **Pattern:**
+
 ```typescript
 // Fire-and-forget - don't block user requests
 auditService
   .logEvent(event)
   .catch((err) => console.warn("Audit failed (non-critical):", err));
-return result;  // Continue without waiting
+return result; // Continue without waiting
 ```
 
 **Rationale:** Audit failures should never break user queries
@@ -337,6 +363,7 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ```
 
 **Rationale:**
+
 - Rich options enable detailed analytics (which values selected?)
 - Legacy options maintain backward compatibility
 - Frontend can render rich options with metadata (count, unit, description)
@@ -345,14 +372,14 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 
 ### 4. Layered Retention Policy
 
-| Retention | Purpose | Tables |
-|-----------|---------|--------|
-| 7 days | Diagnostics | DiscoveryLog |
-| 14 days | Component debugging | FilterStateMergeLog |
-| 30 days | Pipeline tracking | QueryHistory, ContextDiscoveryRun, IntentClassificationLog, SqlValidationLog, SnippetUsageLog |
-| 60 days | UX analysis | ClarificationAudit |
-| 90 days | Trend analysis | QueryPerformanceMetrics, TemplateUsage |
-| Indefinite | Compliance | OntologyAuditLog |
+| Retention  | Purpose             | Tables                                                                                        |
+| ---------- | ------------------- | --------------------------------------------------------------------------------------------- |
+| 7 days     | Diagnostics         | DiscoveryLog                                                                                  |
+| 14 days    | Component debugging | FilterStateMergeLog                                                                           |
+| 30 days    | Pipeline tracking   | QueryHistory, ContextDiscoveryRun, IntentClassificationLog, SqlValidationLog, SnippetUsageLog |
+| 60 days    | UX analysis         | ClarificationAudit                                                                            |
+| 90 days    | Trend analysis      | QueryPerformanceMetrics, TemplateUsage                                                        |
+| Indefinite | Compliance          | OntologyAuditLog                                                                              |
 
 **Rationale:** Balance storage costs with analytical needs
 
@@ -363,16 +390,19 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ### Audit System Health (Technical)
 
 ✅ **Coverage:**
+
 - 100% of queries logged in QueryHistory
-- >95% of clarifications logged in ClarificationAudit
+- > 95% of clarifications logged in ClarificationAudit
 - 100% of SQL validations logged in SqlValidationLog
 
 ✅ **Performance:**
+
 - Audit overhead <50ms per query
 - Dashboard load time <2s for overview
 - No user-facing impact from audit logging
 
 ✅ **Data Quality:**
+
 - No missing FK references
 - No NULL values in critical columns
 - Metrics queries return consistent results
@@ -382,27 +412,32 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ### User-Facing Goals (What We'll Measure)
 
 #### 1. Usage Patterns
+
 - **Which queries are common?** Intent distribution, common keywords
 - **Which features are preferred?** Template vs semantic mode usage
 - **Which templates are effective?** Usage frequency, success rates
 
 #### 2. Issue Identification
+
 - **Where do queries fail?** Error rates by type and intent
 - **Where do users get stuck?** Clarification abandonment rates
 - **What prompts need improvement?** SQL validation error patterns
 
 #### 3. UX Validation (Task 4.S21 Effectiveness)
+
 - **Clarification acceptance rate:** Target >85%
 - **Time on clarification modal:** Target <30 seconds
 - **Preset vs custom ratio:** Target <15% custom input
 - **A/B test results:** Control vs context-grounded comparison
 
 #### 4. Template Effectiveness
+
 - **Template usage rate:** Target >40% of queries
 - **Template success rate:** Target >90%
 - **Template match accuracy:** Target >85%
 
 #### 5. Discovery Effectiveness
+
 - **Field discovery rate:** Target >85%
 - **Empty context rate:** Target <5%
 - **Terminology mapping confidence:** Target >0.80 avg
@@ -414,18 +449,21 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ### Week 1: Core Audit Features
 
 **Days 1-2: Task 4.5G - Clarification Audit**
+
 - Create ClarificationAudit table
 - Implement ClarificationAuditService
 - Integrate backend logging
 - Unit + integration tests
 
 **Day 3: Task 4.S23 Extension - SQL Validation Logging**
+
 - Create SqlValidationLog table
 - Implement SqlValidationAuditService
 - Integrate validation logging
 - Unit tests
 
 **Days 4-7: Task 4.16 - Admin Dashboard**
+
 - Build dashboard structure
 - Implement 5 main views
 - Create API endpoints
@@ -436,11 +474,13 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ### Week 2: Integration & Testing
 
 **Days 8-9: Task 4.5F - Frontend Integration**
+
 - Update clarification modal UI
 - Add user response logging
 - Display rich options and template context
 
 **Day 10: Task 4.5H - E2E Testing**
+
 - Create E2E test suite
 - Validate audit data quality
 - Test dashboard functionality
@@ -451,20 +491,20 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 
 ## Audit Tables Reference
 
-| Table | Status | Purpose | Retention |
-|-------|--------|---------|-----------|
-| QueryHistory | ✅ Live | Every query asked | 30d |
-| QueryPerformanceMetrics | ✅ Live | Performance telemetry | 90d |
-| TemplateUsage | ✅ Live | Template effectiveness | 90d |
-| ContextDiscoveryRun | ✅ Live | Semantic context | 30d |
-| IntentClassificationLog | ✅ Live | Intent classification | 30d |
-| IntentClassificationDisagreement | ✅ Live | Classification conflicts | 30d |
-| DiscoveryLog | ✅ Live | Detailed pipeline logs | 7d |
-| OntologyAuditLog | ✅ Live | Ontology changes | ∞ |
-| **ClarificationAudit** | ❌ Missing | Clarification UX (4.5G) | 60d |
-| **SqlValidationLog** | ❌ Missing | Validation patterns (4.S23) | 30d |
-| SnippetUsageLog | ⏳ Optional | Snippet effectiveness (4.S10) | 30d |
-| FilterStateMergeLog | ⏳ Optional | Filter conflicts (4.S16) | 14d |
+| Table                            | Status      | Purpose                       | Retention |
+| -------------------------------- | ----------- | ----------------------------- | --------- |
+| QueryHistory                     | ✅ Live     | Every query asked             | 30d       |
+| QueryPerformanceMetrics          | ✅ Live     | Performance telemetry         | 90d       |
+| TemplateUsage                    | ✅ Live     | Template effectiveness        | 90d       |
+| ContextDiscoveryRun              | ✅ Live     | Semantic context              | 30d       |
+| IntentClassificationLog          | ✅ Live     | Intent classification         | 30d       |
+| IntentClassificationDisagreement | ✅ Live     | Classification conflicts      | 30d       |
+| DiscoveryLog                     | ✅ Live     | Detailed pipeline logs        | 7d        |
+| OntologyAuditLog                 | ✅ Live     | Ontology changes              | ∞         |
+| **ClarificationAudit**           | ❌ Missing  | Clarification UX (4.5G)       | 60d       |
+| **SqlValidationLog**             | ❌ Missing  | Validation patterns (4.S23)   | 30d       |
+| SnippetUsageLog                  | ⏳ Optional | Snippet effectiveness (4.S10) | 30d       |
+| FilterStateMergeLog              | ⏳ Optional | Filter conflicts (4.S16)      | 14d       |
 
 ---
 
@@ -473,29 +513,34 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ### 6 Core Views
 
 1. **Dashboard Home**
+
    - KPIs: Queries, success rate, latency, template usage, clarifications
    - Query volume trend chart
    - Intent distribution pie chart
    - Recent issues alert list
 
 2. **Query Explorer**
+
    - Searchable, filterable query list
    - Query detail drill-down
    - Complete audit trail per query
 
 3. **Template Analytics**
+
    - Template usage and success rates
    - Per-template clarification analysis
    - Error patterns by template
    - Improvement recommendations
 
 4. **Clarification Analytics** (NEW - validates Task 4.S21)
+
    - Acceptance rates by semantic type
    - Time on modal distribution
    - Option selection patterns
    - A/B test results
 
 5. **Error Analysis**
+
    - Error summary by category
    - SQL validation error patterns
    - Intent-specific error rates
@@ -512,24 +557,24 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 
 ### Week 4 Tasks (Referenced in User Query)
 
-| Task | Description | Status | Priority | Effort | Blocking |
-|------|-------------|--------|----------|--------|----------|
-| **4.S21** | Context-grounded clarifications | ✅ COMPLETE | N/A | N/A | No |
-| **4.S23** | SQL validation layer | ✅ COMPLETE | N/A | N/A | No |
-| **4.5F** | Clarification UI | ⏳ Not Started | 🔴 HIGH | 2d | Yes |
-| **4.5G** | Clarification audit | ⏳ Not Started | 🔴 HIGH | 2-3d | Yes |
-| **4.5H** | E2E testing | ⏳ Not Started | 🔴 HIGH | 1d | Yes |
-| **4.8** | Assessment type search | ✅ INTEGRATED | 🟢 LOW | 0d | No |
-| **4.10** | Assessment in prompts | 🔄 Verify | 🟡 MED | 1h | No |
-| **4.11** | Test assessment discovery | 🔄 Pending | 🟡 MED | 3h | No |
-| **4.12** | E2E test suite | ⏳ Not Started | 🔴 HIGH | 2d | Yes |
-| **4.13** | Staging tests | ⏳ Not Started | 🟡 MED | 1d | No |
-| **4.14** | Accuracy metrics | ⏳ Not Started | 🟡 MED | 2d | No |
-| **4.15** | Performance metrics | ⏳ Not Started | 🟡 MED | 1d | No |
-| **4.16** | Metrics dashboard | ⏳ Not Started | 🔴 HIGH | 4-5d | Yes |
-| **4.17** | Metrics report | ⏳ Not Started | 🟡 MED | 1d | No |
-| **4.S10** | Snippet telemetry | ⏳ Not Started | 🟡 MED | 1-2d | No |
-| **4.S16** | Filter merge telemetry | ⏳ Not Started | 🟡 MED | 1-2d | No |
+| Task      | Description                     | Status         | Priority | Effort | Blocking |
+| --------- | ------------------------------- | -------------- | -------- | ------ | -------- |
+| **4.S21** | Context-grounded clarifications | ✅ COMPLETE    | N/A      | N/A    | No       |
+| **4.S23** | SQL validation layer            | ✅ COMPLETE    | N/A      | N/A    | No       |
+| **4.5F**  | Clarification UI                | ⏳ Not Started | 🔴 HIGH  | 2d     | Yes      |
+| **4.5G**  | Clarification audit             | ⏳ Not Started | 🔴 HIGH  | 2-3d   | Yes      |
+| **4.5H**  | E2E testing                     | ⏳ Not Started | 🔴 HIGH  | 1d     | Yes      |
+| **4.8**   | Assessment type search          | ✅ INTEGRATED  | 🟢 LOW   | 0d     | No       |
+| **4.10**  | Assessment in prompts           | 🔄 Verify      | 🟡 MED   | 1h     | No       |
+| **4.11**  | Test assessment discovery       | 🔄 Pending     | 🟡 MED   | 3h     | No       |
+| **4.12**  | E2E test suite                  | ⏳ Not Started | 🔴 HIGH  | 2d     | Yes      |
+| **4.13**  | Staging tests                   | ⏳ Not Started | 🟡 MED   | 1d     | No       |
+| **4.14**  | Accuracy metrics                | ⏳ Not Started | 🟡 MED   | 2d     | No       |
+| **4.15**  | Performance metrics             | ⏳ Not Started | 🟡 MED   | 1d     | No       |
+| **4.16**  | Metrics dashboard               | ⏳ Not Started | 🔴 HIGH  | 4-5d   | Yes      |
+| **4.17**  | Metrics report                  | ⏳ Not Started | 🟡 MED   | 1d     | No       |
+| **4.S10** | Snippet telemetry               | ⏳ Not Started | 🟡 MED   | 1-2d   | No       |
+| **4.S16** | Filter merge telemetry          | ⏳ Not Started | 🟡 MED   | 1-2d   | No       |
 
 **Deployment Blockers (4 tasks):** 4.5F, 4.5G, 4.16, 4.12+4.5H  
 **Quick Wins (2 tasks):** 4.8/4.10/4.11 (assessment type verification - 1 day total)
@@ -541,20 +586,24 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ### Design Principles
 
 1. **Single Source of Truth**
+
    - QueryHistory is the central anchor
    - All other tables FK to query_history_id
    - Enables complete audit trail reconstruction
 
 2. **Non-Blocking Logging**
+
    - Fire-and-forget pattern
    - Graceful degradation on errors
    - Never block user requests
 
 3. **Layered Retention**
+
    - 7d diagnostic → 30d pipeline → 60d UX → 90d trends
    - Balance storage costs with analytical needs
 
 4. **Privacy by Design**
+
    - Track query text and SQL structure
    - NEVER store query results or PHI
    - Internal users only (no customer PII)
@@ -569,6 +618,7 @@ legacy_options_presented TEXT[]  -- Backward compatible string array
 ### Extension Points
 
 **Adding New Audit Tables:**
+
 ```sql
 -- Template for new audit table
 CREATE TABLE "NewAuditLog" (
@@ -585,6 +635,7 @@ CREATE INDEX idx_new_audit_created_at ON "NewAuditLog"(created_at DESC);
 ```
 
 **Adding New Dashboard Views:**
+
 ```tsx
 // app/admin/audit/new-view/page.tsx
 
@@ -611,6 +662,7 @@ export default function NewAuditView() {
 ```
 
 **Adding New Metrics:**
+
 ```typescript
 // lib/services/audit/new-metric-service.ts
 
@@ -674,7 +726,7 @@ SELECT COUNT(*) FROM "SqlValidationLog" WHERE is_valid = FALSE AND created_at >=
 
 ```sql
 -- Are all queries being logged?
-SELECT 
+SELECT
   DATE("createdAt") as date,
   COUNT(*) as queries_per_day
 FROM "QueryHistory"
@@ -708,18 +760,21 @@ node scripts/cleanup-audit-logs.ts
 ### Pre-Deployment Checklist
 
 **Database:**
+
 - [ ] All 10 audit tables created (8 existing + 2 new)
 - [ ] All indexes created
 - [ ] FK constraints validated
 - [ ] Retention policies documented
 
 **Services:**
+
 - [ ] ClarificationAuditService implemented and tested
 - [ ] SqlValidationAuditService implemented and tested
 - [ ] All services integrated into orchestrator
 - [ ] Graceful error handling verified
 
 **Dashboard:**
+
 - [ ] All 6 views functional
 - [ ] KPIs load fast (<2s)
 - [ ] Queries return correct data
@@ -727,12 +782,14 @@ node scripts/cleanup-audit-logs.ts
 - [ ] Pagination works (50 rows max)
 
 **Testing:**
+
 - [ ] Unit tests pass (>90% coverage)
 - [ ] Integration tests pass
 - [ ] E2E tests validate audit flow
 - [ ] Performance tests pass (<50ms overhead)
 
 **Documentation:**
+
 - [ ] Audit architecture documented
 - [ ] Dashboard user guide created
 - [ ] SQL query cookbook available
@@ -745,11 +802,13 @@ node scripts/cleanup-audit-logs.ts
 ### Week 1: Monitor & Validate
 
 1. **Validate Audit Coverage**
+
    - Check QueryHistory count matches expected usage
    - Verify clarifications being logged
    - Confirm SQL validation logging working
 
 2. **Review Dashboard Metrics**
+
    - Are KPIs accurate?
    - Do trends look reasonable?
    - Any anomalies?
@@ -764,11 +823,13 @@ node scripts/cleanup-audit-logs.ts
 ### Week 2-4: Iterate & Improve
 
 4. **Act on Insights**
+
    - Update prompts based on error patterns
    - Create templates for common queries
    - Add ontology entries for unmapped terms
 
 5. **Measure Improvements**
+
    - Did prompt updates reduce errors?
    - Did new templates increase success rates?
    - Did ontology additions improve mapping?
@@ -784,6 +845,7 @@ node scripts/cleanup-audit-logs.ts
 ### Issue: Dashboard shows no data
 
 **Check:**
+
 1. Are queries being executed? `SELECT COUNT(*) FROM "QueryHistory"`
 2. Is date range correct? Try wider range (30d instead of 7d)
 3. Are JOINs working? Verify FK relationships
@@ -793,6 +855,7 @@ node scripts/cleanup-audit-logs.ts
 ### Issue: Clarifications not logging
 
 **Check:**
+
 1. Is `ClarificationAuditService` integrated?
 2. Check logs for errors: "Clarification audit failed"
 3. Is table created? `\d "ClarificationAudit"` in psql
@@ -802,6 +865,7 @@ node scripts/cleanup-audit-logs.ts
 ### Issue: Performance degraded
 
 **Check:**
+
 1. Is audit logging blocking? Should be fire-and-forget
 2. Are indexes created? `\d "QueryHistory"`
 3. Is cleanup job running? Check old data accumulation
@@ -811,19 +875,14 @@ node scripts/cleanup-audit-logs.ts
 ## Next Steps
 
 **Immediate (This Week):**
+
 1. Review this summary with team
 2. Create migration 043 (ClarificationAudit)
 3. Begin implementation of Task 4.5G
 
-**Short-term (Next 2 Weeks):**
-4. Complete critical audit features (4.5G, 4.S23 Extension, 4.16)
-5. Integrate frontend logging (4.5F)
-6. Run E2E validation (4.5H)
+**Short-term (Next 2 Weeks):** 4. Complete critical audit features (4.5G, 4.S23 Extension, 4.16) 5. Integrate frontend logging (4.5F) 6. Run E2E validation (4.5H)
 
-**Medium-term (Week 3-4):**
-7. Monitor initial deployment
-8. Act on insights
-9. Add enhanced telemetry if needed
+**Medium-term (Week 3-4):** 7. Monitor initial deployment 8. Act on insights 9. Add enhanced telemetry if needed
 
 ---
 

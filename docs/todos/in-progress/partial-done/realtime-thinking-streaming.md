@@ -1,5 +1,8 @@
 # Real-Time Thinking Stream — Implementation Plan
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/in-progress/partial-done/`
+**Reason:** Phase 1 95% complete, but Phase 2 (full streaming) remains. Most functionality implemented, but important enhancement work still pending.
+
 ## Overview
 This document outlines a **two-phase approach** to showing real-time progress during query analysis. Phase 1 (Hybrid Progress) provides immediate value with minimal engineering effort, while Phase 2 (Full Streaming) delivers the ideal solution for the long term.
 

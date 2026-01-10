@@ -1,9 +1,12 @@
 # Performance Optimization Implementation - Detailed Todo List
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/in-progress/partial-done/`
+**Reason:** Tier 1 complete (60% improvement achieved), but Tier 2 and Tier 3 optimizations remain. Significant progress but important work still pending.
+
 **Document Version:** 1.2
 **Created:** 2025-11-12
 **Last Updated:** 2025-11-19 (Added Task 2.4: Template-Based Query Acceleration)
-**Status:** Tier 1 Complete ✅
+**Status:** Tier 1 Complete ✅ (Tier 2 & 3 Pending)
 **Owner:** Engineering Team
 **Related Docs:**
 - `docs/design/semantic_layer/PERFORMANCE_OPTIMIZATION.md`

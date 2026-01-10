@@ -23,6 +23,7 @@
 ### Deployment Blocker
 
 **Cannot deploy to developers/consultants without:**
+
 1. Clarification audit (Task 4.5G) - can't measure UX
 2. SQL validation logging (4.S23 Ext) - can't track errors
 3. Admin dashboard (Task 4.16) - can't visualize data
@@ -33,14 +34,14 @@
 
 ## 📚 Document Index
 
-| Document | Purpose |
-|----------|---------|
-| **auditing_design.md** | Original comprehensive design |
+| Document                               | Purpose                              |
+| -------------------------------------- | ------------------------------------ |
+| **auditing_design.md**                 | Original comprehensive design        |
 | **DEPLOYMENT_READINESS_AUDIT_PLAN.md** | Updated plan with 4.S21/4.S23 status |
-| **ARCHITECTURE_DIAGRAM.md** | Visual diagrams and data flows |
-| **IMPLEMENTATION_CHECKLIST.md** | Step-by-step implementation guide |
-| **QUICK_REFERENCE.md** | SQL query cookbook (existing) |
-| **AUDIT_QUICK_START.md** | This file - fast reference |
+| **ARCHITECTURE_DIAGRAM.md**            | Visual diagrams and data flows       |
+| **IMPLEMENTATION_CHECKLIST.md**        | Step-by-step implementation guide    |
+| **QUICK_REFERENCE.md**                 | SQL query cookbook (existing)        |
+| **AUDIT_QUICK_START.md**               | This file - fast reference           |
 
 ---
 
@@ -51,6 +52,7 @@
 **Purpose:** Every query creates one entry here
 
 **Key Columns:**
+
 - `id` - Primary key (link to all other audit tables)
 - `question` - User's question text
 - `sql` - Generated SQL
@@ -59,10 +61,11 @@
 - `userId` - Which user
 
 **Usage:**
+
 ```sql
 -- Get all queries for a customer
-SELECT * FROM "QueryHistory" 
-WHERE "customerId" = 'abc-123' 
+SELECT * FROM "QueryHistory"
+WHERE "customerId" = 'abc-123'
   AND "createdAt" >= NOW() - INTERVAL '7 days'
 ORDER BY "createdAt" DESC;
 ```
@@ -74,14 +77,16 @@ ORDER BY "createdAt" DESC;
 **Purpose:** Performance telemetry
 
 **Key Columns:**
+
 - `totalDurationMs` - End-to-end query time
 - `filterValidationErrors` - Filter resolution errors
 - `clarificationRequested` - Boolean flag
 
 **Usage:**
+
 ```sql
 -- Average latency by mode
-SELECT 
+SELECT
   mode,
   AVG("totalDurationMs") as avg_ms,
   PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY "totalDurationMs") as p95_ms
@@ -97,6 +102,7 @@ GROUP BY mode;
 **Purpose:** Track clarification UX
 
 **Key Columns:**
+
 - `query_history_id` - Link to QueryHistory
 - `placeholder` - Which placeholder needed clarification
 - `placeholder_semantic` - Type: percentage, time_window, enum, etc.
@@ -106,6 +112,7 @@ GROUP BY mode;
 - `time_to_response_ms` - How long user took
 
 **Usage:**
+
 ```sql
 -- Clarification acceptance rate by semantic type
 SELECT
@@ -128,6 +135,7 @@ ORDER BY total DESC;
 **Purpose:** Track SQL validation patterns
 
 **Key Columns:**
+
 - `query_history_id` - Link to QueryHistory
 - `is_valid` - Boolean: passed validation?
 - `primary_error_type` - GROUP_BY_VIOLATION, ORDER_BY_VIOLATION, etc.
@@ -136,6 +144,7 @@ ORDER BY total DESC;
 - `suggestions` - JSONB array of fix suggestions
 
 **Usage:**
+
 ```sql
 -- Most common SQL validation errors
 SELECT
@@ -448,11 +457,13 @@ npm run test:e2e
 ### Deployment Ready When:
 
 ✅ **Audit Coverage**
+
 - [ ] 100% of queries logged in QueryHistory
 - [ ] 100% of clarifications logged in ClarificationAudit
 - [ ] 100% of SQL validations logged in SqlValidationLog
 
 ✅ **Dashboard Functional**
+
 - [ ] KPIs load in <2 seconds
 - [ ] Query Explorer searchable and filterable
 - [ ] Template Analytics shows usage stats
@@ -460,11 +471,13 @@ npm run test:e2e
 - [ ] Error Analysis identifies patterns
 
 ✅ **Performance Acceptable**
+
 - [ ] Audit logging overhead <50ms per query
 - [ ] Dashboard queries <1 second for overview
 - [ ] No blocking on audit failures
 
 ✅ **Data Quality**
+
 - [ ] No missing FK references
 - [ ] No NULL values in critical columns
 - [ ] Audit data matches test fixtures
@@ -476,6 +489,7 @@ npm run test:e2e
 ### For Developers
 
 **Questions We'll Answer:**
+
 1. Which queries work best? (success rate by intent)
 2. Which templates should I use? (template effectiveness)
 3. Where do queries fail? (error patterns)
@@ -484,6 +498,7 @@ npm run test:e2e
 ### For Service Consultants
 
 **Questions We'll Answer:**
+
 1. What questions do users ask most? (common patterns)
 2. Where do users get stuck? (clarification abandonment)
 3. What data do users need? (field/table discovery)
@@ -492,6 +507,7 @@ npm run test:e2e
 ### For Engineering Team
 
 **Questions We'll Answer:**
+
 1. Where should we improve prompts? (error analysis by intent)
 2. What ontology is missing? (unmapped terminology)
 3. Which templates need work? (low success rates)
@@ -505,6 +521,7 @@ npm run test:e2e
 ### Issue: Clarifications not logging
 
 **Check:**
+
 1. Is `ClarificationAuditService` integrated in `template-placeholder.service.ts`?
 2. Does frontend call audit API when user responds?
 3. Check database: `SELECT COUNT(*) FROM "ClarificationAudit"`
@@ -514,6 +531,7 @@ npm run test:e2e
 ### Issue: Dashboard KPIs show 0
 
 **Check:**
+
 1. Are queries being executed? Check `QueryHistory` count
 2. Is join logic correct? Verify FK relationships
 3. Is date range too narrow? Try 30 days instead of 7
@@ -523,6 +541,7 @@ npm run test:e2e
 ### Issue: Performance slow
 
 **Check:**
+
 1. Are indexes created? Run `\d "QueryHistory"` in psql
 2. Is pagination enabled? Limit to 50 rows
 3. Are logs cleaned up? Run cleanup job

@@ -1,5 +1,8 @@
 # Field Gap Discovery Root Cause Analysis & Fix
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/done/`
+**Reason:** Root cause analysis complete, migration 039 implemented. This document served its purpose as an analysis document that identified the issue and provided the fix. The fix (migration 039) has been implemented in the codebase.
+
 **Date:** December 7, 2025  
 **Status:** ROOT CAUSE IDENTIFIED → FIX READY  
 **Issue:** `discover-field-gaps` script returns "all fields missing" despite running migrations

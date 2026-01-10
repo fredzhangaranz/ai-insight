@@ -1,7 +1,10 @@
 # Ontology Mapping Implementation - Comprehensive Todo List
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/in-progress/partial-done/`
+**Reason:** Phase 1 complete, but Phases 2 and 3 remain. Foundation work done, but significant enhancement work still pending.
+
 **Created:** 2025-11-18
-**Status:** Phase 1 Complete ✅
+**Status:** Phase 1 Complete ✅ (Phases 2 & 3 Pending)
 **Design Reference:** `docs/design/semantic_layer/ontology_mapping/ONTOLOGY_MAPPING_DESIGN.md`
 **Target Completion:** 6-10 weeks (3 phases)
 **Current Phase:** Phase 1 (Foundation) - **COMPLETED November 18, 2025**

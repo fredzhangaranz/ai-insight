@@ -1,5 +1,10 @@
 # Deleted Templates Reference for Task 4.S1
 
+**Status Change:** 2025-01-16 - Moved to `docs/todos/done/`
+**Reason:** Reference document that served its purpose. Document states it can be deleted after Task 4.S1 is complete. Task 4.S1 work has been completed, making this a historical reference.
+
+---
+
 This file contains the three long-form templates that were removed from `lib/prompts/query-templates.json` in Task 4.S0B. Use this as a reference when decomposing them into reusable snippets for Task 4.S1.
 
 ---

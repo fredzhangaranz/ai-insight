@@ -19,23 +19,25 @@
 ### Recent Completions (Week 4B)
 
 ✅ **Task 4.S21** - Context-grounded clarifications (2025-01-16)
+
 - ClarificationBuilder service with rich options (percentage, time_window, enum, numeric, text)
 - 28 tests passing
 - Ready for auditing implementation (Task 4.5G can now track rich options)
 
 ✅ **Task 4.S23** - SQL validation layer (2025-12-16)
+
 - Runtime SQL validator with GROUP BY/ORDER BY correctness checking
 - Integrated into orchestrator
 - Ready for logging extension (track validation patterns)
 
 ### Deployment Readiness Status
 
-| Category | Status | Blockers |
-|----------|--------|----------|
-| **Core Functionality** | ✅ 95% | None |
+| Category                 | Status | Blockers                                 |
+| ------------------------ | ------ | ---------------------------------------- |
+| **Core Functionality**   | ✅ 95% | None                                     |
 | **Audit Infrastructure** | ⚠️ 70% | Missing 3 critical tables + dashboard UI |
-| **Testing Coverage** | ⚠️ 60% | E2E tests pending |
-| **Admin Dashboard** | ❌ 0% | Must implement before deployment |
+| **Testing Coverage**     | ⚠️ 60% | E2E tests pending                        |
+| **Admin Dashboard**      | ❌ 0%  | Must implement before deployment         |
 
 ### Critical Path to Deployment (8-10 days)
 
@@ -60,6 +62,7 @@
 **Purpose:** Auto-saved query history - tracks every question asked
 
 **Schema:**
+
 ```sql
 - id: SERIAL PRIMARY KEY
 - customerId: UUID (FK)
@@ -73,6 +76,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ Every question asked
 - ✅ SQL generated
 - ✅ Execution mode
@@ -89,6 +93,7 @@
 **Purpose:** Orchestration telemetry and filter resolution metrics
 
 **Schema:**
+
 ```sql
 - id: SERIAL PRIMARY KEY
 - question: TEXT
@@ -105,6 +110,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ End-to-end query duration
 - ✅ Filter resolution metrics (overrides, errors, confidence)
 - ✅ Clarification flag (requested/not requested)
@@ -120,6 +126,7 @@
 **Purpose:** Track template matching and execution outcomes
 
 **Schema:**
+
 ```sql
 - id: SERIAL PRIMARY KEY
 - templateVersionId: INTEGER (FK)
@@ -135,6 +142,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ Which template was used
 - ✅ Match reason (keywords/examples)
 - ✅ Execution success/failure
@@ -151,6 +159,7 @@
 **Purpose:** Store full semantic context for each query
 
 **Schema:**
+
 ```sql
 - id: UUID PRIMARY KEY
 - customer_id: UUID (FK)
@@ -164,6 +173,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ Complete semantic context bundle
 - ✅ Intent classification result
 - ✅ Discovery confidence scores
@@ -180,6 +190,7 @@
 **Purpose:** Per-question intent classification telemetry
 
 **Schema:**
+
 ```sql
 - id: BIGSERIAL PRIMARY KEY
 - customer_id: UUID (FK)
@@ -194,6 +205,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ Intent classification method (pattern vs AI)
 - ✅ Confidence scores
 - ✅ LLM reasoning for AI classification
@@ -208,6 +220,7 @@
 **Purpose:** Track cases where pattern-based and AI-based classification disagree
 
 **Schema:**
+
 ```sql
 - id: BIGSERIAL PRIMARY KEY
 - customer_id: UUID (FK)
@@ -222,6 +235,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ Disagreements between classification methods
 - ✅ Resolution status for review
 - ✅ Manual resolution notes
@@ -235,6 +249,7 @@
 **Purpose:** Detailed step-by-step discovery pipeline logging
 
 **Schema:**
+
 ```sql
 - id: UUID PRIMARY KEY
 - discovery_run_id: UUID (FK)
@@ -248,6 +263,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ Pipeline step execution details
 - ✅ Warnings and errors with context
 - ✅ Component-level performance
@@ -263,6 +279,7 @@
 **Purpose:** Track mutations to clinical ontology
 
 **Schema:**
+
 ```sql
 - id: SERIAL PRIMARY KEY
 - concept_id: UUID (FK)
@@ -273,6 +290,7 @@
 ```
 
 **What's Tracked:**
+
 - ✅ Ontology create/update/delete operations
 - ✅ Who made changes
 - ✅ Change details
@@ -291,6 +309,7 @@
 **Blocking For:** Task 4.S21 effectiveness measurement
 
 **Why Critical:**
+
 - Cannot measure clarification acceptance rate (target: >85%)
 - Cannot track which options users select vs custom input
 - Cannot measure time on clarification modal (target: <30s)
@@ -301,21 +320,21 @@
 ```sql
 CREATE TABLE "ClarificationAudit" (
   id BIGSERIAL PRIMARY KEY,
-  
+
   -- Query context
   query_history_id INTEGER NOT NULL REFERENCES "QueryHistory"(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
-  
+
   -- Template context
   template_version_id INTEGER REFERENCES "TemplateVersion"(id) ON DELETE SET NULL,
   template_name VARCHAR(255),
-  
+
   -- Placeholder context
   placeholder VARCHAR(255) NOT NULL,
   placeholder_semantic VARCHAR(100),  -- 'percentage', 'time_window', 'enum', 'numeric', 'text'
   placeholder_required BOOLEAN DEFAULT TRUE,
-  
+
   -- Clarification presented (Task 4.S21 integration)
   clarification_type VARCHAR(50) NOT NULL,  -- 'context_grounded' | 'basic' | 'confirmation'
   prompt_text TEXT NOT NULL,
@@ -326,20 +345,20 @@ CREATE TABLE "ClarificationAudit" (
   data_type VARCHAR(50),  -- 'numeric', 'percentage', 'time_window', 'enum', 'date', 'text'
   value_range JSONB,  -- {min, max} for numeric/percentage
   value_unit VARCHAR(50),  -- '%', 'days', etc.
-  
+
   -- User response
   response_type VARCHAR(50),  -- 'selected_option' | 'custom_input' | 'skipped' | 'abandoned'
   selected_option_index INTEGER,  -- Which option clicked (0-based)
   selected_option_value TEXT,
   custom_input_value TEXT,
-  
+
   -- Outcome metrics
   accepted BOOLEAN,  -- Did user complete clarification?
   time_to_response_ms INTEGER,  -- How long did user take?
-  
+
   -- A/B testing (Task 4.S21)
   ab_variant VARCHAR(50),  -- 'control' | 'context_grounded'
-  
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   responded_at TIMESTAMPTZ  -- When user responded (NULL if abandoned)
 );
@@ -357,11 +376,13 @@ CREATE INDEX idx_clarification_audit_created_at ON "ClarificationAudit"(created_
 **Key Metrics Enabled:**
 
 1. **Clarification UX Metrics (Task 4.S21 Success Criteria)**
+
    - Acceptance rate by semantic type: `AVG(accepted) GROUP BY placeholder_semantic`
    - Time on modal: `AVG(time_to_response_ms), PERCENTILE_CONT(0.5/0.95)`
    - Preset vs custom ratio: `COUNT(response_type = 'selected_option') / COUNT(response_type = 'custom_input')`
 
 2. **A/B Test Metrics**
+
    - Control acceptance: `AVG(accepted) WHERE ab_variant = 'control'`
    - Test acceptance: `AVG(accepted) WHERE ab_variant = 'context_grounded'`
    - Statistical significance: Chi-square test on acceptance counts
@@ -380,6 +401,7 @@ CREATE INDEX idx_clarification_audit_created_at ON "ClarificationAudit"(created_
 **Dependency:** Task 4.S23 ✅ (validator implemented)
 
 **Why Critical:**
+
 - Cannot track which SQL validation rules fail most often
 - Cannot identify prompt improvement opportunities
 - Cannot analyze error patterns by intent (e.g., "age_group queries have 20% GROUP BY errors")
@@ -390,38 +412,38 @@ CREATE INDEX idx_clarification_audit_created_at ON "ClarificationAudit"(created_
 ```sql
 CREATE TABLE "SqlValidationLog" (
   id BIGSERIAL PRIMARY KEY,
-  
+
   -- Query context
   query_history_id INTEGER NOT NULL REFERENCES "QueryHistory"(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES "Customer"(id) ON DELETE CASCADE,
-  
+
   -- SQL context
   sql_source VARCHAR(50) NOT NULL,  -- 'template_injection' | 'llm_generation' | 'snippet_guided' | 'direct'
   generated_sql TEXT NOT NULL,
-  
+
   -- Validation results (from sql-validator.service.ts)
   is_valid BOOLEAN NOT NULL,
   validation_errors JSONB,  -- Array of {type, message, line, column, suggestion}
   validation_warnings JSONB,
   quality_score NUMERIC(4,3),  -- 0-1 score (1.0 = perfect, <0.7 = problematic)
-  
+
   -- Error classification
   primary_error_type VARCHAR(100),  -- 'GROUP_BY_VIOLATION' | 'ORDER_BY_VIOLATION' | 'AGGREGATE_VIOLATION' | 'UNKNOWN'
   error_severity VARCHAR(20),  -- 'blocker' | 'warning' | 'info'
   error_count INTEGER DEFAULT 0,
-  
+
   -- Suggestions provided
   suggestions JSONB,  -- Array of {type, description, example_fix}
   suggestion_accepted BOOLEAN,  -- Did user apply suggestion? (manual track)
-  
+
   -- Context for pattern analysis
   intent_type VARCHAR(100),
   template_used BOOLEAN DEFAULT FALSE,
   template_version_id INTEGER REFERENCES "TemplateVersion"(id) ON DELETE SET NULL,
-  
+
   -- Validation performance
   validation_duration_ms INTEGER,
-  
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -438,10 +460,12 @@ CREATE INDEX idx_sql_validation_created_at ON "SqlValidationLog"(created_at DESC
 **Key Metrics Enabled:**
 
 1. **Validation Effectiveness**
+
    - Pass rate: `AVG(is_valid::INT)`
    - Quality distribution: `AVG(quality_score), PERCENTILE_CONT(0.5/0.95)`
 
 2. **Error Pattern Analysis**
+
    - Errors by type: `COUNT(*) GROUP BY primary_error_type WHERE is_valid = FALSE`
    - Errors by intent: `COUNT(*) GROUP BY intent_type, primary_error_type`
    - Template vs LLM error rates: `AVG(is_valid) GROUP BY template_used`
@@ -460,21 +484,24 @@ CREATE INDEX idx_sql_validation_created_at ON "SqlValidationLog"(created_at DESC
 **Effort:** 2-3 days
 
 **What Exists:**
+
 - ✅ `AssessmentTypeSearcher` service (Task 4.9 complete)
 - ✅ `SemanticIndexAssessmentType` table (Migration 030)
 - ✅ Assessment taxonomy with 30+ concepts
 
 **What's Missing:**
+
 - ❌ Task 4.8: Integration into `context-discovery.service.ts`
 - ❌ Task 4.10: Assessment types in SQL generation prompts
 - ❌ Task 4.11: Testing assessment type discovery
 
 **Implementation Note:**
 
-Assessment types are ALREADY integrated in `context-discovery.service.ts` (lines 715-769). The `runAssessmentTypeSearch()` method exists and is functional. 
+Assessment types are ALREADY integrated in `context-discovery.service.ts` (lines 715-769). The `runAssessmentTypeSearch()` method exists and is functional.
 
 **Recommendation:**  
 Tasks 4.8, 4.10, 4.11 can be MARKED AS COMPLETE or SIMPLIFIED:
+
 - ✅ Task 4.8: ALREADY DONE - `runAssessmentTypeSearch()` exists
 - 🔄 Task 4.10: Verify prompt integration (check if `assessmentTypes` in context bundle are used in prompts)
 - 🔄 Task 4.11: Add integration test validating assessment type discovery
@@ -485,12 +512,12 @@ Tasks 4.8, 4.10, 4.11 can be MARKED AS COMPLETE or SIMPLIFIED:
 
 ### Gap Summary
 
-| Gap | Impact | Solution | Effort | Priority |
-|-----|--------|----------|--------|----------|
-| **No clarification tracking** | Can't measure Task 4.S21 effectiveness | Create ClarificationAudit table + service | 2-3d | 🔴 CRITICAL |
-| **No SQL validation logging** | Can't track error patterns | Create SqlValidationLog table + service | 1d | 🔴 CRITICAL |
-| **No admin dashboard** | Can't visualize any metrics | Build dashboard UI (6 views) | 4-5d | 🔴 CRITICAL |
-| **No E2E tests** | Can't validate audit data quality | Create E2E test suite | 2d | 🔴 HIGH |
+| Gap                           | Impact                                 | Solution                                  | Effort | Priority    |
+| ----------------------------- | -------------------------------------- | ----------------------------------------- | ------ | ----------- |
+| **No clarification tracking** | Can't measure Task 4.S21 effectiveness | Create ClarificationAudit table + service | 2-3d   | 🔴 CRITICAL |
+| **No SQL validation logging** | Can't track error patterns             | Create SqlValidationLog table + service   | 1d     | 🔴 CRITICAL |
+| **No admin dashboard**        | Can't visualize any metrics            | Build dashboard UI (6 views)              | 4-5d   | 🔴 CRITICAL |
+| **No E2E tests**              | Can't validate audit data quality      | Create E2E test suite                     | 2d     | 🔴 HIGH     |
 
 **Total Critical Path:** 9-11 days
 
@@ -501,6 +528,7 @@ Tasks 4.8, 4.10, 4.11 can be MARKED AS COMPLETE or SIMPLIFIED:
 ### Dashboard Architecture
 
 **Route Structure:**
+
 ```
 /app/admin/audit/
   ├── page.tsx                    # Dashboard home (KPIs + overview)
@@ -542,6 +570,7 @@ Tasks 4.8, 4.10, 4.11 can be MARKED AS COMPLETE or SIMPLIFIED:
 **Components:**
 
 1. **KPI Cards (Top Row)**
+
    ```tsx
    <div className="grid grid-cols-5 gap-4">
      <KPICard title="Total Queries" value="1,234" change="+12%" />
@@ -553,14 +582,17 @@ Tasks 4.8, 4.10, 4.11 can be MARKED AS COMPLETE or SIMPLIFIED:
    ```
 
 2. **Query Volume Trend (Chart)**
+
    - Line chart: queries per day (last 30 days)
    - Breakdown by mode (template, semantic, direct)
 
 3. **Intent Distribution (Pie Chart)**
+
    - Slice by intent type
    - Click to filter Query Explorer
 
 4. **Template Usage (Bar Chart)**
+
    - Top 10 templates by usage count
    - Click to view template details
 
@@ -569,6 +601,7 @@ Tasks 4.8, 4.10, 4.11 can be MARKED AS COMPLETE or SIMPLIFIED:
    - Click to navigate to Error Analysis
 
 **Data Source SQL:**
+
 ```sql
 -- Dashboard KPIs
 WITH kpis AS (
@@ -596,6 +629,7 @@ SELECT * FROM kpis;
 **Features:**
 
 1. **Query List (Paginated Table)**
+
    - Columns: Question, Mode, Intent, Duration, Success, Clarifications, Created At, User
    - Filters: Mode, Success/Failure, Date Range, User, Intent
    - Sort: Recency, Duration, Result Count
@@ -637,6 +671,7 @@ SELECT * FROM kpis;
      - Component latencies
 
 **UI Mockup:**
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │ Query #123 - 2025-01-16 10:00:00                              │
@@ -690,12 +725,14 @@ SELECT * FROM kpis;
 **Purpose:** Monitor template effectiveness and identify opportunities
 
 **KPI Cards:**
+
 - Total Templates: 12
 - Avg Success Rate: 89%
 - Avg Latency: 3.8s
 - Clarification Rate: 15%
 
 **Template Usage Table:**
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Template                               Usage  Success  Latency  │
@@ -703,13 +740,14 @@ SELECT * FROM kpis;
 │ Area Reduction at Fixed Time Point      234    89%     3.8s    │
 │ Multi-Assessment Correlation              89    92%     4.2s    │
 │ Workflow Status Monitoring                67    95%     2.1s    │
-│ ... 
+│ ...
 ├─────────────────────────────────────────────────────────────────┤
 │ [View Details] for each template                                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Template Detail Page:**
+
 - **Usage Stats**
   - Usage count trend (last 30 days)
   - Success rate over time
@@ -734,12 +772,14 @@ SELECT * FROM kpis;
 **Purpose:** Measure Task 4.S21 effectiveness and run A/B tests
 
 **KPI Cards:**
+
 - Total Clarifications: 156
 - Acceptance Rate: 87% (target: >85%) ✅
 - Avg Time on Modal: 8.5s (target: <30s) ✅
 - Custom Input Rate: 11%
 
 **Clarification Metrics by Semantic Type:**
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Semantic Type    Presented  Accepted  Rate   Avg Time       │
@@ -759,6 +799,7 @@ SELECT * FROM kpis;
 ```
 
 **A/B Test Results (If Running):**
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ A/B Test: Context-Grounded Clarifications                    │
@@ -775,6 +816,7 @@ SELECT * FROM kpis;
 ```
 
 **Clarification Option Distribution (for percentage type):**
+
 ```
 Option Selected:
   25% (minor):      15 selections (33%)
@@ -792,6 +834,7 @@ Insight: Users prefer 50% option - aligns with clinical standards
 **Purpose:** Identify and triage system issues for prompt/template improvements
 
 **Error Summary Dashboard:**
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Error Overview (Last 7 Days)                                 │
@@ -810,6 +853,7 @@ Insight: Users prefer 50% option - aligns with clinical standards
 ```
 
 **Error Pattern Analysis (Drill-Down):**
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ SQL Validation Errors - Detailed Analysis                    │
@@ -832,7 +876,9 @@ Insight: Users prefer 50% option - aligns with clinical standards
 ```
 
 **Action Items (Generated from Patterns):**
+
 1. **age_group queries → GROUP BY errors**
+
    - Recommendation: Update prompt to explicitly guide GROUP BY usage
    - Sample failing SQL: [View examples]
    - Suggested prompt addition: "When grouping by age ranges, ensure all ORDER BY columns are either in GROUP BY or use aggregates"
@@ -849,6 +895,7 @@ Insight: Users prefer 50% option - aligns with clinical standards
 **Purpose:** Track system performance and identify bottlenecks
 
 **Latency Overview:**
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Query Latency Distribution (Last 7 Days)                     │
@@ -868,6 +915,7 @@ Insight: Users prefer 50% option - aligns with clinical standards
 ```
 
 **Component Performance Breakdown:**
+
 ```
 Pipeline Stage            Avg    P95   % of Total
 ────────────────────────────────────────────────
@@ -890,6 +938,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 #### Days 1-2: Task 4.5G - Clarification Audit
 
 **Deliverables:**
+
 1. Migration: `043_create_clarification_audit.sql`
 2. Service: `lib/services/semantic/clarification-audit.service.ts`
 3. Tests: Unit + integration tests
@@ -898,6 +947,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
    - Add frontend logging for user responses
 
 **Acceptance Criteria:**
+
 - [ ] Every clarification is logged with rich options (from Task 4.S21)
 - [ ] User responses tracked (option index, custom input, time)
 - [ ] Can query acceptance rate by semantic type
@@ -908,6 +958,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 #### Day 3: Task 4.S23 Extension - SQL Validation Logging
 
 **Deliverables:**
+
 1. Migration: `044_create_sql_validation_log.sql`
 2. Service: `lib/services/sql-validation-audit.service.ts`
 3. Integration:
@@ -916,6 +967,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 4. Tests: Unit tests
 
 **Acceptance Criteria:**
+
 - [ ] Every SQL validation is logged
 - [ ] Validation errors include suggestions
 - [ ] Can query error patterns by intent and template
@@ -926,6 +978,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 #### Days 4-7: Task 4.16 - Admin Dashboard Foundation
 
 **Deliverables:**
+
 1. Dashboard structure: `/app/admin/audit/`
 2. Components:
    - `components/KPICard.tsx`
@@ -945,6 +998,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
    - `/api/admin/audit/errors/summary`
 
 **Acceptance Criteria:**
+
 - [ ] Dashboard home displays real KPIs
 - [ ] Can search and filter queries
 - [ ] Can drill down into query details
@@ -959,12 +1013,14 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 #### Days 8-9: Task 4.5F - Clarification UI Integration
 
 **Deliverables:**
+
 1. Frontend clarification modal updates
 2. Rich option rendering (from ClarificationBuilder)
 3. User response logging
 4. Template context display
 
 **Acceptance Criteria:**
+
 - [ ] Rich options render correctly (percentage, time_window, enum)
 - [ ] Template name/description shown in modal
 - [ ] User responses logged to ClarificationAudit
@@ -975,6 +1031,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 #### Day 10: Task 4.5H - E2E Testing
 
 **Deliverables:**
+
 1. E2E test suite: `tests/e2e/audit-validation.e2e.spec.ts`
 2. Test scenarios:
    - Template query with clarifications
@@ -984,6 +1041,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 3. Audit data validation
 
 **Acceptance Criteria:**
+
 - [ ] All audit tables receive expected data
 - [ ] Dashboard queries return correct metrics
 - [ ] No missing audit entries
@@ -998,6 +1056,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 **When to Implement:** After snippet system is in production use
 
 **Deliverables:**
+
 1. Migration: `045_create_snippet_usage_log.sql`
 2. Service: `lib/services/snippet/snippet-usage-logger.service.ts`
 3. Dashboard view: Snippet effectiveness analytics
@@ -1009,6 +1068,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 **When to Implement:** If filter conflicts are common (>5% of queries)
 
 **Deliverables:**
+
 1. Migration: `046_create_filter_merge_log.sql`
 2. Service: `lib/services/semantic/filter-merge-audit.service.ts`
 3. Dashboard view: Filter conflict analysis
@@ -1020,6 +1080,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 ### Current Status Analysis
 
 **Findings:**
+
 - ✅ Task 4.9: AssessmentTypeSearcher service COMPLETE
 - ✅ Task 4.8: Assessment type search ALREADY INTEGRATED in `context-discovery.service.ts`
   - Method: `runAssessmentTypeSearch()` (lines 715-769)
@@ -1033,6 +1094,7 @@ User Clarification Time  5.6s   25.0s    N/A (user-driven, not system)
 **Current State:** Need to verify if `context.assessmentTypes` is used in SQL generation prompts
 
 **Action:**
+
 ```bash
 # Search for assessmentTypes usage in prompts
 grep -r "assessmentTypes" lib/prompts/
@@ -1041,6 +1103,7 @@ grep -r "AssessmentType" lib/services/semantic/sql-prompt-builder.service.ts
 
 **If Not Used:**
 Add to prompt builder:
+
 ```typescript
 if (context.assessmentTypes && context.assessmentTypes.length > 0) {
   prompt += `\n\n## Relevant Assessment Types\n\n`;
@@ -1105,6 +1168,7 @@ describe("Assessment Type Discovery", () => {
 #### 1. Single Source of Truth
 
 **Central Anchor:** `QueryHistory` table
+
 - Every query creates ONE entry
 - All other audit tables link to `query_history_id`
 - Enables complete audit trail reconstruction
@@ -1146,6 +1210,7 @@ describe("Assessment Type Discovery", () => {
 #### 3. Privacy by Design
 
 **What We Track:**
+
 - ✅ Query text (natural language, screened for PHI)
 - ✅ SQL generated (structure only, no result data)
 - ✅ Internal user IDs and emails
@@ -1153,12 +1218,14 @@ describe("Assessment Type Discovery", () => {
 - ✅ Error messages and stack traces
 
 **What We NEVER Track:**
+
 - ❌ Query result data (patient records, clinical outcomes)
 - ❌ PHI (patient names, MRNs, DOBs)
 - ❌ Customer credentials (connection strings, API keys)
 - ❌ External user PII
 
 **Enforcement:**
+
 - Review all audit inserts for PHI leakage
 - Use parameterized queries (no SQL interpolation)
 - Admin dashboard requires authentication + authorization
@@ -1166,6 +1233,7 @@ describe("Assessment Type Discovery", () => {
 #### 4. Performance First
 
 **Non-Blocking Logging:**
+
 ```typescript
 // Fire-and-forget pattern
 auditService
@@ -1177,6 +1245,7 @@ return result;
 ```
 
 **Async Batch Writes:**
+
 ```typescript
 // Collect events in memory
 const auditBatch: AuditEvent[] = [];
@@ -1189,6 +1258,7 @@ if (auditBatch.length >= 10 || timeSinceLastFlush > 5000) {
 ```
 
 **Query Optimization:**
+
 - Indexes on all FK columns
 - Indexes on filter columns (mode, success, semantic type)
 - Materialized views for dashboard KPIs
@@ -1200,23 +1270,24 @@ if (auditBatch.length >= 10 || timeSinceLastFlush > 5000) {
 
 ### Retention Policy
 
-| Table                       | Retention | Reason                          |
-|-----------------------------|-----------|----------------------------------|
-| QueryHistory                | 30 days   | Recent query debugging          |
-| QueryPerformanceMetrics     | 90 days   | Trend analysis                  |
-| ContextDiscoveryRun         | 30 days   | Discovery debugging             |
-| IntentClassificationLog     | 30 days   | Intent accuracy measurement     |
-| TemplateUsage               | 90 days   | Template effectiveness tracking |
-| ClarificationAudit          | 60 days   | UX improvement, A/B tests       |
-| SqlValidationLog            | 30 days   | Error pattern analysis          |
-| SnippetUsageLog             | 30 days   | Snippet effectiveness           |
-| FilterStateMergeLog         | 14 days   | Conflict resolution debugging   |
-| DiscoveryLog                | 7 days    | Diagnostics only                |
-| OntologyAuditLog            | Indefinite| Change history (compliance)     |
+| Table                   | Retention  | Reason                          |
+| ----------------------- | ---------- | ------------------------------- |
+| QueryHistory            | 30 days    | Recent query debugging          |
+| QueryPerformanceMetrics | 90 days    | Trend analysis                  |
+| ContextDiscoveryRun     | 30 days    | Discovery debugging             |
+| IntentClassificationLog | 30 days    | Intent accuracy measurement     |
+| TemplateUsage           | 90 days    | Template effectiveness tracking |
+| ClarificationAudit      | 60 days    | UX improvement, A/B tests       |
+| SqlValidationLog        | 30 days    | Error pattern analysis          |
+| SnippetUsageLog         | 30 days    | Snippet effectiveness           |
+| FilterStateMergeLog     | 14 days    | Conflict resolution debugging   |
+| DiscoveryLog            | 7 days     | Diagnostics only                |
+| OntologyAuditLog        | Indefinite | Change history (compliance)     |
 
 ### Cleanup Jobs
 
 **Daily Cleanup Job:**
+
 ```typescript
 // scripts/cleanup-audit-logs.ts
 
@@ -1365,27 +1436,27 @@ export interface ClarificationAuditEntry {
   queryHistoryId: number;
   customerId: string;
   userId: number;
-  
+
   // Template context
   templateVersionId?: number;
   templateName?: string;
-  
+
   // Placeholder context
   placeholder: string;
   placeholderSemantic?: string;
   placeholderRequired: boolean;
-  
+
   // Clarification presented (from Task 4.S21)
   clarificationType: "context_grounded" | "basic" | "confirmation";
   promptText: string;
-  richOptionsPresented?: ClarificationOption[];  // From ClarificationBuilder
-  legacyOptionsPresented?: string[];  // Backward compatible
+  richOptionsPresented?: ClarificationOption[]; // From ClarificationBuilder
+  legacyOptionsPresented?: string[]; // Backward compatible
   examplesShown?: string[];
-  availableFields?: string[];  // For time_window
+  availableFields?: string[]; // For time_window
   dataType?: string;
   valueRange?: { min: number; max: number };
   valueUnit?: string;
-  
+
   // A/B testing
   abVariant?: "control" | "context_grounded";
 }
@@ -1637,7 +1708,8 @@ export class ClarificationAuditService extends AuditBaseService {
 
       if (control && test) {
         const acceptanceDelta =
-          ((parseFloat(test.acceptance_rate) - parseFloat(control.acceptance_rate)) /
+          ((parseFloat(test.acceptance_rate) -
+            parseFloat(control.acceptance_rate)) /
             parseFloat(control.acceptance_rate)) *
           100;
         const timeDelta =
@@ -1655,7 +1727,9 @@ export class ClarificationAuditService extends AuditBaseService {
             avgTimeMs: parseFloat(test.avg_time_ms),
           },
           improvement: {
-            acceptanceDelta: `${acceptanceDelta > 0 ? "+" : ""}${acceptanceDelta.toFixed(1)}%`,
+            acceptanceDelta: `${
+              acceptanceDelta > 0 ? "+" : ""
+            }${acceptanceDelta.toFixed(1)}%`,
             timeDelta: `${timeDelta > 0 ? "+" : ""}${timeDelta.toFixed(1)}%`,
             recommendation:
               acceptanceDelta > 20 && timeDelta < -50
@@ -1715,15 +1789,23 @@ import type {
 export interface SqlValidationEntry {
   queryHistoryId: number;
   customerId: string;
-  sqlSource: "template_injection" | "llm_generation" | "snippet_guided" | "direct";
+  sqlSource:
+    | "template_injection"
+    | "llm_generation"
+    | "snippet_guided"
+    | "direct";
   generatedSql: string;
   isValid: boolean;
   validationErrors: SQLValidationError[];
   validationWarnings: string[];
-  qualityScore: number;  // 0-1
+  qualityScore: number; // 0-1
   primaryErrorType?: string;
   errorSeverity?: "blocker" | "warning" | "info";
-  suggestions: Array<{ type: string; description: string; exampleFix?: string }>;
+  suggestions: Array<{
+    type: string;
+    description: string;
+    exampleFix?: string;
+  }>;
   intentType?: string;
   templateUsed: boolean;
   templateVersionId?: number;
@@ -1939,8 +2021,12 @@ export class SqlValidationAuditService extends AuditBaseService {
       };
     }
 
-    const templateRow = templateVsLlmResult.rows.find((r) => r.template_used === true);
-    const llmRow = templateVsLlmResult.rows.find((r) => r.template_used === false);
+    const templateRow = templateVsLlmResult.rows.find(
+      (r) => r.template_used === true
+    );
+    const llmRow = templateVsLlmResult.rows.find(
+      (r) => r.template_used === false
+    );
 
     return {
       totalValidations: parseInt(overview.total, 10),
@@ -2120,6 +2206,7 @@ export async function GET(request: NextRequest) {
 **Week 1-2: Critical Path (Must Complete)**
 
 - [ ] **Day 1-2: Task 4.5G - Clarification Audit**
+
   - [ ] Create migration 043
   - [ ] Implement ClarificationAuditService
   - [ ] Integrate into template-placeholder.service
@@ -2127,6 +2214,7 @@ export async function GET(request: NextRequest) {
   - [ ] Unit + integration tests
 
 - [ ] **Day 3: Task 4.S23 Extension - SQL Validation Logging**
+
   - [ ] Create migration 044
   - [ ] Implement SqlValidationAuditService
   - [ ] Integrate into sql-validator.service
@@ -2134,6 +2222,7 @@ export async function GET(request: NextRequest) {
   - [ ] Unit tests
 
 - [ ] **Days 4-7: Task 4.16 - Admin Dashboard**
+
   - [ ] Create dashboard structure
   - [ ] Implement Dashboard Home (KPIs)
   - [ ] Implement Query Explorer
@@ -2144,6 +2233,7 @@ export async function GET(request: NextRequest) {
   - [ ] Manual QA testing
 
 - [ ] **Days 8-9: Task 4.5F - Frontend Integration**
+
   - [ ] Update clarification modal UI
   - [ ] Add user response logging
   - [ ] Display template context
@@ -2176,11 +2266,13 @@ export async function GET(request: NextRequest) {
 ### User-Facing Goals (What We'll Measure)
 
 1. **Usage Patterns**
+
    - Which intents are most common?
    - Which templates are used most?
    - What features do users prefer?
 
 2. **Issue Identification**
+
    - What's the error rate?
    - Where do queries fail most?
    - Which prompts need improvement?
@@ -2197,15 +2289,18 @@ export async function GET(request: NextRequest) {
 ### Current State
 
 ✅ **Strong Foundation**
+
 - 8 audit tables implemented
 - 3 logging services operational
 - Comprehensive data model
 
 ✅ **Recent Completions**
+
 - Task 4.S21: Context-grounded clarifications (ready for audit tracking)
 - Task 4.S23: SQL validation layer (ready for logging extension)
 
 ⚠️ **Critical Gaps**
+
 - No clarification audit trail (Task 4.5G)
 - No SQL validation logging (Task 4.S23 Extension)
 - No admin dashboard (Task 4.16)
@@ -2230,17 +2325,20 @@ export async function GET(request: NextRequest) {
 ### Key Principle: Balance
 
 **✅ Collect:**
+
 - Query text, SQL, mode, success/failure
 - Intent classification, semantic context
 - Template usage, clarification UX
 - Performance metrics, error patterns
 
 **❌ Don't Collect:**
+
 - Query results (patient data, PHI)
 - Excessive logs (debug-level everywhere)
 - Redundant data (duplicate information across tables)
 
 **✅ Dashboard Design:**
+
 - Visual KPIs for quick health check
 - Drill-down capability for detailed investigation
 - Actionable insights (not just data dumps)
