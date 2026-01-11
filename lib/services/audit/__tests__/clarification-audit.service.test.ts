@@ -286,6 +286,48 @@ describe('ClarificationAuditService', () => {
     });
   });
 
+  describe('logClarificationPresentedBatch', () => {
+    it('should log presentations and return audit IDs', async () => {
+      mockPool.query.mockResolvedValueOnce({
+        rows: [
+          { id: 101, placeholderSemantic: 'assessment_type' },
+          { id: 102, placeholderSemantic: 'time_window' },
+        ],
+      });
+
+      const result = await ClarificationAuditService.logClarificationPresentedBatch([
+        {
+          placeholderSemantic: 'assessment_type',
+          promptText: 'Which assessment?',
+          optionsPresented: ['Wound', 'Burn'],
+        },
+        {
+          placeholderSemantic: 'time_window',
+          promptText: 'Time period?',
+          optionsPresented: ['7d', '30d'],
+        },
+      ]);
+
+      expect(result).toEqual([
+        { id: 101, placeholderSemantic: 'assessment_type' },
+        { id: 102, placeholderSemantic: 'time_window' },
+      ]);
+      expect(mockPool.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO "ClarificationAudit"'),
+        expect.arrayContaining([
+          'assessment_type',
+          'Which assessment?',
+          JSON.stringify(['Wound', 'Burn']),
+          'abandoned',
+          'time_window',
+          'Time period?',
+          JSON.stringify(['7d', '30d']),
+          'abandoned',
+        ])
+      );
+    });
+  });
+
   describe('updateClarificationResponse', () => {
     it('should update response fields', async () => {
       await ClarificationAuditService.updateClarificationResponse(
@@ -334,6 +376,35 @@ describe('ClarificationAuditService', () => {
     });
   });
 
+  describe('updateClarificationResponsesBatch', () => {
+    it('should update multiple responses', async () => {
+      await ClarificationAuditService.updateClarificationResponsesBatch([
+        {
+          auditId: 11,
+          responseType: 'accepted',
+          acceptedValue: 'A',
+          timeSpentMs: 1200,
+        },
+        {
+          auditId: 12,
+          responseType: 'custom',
+          acceptedValue: 'Custom',
+          timeSpentMs: 800,
+        },
+      ]);
+
+      expect(mockPool.query).toHaveBeenCalledTimes(2);
+      expect(mockPool.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "ClarificationAudit"'),
+        ['accepted', JSON.stringify('A'), 1200, 11]
+      );
+      expect(mockPool.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "ClarificationAudit"'),
+        ['custom', JSON.stringify('Custom'), 800, 12]
+      );
+    });
+  });
+
   describe('linkClarificationToQuery', () => {
     it('should link clarification to query history', async () => {
       await ClarificationAuditService.linkClarificationToQuery(111, 222);
@@ -352,6 +423,17 @@ describe('ClarificationAuditService', () => {
       ).resolves.toBeUndefined();
 
       expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('linkClarificationsToQuery', () => {
+    it('should link multiple clarifications to query history', async () => {
+      await ClarificationAuditService.linkClarificationsToQuery([1, 2, 3], 777);
+
+      expect(mockPool.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "ClarificationAudit"'),
+        [777, [1, 2, 3]]
+      );
     });
   });
 });

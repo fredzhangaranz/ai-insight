@@ -25,20 +25,63 @@ export async function POST(req: NextRequest) {
     }
     
     const body = await req.json();
-    const { 
-      queryHistoryId, 
-      clarifications 
-    } = body;
-    
-    // Support both single clarification and batch
+    const { mode, queryHistoryId, clarifications } = body;
+
+    if (mode === "present") {
+      if (!Array.isArray(clarifications)) {
+        return NextResponse.json(
+          { error: "clarifications array required for mode=present" },
+          { status: 400 }
+        );
+      }
+
+      const auditIds = await ClarificationAuditService.logClarificationPresentedBatch(
+        clarifications.map((clarification: any) => ({
+          placeholderSemantic: clarification.placeholderSemantic,
+          promptText: clarification.promptText,
+          optionsPresented: clarification.optionsPresented || [],
+          presentedAt: clarification.presentedAt ? new Date(clarification.presentedAt) : undefined,
+          templateName: clarification.templateName ?? undefined,
+          templateSummary: clarification.templateSummary ?? undefined,
+        }))
+      );
+
+      return NextResponse.json({
+        success: true,
+        auditIds: auditIds.map((entry) => ({
+          auditId: entry.id,
+          placeholderSemantic: entry.placeholderSemantic,
+        })),
+      });
+    }
+
+    if (mode === "respond") {
+      if (!Array.isArray(clarifications)) {
+        return NextResponse.json(
+          { error: "clarifications array required for mode=respond" },
+          { status: 400 }
+        );
+      }
+
+      await ClarificationAuditService.updateClarificationResponsesBatch(
+        clarifications.map((clarification: any) => ({
+          auditId: clarification.auditId,
+          responseType: clarification.responseType,
+          acceptedValue: clarification.acceptedValue,
+          timeSpentMs: clarification.timeSpentMs,
+        }))
+      );
+
+      return NextResponse.json({ success: true });
+    }
+
+    // Default logging behavior (single or batch insert)
     if (Array.isArray(clarifications)) {
-      // Batch logging
       await ClarificationAuditService.logClarificationBatch({
         queryHistoryId: queryHistoryId ?? undefined,
         clarifications,
       });
     } else {
-      // Single clarification
       const input: LogClarificationInput = {
         queryHistoryId: body.queryHistoryId ?? undefined,
         placeholderSemantic: body.placeholderSemantic,
@@ -52,11 +95,10 @@ export async function POST(req: NextRequest) {
         templateName: body.templateName ?? undefined,
         templateSummary: body.templateSummary ?? undefined,
       };
-      
+
       await ClarificationAuditService.logClarification(input);
     }
-    
-    // Always return success (fire-and-forget pattern)
+
     return NextResponse.json({ success: true });
   } catch (error) {
     // Log error but still return 200 to avoid blocking frontend

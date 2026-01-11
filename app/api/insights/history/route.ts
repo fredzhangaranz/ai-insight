@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getInsightGenDbPool } from "@/lib/db";
+import { ClarificationAuditService } from "@/lib/services/audit/clarification-audit.service";
 
 /**
  * GET /api/insights/history
@@ -80,8 +81,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { question, customerId, sql, mode, resultCount, semanticContext } =
-      body;
+    const {
+      question,
+      customerId,
+      sql,
+      mode,
+      resultCount,
+      semanticContext,
+      clarificationAuditIds,
+    } = body;
 
     // Validate required fields
     if (!question || !customerId || !sql || !mode) {
@@ -112,11 +120,24 @@ export async function POST(req: NextRequest) {
       semanticContext ? JSON.stringify(semanticContext) : null,
     ]);
 
-    return NextResponse.json({
+    const createdRecord = {
       id: result.rows[0].id,
       createdAt: result.rows[0].createdAt,
       message: "Query saved to history",
-    });
+    };
+
+    if (Array.isArray(clarificationAuditIds) && clarificationAuditIds.length > 0) {
+      try {
+        await ClarificationAuditService.linkClarificationsToQuery(
+          clarificationAuditIds,
+          createdRecord.id
+        );
+      } catch (linkError) {
+        console.warn("Failed to link clarification audits to query history:", linkError);
+      }
+    }
+
+    return NextResponse.json(createdRecord);
   } catch (error) {
     console.error("Failed to save query to history:", error);
     return NextResponse.json(

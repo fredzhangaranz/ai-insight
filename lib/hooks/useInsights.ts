@@ -463,7 +463,8 @@ export function useInsights() {
     originalQuestion: string,
     customerId: string,
     clarifications: Record<string, string>,
-    modelId?: string
+    modelId?: string,
+    clarificationAuditIds?: number[]
   ) => {
     // Cancel any ongoing request before starting a new one
     abortControllerRef.current?.abort();
@@ -538,6 +539,7 @@ export function useInsights() {
             mode: data.mode || "direct",
             resultCount: data.results?.rows?.length || 0,
             semanticContext: data.context || null,
+            clarificationAuditIds,
           }),
         });
       } catch (historyError) {

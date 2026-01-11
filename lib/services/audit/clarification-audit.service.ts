@@ -47,6 +47,28 @@ export interface LogClarificationBatchInput {
 }
 
 /**
+ * Input for logging clarification presentation (without response)
+ */
+export interface LogClarificationPresentedInput {
+  placeholderSemantic: string;
+  promptText: string;
+  optionsPresented: string[];
+  presentedAt?: Date;
+  templateName?: string;
+  templateSummary?: string;
+}
+
+/**
+ * Input for updating clarification response by audit ID
+ */
+export interface LogClarificationResponseUpdate {
+  auditId: number;
+  responseType: ClarificationResponseType;
+  acceptedValue: any;
+  timeSpentMs?: number;
+}
+
+/**
  * Service for logging clarification audit trail
  * Uses fire-and-forget pattern to avoid blocking query execution
  */
@@ -217,6 +239,68 @@ export class ClarificationAuditService {
       return null;
     }
   }
+
+  /**
+   * Log multiple clarification presentations and return audit IDs
+   */
+  static async logClarificationPresentedBatch(
+    clarifications: LogClarificationPresentedInput[]
+  ): Promise<Array<{ id: number; placeholderSemantic: string }>> {
+    if (!clarifications || clarifications.length === 0) {
+      return [];
+    }
+
+    try {
+      const pool = await getInsightGenDbPool();
+
+      const values: any[] = [];
+      const placeholders: string[] = [];
+
+      clarifications.forEach((clarification, index) => {
+        const baseIndex = index * 7;
+        placeholders.push(
+          `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7})`
+        );
+
+        values.push(
+          clarification.placeholderSemantic,
+          clarification.promptText,
+          JSON.stringify(clarification.optionsPresented),
+          'abandoned',
+          clarification.presentedAt ?? new Date(),
+          clarification.templateName ?? null,
+          clarification.templateSummary ?? null
+        );
+      });
+
+      const query = `
+        INSERT INTO "ClarificationAudit" (
+          "placeholderSemantic",
+          "promptText",
+          "optionsPresented",
+          "responseType",
+          "presentedAt",
+          "templateName",
+          "templateSummary"
+        )
+        VALUES ${placeholders.join(', ')}
+        RETURNING id, "placeholderSemantic"
+      `;
+
+      const result = await pool.query(query, values);
+      console.log('[ClarificationAudit] Logged clarification presentations:', {
+        count: clarifications.length,
+      });
+
+      return result.rows.map((row: any) => ({
+        id: row.id,
+        placeholderSemantic: row.placeholderSemantic,
+      }));
+    } catch (error) {
+      console.error('[ClarificationAudit] Failed to log clarification presentations (non-blocking):', error);
+      return [];
+    }
+  }
   
   /**
    * Update clarification audit when user responds
@@ -257,6 +341,28 @@ export class ClarificationAuditService {
       console.error('[ClarificationAudit] Failed to update clarification response (non-blocking):', error);
     }
   }
+
+  /**
+   * Update multiple clarification responses by audit ID
+   */
+  static async updateClarificationResponsesBatch(
+    updates: LogClarificationResponseUpdate[]
+  ): Promise<void> {
+    if (!updates || updates.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      updates.map((update) =>
+        ClarificationAuditService.updateClarificationResponse(
+          update.auditId,
+          update.responseType,
+          update.acceptedValue,
+          update.timeSpentMs
+        )
+      )
+    );
+  }
   
   /**
    * Link clarification audit to query history after query executes
@@ -284,6 +390,37 @@ export class ClarificationAuditService {
       });
     } catch (error) {
       console.error('[ClarificationAudit] Failed to link clarification to query (non-blocking):', error);
+    }
+  }
+
+  /**
+   * Link multiple clarification audits to a query history record
+   */
+  static async linkClarificationsToQuery(
+    auditIds: number[],
+    queryHistoryId: number
+  ): Promise<void> {
+    if (!auditIds || auditIds.length === 0) {
+      return;
+    }
+
+    try {
+      const pool = await getInsightGenDbPool();
+      await pool.query(
+        `
+        UPDATE "ClarificationAudit"
+        SET "queryHistoryId" = $1
+        WHERE id = ANY($2::int[])
+        `,
+        [queryHistoryId, auditIds]
+      );
+
+      console.log('[ClarificationAudit] Linked clarifications to query:', {
+        queryHistoryId,
+        count: auditIds.length,
+      });
+    } catch (error) {
+      console.error('[ClarificationAudit] Failed to link clarifications to query (non-blocking):', error);
     }
   }
 }

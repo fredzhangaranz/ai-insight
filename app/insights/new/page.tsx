@@ -35,9 +35,18 @@ export default function NewInsightPage() {
     await ask(question, customerId, modelId);
   };
 
-  const handleClarificationSubmit = async (clarifications: Record<string, string>) => {
+  const handleClarificationSubmit = async (
+    clarifications: Record<string, string>,
+    clarificationAuditIds?: number[]
+  ) => {
     if (!customerId || !result?.question) return;
-    await askWithClarifications(result.question, customerId, clarifications, modelId);
+    await askWithClarifications(
+      result.question,
+      customerId,
+      clarifications,
+      modelId,
+      clarificationAuditIds
+    );
   };
 
   const handleRerun = async (newSql: string, newQuestion: string) => {

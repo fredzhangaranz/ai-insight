@@ -37,7 +37,7 @@ interface ClarificationDialogProps {
   question: string;
   clarifications: ClarificationRequest[] | any[];  // Accept both formats
   confirmations?: ConfirmationPrompt[];
-  onSubmit: (responses: Record<string, string>) => void;
+  onSubmit: (responses: Record<string, string>, auditIds?: number[]) => void;
   onConfirm?: (confirmations: Record<string, boolean>) => void;
   isSubmitting?: boolean;
 }
@@ -102,6 +102,7 @@ export function ClarificationDialog({
   // Track presentation time for audit logging (Task P0.1)
   const presentedAtRef = useRef<Date>(new Date());
   const hasLoggedPresentationRef = useRef<boolean>(false);
+  const auditIdsByPlaceholderRef = useRef<Record<string, number>>({});
 
   // Normalize clarifications to handle both old and new formats
   // Use useMemo to prevent recalculating on every render, which was resetting responses
@@ -130,6 +131,7 @@ export function ClarificationDialog({
   useEffect(() => {
     if (hasLoggedPresentationRef.current) return;
     hasLoggedPresentationRef.current = true;
+    auditIdsByPlaceholderRef.current = {};
     
     // Log presentation asynchronously (fire-and-forget)
     const logClarificationPresentation = async () => {
@@ -138,22 +140,32 @@ export function ClarificationDialog({
           placeholderSemantic: clarification.semantic || clarification.placeholder,
           promptText: clarification.prompt,
           optionsPresented: clarification.options || [],
-          responseType: 'abandoned', // Default to abandoned, will update on submit
           templateName: clarification.templateName,
           templateSummary: clarification.templateSummary,
           presentedAt: presentedAtRef.current.toISOString(),
         }));
         
         // Fire-and-forget API call
-        fetch('/api/admin/audit/clarifications', {
+        const response = await fetch('/api/admin/audit/clarifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clarifications: clarificationLogs }),
-        }).catch((err) => {
-          console.warn('[ClarificationDialog] Failed to log presentation (non-blocking):', err);
+          body: JSON.stringify({ mode: 'present', clarifications: clarificationLogs }),
         });
+
+        if (!response.ok) {
+          throw new Error(`Failed to log presentation: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (Array.isArray(data?.auditIds)) {
+          data.auditIds.forEach((entry: { auditId: number; placeholderSemantic: string }) => {
+            if (entry?.auditId && entry?.placeholderSemantic) {
+              auditIdsByPlaceholderRef.current[entry.placeholderSemantic] = entry.auditId;
+            }
+          });
+        }
       } catch (error) {
-        console.warn('[ClarificationDialog] Error preparing clarification logs:', error);
+        console.warn('[ClarificationDialog] Failed to log presentation (non-blocking):', error);
       }
     };
     
@@ -201,32 +213,75 @@ export function ClarificationDialog({
         const respondedAt = new Date();
         const timeSpentMs = respondedAt.getTime() - presentedAtRef.current.getTime();
         
-        const clarificationLogs = normalizedClarifications.map((clarification) => {
+        const responseUpdates: Array<{
+          auditId: number;
+          responseType: 'accepted' | 'custom';
+          acceptedValue: string;
+          timeSpentMs: number;
+        }> = [];
+
+        const fallbackInserts: Array<{
+          placeholderSemantic: string;
+          promptText: string;
+          optionsPresented: string[];
+          responseType: 'accepted' | 'custom';
+          acceptedValue: string;
+          timeSpentMs: number;
+          presentedAt: string;
+          respondedAt: string;
+          templateName?: string;
+          templateSummary?: string;
+        }> = [];
+
+        normalizedClarifications.forEach((clarification) => {
           const userResponse = responses[clarification.placeholder];
           const isAccepted = clarification.options?.includes(userResponse);
-          
-          return {
-            placeholderSemantic: clarification.semantic || clarification.placeholder,
-            promptText: clarification.prompt,
-            optionsPresented: clarification.options || [],
-            responseType: isAccepted ? 'accepted' : 'custom',
-            acceptedValue: userResponse,
-            timeSpentMs,
-            presentedAt: presentedAtRef.current.toISOString(),
-            respondedAt: respondedAt.toISOString(),
-            templateName: clarification.templateName,
-            templateSummary: clarification.templateSummary,
-          };
+          const placeholderSemantic = clarification.semantic || clarification.placeholder;
+          const auditId = auditIdsByPlaceholderRef.current[placeholderSemantic];
+
+          if (auditId) {
+            responseUpdates.push({
+              auditId,
+              responseType: isAccepted ? 'accepted' : 'custom',
+              acceptedValue: userResponse,
+              timeSpentMs,
+            });
+          } else {
+            fallbackInserts.push({
+              placeholderSemantic,
+              promptText: clarification.prompt,
+              optionsPresented: clarification.options || [],
+              responseType: isAccepted ? 'accepted' : 'custom',
+              acceptedValue: userResponse,
+              timeSpentMs,
+              presentedAt: presentedAtRef.current.toISOString(),
+              respondedAt: respondedAt.toISOString(),
+              templateName: clarification.templateName,
+              templateSummary: clarification.templateSummary,
+            });
+          }
         });
         
         // Fire-and-forget API call
-        fetch('/api/admin/audit/clarifications', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clarifications: clarificationLogs }),
-        }).catch((err) => {
-          console.warn('[ClarificationDialog] Failed to log responses (non-blocking):', err);
-        });
+        if (responseUpdates.length > 0) {
+          fetch('/api/admin/audit/clarifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'respond', clarifications: responseUpdates }),
+          }).catch((err) => {
+            console.warn('[ClarificationDialog] Failed to log responses (non-blocking):', err);
+          });
+        }
+
+        if (fallbackInserts.length > 0) {
+          fetch('/api/admin/audit/clarifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clarifications: fallbackInserts }),
+          }).catch((err) => {
+            console.warn('[ClarificationDialog] Failed to log responses (non-blocking):', err);
+          });
+        }
       } catch (error) {
         console.warn('[ClarificationDialog] Error logging clarification responses:', error);
       }
@@ -236,7 +291,14 @@ export function ClarificationDialog({
     logClarificationResponses();
     
     // Proceed with submission
-    onSubmit(responses);
+    const auditIds = normalizedClarifications
+      .map((clarification) => {
+        const placeholderSemantic = clarification.semantic || clarification.placeholder;
+        return auditIdsByPlaceholderRef.current[placeholderSemantic];
+      })
+      .filter((auditId): auditId is number => typeof auditId === "number");
+
+    onSubmit(responses, auditIds.length > 0 ? auditIds : undefined);
   };
 
   const allAnswered = normalizedClarifications.every(
@@ -502,4 +564,3 @@ function ClarificationItem({
     </div>
   );
 }
-
