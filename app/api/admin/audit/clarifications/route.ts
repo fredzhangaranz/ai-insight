@@ -5,9 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { ClarificationAuditService, type LogClarificationInput } from "@/lib/services/audit/clarification-audit.service";
+import { requireAdmin } from "@/lib/middleware/auth-middleware";
+import { ensureAuditDashboardEnabled } from "@/lib/services/audit/audit-feature-guard";
+import { getAuditCache } from "@/lib/services/audit/audit-cache";
+import { assertAuditQueryUsesViews } from "@/lib/services/audit/audit-query-guard";
+import { getInsightGenDbPool } from "@/lib/db";
 
 /**
  * POST /api/admin/audit/clarifications
@@ -15,13 +18,9 @@ import { ClarificationAuditService, type LogClarificationInput } from "@/lib/ser
  */
 export async function POST(req: NextRequest) {
   try {
-    // Authentication check (optional - logging should work even for unauthenticated requests)
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+    const auth = await requireAdmin(req);
+    if (auth instanceof NextResponse) {
+      return auth;
     }
     
     const body = await req.json();
@@ -116,95 +115,94 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    // Authentication & authorization check
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+    const featureGate = ensureAuditDashboardEnabled();
+    if (featureGate) {
+      return featureGate;
     }
-    
-    // TODO: Add role check for admin-only access
-    // if (session.user.role !== 'admin') {
-    //   return NextResponse.json(
-    //     { error: "Forbidden - Admin access required" },
-    //     { status: 403 }
-    //   );
-    // }
+
+    const auth = await requireAdmin(req);
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
     
     // Parse query parameters
     const { searchParams } = new URL(req.url);
     const placeholderSemantic = searchParams.get('placeholderSemantic');
     const responseType = searchParams.get('responseType');
-    const templateName = searchParams.get('templateName');
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     
-    // Build query with filters
-    const { getInsightGenDbPool } = await import("@/lib/db");
-    const pool = await getInsightGenDbPool();
-    
-    const conditions: string[] = ['1=1'];
-    const values: any[] = [];
-    let paramIndex = 1;
-    
-    if (placeholderSemantic) {
-      conditions.push(`"placeholderSemantic" = $${paramIndex}`);
-      values.push(placeholderSemantic);
-      paramIndex++;
-    }
-    
-    if (responseType) {
-      conditions.push(`"responseType" = $${paramIndex}`);
-      values.push(responseType);
-      paramIndex++;
-    }
-    
-    if (templateName) {
-      conditions.push(`"templateName" = $${paramIndex}`);
-      values.push(templateName);
-      paramIndex++;
-    }
-    
-    // Add limit and offset
-    values.push(limit, offset);
-    
-    const query = `
-      SELECT 
-        id,
-        "queryHistoryId",
-        "placeholderSemantic",
-        "promptText",
-        "optionsPresented",
-        "responseType",
-        "acceptedValue",
-        "timeSpentMs",
-        "presentedAt",
-        "respondedAt",
-        "templateName",
-        "templateSummary",
-        "createdAt"
-      FROM "ClarificationAudit"
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY "createdAt" DESC
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-    `;
-    
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM "ClarificationAudit"
-      WHERE ${conditions.join(' AND ')}
-    `;
-    
-    const [result, countResult] = await Promise.all([
-      pool.query(query, values),
-      pool.query(countQuery, values.slice(0, -2)), // Exclude limit/offset from count
-    ]);
-    
+    const cacheKey = `clarifications:${placeholderSemantic ?? "all"}:${responseType ?? "all"}:${startDate ?? "all"}:${endDate ?? "all"}:${limit}:${offset}`;
+
+    const data = await getAuditCache(cacheKey, 60_000, async () => {
+      const pool = await getInsightGenDbPool();
+      const conditions: string[] = ['1=1'];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (placeholderSemantic) {
+        conditions.push(`"placeholderSemantic" = $${paramIndex}`);
+        values.push(placeholderSemantic);
+        paramIndex++;
+      }
+
+      if (responseType) {
+        conditions.push(`"responseType" = $${paramIndex}`);
+        values.push(responseType);
+        paramIndex++;
+      }
+
+      if (startDate) {
+        conditions.push(`day >= $${paramIndex}`);
+        values.push(startDate);
+        paramIndex++;
+      }
+
+      if (endDate) {
+        conditions.push(`day <= $${paramIndex}`);
+        values.push(endDate);
+        paramIndex++;
+      }
+
+      values.push(limit, offset);
+
+      const query = `
+        SELECT
+          day,
+          "placeholderSemantic",
+          "responseType",
+          "clarificationCount",
+          "avgTimeSpentMs"
+        FROM "ClarificationMetricsDaily"
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY day DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM "ClarificationMetricsDaily"
+        WHERE ${conditions.join(" AND ")}
+      `;
+
+      assertAuditQueryUsesViews(query);
+      assertAuditQueryUsesViews(countQuery);
+
+      const [result, countResult] = await Promise.all([
+        pool.query(query, values),
+        pool.query(countQuery, values.slice(0, -2)),
+      ]);
+
+      return {
+        clarifications: result.rows,
+        total: parseInt(countResult.rows[0]?.total || '0', 10),
+      };
+    });
+
     return NextResponse.json({
-      clarifications: result.rows,
-      total: parseInt(countResult.rows[0]?.total || '0', 10),
+      ...data,
       limit,
       offset,
     });

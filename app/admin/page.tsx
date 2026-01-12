@@ -605,6 +605,13 @@ export default function AdminDashboard() {
                   </Button>
                 </Link>
 
+                <Link href="/admin/audit">
+                  <Button variant="outline" className="w-full justify-start">
+                    <ChartBarIcon className="w-4 h-4 mr-2" />
+                    Audit Dashboard
+                  </Button>
+                </Link>
+
                 <Link href="/">
                   <Button variant="outline" className="w-full justify-start">
                     <ArrowRightIcon className="w-4 h-4 mr-2" />

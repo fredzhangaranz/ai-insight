@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { setupService } from "@/lib/services/setup.service";
 import { healthMonitorService } from "@/lib/services/health-monitor.service";
+import { auditViewRefreshService } from "@/lib/services/audit/audit-view-refresh.service";
 
 export async function GET() {
   try {
-    // Ensure health monitor is running in production
+    // Ensure health monitor and audit view refresh are running in production
     healthMonitorService.start();
+    auditViewRefreshService.start();
     const setupStatus = await setupService.checkSetupStatus();
     return NextResponse.json(setupStatus);
   } catch (error) {

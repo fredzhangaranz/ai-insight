@@ -5,9 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { getInsightGenDbPool } from "@/lib/db";
+import { requireAdmin } from "@/lib/middleware/auth-middleware";
+import { ensureAuditDashboardEnabled } from "@/lib/services/audit/audit-feature-guard";
+import { getAuditCache } from "@/lib/services/audit/audit-cache";
+import { assertAuditQueryUsesViews } from "@/lib/services/audit/audit-query-guard";
 
 /**
  * GET /api/admin/audit/sql-validation
@@ -15,103 +17,109 @@ import { getInsightGenDbPool } from "@/lib/db";
  */
 export async function GET(req: NextRequest) {
   try {
-    // Authentication & authorization check
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+    const featureGate = ensureAuditDashboardEnabled();
+    if (featureGate) {
+      return featureGate;
     }
-    
-    // TODO: Add role check for admin-only access
-    // if (session.user.role !== 'admin') {
-    //   return NextResponse.json(
-    //     { error: "Forbidden - Admin access required" },
-    //     { status: 403 }
-    //   );
-    // }
+
+    const auth = await requireAdmin(req);
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
     
     // Parse query parameters
     const { searchParams } = new URL(req.url);
-    const isValid = searchParams.get('isValid');
-    const errorType = searchParams.get('errorType');
-    const intentType = searchParams.get('intentType');
-    const mode = searchParams.get('mode');
+    const isValid = searchParams.get("isValid");
+    const errorType = searchParams.get("errorType");
+    const intentType = searchParams.get("intentType");
+    const mode = searchParams.get("mode");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     
-    // Build query with filters
-    const pool = await getInsightGenDbPool();
-    
-    const conditions: string[] = ['1=1'];
-    const values: any[] = [];
-    let paramIndex = 1;
-    
-    if (isValid !== null) {
-      conditions.push(`"isValid" = $${paramIndex}`);
-      values.push(isValid === 'true');
-      paramIndex++;
-    }
-    
-    if (errorType) {
-      conditions.push(`"errorType" = $${paramIndex}`);
-      values.push(errorType);
-      paramIndex++;
-    }
-    
-    if (intentType) {
-      conditions.push(`"intentType" = $${paramIndex}`);
-      values.push(intentType);
-      paramIndex++;
-    }
-    
-    if (mode) {
-      conditions.push(`"mode" = $${paramIndex}`);
-      values.push(mode);
-      paramIndex++;
-    }
-    
-    // Add limit and offset
-    values.push(limit, offset);
-    
-    const query = `
-      SELECT 
-        id,
-        "queryHistoryId",
-        "sqlGenerated",
-        "intentType",
-        "mode",
-        "isValid",
-        "errorType",
-        "errorMessage",
-        "errorLine",
-        "errorColumn",
-        "suggestionProvided",
-        "suggestionText",
-        "suggestionAccepted",
-        "validationDurationMs",
-        "createdAt"
-      FROM "SqlValidationLog"
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY "createdAt" DESC
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-    `;
-    
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM "SqlValidationLog"
-      WHERE ${conditions.join(' AND ')}
-    `;
-    
-    const [result, countResult] = await Promise.all([
-      pool.query(query, values),
-      pool.query(countQuery, values.slice(0, -2)), // Exclude limit/offset from count
-    ]);
-    
+    const cacheKey = `sql-validation:${isValid ?? "all"}:${errorType ?? "all"}:${intentType ?? "all"}:${mode ?? "all"}:${startDate ?? "all"}:${endDate ?? "all"}:${limit}:${offset}`;
+
+    const data = await getAuditCache(cacheKey, 60_000, async () => {
+      const pool = await getInsightGenDbPool();
+      const conditions: string[] = ['1=1'];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (isValid !== null) {
+        conditions.push(`"errorType" ${isValid === "true" ? "=" : "!="} 'none'`);
+      }
+
+      if (errorType) {
+        conditions.push(`"errorType" = $${paramIndex}`);
+        values.push(errorType);
+        paramIndex++;
+      }
+
+      if (intentType) {
+        conditions.push(`"intentType" = $${paramIndex}`);
+        values.push(intentType);
+        paramIndex++;
+      }
+
+      if (mode) {
+        conditions.push(`mode = $${paramIndex}`);
+        values.push(mode);
+        paramIndex++;
+      }
+
+      if (startDate) {
+        conditions.push(`day >= $${paramIndex}`);
+        values.push(startDate);
+        paramIndex++;
+      }
+
+      if (endDate) {
+        conditions.push(`day <= $${paramIndex}`);
+        values.push(endDate);
+        paramIndex++;
+      }
+
+      values.push(limit, offset);
+
+      const query = `
+        SELECT
+          day,
+          "errorType",
+          "intentType",
+          mode,
+          "validationCount",
+          "validCount",
+          "suggestionProvidedCount",
+          "suggestionAcceptedCount"
+        FROM "SqlValidationDaily"
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY day DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM "SqlValidationDaily"
+        WHERE ${conditions.join(" AND ")}
+      `;
+
+      assertAuditQueryUsesViews(query);
+      assertAuditQueryUsesViews(countQuery);
+
+      const [result, countResult] = await Promise.all([
+        pool.query(query, values),
+        pool.query(countQuery, values.slice(0, -2)),
+      ]);
+
+      return {
+        validations: result.rows,
+        total: parseInt(countResult.rows[0]?.total || "0", 10),
+      };
+    });
+
     return NextResponse.json({
-      validations: result.rows,
-      total: parseInt(countResult.rows[0]?.total || '0', 10),
+      ...data,
       limit,
       offset,
     });
@@ -134,68 +142,82 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const featureGate = ensureAuditDashboardEnabled();
+    if (featureGate) {
+      return featureGate;
     }
-    
-    const pool = await getInsightGenDbPool();
-    
-    // Get error distribution by type and intent
-    const errorDistribution = await pool.query(`
-      SELECT 
-        "errorType",
-        "intentType",
-        COUNT(*) as count,
-        ROUND(AVG("validationDurationMs")::numeric, 2) as avg_duration_ms
-      FROM "SqlValidationLog"
-      WHERE "isValid" = false
-        AND "errorType" IS NOT NULL
-        AND "createdAt" > NOW() - INTERVAL '7 days'
-      GROUP BY "errorType", "intentType"
-      ORDER BY count DESC
-      LIMIT 20
-    `);
-    
-    // Get success rate by mode
-    const successRateByMode = await pool.query(`
-      SELECT 
-        "mode",
-        COUNT(*) FILTER (WHERE "isValid" = true) as success_count,
-        COUNT(*) as total_count,
-        ROUND(
-          (COUNT(*) FILTER (WHERE "isValid" = true)::numeric / COUNT(*)) * 100,
-          2
-        ) as success_rate_pct
-      FROM "SqlValidationLog"
-      WHERE "createdAt" > NOW() - INTERVAL '7 days'
-      GROUP BY "mode"
-      ORDER BY total_count DESC
-    `);
-    
-    // Get suggestion acceptance rate
-    const suggestionStats = await pool.query(`
-      SELECT 
-        COUNT(*) FILTER (WHERE "suggestionProvided" = true) as suggestions_provided,
-        COUNT(*) FILTER (WHERE "suggestionAccepted" = true) as suggestions_accepted,
-        ROUND(
-          (COUNT(*) FILTER (WHERE "suggestionAccepted" = true)::numeric / 
-           NULLIF(COUNT(*) FILTER (WHERE "suggestionProvided" = true), 0)) * 100,
-          2
-        ) as acceptance_rate_pct
-      FROM "SqlValidationLog"
-      WHERE "createdAt" > NOW() - INTERVAL '7 days'
-    `);
-    
-    return NextResponse.json({
-      errorDistribution: errorDistribution.rows,
-      successRateByMode: successRateByMode.rows,
-      suggestionStats: suggestionStats.rows[0] || {
-        suggestions_provided: 0,
-        suggestions_accepted: 0,
-        acceptance_rate_pct: 0,
-      },
+
+    const auth = await requireAdmin(req);
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
+    const cacheKey = "sql-validation:stats:last7d";
+    const data = await getAuditCache(cacheKey, 60_000, async () => {
+      const pool = await getInsightGenDbPool();
+
+      const errorDistributionQuery = `
+        SELECT
+          "errorType",
+          "intentType",
+          SUM("validationCount") as count
+        FROM "SqlValidationDaily"
+        WHERE day >= (CURRENT_DATE - INTERVAL '7 days')
+          AND "errorType" != 'none'
+        GROUP BY "errorType", "intentType"
+        ORDER BY count DESC
+        LIMIT 20
+      `;
+
+      const successRateQuery = `
+        SELECT
+          mode,
+          SUM("validCount") as success_count,
+          SUM("validationCount") as total_count,
+          ROUND(
+            (SUM("validCount")::numeric / NULLIF(SUM("validationCount"), 0)) * 100,
+            2
+          ) as success_rate_pct
+        FROM "SqlValidationDaily"
+        WHERE day >= (CURRENT_DATE - INTERVAL '7 days')
+        GROUP BY mode
+        ORDER BY total_count DESC
+      `;
+
+      const suggestionStatsQuery = `
+        SELECT
+          SUM("suggestionProvidedCount") as suggestions_provided,
+          SUM("suggestionAcceptedCount") as suggestions_accepted,
+          ROUND(
+            (SUM("suggestionAcceptedCount")::numeric / NULLIF(SUM("suggestionProvidedCount"), 0)) * 100,
+            2
+          ) as acceptance_rate_pct
+        FROM "SqlValidationDaily"
+        WHERE day >= (CURRENT_DATE - INTERVAL '7 days')
+      `;
+
+      assertAuditQueryUsesViews(errorDistributionQuery);
+      assertAuditQueryUsesViews(successRateQuery);
+      assertAuditQueryUsesViews(suggestionStatsQuery);
+
+      const [errorDistribution, successRateByMode, suggestionStats] = await Promise.all([
+        pool.query(errorDistributionQuery),
+        pool.query(successRateQuery),
+        pool.query(suggestionStatsQuery),
+      ]);
+
+      return {
+        errorDistribution: errorDistribution.rows,
+        successRateByMode: successRateByMode.rows,
+        suggestionStats: suggestionStats.rows[0] || {
+          suggestions_provided: 0,
+          suggestions_accepted: 0,
+          acceptance_rate_pct: 0,
+        },
+      };
     });
+
+    return NextResponse.json(data);
   } catch (error) {
     console.error('[API /audit/sql-validation/stats] Error:', error);
     return NextResponse.json(

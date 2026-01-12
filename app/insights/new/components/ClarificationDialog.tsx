@@ -146,7 +146,7 @@ export function ClarificationDialog({
         }));
         
         // Fire-and-forget API call
-        const response = await fetch('/api/admin/audit/clarifications', {
+        const response = await fetch('/api/audit/clarifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode: 'present', clarifications: clarificationLogs }),
@@ -264,7 +264,7 @@ export function ClarificationDialog({
         
         // Fire-and-forget API call
         if (responseUpdates.length > 0) {
-          fetch('/api/admin/audit/clarifications', {
+          fetch('/api/audit/clarifications', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mode: 'respond', clarifications: responseUpdates }),
@@ -274,7 +274,7 @@ export function ClarificationDialog({
         }
 
         if (fallbackInserts.length > 0) {
-          fetch('/api/admin/audit/clarifications', {
+          fetch('/api/audit/clarifications', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ clarifications: fallbackInserts }),
