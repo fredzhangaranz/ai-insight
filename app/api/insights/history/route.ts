@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getInsightGenDbPool } from "@/lib/db";
+import { SqlValidationAuditService, type LogSqlValidationInput } from "@/lib/services/audit/sql-validation-audit.service";
+import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import { ClarificationAuditService } from "@/lib/services/audit/clarification-audit.service";
 
 /**
@@ -89,6 +91,7 @@ export async function POST(req: NextRequest) {
       resultCount,
       semanticContext,
       clarificationAuditIds,
+      sqlValidation,
     } = body;
 
     // Validate required fields
@@ -126,6 +129,26 @@ export async function POST(req: NextRequest) {
       message: "Query saved to history",
     };
 
+    if (sqlValidation && sql) {
+      try {
+        const validationInput = buildSqlValidationAuditInput({
+          sql,
+          mode,
+          sqlValidation,
+          intentType: semanticContext?.intent || semanticContext?.intentType,
+        });
+
+        if (validationInput) {
+          await SqlValidationAuditService.logValidation({
+            ...validationInput,
+            queryHistoryId: createdRecord.id,
+          });
+        }
+      } catch (validationError) {
+        console.warn("Failed to log SQL validation audit:", validationError);
+      }
+    }
+
     if (Array.isArray(clarificationAuditIds) && clarificationAuditIds.length > 0) {
       try {
         await ClarificationAuditService.linkClarificationsToQuery(
@@ -145,4 +168,47 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function buildSqlValidationAuditInput(input: {
+  sql: string;
+  mode: string;
+  sqlValidation: SQLValidationResult;
+  intentType?: string;
+}): Omit<LogSqlValidationInput, "queryHistoryId"> | null {
+  const { sql, mode, sqlValidation, intentType } = input;
+
+  if (!sqlValidation) {
+    return null;
+  }
+
+  const errors = Array.isArray(sqlValidation.errors) ? sqlValidation.errors : [];
+  const errorMessage = errors.map((error) => error.message).join(" | ") || undefined;
+  const suggestionText = errors.map((error) => error.suggestion).filter(Boolean).join(" | ") || undefined;
+  const suggestionProvided = Boolean(suggestionText);
+
+  let errorType: LogSqlValidationInput["errorType"] | undefined;
+  if (!sqlValidation.isValid && errors.length > 0) {
+    const hasStructuralViolation = errors.some((error) =>
+      ["GROUP_BY_VIOLATION", "ORDER_BY_VIOLATION", "AGGREGATE_VIOLATION"].includes(error.type)
+    );
+
+    if (hasStructuralViolation) {
+      errorType = "semantic_error";
+    } else if (errorMessage) {
+      errorType = SqlValidationAuditService.classifyErrorType(errorMessage);
+    }
+  }
+
+  return {
+    sqlGenerated: sql,
+    intentType,
+    mode,
+    isValid: sqlValidation.isValid,
+    errorType,
+    errorMessage,
+    suggestionProvided,
+    suggestionText,
+    validationDurationMs: (sqlValidation as any).validationDurationMs ?? undefined,
+  };
 }

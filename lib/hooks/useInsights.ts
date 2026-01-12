@@ -411,6 +411,7 @@ export function useInsights() {
             mode: data.mode || "direct",
             resultCount: data.results?.rows?.length || 0,
             semanticContext: data.context || null,
+            sqlValidation: data.sqlValidation || null,
           }),
         });
       } catch (historyError) {
@@ -539,6 +540,7 @@ export function useInsights() {
             mode: data.mode || "direct",
             resultCount: data.results?.rows?.length || 0,
             semanticContext: data.context || null,
+            sqlValidation: data.sqlValidation || null,
             clarificationAuditIds,
           }),
         });
