@@ -69,6 +69,7 @@ const migrations = [
   "041_remove_faulty_data_sources_index.sql",
   "042_semantic_index_concept_id.sql",
   "043_create_clarification_audit.sql",
+  "044_create_sql_validation_log.sql",
 ];
 
 /**
