@@ -230,6 +230,11 @@ export function SideNav() {
                         >
                           Manage Ontology
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/audit")}
+                        >
+                          Audit Dashboard
+                        </DropdownMenuItem>
                       </>
                     )}
                     <DropdownMenuSeparator />

@@ -3,9 +3,11 @@ const AUDIT_DASHBOARD_PUBLIC_KEY = "NEXT_PUBLIC_ENABLE_AUDIT_DASHBOARD" as const
 
 export function isAuditDashboardEnabled(): boolean {
   if (typeof window !== "undefined") {
-    return process.env[AUDIT_DASHBOARD_PUBLIC_KEY] === "true";
+    // Access directly for Next.js static replacement
+    // Next.js replaces NEXT_PUBLIC_* variables at build time
+    return process.env.NEXT_PUBLIC_ENABLE_AUDIT_DASHBOARD === "true";
   }
-  return process.env[AUDIT_DASHBOARD_ENV_KEY] === "true";
+  return process.env.ENABLE_AUDIT_DASHBOARD === "true";
 }
 
 export function getAuditDashboardEnvKey(): string {

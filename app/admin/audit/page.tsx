@@ -18,7 +18,18 @@ interface AuditSummary {
 }
 
 export default function AuditDashboardPage() {
-  const enabled = useMemo(() => isAuditDashboardEnabled(), []);
+  const enabled = useMemo(() => {
+    const result = isAuditDashboardEnabled();
+    // Debug logging (remove in production)
+    if (typeof window !== "undefined") {
+      console.log("[AuditDashboard] Feature flag check:", {
+        enabled: result,
+        envValue: process.env.NEXT_PUBLIC_ENABLE_AUDIT_DASHBOARD,
+        envType: typeof process.env.NEXT_PUBLIC_ENABLE_AUDIT_DASHBOARD,
+      });
+    }
+    return result;
+  }, []);
   const [summary, setSummary] = useState<AuditSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +83,13 @@ export default function AuditDashboardPage() {
           {!enabled && (
             <Card className="border-amber-200 bg-amber-50">
               <CardContent className="py-4 text-sm text-amber-800">
-                The audit dashboard is disabled. Set ENABLE_AUDIT_DASHBOARD=true to enable.
+                <p className="font-semibold mb-2">The audit dashboard is disabled.</p>
+                <p className="mb-1">To enable, add both to your <code className="bg-amber-100 px-1 rounded">.env.local</code> file:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li><code>ENABLE_AUDIT_DASHBOARD=true</code> (for server-side APIs)</li>
+                  <li><code>NEXT_PUBLIC_ENABLE_AUDIT_DASHBOARD=true</code> (for client-side UI)</li>
+                </ul>
+                <p className="mt-2 text-xs">Note: Restart your dev server after adding these variables.</p>
               </CardContent>
             </Card>
           )}

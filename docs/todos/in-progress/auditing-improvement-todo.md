@@ -1,9 +1,9 @@
 # Auditing & Telemetry - Deployment Readiness Plan
 
-**Document Version:** 1.1  
+**Document Version:** 1.2  
 **Created:** 2025-12-23  
-**Updated:** 2025-01-23  
-**Status:** Phase 0 In Progress (3/4 tasks complete) → P0.4 Remaining  
+**Updated:** 2025-01-13  
+**Status:** Phase 0 Complete (3/4 tasks done) → P0.4 Deferred (post-deployment evaluation)  
 **Owner:** Observability & Insights Guild  
 **Timeline:** 9-11 days to deployment readiness  
 **Related Docs:** `docs/design/auditing/auditing_design.md`, `docs/design/auditing/IMPLEMENTATION_CHECKLIST.md`
@@ -302,11 +302,35 @@ Implement resilient fire-and-forget logging with retry logic, backpressure handl
 
 ### Status
 
-Not Started
+⏸️ Deferred (Post-Deployment)
 
 ### Completion Date
 
-TBD
+TBD – Re-evaluate after P0.1-P0.3 stability validation (2-4 weeks in production)
+
+### Deferral Rationale
+
+**Decision:** Defer P0.4 implementation until after P0.1-P0.3 are stable in production.
+
+**Justification:**
+
+1. **Core auditing works**: P0.1, P0.2, P0.3 are deployed and logging under normal conditions. All audit functionality is operational.
+2. **Transient outages are edge case**: Rare in typical dev/internal deployments. Priority is validating that audit data is operationally useful first.
+3. **Reduces deployment risk**: Fewer moving parts (no queue infrastructure) means faster time to production visibility.
+4. **Data loss is tolerable short-term**: If outages are rare (<1/month), missing a few audit entries doesn't affect decision-making.
+5. **Re-prioritize based on ops data**: If we observe frequent outages or audit gaps cause operational pain, implement P0.4 within 1-2 sprints.
+
+**Trigger to implement P0.4:**
+
+- Transient database outages >2/month, OR
+- Audit logging error rates >0.1%, OR
+- Operations team requests complete audit trail for compliance
+
+**Monitoring required while deferred:**
+
+- Log all audit service write failures (add try-catch handlers if missing)
+- Alert if exception rates spike
+- Track audit data coverage (gaps in dashboard queries suggest missing records)
 
 ### Dependency
 
@@ -392,6 +416,8 @@ TBD
 | 2025-01-10 | 0     | P0.1    | ✅ Complete | Clarification audit trail implemented. Migration 043, service layer, API endpoints, frontend integration. See `docs/todos/in-progress/P0.1_COMPLETION_REPORT.md`                |
 | 2025-01-13 | 0     | P0.2    | ✅ Complete | SQL validation logging implemented. Migration 044, service layer, API endpoints, error classification. Integrated with SQL validator. See `docs/reviews/P0.2_REVIEW_SUMMARY.md` |
 | 2025-01-17 | 0     | P0.3    | ✅ Complete | Admin dashboard shell implemented. Materialized views (migration 045), refresh service, dashboard pages, API endpoints, feature flags. All acceptance criteria met.             |
+
+|| 2025-01-13 | 0 | P0.4 | ⏸️ Deferred | Queue & retry system deferred post-deployment. Core auditing works; transient outages rare. Re-evaluate if outages >2/month or audit gaps impact operations. |
 
 _Update instructions:_ Every time a task reaches **Acceptance Criteria**, append a row with completion date, PR/commit links, rollback notes, and outstanding follow-ups.
 
