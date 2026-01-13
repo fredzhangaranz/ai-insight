@@ -89,7 +89,7 @@ export default function QueryExplorerPage() {
   return (
     <ProtectedRoute requireAdmin>
       <div className="min-h-screen bg-slate-50 p-6">
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="w-full space-y-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">Query Explorer</h1>
