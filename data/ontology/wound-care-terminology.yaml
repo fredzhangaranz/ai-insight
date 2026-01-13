@@ -1,0 +1,671 @@
+# Wound Care Clinical Ontology Data
+# Phase 1 - Initial Dataset (20-30 core terms)
+#
+# This file contains the foundational clinical terminology for wound care
+# to enable synonym expansion and abbreviation resolution.
+#
+# Structure:
+# - preferred_term: Canonical term used in database
+# - category: Classification (wound_type, treatment, assessment, etc.)
+# - synonyms: Alternative terms with metadata
+# - abbreviations: Short forms with context keywords
+# - related_terms: Broader/narrower concepts
+
+ontology:
+  # ============================================================================
+  # WOUND TYPES (10 entries)
+  # ============================================================================
+
+  - preferred_term: "diabetic foot ulcer"
+    category: "wound_type"
+    description: "Ulceration of the foot in diabetic patients, often due to neuropathy or ischemia"
+    synonyms:
+      - value: "foot ulcer"
+        formality: "informal"
+        confidence: 0.85
+      - value: "diabetic foot wound"
+        formality: "clinical"
+        confidence: 0.95
+      - value: "DM foot ulcer"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "diabetic ulcer"
+        formality: "informal"
+        confidence: 0.80
+      - value: "neuropathic foot ulcer"
+        formality: "clinical"
+        confidence: 0.85
+        specialty: "podiatry"
+    abbreviations:
+      - value: "DFU"
+        context_keywords: ["wound", "ulcer", "foot", "diabetic", "patient", "diabetes"]
+        frequency: 0.90
+        domain: "wound_care"
+    related_terms:
+      - "diabetic foot infection"
+      - "ischemic foot ulcer"
+      - "Wagner grade ulcer"
+
+  - preferred_term: "venous leg ulcer"
+    category: "wound_type"
+    description: "Ulceration caused by venous insufficiency, typically on lower leg"
+    synonyms:
+      - value: "leg ulcer"
+        formality: "informal"
+        confidence: 0.75
+      - value: "venous ulcer"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "varicose ulcer"
+        formality: "clinical"
+        confidence: 0.85
+      - value: "venous stasis ulcer"
+        formality: "clinical"
+        confidence: 0.92
+    abbreviations:
+      - value: "VLU"
+        context_keywords: ["leg", "ulcer", "venous", "varicose", "stasis"]
+        frequency: 0.88
+        domain: "wound_care"
+    related_terms:
+      - "chronic venous insufficiency"
+      - "venous hypertension"
+      - "lipodermatosclerosis"
+
+  - preferred_term: "pressure injury"
+    category: "wound_type"
+    description: "Localized damage to skin and underlying tissue, usually over bony prominence"
+    synonyms:
+      - value: "pressure ulcer"
+        region: "US"
+        formality: "clinical"
+        confidence: 0.98
+      - value: "pressure sore"
+        region: "UK"
+        formality: "informal"
+        confidence: 0.85
+      - value: "bed sore"
+        formality: "informal"
+        confidence: 0.80
+      - value: "decubitus ulcer"
+        formality: "deprecated"
+        confidence: 0.70
+      - value: "bedsore"
+        formality: "informal"
+        confidence: 0.78
+    abbreviations:
+      - value: "PI"
+        context_keywords: ["wound", "ulcer", "stage", "pressure", "bed", "patient", "immobile"]
+        frequency: 0.82
+        domain: "wound_care"
+      - value: "PU"
+        context_keywords: ["wound", "ulcer", "pressure", "decubitus"]
+        frequency: 0.75
+        domain: "wound_care"
+    related_terms:
+      - "pressure injury stage 1"
+      - "pressure injury stage 2"
+      - "pressure injury stage 3"
+      - "pressure injury stage 4"
+      - "unstageable pressure injury"
+      - "deep tissue pressure injury"
+
+  - preferred_term: "arterial ulcer"
+    category: "wound_type"
+    description: "Ulceration due to arterial insufficiency and poor blood flow"
+    synonyms:
+      - value: "ischemic ulcer"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "arterial wound"
+        formality: "informal"
+        confidence: 0.80
+      - value: "PAD ulcer"
+        formality: "clinical"
+        confidence: 0.88
+    abbreviations:
+      - value: "AU"
+        context_keywords: ["arterial", "ulcer", "ischemic", "PAD"]
+        frequency: 0.65
+        domain: "wound_care"
+    related_terms:
+      - "peripheral arterial disease"
+      - "critical limb ischemia"
+
+  - preferred_term: "surgical wound"
+    category: "wound_type"
+    description: "Wound created by surgical incision"
+    synonyms:
+      - value: "surgical site"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "postoperative wound"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "incision"
+        formality: "clinical"
+        confidence: 0.75
+      - value: "surgical incision"
+        formality: "clinical"
+        confidence: 0.95
+    abbreviations:
+      - value: "SSI"
+        context_keywords: ["surgical", "site", "infection", "postoperative"]
+        frequency: 0.70
+        domain: "wound_care"
+    related_terms:
+      - "clean surgical wound"
+      - "contaminated surgical wound"
+      - "dehisced wound"
+
+  - preferred_term: "traumatic wound"
+    category: "wound_type"
+    description: "Wound caused by physical trauma or injury"
+    synonyms:
+      - value: "trauma wound"
+        formality: "informal"
+        confidence: 0.88
+      - value: "injury"
+        formality: "informal"
+        confidence: 0.70
+      - value: "acute wound"
+        formality: "clinical"
+        confidence: 0.85
+    related_terms:
+      - "laceration"
+      - "abrasion"
+      - "contusion"
+      - "puncture wound"
+
+  - preferred_term: "burn"
+    category: "wound_type"
+    description: "Tissue damage caused by heat, chemicals, electricity, or radiation"
+    synonyms:
+      - value: "thermal injury"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "burn wound"
+        formality: "clinical"
+        confidence: 0.95
+      - value: "burn injury"
+        formality: "clinical"
+        confidence: 0.92
+    related_terms:
+      - "first degree burn"
+      - "second degree burn"
+      - "third degree burn"
+      - "partial thickness burn"
+      - "full thickness burn"
+
+  - preferred_term: "skin tear"
+    category: "wound_type"
+    description: "Traumatic wound from shear, friction, or blunt force causing skin separation"
+    synonyms:
+      - value: "tear"
+        formality: "informal"
+        confidence: 0.70
+      - value: "skin laceration"
+        formality: "clinical"
+        confidence: 0.85
+      - value: "epidermal tear"
+        formality: "clinical"
+        confidence: 0.88
+    related_terms:
+      - "STAR category 1 tear"
+      - "STAR category 2 tear"
+      - "STAR category 3 tear"
+
+  - preferred_term: "laceration"
+    category: "wound_type"
+    description: "Irregular tear-like wound caused by blunt trauma"
+    synonyms:
+      - value: "cut"
+        formality: "informal"
+        confidence: 0.65
+      - value: "tear"
+        formality: "informal"
+        confidence: 0.70
+      - value: "traumatic laceration"
+        formality: "clinical"
+        confidence: 0.90
+    related_terms:
+      - "deep laceration"
+      - "superficial laceration"
+
+  - preferred_term: "abrasion"
+    category: "wound_type"
+    description: "Superficial wound where skin is scraped or rubbed off"
+    synonyms:
+      - value: "scrape"
+        formality: "informal"
+        confidence: 0.75
+      - value: "graze"
+        region: "UK"
+        formality: "informal"
+        confidence: 0.72
+      - value: "skin abrasion"
+        formality: "clinical"
+        confidence: 0.92
+    related_terms:
+      - "superficial abrasion"
+      - "road rash"
+
+  # ============================================================================
+  # TREATMENTS (10 entries)
+  # ============================================================================
+
+  - preferred_term: "negative pressure wound therapy"
+    category: "treatment"
+    description: "Wound treatment using controlled negative pressure to promote healing"
+    synonyms:
+      - value: "vacuum assisted closure"
+        formality: "clinical"
+        confidence: 0.95
+      - value: "VAC therapy"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "NPWT"
+        formality: "clinical"
+        confidence: 0.88
+      - value: "wound vac"
+        formality: "informal"
+        confidence: 0.80
+    abbreviations:
+      - value: "NPWT"
+        context_keywords: ["wound", "therapy", "negative", "pressure", "vacuum", "treatment"]
+        frequency: 0.90
+        domain: "wound_care"
+      - value: "VAC"
+        context_keywords: ["wound", "vacuum", "closure", "therapy"]
+        frequency: 0.85
+        domain: "wound_care"
+    related_terms:
+      - "continuous NPWT"
+      - "intermittent NPWT"
+      - "instillation NPWT"
+
+  - preferred_term: "compression therapy"
+    category: "treatment"
+    description: "Application of controlled pressure to limbs to improve venous return"
+    synonyms:
+      - value: "compression bandaging"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "compression wrap"
+        formality: "informal"
+        confidence: 0.82
+      - value: "graduated compression"
+        formality: "clinical"
+        confidence: 0.88
+    related_terms:
+      - "short stretch bandage"
+      - "long stretch bandage"
+      - "multi-layer compression"
+      - "compression stocking"
+
+  - preferred_term: "debridement"
+    category: "treatment"
+    description: "Removal of dead, damaged, or infected tissue to improve healing"
+    synonyms:
+      - value: "wound debridement"
+        formality: "clinical"
+        confidence: 0.95
+      - value: "tissue removal"
+        formality: "informal"
+        confidence: 0.75
+      - value: "necrotic tissue removal"
+        formality: "clinical"
+        confidence: 0.88
+    related_terms:
+      - "sharp debridement"
+      - "surgical debridement"
+      - "autolytic debridement"
+      - "enzymatic debridement"
+      - "mechanical debridement"
+
+  - preferred_term: "wound dressing"
+    category: "treatment"
+    description: "Material applied to wound to protect and promote healing"
+    synonyms:
+      - value: "dressing"
+        formality: "informal"
+        confidence: 0.85
+      - value: "bandage"
+        formality: "informal"
+        confidence: 0.70
+      - value: "wound cover"
+        formality: "informal"
+        confidence: 0.75
+    related_terms:
+      - "foam dressing"
+      - "hydrocolloid dressing"
+      - "alginate dressing"
+      - "transparent film"
+
+  - preferred_term: "hyperbaric oxygen therapy"
+    category: "treatment"
+    description: "Medical use of oxygen at higher than atmospheric pressure"
+    synonyms:
+      - value: "HBOT"
+        formality: "clinical"
+        confidence: 0.88
+      - value: "hyperbaric treatment"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "HBO therapy"
+        formality: "clinical"
+        confidence: 0.85
+    abbreviations:
+      - value: "HBOT"
+        context_keywords: ["hyperbaric", "oxygen", "therapy", "chamber", "pressure"]
+        frequency: 0.82
+        domain: "wound_care"
+      - value: "HBO"
+        context_keywords: ["hyperbaric", "oxygen", "treatment"]
+        frequency: 0.75
+        domain: "wound_care"
+    related_terms:
+      - "monoplace chamber"
+      - "multiplace chamber"
+
+  - preferred_term: "skin graft"
+    category: "treatment"
+    description: "Transplantation of skin to cover a wound"
+    synonyms:
+      - value: "graft"
+        formality: "informal"
+        confidence: 0.70
+      - value: "skin transplant"
+        formality: "informal"
+        confidence: 0.85
+      - value: "dermal graft"
+        formality: "clinical"
+        confidence: 0.88
+    abbreviations:
+      - value: "STSG"
+        context_keywords: ["split", "thickness", "skin", "graft"]
+        frequency: 0.70
+        domain: "wound_care"
+      - value: "FTSG"
+        context_keywords: ["full", "thickness", "skin", "graft"]
+        frequency: 0.68
+        domain: "wound_care"
+    related_terms:
+      - "split thickness skin graft"
+      - "full thickness skin graft"
+      - "meshed graft"
+
+  - preferred_term: "wound irrigation"
+    category: "treatment"
+    description: "Cleansing wound with fluid solution"
+    synonyms:
+      - value: "wound cleansing"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "wound washing"
+        formality: "informal"
+        confidence: 0.75
+      - value: "saline irrigation"
+        formality: "clinical"
+        confidence: 0.88
+    related_terms:
+      - "pulsed lavage"
+      - "jet irrigation"
+
+  - preferred_term: "topical agents"
+    category: "treatment"
+    description: "Medications or substances applied directly to wound"
+    synonyms:
+      - value: "topical medication"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "wound cream"
+        formality: "informal"
+        confidence: 0.70
+      - value: "topical treatment"
+        formality: "clinical"
+        confidence: 0.88
+    related_terms:
+      - "silver sulfadiazine"
+      - "bacitracin"
+      - "mupirocin"
+
+  - preferred_term: "biological dressings"
+    category: "treatment"
+    description: "Dressings made from biological materials to promote healing"
+    synonyms:
+      - value: "bioengineered skin"
+        formality: "clinical"
+        confidence: 0.88
+      - value: "skin substitute"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "cellular dressing"
+        formality: "clinical"
+        confidence: 0.85
+    related_terms:
+      - "collagen dressing"
+      - "amnion membrane"
+
+  - preferred_term: "growth factors"
+    category: "treatment"
+    description: "Proteins that stimulate cell growth and wound healing"
+    synonyms:
+      - value: "growth factor therapy"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "PDGF"
+        formality: "clinical"
+        confidence: 0.85
+      - value: "platelet derived growth factor"
+        formality: "clinical"
+        confidence: 0.90
+    abbreviations:
+      - value: "PDGF"
+        context_keywords: ["platelet", "derived", "growth", "factor", "wound"]
+        frequency: 0.75
+        domain: "wound_care"
+    related_terms:
+      - "becaplermin"
+      - "platelet rich plasma"
+
+  # ============================================================================
+  # ASSESSMENTS (5 entries)
+  # ============================================================================
+
+  - preferred_term: "wound measurement"
+    category: "assessment"
+    description: "Quantitative assessment of wound dimensions"
+    synonyms:
+      - value: "wound size"
+        formality: "informal"
+        confidence: 0.82
+      - value: "wound dimensions"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "wound area"
+        formality: "clinical"
+        confidence: 0.85
+    related_terms:
+      - "length"
+      - "width"
+      - "depth"
+      - "surface area"
+      - "volume"
+
+  - preferred_term: "tissue type"
+    category: "assessment"
+    description: "Classification of tissue present in wound bed"
+    synonyms:
+      - value: "wound tissue"
+        formality: "informal"
+        confidence: 0.80
+      - value: "tissue assessment"
+        formality: "clinical"
+        confidence: 0.88
+    related_terms:
+      - "granulation tissue"
+      - "slough"
+      - "eschar"
+      - "epithelial tissue"
+      - "necrotic tissue"
+
+  - preferred_term: "exudate assessment"
+    category: "assessment"
+    description: "Evaluation of wound drainage characteristics"
+    synonyms:
+      - value: "wound drainage"
+        formality: "informal"
+        confidence: 0.85
+      - value: "wound exudate"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "drainage assessment"
+        formality: "clinical"
+        confidence: 0.88
+    related_terms:
+      - "serous exudate"
+      - "sanguineous exudate"
+      - "purulent exudate"
+      - "serosanguineous exudate"
+
+  - preferred_term: "wound bed score"
+    category: "assessment"
+    description: "Scoring system for wound bed preparation"
+    synonyms:
+      - value: "WBS"
+        formality: "clinical"
+        confidence: 0.80
+      - value: "wound bed assessment"
+        formality: "clinical"
+        confidence: 0.88
+    abbreviations:
+      - value: "WBS"
+        context_keywords: ["wound", "bed", "score", "assessment"]
+        frequency: 0.70
+        domain: "wound_care"
+    related_terms:
+      - "TIME framework"
+      - "wound bed preparation"
+
+  - preferred_term: "pain assessment"
+    category: "assessment"
+    description: "Evaluation of wound-related pain"
+    synonyms:
+      - value: "pain score"
+        formality: "clinical"
+        confidence: 0.88
+      - value: "pain level"
+        formality: "informal"
+        confidence: 0.82
+      - value: "wound pain"
+        formality: "clinical"
+        confidence: 0.85
+    abbreviations:
+      - value: "VAS"
+        context_keywords: ["visual", "analog", "scale", "pain"]
+        frequency: 0.75
+        domain: "assessment"
+      - value: "NRS"
+        context_keywords: ["numeric", "rating", "scale", "pain"]
+        frequency: 0.72
+        domain: "assessment"
+    related_terms:
+      - "visual analog scale"
+      - "numeric rating scale"
+      - "procedural pain"
+      - "background pain"
+
+  # ============================================================================
+  # COMMON ABBREVIATIONS (5 entries)
+  # ============================================================================
+
+  - preferred_term: "hemoglobin a1c"
+    category: "laboratory"
+    description: "Blood test measuring average blood glucose over 3 months"
+    synonyms:
+      - value: "glycated hemoglobin"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "A1C"
+        formality: "clinical"
+        confidence: 0.88
+      - value: "HbA1c"
+        formality: "clinical"
+        confidence: 0.95
+    abbreviations:
+      - value: "HbA1c"
+        context_keywords: ["hemoglobin", "glucose", "diabetes", "blood", "test", "diabetic"]
+        frequency: 0.90
+        domain: "laboratory"
+      - value: "A1C"
+        context_keywords: ["hemoglobin", "glucose", "diabetes"]
+        frequency: 0.85
+        domain: "laboratory"
+
+  - preferred_term: "ankle brachial index"
+    category: "assessment"
+    description: "Ratio of blood pressure in ankle to blood pressure in arm"
+    synonyms:
+      - value: "ABI test"
+        formality: "clinical"
+        confidence: 0.88
+      - value: "ankle arm index"
+        formality: "clinical"
+        confidence: 0.85
+    abbreviations:
+      - value: "ABI"
+        context_keywords: ["ankle", "brachial", "index", "arterial", "circulation", "PAD"]
+        frequency: 0.88
+        domain: "assessment"
+
+  - preferred_term: "transcutaneous oxygen pressure"
+    category: "assessment"
+    description: "Measurement of oxygen level at skin surface"
+    synonyms:
+      - value: "TcPO2 measurement"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "transcutaneous oxygen"
+        formality: "clinical"
+        confidence: 0.88
+    abbreviations:
+      - value: "TcPO2"
+        context_keywords: ["transcutaneous", "oxygen", "pressure", "tissue", "perfusion"]
+        frequency: 0.80
+        domain: "assessment"
+
+  - preferred_term: "white blood cell count"
+    category: "laboratory"
+    description: "Number of white blood cells in blood sample"
+    synonyms:
+      - value: "WBC count"
+        formality: "clinical"
+        confidence: 0.92
+      - value: "leukocyte count"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "white cell count"
+        formality: "clinical"
+        confidence: 0.88
+    abbreviations:
+      - value: "WBC"
+        context_keywords: ["white", "blood", "cell", "count", "infection", "immune"]
+        frequency: 0.85
+        domain: "laboratory"
+
+  - preferred_term: "c-reactive protein"
+    category: "laboratory"
+    description: "Blood test measuring inflammation"
+    synonyms:
+      - value: "CRP test"
+        formality: "clinical"
+        confidence: 0.90
+      - value: "CRP level"
+        formality: "clinical"
+        confidence: 0.88
+    abbreviations:
+      - value: "CRP"
+        context_keywords: ["reactive", "protein", "inflammation", "infection", "blood"]
+        frequency: 0.82
+        domain: "laboratory"

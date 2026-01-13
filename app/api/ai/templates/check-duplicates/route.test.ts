@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/config/template-flags", () => ({
@@ -14,8 +14,8 @@ import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import { checkSimilarTemplates } from "@/lib/services/template-similarity.service";
 
 const isTemplateSystemEnabledMock =
-  isTemplateSystemEnabled as unknown as vi.Mock;
-const checkSimilarTemplatesMock = checkSimilarTemplates as unknown as vi.Mock;
+  isTemplateSystemEnabled as unknown as Mock;
+const checkSimilarTemplatesMock = checkSimilarTemplates as unknown as Mock;
 
 describe("POST /api/ai/templates/check-duplicates", () => {
   beforeEach(() => {

@@ -100,21 +100,24 @@ fi
 # Check AI model selection
 echo ""
 echo "🧠 AI Model Configuration:"
-if [ -n "$AI_MODEL_NAME" ]; then
-    echo "✅ AI_MODEL_NAME is set: $AI_MODEL_NAME"
+if [ -n "$ANTHROPIC_DEFAULT_MODEL_NAME" ] || [ -n "$GOOGLE_DEFAULT_MODEL_NAME" ] || [ -n "$OPENWEBUI_DEFAULT_MODEL_NAME" ]; then
+    echo "✅ AI model names are configured"
     
-    # Validate model name
-    case "$AI_MODEL_NAME" in
-        "claude-3-5-sonnet-latest"|"claude-3-opus-latest"|"gemini-2.5-pro"|"gemini-1.5-flash-latest")
-            echo "✅ Valid AI model selected"
-            ;;
-        *)
-            echo "⚠️  Unknown AI model: $AI_MODEL_NAME"
-            echo "   Supported models: claude-3-5-sonnet-latest, claude-3-opus-latest, gemini-2.5-pro, gemini-1.5-flash-latest"
-            ;;
-    esac
+    if [ -n "$ANTHROPIC_DEFAULT_MODEL_NAME" ]; then
+        echo "  - Anthropic: $ANTHROPIC_DEFAULT_MODEL_NAME"
+    fi
+    
+    if [ -n "$GOOGLE_DEFAULT_MODEL_NAME" ]; then
+        echo "  - Google: $GOOGLE_DEFAULT_MODEL_NAME"
+    fi
+    
+    if [ -n "$OPENWEBUI_DEFAULT_MODEL_NAME" ]; then
+        echo "  - Open WebUI: $OPENWEBUI_DEFAULT_MODEL_NAME"
+    fi
 else
-    echo "ℹ️  AI_MODEL_NAME not set (will use default: claude-3-5-sonnet-latest)"
+    echo "ℹ️  Model names not explicitly set (will use defaults)"
+    echo "  - Anthropic: claude-3-5-sonnet-latest"
+    echo "  - Google: gemini-2.5-pro"
 fi
 
 # Summary

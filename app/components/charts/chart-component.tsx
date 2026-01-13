@@ -26,6 +26,7 @@ export interface ChartComponentProps {
   data: ChartDataType;
   title?: string;
   className?: string;
+  chartProps?: Record<string, any>; // Optional chart-specific properties
 }
 
 function isBarChartData(data: any): data is BarChartDataPoint[] {

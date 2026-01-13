@@ -105,7 +105,13 @@ describe("authOptions", () => {
     const session = await authOptions.callbacks?.session?.({
       session: { user: { name: "Alice", email: "alice@example.com" } } as any,
       token: token as any,
-    });
+      user: {
+        id: "1",
+        role: "admin",
+        username: "alice",
+        mustChangePassword: true,
+      } as any,
+    } as any);
 
     expect(session?.user).toMatchObject({
       id: "1",

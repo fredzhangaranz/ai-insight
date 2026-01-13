@@ -7,6 +7,7 @@ import { AIModelProvider } from "@/lib/context/AIModelContext";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SideNav } from "@/app/components/shell/SideNav";
 import { MustChangePasswordBanner } from "@/app/components/profile/MustChangePasswordBanner";
+import { Toaster } from "@/components/ui/toaster";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -27,11 +28,11 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   if (shouldShowSidebar) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <main className="w-full px-6 py-8">
+      <div className="min-h-screen bg-slate-50 overflow-x-hidden">
+        <main className="w-full px-6 py-8 overflow-x-hidden">
           <SidebarProvider>
             <SideNav />
-            <SidebarInset>
+            <SidebarInset className="overflow-x-hidden">
               <MustChangePasswordBanner />
               {children}
             </SidebarInset>
@@ -43,8 +44,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   // For login page or when not authenticated, render children without sidebar
   return (
-    <div className="min-h-screen bg-slate-50">
-      <main className="w-full px-6 py-8">
+    <div className="min-h-screen bg-slate-50 overflow-x-hidden">
+      <main className="w-full px-6 py-8 overflow-x-hidden">
         <MustChangePasswordBanner />
         {children}
       </main>
@@ -57,6 +58,7 @@ export function Providers({ children }: ProvidersProps) {
     <SessionProvider>
       <AIModelProvider>
         <AppContent>{children}</AppContent>
+        <Toaster />
       </AIModelProvider>
     </SessionProvider>
   );

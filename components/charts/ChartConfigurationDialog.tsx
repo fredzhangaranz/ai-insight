@@ -35,7 +35,7 @@ export const ChartConfigurationDialog: React.FC<
   onClose,
   queryResults,
   chartType,
-  initialMapping = {},
+  initialMapping,
   title = "Configure Chart",
   onSave,
   saveButtonText = "Save",
@@ -45,8 +45,9 @@ export const ChartConfigurationDialog: React.FC<
   const { handleError } = useErrorHandler();
 
   const [step, setStep] = useState<"mapping" | "preview">("mapping");
-  const [chartMapping, setChartMapping] =
-    useState<ChartMapping>(initialMapping);
+  const [chartMapping, setChartMapping] = useState<ChartMapping>(
+    initialMapping ?? {}
+  );
   const [chartData, setChartData] = useState<ChartDataType | null>(null);
   const [availableFields, setAvailableFields] = useState<string[]>([]);
 
@@ -56,23 +57,26 @@ export const ChartConfigurationDialog: React.FC<
       setStep("mapping");
       setChartData(null);
 
+      const baseMapping = initialMapping ?? {};
+
       // Extract available fields from query results
       if (queryResults && queryResults.length > 0) {
-        setAvailableFields(Object.keys(queryResults[0]));
+        const fields = Object.keys(queryResults[0]);
+        setAvailableFields(fields);
+        
+        // Initialize mapping with provided initial mapping or empty values
+        const requiredFields = getRequiredFields(chartType);
+        const newMapping: ChartMapping = { ...baseMapping };
+
+        // Ensure all required fields have entries (even if empty)
+        requiredFields.forEach((field) => {
+          if (!(field in newMapping)) {
+            newMapping[field] = "";
+          }
+        });
+
+        setChartMapping(newMapping);
       }
-
-      // Initialize mapping with provided initial mapping or empty values
-      const requiredFields = getRequiredFields(chartType);
-      const newMapping: ChartMapping = { ...initialMapping };
-
-      // Ensure all required fields have entries (even if empty)
-      requiredFields.forEach((field) => {
-        if (!(field in newMapping)) {
-          newMapping[field] = "";
-        }
-      });
-
-      setChartMapping(newMapping);
     }
   }, [isOpen, queryResults, chartType, initialMapping]);
 
@@ -132,12 +136,12 @@ export const ChartConfigurationDialog: React.FC<
           queryResults,
           {
             chartType: chartType,
-            mapping: normalizedMapping,
+            mapping: normalizedMapping as any,
           },
           chartType
         );
         setChartData(shapedData);
-        setChartMapping(normalizedMapping);
+        setChartMapping(normalizedMapping as ChartMapping);
       }
 
       setStep("preview");
@@ -242,11 +246,12 @@ export const ChartConfigurationDialog: React.FC<
                           {field}:
                         </label>
                         <select
-                          value={chartMapping[field] || ""}
-                          onChange={(e) =>
-                            handleMappingChange(field, e.target.value)
-                          }
-                          className="flex-1 text-sm border border-gray-300 rounded px-3 py-2 bg-white"
+                          key={`select-${field}`}
+                          value={chartMapping[field] ?? ""}
+                          onChange={(e) => {
+                            handleMappingChange(field, e.target.value);
+                          }}
+                          className="flex-1 text-sm border border-gray-300 rounded px-3 py-2 bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Select field...</option>
                           {availableFields.map((availableField) => (

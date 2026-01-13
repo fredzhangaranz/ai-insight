@@ -1,0 +1,39 @@
+{
+  "families": {
+    "wound_area": {
+      "tables": ["rpt.Measurement", "rpt.Wound"],
+      "columns": ["area", "baselineArea", "areaReduction", "percentChange"],
+      "canonical_concept": "percent_area_reduction",
+      "confidence": 0.9,
+      "unit": "cm2"
+    },
+    "temporal": {
+      "tables": ["rpt.Measurement", "rpt.Assessment", "rpt.Wound", "rpt.WoundState"],
+      "columns": [
+        "measurementDate",
+        "assessmentDate",
+        "baselineDate",
+        "startDate",
+        "endDate",
+        "daysFromBaseline",
+        "dimDateFk"
+      ],
+      "canonical_concept": "measurement_date",
+      "confidence": 0.95
+    },
+    "dimensions": {
+      "tables": ["rpt.Measurement", "rpt.Wound"],
+      "columns": ["depth", "length", "width", "volume"],
+      "canonical_concept": "wound_dimensions",
+      "confidence": 0.9,
+      "unit": "cm"
+    },
+    "healing_status": {
+      "tables": ["rpt.Measurement", "rpt.Wound", "rpt.Assessment"],
+      "columns": ["healingStatus", "woundState"],
+      "canonical_concept": "healing_status",
+      "confidence": 0.9
+    }
+  }
+}
+

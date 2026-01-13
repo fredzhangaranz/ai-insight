@@ -1,0 +1,2153 @@
+﻿{
+  "ReportVersion": "2024.2.6",
+  "ReportGuid": "ab6e4c70-8999-6e7c-03c0-3af3fe72fa66",
+  "ReportName": "User Activity Slow Configurable",
+  "ReportAlias": "User Activity Slow Configurable",
+  "ReportDescription": "Has the table so only can produce 4000 assessments with data un-cached",
+  "ReportCreated": "/Date(1732231059000+1300)/",
+  "ReportChanged": "/Date(1734487352000+1300)/",
+  "EngineVersion": "EngineV2",
+  "CalculationMode": "Interpretation",
+  "ReportUnit": "Centimeters",
+  "CacheAllData": true,
+  "ScriptLanguage": "CSharp",
+  "Dictionary": {
+    "DataSources": {
+      "0": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Assessment",
+        "Alias": "rpt.Assessment",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeVersionFk",
+            "NameInSource": "assessmentTypeVersionFk",
+            "Alias": "assessmentTypeVersionFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "createdByUserFk",
+            "NameInSource": "createdByUserFk",
+            "Alias": "createdByUserFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "createdByUserName",
+            "NameInSource": "createdByUserName",
+            "Alias": "createdByUserName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTimeOffset"
+          },
+          "4": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "signedByUserFk",
+            "NameInSource": "signedByUserFk",
+            "Alias": "signedByUserFk",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "signedByUserName",
+            "NameInSource": "signedByUserName",
+            "Alias": "signedByUserName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "timeZoneId",
+            "NameInSource": "timeZoneId",
+            "Alias": "timeZoneId",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Assessment"
+      },
+      "1": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AssessmentTypeVersion",
+        "Alias": "rpt.AssessmentTypeVersion",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeId",
+            "NameInSource": "assessmentTypeId",
+            "Alias": "assessmentTypeId",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "definitionVersion",
+            "NameInSource": "definitionVersion",
+            "Alias": "definitionVersion",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "type",
+            "NameInSource": "type",
+            "Alias": "type",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AssessmentTypeVersion"
+      },
+      "2": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AttributeType",
+        "Alias": "rpt.AttributeType",
+        "Columns": {
+          "0": {
+            "Name": "attributeTypeKey",
+            "NameInSource": "attributeTypeKey",
+            "Alias": "attributeTypeKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "dataType",
+            "NameInSource": "dataType",
+            "Alias": "dataType",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "variableName",
+            "NameInSource": "variableName",
+            "Alias": "variableName",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AttributeType"
+      },
+      "3": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.DimDate",
+        "Alias": "rpt.DimDate",
+        "Columns": {
+          "0": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTime"
+          },
+          "1": {
+            "Name": "dayOfMonth",
+            "NameInSource": "dayOfMonth",
+            "Alias": "dayOfMonth",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "dayOfWeek",
+            "NameInSource": "dayOfWeek",
+            "Alias": "dayOfWeek",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "dayOfYear",
+            "NameInSource": "dayOfYear",
+            "Alias": "dayOfYear",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "firstOfMonth",
+            "NameInSource": "firstOfMonth",
+            "Alias": "firstOfMonth",
+            "Type": "System.DateTime"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "month",
+            "NameInSource": "month",
+            "Alias": "month",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "quarter",
+            "NameInSource": "quarter",
+            "Alias": "quarter",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "weekOfYear",
+            "NameInSource": "weekOfYear",
+            "Alias": "weekOfYear",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "year",
+            "NameInSource": "year",
+            "Alias": "year",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.DimDate"
+      },
+      "4": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Measurement",
+        "Alias": "rpt.Measurement",
+        "Columns": {
+          "0": {
+            "Name": "area",
+            "NameInSource": "area",
+            "Alias": "area",
+            "Type": "System.Object"
+          },
+          "1": {
+            "Name": "areaReduction",
+            "NameInSource": "areaReduction",
+            "Alias": "areaReduction",
+            "Type": "System.Object"
+          },
+          "2": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "depth",
+            "NameInSource": "depth",
+            "Alias": "depth",
+            "Type": "System.Object"
+          },
+          "5": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "imageCount",
+            "NameInSource": "imageCount",
+            "Alias": "imageCount",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "islandCount",
+            "NameInSource": "islandCount",
+            "Alias": "islandCount",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "length",
+            "NameInSource": "length",
+            "Alias": "length",
+            "Type": "System.Object"
+          },
+          "10": {
+            "Name": "outlineCount",
+            "NameInSource": "outlineCount",
+            "Alias": "outlineCount",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "perimeter",
+            "NameInSource": "perimeter",
+            "Alias": "perimeter",
+            "Type": "System.Object"
+          },
+          "13": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "volume",
+            "NameInSource": "volume",
+            "Alias": "volume",
+            "Type": "System.Object"
+          },
+          "15": {
+            "Name": "width",
+            "NameInSource": "width",
+            "Alias": "width",
+            "Type": "System.Object"
+          },
+          "16": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Measurement"
+      },
+      "5": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Note",
+        "Alias": "rpt.Note",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "value",
+            "NameInSource": "value",
+            "Alias": "value",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "valueBoolean",
+            "NameInSource": "valueBoolean",
+            "Alias": "valueBoolean",
+            "Type": "System.Boolean"
+          },
+          "8": {
+            "Name": "valueDate",
+            "NameInSource": "valueDate",
+            "Alias": "valueDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "valueDecimal",
+            "NameInSource": "valueDecimal",
+            "Alias": "valueDecimal",
+            "Type": "System.Decimal"
+          },
+          "10": {
+            "Name": "valueInt",
+            "NameInSource": "valueInt",
+            "Alias": "valueInt",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "woundStateFk",
+            "NameInSource": "woundStateFk",
+            "Alias": "woundStateFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Note"
+      },
+      "6": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Patient",
+        "Alias": "rpt.Patient",
+        "Columns": {
+          "0": {
+            "Name": "addressCity",
+            "NameInSource": "addressCity",
+            "Alias": "addressCity",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "addressCountry",
+            "NameInSource": "addressCountry",
+            "Alias": "addressCountry",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "addressPostcode",
+            "NameInSource": "addressPostcode",
+            "Alias": "addressPostcode",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "addressState",
+            "NameInSource": "addressState",
+            "Alias": "addressState",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "addressStreet",
+            "NameInSource": "addressStreet",
+            "Alias": "addressStreet",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "addressSuburb",
+            "NameInSource": "addressSuburb",
+            "Alias": "addressSuburb",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "dateOfBirth",
+            "NameInSource": "dateOfBirth",
+            "Alias": "dateOfBirth",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "domainId",
+            "NameInSource": "domainId",
+            "Alias": "domainId",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "firstName",
+            "NameInSource": "firstName",
+            "Alias": "firstName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "gender",
+            "NameInSource": "gender",
+            "Alias": "gender",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "homePhone",
+            "NameInSource": "homePhone",
+            "Alias": "homePhone",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "lastName",
+            "NameInSource": "lastName",
+            "Alias": "lastName",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "middleName",
+            "NameInSource": "middleName",
+            "Alias": "middleName",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "mobilePhone",
+            "NameInSource": "mobilePhone",
+            "Alias": "mobilePhone",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "workPhone",
+            "NameInSource": "workPhone",
+            "Alias": "workPhone",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Patient"
+      },
+      "7": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Unit",
+        "Alias": "rpt.Unit",
+        "Columns": {
+          "0": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Unit"
+      },
+      "8": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Wound",
+        "Alias": "rpt.Wound",
+        "Columns": {
+          "0": {
+            "Name": "anatomyLabel",
+            "NameInSource": "anatomyLabel",
+            "Alias": "anatomyLabel",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "auxText",
+            "NameInSource": "auxText",
+            "Alias": "auxText",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "baselineDate",
+            "NameInSource": "baselineDate",
+            "Alias": "baselineDate",
+            "Type": "System.DateTime"
+          },
+          "3": {
+            "Name": "baselineDimDateFk",
+            "NameInSource": "baselineDimDateFk",
+            "Alias": "baselineDimDateFk",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "description",
+            "NameInSource": "description",
+            "Alias": "description",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "index",
+            "NameInSource": "index",
+            "Alias": "index",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "label",
+            "NameInSource": "label",
+            "Alias": "label",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "level0AnatomyId",
+            "NameInSource": "level0AnatomyId",
+            "Alias": "level0AnatomyId",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "level0Text",
+            "NameInSource": "level0Text",
+            "Alias": "level0Text",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "level1AnatomyId",
+            "NameInSource": "level1AnatomyId",
+            "Alias": "level1AnatomyId",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "level1Text",
+            "NameInSource": "level1Text",
+            "Alias": "level1Text",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "level2AnatomyId",
+            "NameInSource": "level2AnatomyId",
+            "Alias": "level2AnatomyId",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "level2Text",
+            "NameInSource": "level2Text",
+            "Alias": "level2Text",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "level3AnatomyId",
+            "NameInSource": "level3AnatomyId",
+            "Alias": "level3AnatomyId",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "level3Text",
+            "NameInSource": "level3Text",
+            "Alias": "level3Text",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "17": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Wound"
+      },
+      "9": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundState",
+        "Alias": "rpt.WoundState",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "endDate",
+            "NameInSource": "endDate",
+            "Alias": "endDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "endDateDimDateFk",
+            "NameInSource": "endDateDimDateFk",
+            "Alias": "endDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "isCurrentState",
+            "NameInSource": "isCurrentState",
+            "Alias": "isCurrentState",
+            "Type": "System.Boolean"
+          },
+          "5": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "startDate",
+            "NameInSource": "startDate",
+            "Alias": "startDate",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "startDateDimDateFk",
+            "NameInSource": "startDateDimDateFk",
+            "Alias": "startDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "woundStateTypeFk",
+            "NameInSource": "woundStateTypeFk",
+            "Alias": "woundStateTypeFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundState"
+      },
+      "10": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundStateType",
+        "Alias": "rpt.WoundStateType",
+        "Columns": {
+          "0": {
+            "Name": "attributeLookupKey",
+            "NameInSource": "attributeLookupKey",
+            "Alias": "attributeLookupKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "isActive",
+            "NameInSource": "isActive",
+            "Alias": "isActive",
+            "Type": "System.Boolean"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundStateType"
+      },
+      "11": {
+        "Ident": "StiSqlSource",
+        "Name": "all_assessments",
+        "Alias": "all_assessments",
+        "Key": "5cd4224850a95f9a24c6deb2853ad863",
+        "Columns": {
+          "0": {
+            "Name": "assessid",
+            "NameInSource": "assessid",
+            "Alias": "assessid",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "woundid",
+            "NameInSource": "woundid",
+            "Alias": "woundid",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "patientid",
+            "NameInSource": "patientid",
+            "Alias": "patientid",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "Created By",
+            "NameInSource": "Created By",
+            "Alias": "Created By",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "Patient Name",
+            "NameInSource": "Patient Name",
+            "Alias": "Patient Name",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "Unit Name",
+            "NameInSource": "Unit Name",
+            "Alias": "Unit Name",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "state Name",
+            "NameInSource": "state Name",
+            "Alias": "state Name",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "Assessment Date",
+            "NameInSource": "Assessment Date",
+            "Alias": "Assessment Date",
+            "Type": "System.DateTime"
+          },
+          "8": {
+            "Name": "Primary Etiology",
+            "NameInSource": "Primary Etiology",
+            "Alias": "Primary Etiology",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "Wound Description",
+            "NameInSource": "Wound Description",
+            "Alias": "Wound Description",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "SELECT \n    a.id AS [assessid],\n    a.woundFk AS [woundid], \n    a.patientFk AS [patientid],\n    a.createdByUserName AS [Created By],\n    CONCAT(p.firstName, ' ', p.lastName) AS [Patient Name],\n    u.name AS [Unit Name],\n    LEFT(u.name, 2) AS [state Name],\n    d.date AS [Assessment Date], -- Fetch date from the dimdate table\n    w.description AS [Wound Description]\nFROM \n    rpt.assessment a\nINNER JOIN \n    rpt.patient p ON a.patientFk = p.id\nINNER JOIN \n    rpt.unit u ON a.unitFk = u.id\nINNER JOIN \n    rpt.dimdate d ON a.dimdateFk = d.id -- Link dimdateFk to the id column in dimdate\nINNER JOIN \n    rpt.wound w ON w.id=a.woundFk\nLEFT JOIN \n    rpt.AssessmentTypeVersion atv ON a.assessmentTypeVersionFk = atv.id -- Join with AssessmentTypeVersion\nLEFT JOIN \n    rpt.AttributeType atr ON atr.name = 'Primary Etiology' -- Join with AttributeType for primary etiology\nWHERE \n    atv.name = 'Wound Assessment' -- Filter for \"Wound Assessment\"\n    AND LEFT(u.name, 2) != 'Te' -- Corrected comparison operator for SQL Server\nORDER BY \n    d.date DESC -- Sort using the date from dimdate\nOFFSET 0 ROWS FETCH NEXT 12000 ROWS ONLY; -- Correct syntax for OFFSET-FETCH in SQL Server\n"
+      },
+      "12": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AssessmentCopy",
+        "Alias": "rpt.AssessmentCopy",
+        "Key": "8ab6364fbf50eaa97ab9cdc9beb31754",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeVersionFk",
+            "NameInSource": "assessmentTypeVersionFk",
+            "Alias": "assessmentTypeVersionFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "createdByUserFk",
+            "NameInSource": "createdByUserFk",
+            "Alias": "createdByUserFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "createdByUserName",
+            "NameInSource": "createdByUserName",
+            "Alias": "createdByUserName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTimeOffset"
+          },
+          "4": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "signedByUserFk",
+            "NameInSource": "signedByUserFk",
+            "Alias": "signedByUserFk",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "signedByUserName",
+            "NameInSource": "signedByUserName",
+            "Alias": "signedByUserName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "timeZoneId",
+            "NameInSource": "timeZoneId",
+            "Alias": "timeZoneId",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select TOP 4000 * from rpt.Assessment"
+      },
+      "13": {
+        "Ident": "StiSqlSource",
+        "Name": "working_weekly_data",
+        "Alias": "working_weekly_data",
+        "Key": "0cbe239a6d237f9a2ae4bc4c0eecff3e",
+        "Columns": {
+          "0": {
+            "Name": "Year",
+            "NameInSource": "Year",
+            "Alias": "Year",
+            "Type": "System.Int32"
+          },
+          "1": {
+            "Name": "Week",
+            "NameInSource": "Week",
+            "Alias": "Week",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "UserName",
+            "NameInSource": "UserName",
+            "Alias": "UserName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "AssessmentCount",
+            "NameInSource": "AssessmentCount",
+            "Alias": "AssessmentCount",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "WoundCount",
+            "NameInSource": "WoundCount",
+            "Alias": "WoundCount",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "PatientCount",
+            "NameInSource": "PatientCount",
+            "Alias": "PatientCount",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "-- Step 1: Determine the range of years directly using the dimdate table and assessment table\nWITH YearRange AS (\n    SELECT \n        MIN(DATEPART(YEAR, d.date)) AS EarliestYear, \n        MAX(DATEPART(YEAR, d.date)) AS LatestYear\n    FROM \n        rpt.dimdate d\n    WHERE \n        d.id = (SELECT MIN(a.dimDateFk) FROM rpt.assessment a)\n)\n\n-- Step 2: Generate week series using CTEs\n, WeekSeries AS (\n    SELECT \n        DATEPART(YEAR, d.date) AS Year,\n        DATEPART(WEEK, d.date) AS Week\n    FROM \n        rpt.dimdate d\n    CROSS JOIN YearRange yr -- Join with YearRange CTE\n    WHERE \n        DATEPART(YEAR, d.date) BETWEEN yr.EarliestYear AND yr.LatestYear\n    GROUP BY \n        DATEPART(YEAR, d.date), DATEPART(WEEK, d.date)\n)\n\n-- Step 3: Get all users\n, AllUsers AS (\n    SELECT DISTINCT \n        a.createdByUserName\n    FROM \n        rpt.assessment a\n)\n\n-- Step 4: Generate week-user combinations\n, WeekUserCombination AS (\n    SELECT \n        ws.Year,\n        ws.Week,\n        au.createdByUserName AS UserName\n    FROM \n        WeekSeries ws\n    CROSS JOIN \n        AllUsers au\n)\n\n-- Step 5: Aggregate weekly data\n, WeeklyData AS (\n    SELECT \n        DATEPART(YEAR, a.date) AS Year,\n        DATEPART(WEEK, a.date) AS Week,\n        a.createdByUserName AS UserName,\n        COUNT(DISTINCT CASE \n                          WHEN atv.name = 'Wound Assessment' THEN a.id \n                          ELSE NULL \n                      END) AS AssessmentCount,\n        COUNT(DISTINCT a.woundFk) AS WoundCount,\n        COUNT(DISTINCT a.patientFk) AS PatientCount\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    WHERE \n        DATEPART(YEAR, a.date) BETWEEN (SELECT EarliestYear FROM YearRange) AND (SELECT LatestYear FROM YearRange)\n    GROUP BY \n        DATEPART(YEAR, a.date), DATEPART(WEEK, a.date), a.createdByUserName\n)\n\n-- Step 6: Combine data\nSELECT \n    wuc.Year,\n    wuc.Week,\n    wuc.UserName,\n    ISNULL(wd.AssessmentCount, 0) AS AssessmentCount,\n    ISNULL(wd.WoundCount, 0) AS WoundCount,\n    ISNULL(wd.PatientCount, 0) AS PatientCount\nFROM \n    WeekUserCombination wuc\nLEFT JOIN \n    WeeklyData wd\n    ON wuc.Year = wd.Year \n    AND wuc.Week = wd.Week \n    AND wuc.UserName = wd.UserName\nORDER BY \n    wuc.Year, wuc.Week, wuc.UserName;\n"
+      },
+      "14": {
+        "Ident": "StiSqlSource",
+        "Name": "all_assessmentsCopy",
+        "Alias": "all_assessmentsCopy",
+        "Key": "1def03c4692f823fa2842b240be1e156",
+        "Columns": {
+          "0": {
+            "Name": "Created By",
+            "NameInSource": "Created By",
+            "Alias": "Created By",
+            "Type": "System.String",
+            "Key": "d8b32ad152cef8beb8e2dcb072151735"
+          },
+          "1": {
+            "Name": "Patient Name",
+            "NameInSource": "Patient Name",
+            "Alias": "Patient Name",
+            "Type": "System.String",
+            "Key": "16ce4342607346935ad712b9e1272f37"
+          },
+          "2": {
+            "Name": "Wound Description",
+            "NameInSource": "Wound Description",
+            "Alias": "Wound Description",
+            "Type": "System.String",
+            "Key": "e7e672d769e351547ba4e364fbc7bfbb"
+          },
+          "3": {
+            "Name": "Unit Name",
+            "NameInSource": "Unit Name",
+            "Alias": "Unit Name",
+            "Type": "System.String",
+            "Key": "7e6770afb6cabe10f1bd558182fb8cd9"
+          },
+          "4": {
+            "Name": "assessid",
+            "NameInSource": "assessid",
+            "Alias": "assessid",
+            "Type": "System.String",
+            "Key": "7550a796f44f62a1b93e67ad137ab08f"
+          },
+          "5": {
+            "Name": "woundid",
+            "NameInSource": "woundid",
+            "Alias": "woundid",
+            "Type": "System.String",
+            "Key": "5edf8788a9f3b9d0c7d6b3f0243d7b82"
+          },
+          "6": {
+            "Name": "patientid",
+            "NameInSource": "patientid",
+            "Alias": "patientid",
+            "Type": "System.String",
+            "Key": "94851e901356860eb5488c14ecb32d05"
+          },
+          "7": {
+            "Name": "Assessment Date",
+            "NameInSource": "Assessment Date",
+            "Alias": "Assessment Date",
+            "Type": "System.DateTime",
+            "Key": "55670c1b7687de8aff12261740a61c72"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "SELECT \n    a.id AS [assessid],\n    a.woundFk AS [woundid], \n    a.patientFk AS [patientid],\n    a.createdByUserName AS [Created By],\n    CONCAT(p.firstName, ' ', p.lastName) AS [Patient Name],\n    w.description AS [Wound Description],\n    u.name AS [Unit Name],\n    d.date AS [Assessment Date] -- Fetch date from the dimdate table\nFROM \n    rpt.assessment a\nINNER JOIN \n    rpt.patient p ON a.patientFk = p.id\nINNER JOIN \n    rpt.wound w ON a.woundFk = w.id\nINNER JOIN \n    rpt.unit u ON a.unitFk = u.id\nINNER JOIN \n    rpt.dimdate d ON a.dimdateFk = d.id -- Link dimdateFk to the id column in dimdate\nINNER JOIN \n    rpt.AssessmentTypeVersion atv ON a.assessmentTypeVersionFk = atv.id -- Join with AssessmentTypeVersion\nWHERE \n    atv.name = 'Wound Assessment' -- Filter for \"Wound Assessment\"\nORDER BY \n    d.date DESC -- Sort using the date from dimdate\nOFFSET 0 ROWS FETCH NEXT 4000 ROWS ONLY;\n"
+      }
+    },
+    "Databases": {
+      "0": {
+        "Ident": "StiSqlDatabase",
+        "Name": "Connection",
+        "Alias": "Connection",
+        "ConnectionStringEncrypted": "ng=="
+      }
+    }
+  },
+  "Pages": {
+    "0": {
+      "Ident": "StiDashboard",
+      "Name": "Dashboard_Page",
+      "Guid": "91e1f21d176db29f171df811e220f8b3",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:",
+      "Components": {
+        "0": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement7",
+          "Guid": "ba774a00b2b79efb6787e5b41d33df12",
+          "ClientRectangle": "640,160,340,20",
+          "Expressions": {
+            "0": {
+              "Name": "BackColor",
+              "Expression": "\"#0A325A\""
+            }
+          },
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "10,50,90",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "255,255,255",
+          "Text": "<font face=\"Arial\" size=\"16\" ><text-align=\"Center\"><b><font-color=\"#ffffff\">User Activity per State</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "1": {
+          "Ident": "StiChartElement",
+          "Name": "ChartElement2",
+          "Guid": "15401103f2960ee623f9a2ddf680b67d",
+          "ClientRectangle": "640,120,340,180",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "74,145,206",
+          "Values": {
+            "0": {
+              "Ident": "ValueChartMeter",
+              "Key": "728388aa00d231261ebf6af68ecf703a",
+              "Expression": "Count(all_assessments.CreatedBy)",
+              "Label": "Created By",
+              "SeriesType": "Doughnut",
+              "ShowZeros": "Gap"
+            }
+          },
+          "Arguments": {
+            "0": {
+              "Ident": "ArgumentChartMeter",
+              "Key": "0f61f210dae7800c4efe1c2f910fb5c0",
+              "Expression": "all_assessments.stateName",
+              "Label": "state Name"
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Chart",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Title": {
+            "Text": "Chart",
+            "Visible": false
+          },
+          "ManuallyEnteredChartMeter": {
+            "Ident": "ValueChartMeter",
+            "Key": "ce6105c56a581654315e831178b61949"
+          },
+          "ArgumentFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "ValueFormat": {
+            "Ident": "StiNumberFormatService",
+            "DecimalDigits": 0,
+            "GroupSeparator": ",",
+            "State": "DecimalDigits, Abbreviation"
+          },
+          "Legend": {
+            "Labels": {
+              "Font": ";10;Bold;"
+            },
+            "HorAlignment": "Center"
+          },
+          "Area": {
+            "SideBySide": true,
+            "GridLinesHor": {
+              "Color": "Transparent"
+            },
+            "GridLinesVert": {
+              "Color": "Transparent"
+            },
+            "InterlacingHor": {
+              "Color": "Transparent"
+            },
+            "InterlacingVert": {
+              "Color": "Transparent"
+            },
+            "Indicator": {
+              "Title": {
+                "Text": ""
+              }
+            }
+          },
+          "Labels": {
+            "Position": "Center"
+          },
+          "Options3D": {
+            "Opacity": 1,
+            "Lighting": "Gradient"
+          },
+          "Style": "DarkTurquoise",
+          "CornerRadius": "0, 0, 10, 10",
+          "Shadow": ";;;"
+        },
+        "2": {
+          "Ident": "StiIndicatorElement",
+          "Name": "IndicatorElement1",
+          "Guid": "65b8da5e28af5915eae41d3d4865b61d",
+          "ClientRectangle": "1000,480,200,100",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "74,145,206",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "TargetFormat": {
+            "Ident": "StiPercentageFormatService",
+            "GroupSeparator": ",",
+            "Symbol": "%"
+          },
+          "Value": {
+            "Ident": "ValueIndicatorMeter",
+            "Key": "e0142dde48be321a5e44553e8cc38a9d",
+            "Expression": "DistinctCount(all_assessments.patientid)",
+            "Label": "patientid"
+          },
+          "Title": {
+            "Text": "Patient",
+            "Visible": false
+          },
+          "ForeColor": "242,245,252",
+          "Font": ";13;Bold;",
+          "CornerRadius": "0, 0, 10, 10",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Indicator",
+            "OnHover": "ShowToolTip",
+            "OnClick": "None",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "3": {
+          "Ident": "StiIndicatorElement",
+          "Name": "IndicatorElement2",
+          "Guid": "5fd3eb31df1886a2b67daefd8fa64a8f",
+          "ClientRectangle": "1000,320,200,100",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "74,145,206",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "TargetFormat": {
+            "Ident": "StiPercentageFormatService",
+            "GroupSeparator": ",",
+            "Symbol": "%"
+          },
+          "Value": {
+            "Ident": "ValueIndicatorMeter",
+            "Key": "626c1eaa73dbb12924242e26f7a5fc86",
+            "Expression": "DistinctCount(all_assessments.woundid)",
+            "Label": "woundid"
+          },
+          "Title": {
+            "Text": "Wound",
+            "Visible": false
+          },
+          "ForeColor": "242,245,252",
+          "Font": ";13;Bold;",
+          "CornerRadius": "0, 0, 10, 10",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Indicator",
+            "OnHover": "ShowToolTip",
+            "OnClick": "None",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "4": {
+          "Ident": "StiIndicatorElement",
+          "Name": "IndicatorElement3",
+          "Guid": "5466a997194774ded524278dc4201646",
+          "ClientRectangle": "1000,160,200,100",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "74,145,206",
+          "TextFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "TargetFormat": {
+            "Ident": "StiNumberFormatService",
+            "GroupSeparator": ","
+          },
+          "Value": {
+            "Ident": "ValueIndicatorMeter",
+            "Key": "67c8b37718590e7f6c12dde8363fd860",
+            "Expression": "Count(all_assessments.assessid)",
+            "Label": "assessid"
+          },
+          "Title": {
+            "Text": "Assessments",
+            "Visible": false
+          },
+          "ForeColor": "242,245,252",
+          "Font": ";13;Bold;",
+          "Style": "DarkBlue",
+          "CornerRadius": "0, 0, 10, 10",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Indicator",
+            "OnHover": "ShowToolTip",
+            "OnClick": "None",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "5": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement1",
+          "Guid": "9aa01c314b1798b3adf37cf2dab07d2b",
+          "ClientRectangle": "160,80,220,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "242,245,252",
+          "ForeColor": "0,32,96",
+          "ShowAllValue": true,
+          "SelectionMode": "Multi",
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "c0eebd8d45f34b5f5e4ed6e54ad1bd7e",
+            "Expression": "all_assessments.CreatedBy",
+            "Label": "Created By"
+          },
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "6": {
+          "Ident": "StiDatePickerElement",
+          "Name": "DatePickerElement1",
+          "Guid": "a3279ccc969e52e80bd6ea382ca17277",
+          "ClientRectangle": "520,80,220,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "242,245,252",
+          "ForeColor": "0,32,96",
+          "SelectionMode": "Range",
+          "InitialRangeSelection": "YearCurrent",
+          "ValueMeter": {
+            "Ident": "ValueDatePickerMeter",
+            "Key": "48f942680819c28c737cba182f25bf62",
+            "Expression": "all_assessments.AssessmentDate",
+            "Label": "Assessment Date"
+          },
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "TextFormat": {
+            "Ident": "StiDateFormatService"
+          }
+        },
+        "7": {
+          "Ident": "StiTableElement",
+          "Name": "TableElement1",
+          "Guid": "7d1555f21a820f5ebe73157c86ec68d1",
+          "ClientRectangle": "20,120,980,460",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "6ecd2c1c11e57e47b88ee0265755bdc5",
+              "Expression": "all_assessments.CreatedBy",
+              "Label": "Created By",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "ShowToolTip",
+                "OnClick": "ShowDashboard",
+                "HyperlinkDestination": "NewTab",
+                "ToolTip": "<font face=\"Arial\">INDIV</font><div><font face=\"Arial\"><br></font></div>",
+                "DrillDownPageKey": "d3171e36e4c44b830623bb0a968c7368",
+                "DrillDownParameters": {
+                  "0": {
+                    "Name": "user",
+                    "Expression": "{Row.Created_By}"
+                  }
+                }
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "3b248da7f76983c55aa53668c5784e78",
+              "Expression": "all_assessments.PatientName",
+              "Label": "Patient Name",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "ShowDashboard",
+                "HyperlinkDestination": "NewTab",
+                "DrillDownPageKey": "ee765181eb1f4c64f54336859463f5d8"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "e0a68e5237eeca4d9607cbc99b04789d",
+              "Expression": "all_assessments.WoundDescription",
+              "Label": "Wound Description",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "99f56450ec252ccebdec8e2d9f3a690a",
+              "Expression": "all_assessments.UnitName",
+              "Label": "Unit Name",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "4": {
+              "Ident": "DimensionColumn",
+              "Key": "c9cf5c91a05718739022c98a2359b564",
+              "Expression": "all_assessments.assessid",
+              "Label": "assessid",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "5": {
+              "Ident": "DimensionColumn",
+              "Key": "1eb02e9a4b199244806d12ac926c09b3",
+              "Expression": "all_assessments.woundid",
+              "Label": "woundid",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "6": {
+              "Ident": "DimensionColumn",
+              "Key": "622c08406506721282cfef7612c9b1d3",
+              "Expression": "all_assessments.stateName",
+              "Label": "state Name",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "7": {
+              "Ident": "DimensionColumn",
+              "Key": "be2186709483bfdac07aa602b1c31629",
+              "Expression": "all_assessments.patientid",
+              "Label": "patientid",
+              "Visibility": "False",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "8": {
+              "Ident": "DimensionColumn",
+              "Key": "85ea7b770548ae3a29dc9192488092aa",
+              "Expression": "all_assessments.AssessmentDate",
+              "Label": "Assessment Date",
+              "HorAlignment": "Center",
+              "TextFormat": {
+                "Ident": "StiDateFormatService"
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "HeaderForeColor": "255,255,255",
+          "FooterForeColor": "255,255,255",
+          "HeaderFont": ";10;Bold;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "Assessments",
+            "Visible": false,
+            "Padding": {
+              "Left": 10,
+              "Right": 5
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Style": "DarkBlue",
+          "SizeMode": "Fit",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;"
+        },
+        "8": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement1",
+          "Guid": "04e9c4bc74e9c2b483fcd484b7870ec6",
+          "ClientRectangle": "20,80,140,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "242,245,252",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "10,50,90",
+          "Text": "<font face=\"Arial\" size=\"16\" ><text-align=\"Left\"><b><font-color=\"#0a325a\">User Filter:</font-color></b></text-align></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "BackColor": "25,25,112",
+            "Visible": false
+          }
+        },
+        "9": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement2",
+          "Guid": "1f88853ab9296adff2a718249d905ea3",
+          "ClientRectangle": "380,80,140,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "242,245,252",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "10,50,90",
+          "Text": "<font face=\"Arial\" size=\"16\" ><text-align=\"Left\"><b><font-color=\"#0a325a\">Date Filter:</font-color></b></text-align></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "10": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement3",
+          "Guid": "d7f6cbff75b2a3506a7f2003dad7d15a",
+          "ClientRectangle": "1000,440,200,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "11,51,89",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "242,245,252",
+          "Text": "<font face=\"Arial\" size=\"16\" ><text-align=\"Center\"><b><font-color=\"#f2f5fc\">Patients</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "11": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement4",
+          "Guid": "e89fa5fdf7ac855fd986ab4708727eed",
+          "ClientRectangle": "1000,280,200,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "11,51,89",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "242,245,252",
+          "Text": "<font face=\"Arial\" size=\"16\" ><text-align=\"Center\"><b><font-color=\"#f2f5fc\">Wounds</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "12": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement5",
+          "Guid": "a704f19867f1c894d7fe614fc57c981c",
+          "ClientRectangle": "1000,120,200,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "11,51,89",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "242,245,252",
+          "Text": "<font face=\"Arial\" size=\"16\" ><text-align=\"Center\"><b><font-color=\"#f2f5fc\">Assessments</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "13": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement6",
+          "Guid": "a13037297a8d9fb55e69358a76f6cdfc",
+          "ClientRectangle": "400,0,380,60",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"26\" ><text-align=\"Center\"><b>User Activity Overview</b></text-align></font>",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "14": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement10",
+          "Guid": "e83d389adb7a513e58eb70d465dfcfe4",
+          "ClientRectangle": "1000,80,200,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"16\"><text-align=\"center\"><b>User Statistics</b></text-align=\"center\"></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Style": "AliceBlue",
+      "Border": ";;2;;;;;solid:Black"
+    },
+    "1": {
+      "Ident": "StiDashboard",
+      "Name": "individual",
+      "Guid": "d3171e36e4c44b830623bb0a968c7368",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:",
+      "Components": {
+        "0": {
+          "Ident": "StiChartElement",
+          "Name": "ChartElement1",
+          "Guid": "6c54559cd4b41353f7eeeef8752f5175",
+          "ClientRectangle": "60,120,1040,460",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DataFilters": {
+            "0": {
+              "Path": "working_weekly_data.UserName",
+              "Value": "this[\"user\"]",
+              "IsExpression": true
+            }
+          },
+          "Values": {
+            "0": {
+              "Ident": "ValueChartMeter",
+              "Key": "fcfdc066164701bf7a91691469d7aa66",
+              "Expression": "Sum(working_weekly_data.WoundCount)",
+              "Label": "WoundCount",
+              "ShowZeros": "Gap"
+            },
+            "1": {
+              "Ident": "ValueChartMeter",
+              "Key": "33eb225d78b7255aed875b671990b966",
+              "Expression": "Sum(working_weekly_data.PatientCount)",
+              "Label": "PatientCount"
+            }
+          },
+          "Arguments": {
+            "0": {
+              "Ident": "ArgumentChartMeter",
+              "Key": "e0b2a53fba60fd674a38a57587710c45",
+              "Expression": "working_weekly_data.Week",
+              "Label": "Week"
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Chart",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Title": {
+            "Text": "Chart",
+            "Visible": false
+          },
+          "ManuallyEnteredChartMeter": {
+            "Ident": "ValueChartMeter",
+            "Key": "be9392365afe27542d4abbc35d962805"
+          },
+          "ArgumentFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "ValueFormat": {
+            "Ident": "StiNumberFormatService",
+            "DecimalDigits": 0,
+            "GroupSeparator": ",",
+            "State": "DecimalDigits, Abbreviation"
+          },
+          "Legend": {
+            "Labels": {
+              "Font": ";11;;"
+            },
+            "HorAlignment": "Center"
+          },
+          "Area": {
+            "SideBySide": true,
+            "GridLinesHor": {
+              "Color": "Transparent"
+            },
+            "GridLinesVert": {
+              "Color": "Transparent"
+            },
+            "InterlacingHor": {
+              "Color": "Transparent"
+            },
+            "InterlacingVert": {
+              "Color": "Transparent"
+            },
+            "Indicator": {
+              "Title": {
+                "Text": ""
+              }
+            }
+          },
+          "Labels": {
+            "Font": ";12;;",
+            "Position": "None",
+            "Style": "Category"
+          },
+          "Options3D": {
+            "Opacity": 1,
+            "Lighting": "Gradient"
+          },
+          "Style": "DarkBlue",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement3",
+          "Guid": "f2eb0d8d5c88f1ebb6e43ef57fceb48d",
+          "ClientRectangle": "500,80,220,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "6659a48d683ae69df0963587484b78a7",
+            "Expression": "working_weekly_data.Year",
+            "Label": "Year"
+          },
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "2": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement8",
+          "Guid": "40692aa6d17957ccad4d2035555cb4cb",
+          "ClientRectangle": "60,0,1040,60",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Right": 0
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"24\" ><text-align=\"Center\"><b>Weekly Distribution of Selected User's Activity for Previous Years</b></text-align></font>",
+          "VertAlignment": "Top",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "3": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement9",
+          "Guid": "f9122f8221514ed32a635d25e9739376",
+          "ClientRectangle": "420,80,80,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Text": "<font face=\"Arial\" size=\"20\" ><text-align=\"Left\"><b>Year:</b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Style": "AliceBlue",
+      "Border": ";;2;;;;;solid:Black"
+    },
+    "2": {
+      "Ident": "StiDashboard",
+      "Name": "Dashboard1",
+      "Guid": "ee765181eb1f4c64f54336859463f5d8",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:",
+      "Components": {
+        "0": {
+          "Ident": "StiTableElement",
+          "Name": "TableElement2",
+          "Guid": "d49d8ffce459f6217cf9c9585d40639c",
+          "ClientRectangle": "80,160,1020,400",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "174333b072dbffa5e79ac9e610e72166",
+              "Expression": "alldataweeklyusers.Year",
+              "Label": "Year",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "143f47ae82dd61cd32a4eade46a2a894",
+              "Expression": "alldataweeklyusers.Week",
+              "Label": "Week",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "c9205a2cfc6a1b8b2eb7af933a1c9294",
+              "Expression": "alldataweeklyusers.UserName",
+              "Label": "UserName",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "4b81ac05d00ba338c7790f2f332827ca",
+              "Expression": "alldataweeklyusers.AssessmentCount",
+              "Label": "AssessmentCount",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "4": {
+              "Ident": "DimensionColumn",
+              "Key": "665e4aeb80640f4399d15432e2dd1895",
+              "Expression": "alldataweeklyusers.WoundCount",
+              "Label": "WoundCount",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "5": {
+              "Ident": "DimensionColumn",
+              "Key": "2516896fc09a67ce6ddc308c320685e2",
+              "Expression": "alldataweeklyusers.PatientCount",
+              "Label": "PatientCount",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "HeaderFont": ";10;;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "Table"
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement2",
+          "Guid": "aa196a55f313457e52a799c9fcbdff23",
+          "ClientRectangle": "80,100,320,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "41376c9aef46ef9c6110b2b66eb87bdd",
+            "Expression": "alldataweeklyusers.Year",
+            "Label": "Year"
+          },
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black"
+    }
+  }
+}

@@ -41,7 +41,7 @@ describe("/api/admin/ai-config", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.NODE_ENV = originalNodeEnv;
+    (process.env as { NODE_ENV?: string }).NODE_ENV = originalNodeEnv;
   });
 
   it("returns auth response when GET unauthorized", async () => {
@@ -100,7 +100,7 @@ describe("/api/admin/ai-config", () => {
   });
 
   it("persists configuration when admin in production", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
     requireAdminMock.mockResolvedValueOnce({
       user: { id: "1", username: "admin", role: "admin" },
     });

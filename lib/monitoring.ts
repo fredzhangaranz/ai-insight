@@ -4,6 +4,7 @@ import type {
   AIResponseMetrics,
   CacheMetrics,
 } from "./prompts/types";
+import type { FilterMetricsSummary } from "./types/filter-metrics";
 import { getInsightGenDbPool } from "./db";
 
 /**
@@ -173,4 +174,55 @@ export class MetricsMonitor {
       return null;
     }
   }
+
+  public async logQueryPerformanceMetrics(metrics: QueryPerformanceLog): Promise<void> {
+    try {
+      const pool = await this.ensurePool();
+      const filterMetrics = metrics.filterMetrics;
+      const overrideRate =
+        filterMetrics && filterMetrics.totalFilters > 0
+          ? (filterMetrics.overrides / filterMetrics.totalFilters) * 100
+          : null;
+      const mappingConfidence =
+        filterMetrics && filterMetrics.avgMappingConfidence !== null
+          ? filterMetrics.avgMappingConfidence * 100
+          : null;
+
+      const query = `
+        INSERT INTO "QueryPerformanceMetrics"
+          ("question", "customerId", "mode", "totalDurationMs",
+           "filterValueOverrideRate", "filterValidationErrors", "filterAutoCorrections",
+           "filterMappingConfidence", "filterUnresolvedWarnings", "clarificationRequested", "createdAt")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `;
+
+      const values = [
+        metrics.question,
+        metrics.customerId,
+        metrics.mode,
+        metrics.totalDurationMs,
+        overrideRate,
+        filterMetrics?.validationErrors ?? 0,
+        filterMetrics?.autoCorrections ?? 0,
+        mappingConfidence,
+        filterMetrics?.unresolvedWarnings ?? 0,
+        metrics.clarificationRequested ?? false,
+        metrics.timestamp ?? new Date(),
+      ];
+
+      await pool.query(query, values);
+    } catch (error) {
+      console.error("Failed to log query performance metrics:", error);
+    }
+  }
+}
+
+export interface QueryPerformanceLog {
+  question: string;
+  customerId: string;
+  mode: string;
+  totalDurationMs: number;
+  filterMetrics?: FilterMetricsSummary;
+  clarificationRequested?: boolean;
+  timestamp?: Date;
 }

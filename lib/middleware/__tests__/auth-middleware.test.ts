@@ -38,7 +38,7 @@ describe("auth-middleware helpers", () => {
 
     expect(result).toBeInstanceOf(NextResponse);
     const body = await (result as NextResponse).json();
-    expect(result.status).toBe(401);
+    expect((result as NextResponse).status).toBe(401);
     expect(body.error).toBe("Unauthorized");
   });
 
@@ -80,7 +80,7 @@ describe("auth-middleware helpers", () => {
 
     expect(result).toBeInstanceOf(NextResponse);
     const body = await (result as NextResponse).json();
-    expect(result.status).toBe(403);
+    expect((result as NextResponse).status).toBe(403);
     expect(body.error).toBe("Forbidden");
   });
 

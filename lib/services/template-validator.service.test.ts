@@ -42,6 +42,16 @@ describe("template-validator", () => {
     expect(result.errors[0].code).toBe("sql.dangerousKeyword");
   });
 
+  it("allows column names that merely contain keyword substrings", () => {
+    const result = validateSafety(
+      "SELECT createdAt, createdByUserName FROM rpt.Assessment",
+      "SafeColumns"
+    );
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
   it("warns when schema prefix is missing", () => {
     const result = validateSchemaPrefix("SELECT * FROM Table", "MissingPrefix");
 

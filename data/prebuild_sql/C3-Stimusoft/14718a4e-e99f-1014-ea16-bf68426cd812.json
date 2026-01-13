@@ -1,0 +1,2156 @@
+﻿{
+  "ReportVersion": "2024.2.6",
+  "ReportGuid": "14718a4e-e99f-1014-ea16-bf68426cd812",
+  "ReportName": "WCP User Activity By Unit",
+  "ReportAlias": "WCP User Activity By Unit",
+  "ReportCreated": "/Date(1736448793000+1300)/",
+  "ReportChanged": "/Date(1737426248000+1300)/",
+  "EngineVersion": "EngineV2",
+  "CalculationMode": "Interpretation",
+  "ReportUnit": "Centimeters",
+  "Styles": {
+    "0": {
+      "Ident": "StiTableStyle",
+      "Description": "Style based on formating of TableElement1 component",
+      "Name": "Style1",
+      "BackColor": "245,245,245",
+      "DataForeground": "50,58,69",
+      "SelectedDataColor": "200,102,26,148",
+      "AlternatingDataColor": "242,242,242",
+      "HeaderColor": "102,26,148",
+      "HotHeaderColor": "32,132,199",
+      "FooterColor": "102,26,148",
+      "FooterForeground": "255,255,255",
+      "GridColor": "220,220,220"
+    },
+    "1": {
+      "Ident": "StiDialogStyle",
+      "Description": "Style based on formating of ComboBoxElement1 component",
+      "Name": "Style5",
+      "ForeColor": "245,245,245",
+      "GlyphColor": "245,245,245",
+      "SelectedBackColor": "245,245,245",
+      "HotForeColor": "245,245,245",
+      "HotGlyphColor": "245,245,245",
+      "HotSelectedBackColor": "245,245,245",
+      "Font": ";9;;"
+    },
+    "2": {
+      "Ident": "StiCrossTabStyle",
+      "Description": "Style based on formating of PivotTableElement2 component",
+      "Name": "Style4",
+      "BackColor": "255,255,255",
+      "AlternatingCellForeColor": "34,34,34",
+      "ColumnHeaderBackColor": "51,153,204",
+      "RowHeaderBackColor": "51,153,204",
+      "LineColor": "220,220,220",
+      "TotalCellColumnBackColor": "51,153,204",
+      "TotalCellRowBackColor": "51,153,204",
+      "TotalCellRowForeColor": "255,255,255"
+    },
+    "3": {
+      "Ident": "StiCrossTabStyle",
+      "Description": "Style based on formating of PivotTableElement1 component",
+      "Name": "Style3",
+      "BackColor": "255,255,255",
+      "AlternatingCellForeColor": "34,34,34",
+      "ColumnHeaderBackColor": "102,26,148",
+      "RowHeaderBackColor": "102,26,148",
+      "LineColor": "220,220,220",
+      "TotalCellColumnBackColor": "102,26,148",
+      "TotalCellRowBackColor": "102,26,148",
+      "TotalCellRowForeColor": "255,255,255"
+    },
+    "4": {
+      "Ident": "StiTableStyle",
+      "Description": "Style based on formating of Tablepatients_pivot component",
+      "Name": "Style2",
+      "BackColor": "245,245,245",
+      "DataForeground": "50,58,69",
+      "SelectedDataColor": "200,51,153,204",
+      "AlternatingDataColor": "240,240,240",
+      "HeaderColor": "51,153,204",
+      "HotHeaderColor": "32,132,199",
+      "FooterColor": "51,153,204",
+      "FooterForeground": "255,255,255",
+      "GridColor": "220,220,220"
+    }
+  },
+  "Dictionary": {
+    "DataSources": {
+      "0": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Assessment",
+        "Alias": "rpt.Assessment",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeVersionFk",
+            "NameInSource": "assessmentTypeVersionFk",
+            "Alias": "assessmentTypeVersionFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "createdByUserFk",
+            "NameInSource": "createdByUserFk",
+            "Alias": "createdByUserFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "createdByUserName",
+            "NameInSource": "createdByUserName",
+            "Alias": "createdByUserName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTimeOffset"
+          },
+          "4": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "signedByUserFk",
+            "NameInSource": "signedByUserFk",
+            "Alias": "signedByUserFk",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "signedByUserName",
+            "NameInSource": "signedByUserName",
+            "Alias": "signedByUserName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "timeZoneId",
+            "NameInSource": "timeZoneId",
+            "Alias": "timeZoneId",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Assessment"
+      },
+      "1": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AssessmentTypeVersion",
+        "Alias": "rpt.AssessmentTypeVersion",
+        "Columns": {
+          "0": {
+            "Name": "assessmentTypeId",
+            "NameInSource": "assessmentTypeId",
+            "Alias": "assessmentTypeId",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "definitionVersion",
+            "NameInSource": "definitionVersion",
+            "Alias": "definitionVersion",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "type",
+            "NameInSource": "type",
+            "Alias": "type",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AssessmentTypeVersion"
+      },
+      "2": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.AttributeType",
+        "Alias": "rpt.AttributeType",
+        "Columns": {
+          "0": {
+            "Name": "attributeTypeKey",
+            "NameInSource": "attributeTypeKey",
+            "Alias": "attributeTypeKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "dataType",
+            "NameInSource": "dataType",
+            "Alias": "dataType",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "orderIndex",
+            "NameInSource": "orderIndex",
+            "Alias": "orderIndex",
+            "Type": "System.Int32"
+          },
+          "5": {
+            "Name": "variableName",
+            "NameInSource": "variableName",
+            "Alias": "variableName",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.AttributeType"
+      },
+      "3": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.DimDate",
+        "Alias": "rpt.DimDate",
+        "Columns": {
+          "0": {
+            "Name": "date",
+            "NameInSource": "date",
+            "Alias": "date",
+            "Type": "System.DateTime"
+          },
+          "1": {
+            "Name": "dayOfMonth",
+            "NameInSource": "dayOfMonth",
+            "Alias": "dayOfMonth",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "dayOfWeek",
+            "NameInSource": "dayOfWeek",
+            "Alias": "dayOfWeek",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "dayOfYear",
+            "NameInSource": "dayOfYear",
+            "Alias": "dayOfYear",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "firstOfMonth",
+            "NameInSource": "firstOfMonth",
+            "Alias": "firstOfMonth",
+            "Type": "System.DateTime"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "month",
+            "NameInSource": "month",
+            "Alias": "month",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "quarter",
+            "NameInSource": "quarter",
+            "Alias": "quarter",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "weekOfYear",
+            "NameInSource": "weekOfYear",
+            "Alias": "weekOfYear",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "year",
+            "NameInSource": "year",
+            "Alias": "year",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.DimDate"
+      },
+      "4": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Measurement",
+        "Alias": "rpt.Measurement",
+        "Columns": {
+          "0": {
+            "Name": "area",
+            "NameInSource": "area",
+            "Alias": "area",
+            "Type": "System.Object"
+          },
+          "1": {
+            "Name": "areaReduction",
+            "NameInSource": "areaReduction",
+            "Alias": "areaReduction",
+            "Type": "System.Object"
+          },
+          "2": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "depth",
+            "NameInSource": "depth",
+            "Alias": "depth",
+            "Type": "System.Object"
+          },
+          "5": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "imageCount",
+            "NameInSource": "imageCount",
+            "Alias": "imageCount",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "islandCount",
+            "NameInSource": "islandCount",
+            "Alias": "islandCount",
+            "Type": "System.Int32"
+          },
+          "9": {
+            "Name": "length",
+            "NameInSource": "length",
+            "Alias": "length",
+            "Type": "System.Object"
+          },
+          "10": {
+            "Name": "outlineCount",
+            "NameInSource": "outlineCount",
+            "Alias": "outlineCount",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "perimeter",
+            "NameInSource": "perimeter",
+            "Alias": "perimeter",
+            "Type": "System.Object"
+          },
+          "13": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "volume",
+            "NameInSource": "volume",
+            "Alias": "volume",
+            "Type": "System.Object"
+          },
+          "15": {
+            "Name": "width",
+            "NameInSource": "width",
+            "Alias": "width",
+            "Type": "System.Object"
+          },
+          "16": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Measurement"
+      },
+      "5": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Note",
+        "Alias": "rpt.Note",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "attributeTypeFk",
+            "NameInSource": "attributeTypeFk",
+            "Alias": "attributeTypeFk",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "dimDateFk",
+            "NameInSource": "dimDateFk",
+            "Alias": "dimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "value",
+            "NameInSource": "value",
+            "Alias": "value",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "valueBoolean",
+            "NameInSource": "valueBoolean",
+            "Alias": "valueBoolean",
+            "Type": "System.Boolean"
+          },
+          "8": {
+            "Name": "valueDate",
+            "NameInSource": "valueDate",
+            "Alias": "valueDate",
+            "Type": "System.DateTime"
+          },
+          "9": {
+            "Name": "valueDecimal",
+            "NameInSource": "valueDecimal",
+            "Alias": "valueDecimal",
+            "Type": "System.Decimal"
+          },
+          "10": {
+            "Name": "valueInt",
+            "NameInSource": "valueInt",
+            "Alias": "valueInt",
+            "Type": "System.Int32"
+          },
+          "11": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "woundStateFk",
+            "NameInSource": "woundStateFk",
+            "Alias": "woundStateFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Note"
+      },
+      "6": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Patient",
+        "Alias": "rpt.Patient",
+        "Columns": {
+          "0": {
+            "Name": "addressCity",
+            "NameInSource": "addressCity",
+            "Alias": "addressCity",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "addressCountry",
+            "NameInSource": "addressCountry",
+            "Alias": "addressCountry",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "addressPostcode",
+            "NameInSource": "addressPostcode",
+            "Alias": "addressPostcode",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "addressState",
+            "NameInSource": "addressState",
+            "Alias": "addressState",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "addressStreet",
+            "NameInSource": "addressStreet",
+            "Alias": "addressStreet",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "addressSuburb",
+            "NameInSource": "addressSuburb",
+            "Alias": "addressSuburb",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "dateOfBirth",
+            "NameInSource": "dateOfBirth",
+            "Alias": "dateOfBirth",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "domainId",
+            "NameInSource": "domainId",
+            "Alias": "domainId",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "firstName",
+            "NameInSource": "firstName",
+            "Alias": "firstName",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "gender",
+            "NameInSource": "gender",
+            "Alias": "gender",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "homePhone",
+            "NameInSource": "homePhone",
+            "Alias": "homePhone",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "lastName",
+            "NameInSource": "lastName",
+            "Alias": "lastName",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "middleName",
+            "NameInSource": "middleName",
+            "Alias": "middleName",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "mobilePhone",
+            "NameInSource": "mobilePhone",
+            "Alias": "mobilePhone",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "workPhone",
+            "NameInSource": "workPhone",
+            "Alias": "workPhone",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Patient"
+      },
+      "7": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Unit",
+        "Alias": "rpt.Unit",
+        "Columns": {
+          "0": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Unit"
+      },
+      "8": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.Wound",
+        "Alias": "rpt.Wound",
+        "Columns": {
+          "0": {
+            "Name": "anatomyLabel",
+            "NameInSource": "anatomyLabel",
+            "Alias": "anatomyLabel",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "auxText",
+            "NameInSource": "auxText",
+            "Alias": "auxText",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "baselineDate",
+            "NameInSource": "baselineDate",
+            "Alias": "baselineDate",
+            "Type": "System.DateTime"
+          },
+          "3": {
+            "Name": "baselineDimDateFk",
+            "NameInSource": "baselineDimDateFk",
+            "Alias": "baselineDimDateFk",
+            "Type": "System.Int32"
+          },
+          "4": {
+            "Name": "description",
+            "NameInSource": "description",
+            "Alias": "description",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "index",
+            "NameInSource": "index",
+            "Alias": "index",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "label",
+            "NameInSource": "label",
+            "Alias": "label",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "level0AnatomyId",
+            "NameInSource": "level0AnatomyId",
+            "Alias": "level0AnatomyId",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "level0Text",
+            "NameInSource": "level0Text",
+            "Alias": "level0Text",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "level1AnatomyId",
+            "NameInSource": "level1AnatomyId",
+            "Alias": "level1AnatomyId",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "level1Text",
+            "NameInSource": "level1Text",
+            "Alias": "level1Text",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "level2AnatomyId",
+            "NameInSource": "level2AnatomyId",
+            "Alias": "level2AnatomyId",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "level2Text",
+            "NameInSource": "level2Text",
+            "Alias": "level2Text",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "level3AnatomyId",
+            "NameInSource": "level3AnatomyId",
+            "Alias": "level3AnatomyId",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "level3Text",
+            "NameInSource": "level3Text",
+            "Alias": "level3Text",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "17": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.Wound"
+      },
+      "9": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundState",
+        "Alias": "rpt.WoundState",
+        "Columns": {
+          "0": {
+            "Name": "assessmentFk",
+            "NameInSource": "assessmentFk",
+            "Alias": "assessmentFk",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "endDate",
+            "NameInSource": "endDate",
+            "Alias": "endDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "endDateDimDateFk",
+            "NameInSource": "endDateDimDateFk",
+            "Alias": "endDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "3": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "isCurrentState",
+            "NameInSource": "isCurrentState",
+            "Alias": "isCurrentState",
+            "Type": "System.Boolean"
+          },
+          "5": {
+            "Name": "patientFk",
+            "NameInSource": "patientFk",
+            "Alias": "patientFk",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "startDate",
+            "NameInSource": "startDate",
+            "Alias": "startDate",
+            "Type": "System.DateTime"
+          },
+          "7": {
+            "Name": "startDateDimDateFk",
+            "NameInSource": "startDateDimDateFk",
+            "Alias": "startDateDimDateFk",
+            "Type": "System.Int32"
+          },
+          "8": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "woundFk",
+            "NameInSource": "woundFk",
+            "Alias": "woundFk",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "woundStateTypeFk",
+            "NameInSource": "woundStateTypeFk",
+            "Alias": "woundStateTypeFk",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundState"
+      },
+      "10": {
+        "Ident": "StiSqlSource",
+        "Name": "rpt.WoundStateType",
+        "Alias": "rpt.WoundStateType",
+        "Columns": {
+          "0": {
+            "Name": "attributeLookupKey",
+            "NameInSource": "attributeLookupKey",
+            "Alias": "attributeLookupKey",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "id",
+            "NameInSource": "id",
+            "Alias": "id",
+            "Type": "System.String"
+          },
+          "2": {
+            "Name": "isActive",
+            "NameInSource": "isActive",
+            "Alias": "isActive",
+            "Type": "System.Boolean"
+          },
+          "3": {
+            "Name": "name",
+            "NameInSource": "name",
+            "Alias": "name",
+            "Type": "System.String"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "select * from rpt.WoundStateType"
+      },
+      "11": {
+        "Ident": "StiSqlSource",
+        "Name": "unit_monthly_data",
+        "Alias": "unit_monthly_data",
+        "Key": "139d8224fe05d76f83b0a439b254c3fe",
+        "Columns": {
+          "0": {
+            "Name": "Year",
+            "NameInSource": "Year",
+            "Alias": "Year",
+            "Type": "System.Int32"
+          },
+          "1": {
+            "Name": "Month",
+            "NameInSource": "Month",
+            "Alias": "Month",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "MonthName",
+            "NameInSource": "MonthName",
+            "Alias": "MonthName",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "unitFk",
+            "NameInSource": "unitFk",
+            "Alias": "unitFk",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "UnitName",
+            "NameInSource": "UnitName",
+            "Alias": "UnitName",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "Assessments",
+            "NameInSource": "Assessments",
+            "Alias": "Assessments",
+            "Type": "System.Int32"
+          },
+          "6": {
+            "Name": "Wound Assessments",
+            "NameInSource": "Wound Assessments",
+            "Alias": "Wound Assessments",
+            "Type": "System.Int32"
+          },
+          "7": {
+            "Name": "MonthStartDate",
+            "NameInSource": "MonthStartDate",
+            "Alias": "MonthStartDate",
+            "Type": "System.DateTime"
+          },
+          "8": {
+            "Name": "Patient Visits",
+            "NameInSource": "Patient Visits",
+            "Alias": "Patient Visits",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH Trailing12Months AS (\n    SELECT \n        DATEADD(MONTH, -12, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)) AS StartDate,  -- Start of trailing 12 months\n        DATEADD(DAY, -1, DATEADD(MONTH, 1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))) AS EndDate  -- End of current month\n),\n\nMonthSeries AS (\n    SELECT \n        DATEPART(YEAR, d.date) AS Year,\n        DATEPART(MONTH, d.date) AS Month,\n        DATENAME(MONTH, d.date) AS MonthName,  -- Full month name\n        DATEFROMPARTS(DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), 1) AS MonthStartDate  -- First day of the month\n    FROM \n        rpt.dimdate d\n    CROSS JOIN \n        Trailing12Months t12m\n    WHERE \n        d.date BETWEEN t12m.StartDate AND t12m.EndDate\n    GROUP BY \n        DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), DATENAME(MONTH, d.date), DATEFROMPARTS(DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), 1)\n),\n\nAllUnits AS (\n    SELECT DISTINCT \n        a.unitFk\n    FROM \n        rpt.assessment a\n),\n\nMonthUnitCombination AS (\n    SELECT \n        ms.Year,\n        ms.Month,\n        ms.MonthName,\n        ms.MonthStartDate,\n        au.unitFk\n    FROM \n        MonthSeries ms\n    CROSS JOIN \n        AllUnits au\n),\n\nMonthlyData AS (\n    SELECT \n        DATEPART(YEAR, a.date) AS Year,\n        DATEPART(MONTH, a.date) AS Month,\n        a.unitFk,\n        COUNT(CASE \n                  WHEN atv.name = 'Wound Assessment' THEN a.id \n                  ELSE NULL \n              END) AS WoundAssessmentCount,  -- Count of wound assessments\n        COUNT(CASE \n                  WHEN atv.assessmentTypeId = 'a4664a75-1e9a-4537-a663-401954f5593d' THEN a.patientFk \n                  ELSE NULL \n              END) AS PatientVisitCount  -- Count of patient visits (non-distinct)\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    WHERE \n        a.date BETWEEN (SELECT StartDate FROM Trailing12Months) AND (SELECT EndDate FROM Trailing12Months)\n    GROUP BY \n        DATEPART(YEAR, a.date), DATEPART(MONTH, a.date), a.unitFk\n)\n\nSELECT \n    muc.Year,\n    muc.Month,\n    muc.MonthName,\n    muc.unitFk,\n    u.name AS UnitName, -- Unit name from rpt.unit\n    ISNULL(md.WoundAssessmentCount, 0) AS 'Wound Assessments',  -- Wound assessment count\n    ISNULL(md.PatientVisitCount, 0) AS 'Patient Visits',  -- Patient visit count\n    muc.MonthStartDate\nFROM \n    MonthUnitCombination muc\nLEFT JOIN \n    MonthlyData md\n    ON muc.Year = md.Year \n    AND muc.Month = md.Month \n    AND muc.unitFk = md.unitFk\nLEFT JOIN \n    rpt.unit u\n    ON muc.unitFk = u.id\nORDER BY \n    muc.Year, muc.Month, u.name;\n"
+      },
+      "12": {
+        "Ident": "StiSqlSource",
+        "Name": "wound_assessments_pivot",
+        "Alias": "wound_assessments_pivot",
+        "Key": "2e3ed38e3df399aa1a34f3c392acc2a5",
+        "Columns": {
+          "0": {
+            "Name": "UnitName",
+            "NameInSource": "UnitName",
+            "Alias": "UnitName",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "StartDate",
+            "NameInSource": "StartDate",
+            "Alias": "StartDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "YearMonth",
+            "NameInSource": "YearMonth",
+            "Alias": "YearMonth",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "WoundCount",
+            "NameInSource": "WoundCount",
+            "Alias": "WoundCount",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH Trailing12Months AS (\n    SELECT \n        DATEADD(MONTH, -11, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)) AS StartDate,  -- Start of 12 months ago\n        DATEADD(DAY, -1, DATEADD(MONTH, 1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))) AS EndDate  -- End of current month\n),\nMonthSeries AS (\n    SELECT \n        DATEFROMPARTS(DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), 1) AS MonthStartDate  -- First day of the month\n    FROM \n        rpt.dimdate d\n    CROSS JOIN Trailing12Months t12m\n    WHERE \n        d.date BETWEEN t12m.StartDate AND t12m.EndDate\n    GROUP BY \n        DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), DATEFROMPARTS(DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), 1)\n),\nMonthlyData AS (\n    SELECT \n        FORMAT(a.date, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month into a single column\n        a.unitFk,\n        COUNT(DISTINCT a.woundFk) AS WoundCount\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    WHERE \n        a.date BETWEEN (SELECT StartDate FROM Trailing12Months) AND (SELECT EndDate FROM Trailing12Months)\n        AND atv.name = 'Wound Assessment'\n    GROUP BY \n        FORMAT(a.date, 'yyyy-MM'), a.unitFk\n)\n-- Generate the result with 12 rows per unit, for each month in the trailing 12 months\nSELECT \n    u.name AS UnitName,\n    ms.MonthStartDate AS StartDate,\n    FORMAT(ms.MonthStartDate, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month here\n    COALESCE(md.WoundCount, 0) AS WoundCount\nFROM \n    rpt.unit u\nCROSS JOIN \n    MonthSeries ms\nLEFT JOIN \n    MonthlyData md \n    ON md.unitFk = u.id AND md.YearMonth = FORMAT(ms.MonthStartDate, 'yyyy-MM')  -- Match on YearMonth\nORDER BY \n    u.name, ms.MonthStartDate;\n"
+      },
+      "13": {
+        "Ident": "StiSqlSource",
+        "Name": "patients_pivot",
+        "Alias": "patients_pivot",
+        "Key": "d815fc5275231674e0982a29bef36821",
+        "Columns": {
+          "0": {
+            "Name": "UnitName",
+            "NameInSource": "UnitName",
+            "Alias": "UnitName",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "StartDate",
+            "NameInSource": "StartDate",
+            "Alias": "StartDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "YearMonth",
+            "NameInSource": "YearMonth",
+            "Alias": "YearMonth",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "PatientVisitCount",
+            "NameInSource": "PatientVisitCount",
+            "Alias": "PatientVisitCount",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH Trailing12Months AS (\n    SELECT \n        DATEADD(MONTH, -11, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)) AS StartDate,  -- Start of 12 months ago\n        DATEADD(DAY, -1, DATEADD(MONTH, 1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))) AS EndDate  -- End of current month\n),\nMonthSeries AS (\n    SELECT \n        DATEFROMPARTS(DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), 1) AS MonthStartDate  -- First day of the month\n    FROM \n        rpt.dimdate d\n    CROSS JOIN Trailing12Months t12m\n    WHERE \n        d.date BETWEEN t12m.StartDate AND t12m.EndDate\n    GROUP BY \n        DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), DATEFROMPARTS(DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), 1)\n),\nMonthlyData AS (\n    SELECT \n        FORMAT(a.date, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month into a single column\n        a.unitFk,\n        COUNT(CASE \n                  WHEN atv.assessmentTypeId = 'a4664a75-1e9a-4537-a663-401954f5593d' THEN a.patientFk \n                  ELSE NULL \n              END) AS PatientVisitCount  -- Total patient visits (not distinct)\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    WHERE \n        a.date BETWEEN (SELECT StartDate FROM Trailing12Months) AND (SELECT EndDate FROM Trailing12Months)\n    GROUP BY \n        FORMAT(a.date, 'yyyy-MM'), a.unitFk\n)\n-- Generate the result with 12 rows per unit, for each month in the trailing 12 months\nSELECT \n    u.name AS UnitName,\n    ms.MonthStartDate AS StartDate,\n    FORMAT(ms.MonthStartDate, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month here\n    COALESCE(md.PatientVisitCount, 0) AS PatientVisitCount\nFROM \n    rpt.unit u\nCROSS JOIN \n    MonthSeries ms\nLEFT JOIN \n    MonthlyData md \n    ON md.unitFk = u.id AND md.YearMonth = FORMAT(ms.MonthStartDate, 'yyyy-MM')  -- Match on YearMonth\nORDER BY \n    u.name, ms.MonthStartDate;\n"
+      },
+      "14": {
+        "Ident": "StiSqlSource",
+        "Name": "percent_incr_wound",
+        "Alias": "percent_incr_wound",
+        "Key": "96a390d74a324a38e5be0897faddf2d6",
+        "Columns": {
+          "0": {
+            "Name": "UnitName",
+            "NameInSource": "UnitName",
+            "Alias": "UnitName",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "Prev 3 Ave",
+            "NameInSource": "Prev 3 Ave",
+            "Alias": "Prev 3 Ave",
+            "Type": "System.Decimal"
+          },
+          "2": {
+            "Name": "First 6 Mon of 9",
+            "NameInSource": "First 6 Mon of 9",
+            "Alias": "First 6 Mon of 9",
+            "Type": "System.Decimal"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH WoundAssessments AS (\n    SELECT \n        a.unitFk,\n        DATEPART(YEAR, a.date) AS Year,\n        DATEPART(MONTH, a.date) AS Month,\n        COUNT(*) AS WoundAssessmentCount\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    WHERE \n        atv.name = 'Wound Assessment'\n        AND a.date BETWEEN DATEADD(MONTH, -9, GETDATE()) AND GETDATE()  -- Last 9 months\n    GROUP BY \n        a.unitFk, DATEPART(YEAR, a.date), DATEPART(MONTH, a.date)\n),\n\nPrev3Ave AS (\n    SELECT \n        wa.unitFk,\n        AVG(wa.WoundAssessmentCount * 1.0) AS Prev3Ave  -- Average for the last 3 months\n    FROM \n        WoundAssessments wa\n    WHERE \n        DATEFROMPARTS(wa.Year, wa.Month, 1) BETWEEN DATEADD(MONTH, -3, GETDATE()) AND GETDATE()  -- Previous 3 months\n    GROUP BY \n        wa.unitFk\n),\n\nFirst6MonOf9 AS (\n    SELECT \n        wa.unitFk,\n        AVG(wa.WoundAssessmentCount * 1.0) AS First6MonOf9  -- Average for the first 6 months of the last 9\n    FROM \n        WoundAssessments wa\n    WHERE \n        DATEFROMPARTS(wa.Year, wa.Month, 1) BETWEEN DATEADD(MONTH, -9, GETDATE()) AND DATEADD(MONTH, -3, GETDATE())  -- First 6 months of the 9-month period\n    GROUP BY \n        wa.unitFk\n)\n\nSELECT \n    u.name AS UnitName,  -- Unit name\n    ISNULL(p3.Prev3Ave, 0) AS 'Prev 3 Ave',  -- Average for previous 3 months\n    ISNULL(f6.First6MonOf9, 0) AS 'First 6 Mon of 9'  -- Average for first 6 months of last 9\nFROM \n    rpt.unit u\nLEFT JOIN \n    Prev3Ave p3\n    ON u.id = p3.unitFk\nLEFT JOIN \n    First6MonOf9 f6\n    ON u.id = f6.unitFk\nORDER BY \n    u.name;\n"
+      },
+      "15": {
+        "Ident": "StiSqlSource",
+        "Name": "percent_incr_patient",
+        "Alias": "percent_incr_patient",
+        "Key": "a7d330b1aa76a606dd8b38485e27b87e",
+        "Columns": {
+          "0": {
+            "Name": "unit_name",
+            "NameInSource": "unit_name",
+            "Alias": "unit_name",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "Prev 3 Ave",
+            "NameInSource": "Prev 3 Ave",
+            "Alias": "Prev 3 Ave",
+            "Type": "System.Decimal"
+          },
+          "2": {
+            "Name": "First 6 Mon of 9",
+            "NameInSource": "First 6 Mon of 9",
+            "Alias": "First 6 Mon of 9",
+            "Type": "System.Decimal"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH Trailing12Months AS (\n    SELECT \n        DATEADD(MONTH, -12, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)) AS StartDate,  -- Start of trailing 12 months\n        DATEADD(DAY, -1, DATEADD(MONTH, 1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))) AS EndDate  -- End of current month\n),\n\nVisitDetails AS (\n    SELECT \n        a.unitFk,\n        DATEPART(YEAR, a.date) AS Year,\n        DATEPART(MONTH, a.date) AS Month,\n        COUNT(CASE \n                  WHEN atv.assessmentTypeId = 'a4664a75-1e9a-4537-a663-401954f5593d' THEN a.patientFk \n                  ELSE NULL \n              END) AS PatientVisitCount  -- Total patient visits (not distinct)\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    WHERE \n        a.date BETWEEN DATEADD(MONTH, -9, GETDATE()) AND GETDATE()  -- Last 9 months\n    GROUP BY \n        a.unitFk, DATEPART(YEAR, a.date), DATEPART(MONTH, a.date)\n),\n\nPrev3Ave AS (\n    SELECT \n        vd.unitFk,\n        AVG(vd.PatientVisitCount * 1.0) AS Prev3Ave  -- Average patient visits for last 3 months\n    FROM \n        VisitDetails vd\n    WHERE \n        DATEFROMPARTS(vd.Year, vd.Month, 1) BETWEEN DATEADD(MONTH, -3, GETDATE()) AND GETDATE()  -- Previous 3 months\n    GROUP BY \n        vd.unitFk\n),\n\nFirst6MonOf9 AS (\n    SELECT \n        vd.unitFk,\n        AVG(vd.PatientVisitCount * 1.0) AS First6MonOf9  -- Average patient visits for first 6 months of last 9\n    FROM \n        VisitDetails vd\n    WHERE \n        DATEFROMPARTS(vd.Year, vd.Month, 1) BETWEEN DATEADD(MONTH, -9, GETDATE()) AND DATEADD(MONTH, -3, GETDATE())  -- First 6 months of 9-month period\n    GROUP BY \n        vd.unitFk\n)\n\nSELECT \n    u.name AS unit_name,  -- Unit name\n    ISNULL(p3.Prev3Ave, 0) AS 'Prev 3 Ave',  -- Average for previous 3 months\n    ISNULL(f6.First6MonOf9, 0) AS 'First 6 Mon of 9'  -- Average for first 6 months of last 9\nFROM \n    rpt.unit u\nLEFT JOIN \n    Prev3Ave p3\n    ON u.id = p3.unitFk\nLEFT JOIN \n    First6MonOf9 f6\n    ON u.id = f6.unitFk\nORDER BY \n    u.name;\n"
+      },
+      "16": {
+        "Ident": "StiSqlSource",
+        "Name": "wound_assessments_pivot_alltime",
+        "Alias": "wound_assessments_pivot_alltime",
+        "Key": "2a55f28015ce1c70911322c006ea26c0",
+        "Columns": {
+          "0": {
+            "Name": "UnitName",
+            "NameInSource": "UnitName",
+            "Alias": "UnitName",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "StartDate",
+            "NameInSource": "StartDate",
+            "Alias": "StartDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "YearMonth",
+            "NameInSource": "YearMonth",
+            "Alias": "YearMonth",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "WoundCount",
+            "NameInSource": "WoundCount",
+            "Alias": "WoundCount",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH DateRange AS (\n    SELECT \n        MIN(a.date) AS MinDate,  -- Earliest assessment date\n        GETDATE() AS MaxDate  -- Current date\n    FROM \n        rpt.assessment a\n),\nMonthSeries AS (\n    SELECT \n        DATEFROMPARTS(YEAR(d.date), MONTH(d.date), 1) AS MonthStartDate  -- First day of the month\n    FROM \n        rpt.dimdate d\n    CROSS JOIN DateRange dr\n    WHERE \n        d.date BETWEEN dr.MinDate AND dr.MaxDate  -- Generate all months from MinDate to MaxDate\n    GROUP BY \n        DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), DATEFROMPARTS(YEAR(d.date), MONTH(d.date), 1)\n),\nMonthlyData AS (\n    SELECT \n        FORMAT(a.date, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month into a single column\n        a.unitFk,\n        COUNT(DISTINCT a.woundFk) AS WoundCount  -- Count distinct wounds\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    WHERE \n        atv.name = 'Wound Assessment'  -- Filter for 'Wound Assessment'\n    GROUP BY \n        FORMAT(a.date, 'yyyy-MM'), a.unitFk\n)\n-- Generate the result for all units and all months from the minimum date to the current date\nSELECT \n    u.name AS UnitName,\n    ms.MonthStartDate AS StartDate,\n    FORMAT(ms.MonthStartDate, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month here\n    COALESCE(md.WoundCount, 0) AS WoundCount  -- Default to 0 if no data\nFROM \n    rpt.unit u\nCROSS JOIN \n    MonthSeries ms\nLEFT JOIN \n    MonthlyData md \n    ON md.unitFk = u.id AND md.YearMonth = FORMAT(ms.MonthStartDate, 'yyyy-MM')  -- Match on YearMonth\nORDER BY \n    u.name, ms.MonthStartDate;\n"
+      },
+      "17": {
+        "Ident": "StiSqlSource",
+        "Name": "patient_assessments_pivot_alltimeCopy",
+        "Alias": "patient_assessments_pivot_alltimeCopy",
+        "Key": "7cdbd13e810fa7b4aa4c4cece8ac9e8b",
+        "Columns": {
+          "0": {
+            "Name": "UnitName",
+            "NameInSource": "UnitName",
+            "Alias": "UnitName",
+            "Type": "System.String"
+          },
+          "1": {
+            "Name": "StartDate",
+            "NameInSource": "StartDate",
+            "Alias": "StartDate",
+            "Type": "System.DateTime"
+          },
+          "2": {
+            "Name": "YearMonth",
+            "NameInSource": "YearMonth",
+            "Alias": "YearMonth",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "PatientVisitCount",
+            "NameInSource": "PatientVisitCount",
+            "Alias": "PatientVisitCount",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Connection",
+        "SqlCommand": "WITH DateRange AS (\n    SELECT \n        MIN(a.date) AS MinDate,  -- Earliest assessment date\n        GETDATE() AS MaxDate  -- Current date\n    FROM \n        rpt.assessment a\n),\nMonthSeries AS (\n    SELECT \n        DATEFROMPARTS(YEAR(d.date), MONTH(d.date), 1) AS MonthStartDate  -- First day of the month\n    FROM \n        rpt.dimdate d\n    CROSS JOIN DateRange dr\n    WHERE \n        d.date BETWEEN dr.MinDate AND dr.MaxDate  -- Generate all months from MinDate to MaxDate\n    GROUP BY \n        DATEPART(YEAR, d.date), DATEPART(MONTH, d.date), DATEFROMPARTS(YEAR(d.date), MONTH(d.date), 1)\n),\nMonthlyData AS (\n    SELECT \n        FORMAT(a.date, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month into a single column\n        a.unitFk,\n        COUNT(CASE \n                  WHEN atv.assessmentTypeId = 'a4664a75-1e9a-4537-a663-401954f5593d' THEN a.patientFk \n                  ELSE NULL \n              END) AS PatientVisitCount  -- Count total patient visits for the specified assessment type\n    FROM \n        rpt.assessment a\n    INNER JOIN \n        rpt.AssessmentTypeVersion atv\n        ON a.assessmentTypeVersionFk = atv.id\n    GROUP BY \n        FORMAT(a.date, 'yyyy-MM'), a.unitFk\n)\n-- Generate the result for all units and all months from the minimum date to the current date\nSELECT \n    u.name AS UnitName,\n    ms.MonthStartDate AS StartDate,\n    FORMAT(ms.MonthStartDate, 'yyyy-MM') AS YearMonth,  -- Combine Year and Month here\n    COALESCE(md.PatientVisitCount, 0) AS PatientVisitCount  -- Default to 0 if no data\nFROM \n    rpt.unit u\nCROSS JOIN \n    MonthSeries ms\nLEFT JOIN \n    MonthlyData md \n    ON md.unitFk = u.id AND md.YearMonth = FORMAT(ms.MonthStartDate, 'yyyy-MM')  -- Match on YearMonth\nORDER BY \n    u.name, ms.MonthStartDate;\n"
+      }
+    },
+    "Databases": {
+      "0": {
+        "Ident": "StiSqlDatabase",
+        "Name": "Connection",
+        "Alias": "Connection",
+        "ConnectionStringEncrypted": "ng=="
+      }
+    }
+  },
+  "Pages": {
+    "0": {
+      "Ident": "StiDashboard",
+      "Name": "Graph_Trailing_12_Months",
+      "Guid": "6357b55b9fb20524189b88df1403cb28",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiIndicatorElement",
+          "Name": "IndicatorElement1",
+          "Guid": "8c519d2e3f9d7d48568351bcef7a08c8",
+          "ClientRectangle": "790,80,400,220",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "CrossFiltering": false,
+          "TextFormat": {
+            "Ident": "StiNumberFormatService",
+            "DecimalDigits": 0,
+            "GroupSeparator": ",",
+            "State": "DecimalDigits"
+          },
+          "TargetFormat": {
+            "Ident": "StiPercentageFormatService",
+            "GroupSeparator": ",",
+            "Symbol": "%"
+          },
+          "Value": {
+            "Ident": "ValueIndicatorMeter",
+            "Key": "1132f7676ada0769ae3574a2a444de86",
+            "Expression": "Sum(percent_incr_wound.Prev3Ave)",
+            "Label": "Prev 3 Ave"
+          },
+          "Target": {
+            "Ident": "TargetIndicatorMeter",
+            "Key": "4fa5f51bdf6d20dd9b46a2a0925a6dbc",
+            "Expression": "Sum(percent_incr_wound.First6Monof9)",
+            "Label": "First 6 Mon of 9"
+          },
+          "Series": {
+            "Ident": "SeriesIndicatorMeter",
+            "Key": "6ee9873ef10609c3c9bc1d15a469d86e",
+            "Expression": "percent_incr_wound.UnitName",
+            "Label": "UnitName"
+          },
+          "Title": {
+            "Text": "Indicator",
+            "Visible": false
+          },
+          "ForeColor": "51,51,102",
+          "Font": ";14;;",
+          "CornerRadius": "0, 0, 10, 10",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Indicator",
+            "OnHover": "ShowToolTip",
+            "OnClick": "None",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "1": {
+          "Ident": "StiIndicatorElement",
+          "Name": "IndicatorElement2",
+          "Guid": "4b9e4f2bfa1c201080322b6afa4a58f5",
+          "ClientRectangle": "790,340,400,240",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "CrossFiltering": false,
+          "TextFormat": {
+            "Ident": "StiNumberFormatService",
+            "DecimalDigits": 0,
+            "GroupSeparator": ",",
+            "State": "DecimalDigits"
+          },
+          "TargetFormat": {
+            "Ident": "StiPercentageFormatService",
+            "GroupSeparator": ",",
+            "Symbol": "%"
+          },
+          "Value": {
+            "Ident": "ValueIndicatorMeter",
+            "Key": "b4c16a8951d64480185a4e4f5c828061",
+            "Expression": "Sum(percent_incr_patient.Prev3Ave)",
+            "Label": "Prev 3 Ave"
+          },
+          "Target": {
+            "Ident": "TargetIndicatorMeter",
+            "Key": "c0c7642a7e35de5be7678d5e8d1b0b73",
+            "Expression": "Sum(percent_incr_patient.First6Monof9)",
+            "Label": "First 6 Mon of 9"
+          },
+          "Series": {
+            "Ident": "SeriesIndicatorMeter",
+            "Key": "147fe1250183f0a8720ec72fcf4189c0",
+            "Expression": "percent_incr_patient.unit_name",
+            "Label": "unit_name"
+          },
+          "Title": {
+            "Text": "Indicator",
+            "Visible": false
+          },
+          "ForeColor": "51,51,102",
+          "Font": ";14;;",
+          "CornerRadius": "0, 0, 10, 10",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Indicator",
+            "OnHover": "ShowToolTip",
+            "OnClick": "None",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "2": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement1",
+          "Guid": "8808962c7bdba0c11b9863a24adbbddd",
+          "ClientRectangle": "310,0,300,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "ForeColor": "51,51,102",
+          "Font": ";12;;",
+          "ShowAllValue": true,
+          "SelectionMode": "Multi",
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "e643112f9db2304c1a62138b18cbe553",
+            "Expression": "unit_monthly_data.UnitName",
+            "Label": "UnitName"
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style5",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "3": {
+          "Ident": "StiChartElement",
+          "Name": "ChartElement1",
+          "Guid": "2b1b4e8f2efa0dc3f8597a67cbc272bb",
+          "ClientRectangle": "10,40,780,540",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "Values": {
+            "0": {
+              "Ident": "ValueChartMeter",
+              "Key": "f8af265368656f51fa25d629fb1e40c0",
+              "Expression": "Sum(unit_monthly_data.WoundAssessments)",
+              "Label": "Wound Assessments"
+            },
+            "1": {
+              "Ident": "ValueChartMeter",
+              "Key": "0d664139ceca7ddab37b82ac01bdc53e",
+              "Expression": "Sum(unit_monthly_data.PatientVisits)",
+              "Label": "Patient Visits"
+            }
+          },
+          "Arguments": {
+            "0": {
+              "Ident": "ArgumentChartMeter",
+              "Key": "f7b3172ea2d1dd2f78f970de70607316",
+              "Expression": "unit_monthly_data.MonthStartDate",
+              "Label": "MonthStartDate"
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Chart",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Title": {
+            "Text": "Chart",
+            "Visible": false
+          },
+          "ManuallyEnteredChartMeter": {
+            "Ident": "ValueChartMeter",
+            "Key": "6b941f0340eace9c9053b80014b25811"
+          },
+          "ArgumentFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "ValueFormat": {
+            "Ident": "StiNumberFormatService",
+            "DecimalDigits": 0,
+            "GroupSeparator": ",",
+            "State": "DecimalDigits, Abbreviation"
+          },
+          "XAxis": {
+            "Title": {
+              "Visible": false
+            }
+          },
+          "YAxis": {
+            "Title": {
+              "Visible": false
+            }
+          },
+          "Legend": {
+            "HorAlignment": "Center"
+          },
+          "Area": {
+            "SideBySide": true,
+            "GridLinesHor": {
+              "Color": "Transparent",
+              "Visible": false
+            },
+            "GridLinesVert": {
+              "Color": "Transparent"
+            },
+            "InterlacingHor": {
+              "Color": "230,230,230,230",
+              "Visible": true
+            },
+            "InterlacingVert": {
+              "Color": "Transparent"
+            },
+            "Indicator": {
+              "Title": {
+                "Text": ""
+              }
+            }
+          },
+          "Labels": {
+            "ForeColor": "51,51,102",
+            "Position": "None",
+            "Style": "Value"
+          },
+          "Options3D": {
+            "Opacity": 1,
+            "Lighting": "Gradient"
+          },
+          "SeriesColors": {
+            "0": "102,26,148",
+            "1": "51,153,204"
+          },
+          "TrendLines": {
+            "0": {
+              "KeyValueMeter": "2df8230787e530dfbbc33fa9fb66a797",
+              "Type": "Exponential",
+              "LineStyle": "Dash",
+              "LineColor": "237,125,49",
+              "LineWidth": 5
+            }
+          },
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;"
+        },
+        "4": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement25",
+          "Guid": "7d19f375b30478e206e2d9d53a7f2298",
+          "ClientRectangle": "190,2,120,35",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Top": 0,
+            "Bottom": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"18\" ><text-align=\"Center\"><b><font-color=\"#333366\">Unit:</font-color></b></text-align></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 1, 1",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "ForeColor": "214,220,228",
+            "BackColor": "46,117,181",
+            "Visible": false
+          }
+        },
+        "5": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement2",
+          "Guid": "4aef8fff2b913b71dd8d486409954add",
+          "ClientRectangle": "790,300,400,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Top": 0,
+            "Bottom": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "51,153,204",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "255,255,255",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b>Patient Visits</b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 1, 1",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "ForeColor": "214,220,228",
+            "BackColor": "46,117,181",
+            "Visible": false
+          }
+        },
+        "6": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement3",
+          "Guid": "361216fddec35265d1c3f7842e62e5e1",
+          "ClientRectangle": "790,40,400,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Top": 0,
+            "Bottom": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "102,26,148",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "255,255,255",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b>Wound Assessments</b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 1, 1",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "ForeColor": "214,220,228",
+            "BackColor": "46,117,181",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    },
+    "1": {
+      "Ident": "StiDashboard",
+      "Name": "Table_Trailing_12_Months",
+      "Guid": "91cde9e004e17de8452776aab6ded68d",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement1",
+          "Guid": "9ede46a71a39c60a511a36ca547c90d4",
+          "ClientRectangle": "360,0,440,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,51,102",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "245,245,245",
+          "Text": "<font face=\"Arial\" size=\"26\" ><text-align=\"Center\"><b><font-color=\"#f5f5f5\">Trailing 12 months</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "1": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement4",
+          "Guid": "07e0fe2306b32e724e92a85587b30fe7",
+          "ClientRectangle": "80,40,440,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "102,26,148",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "255,255,255",
+          "Text": "<font face=\"Arial\" size=\"26\" ><text-align=\"Center\"><b><font-color=\"#ffffff\">Wound Assessments</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "2": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement5",
+          "Guid": "45622d6d598ad22183b340a5df608b9c",
+          "ClientRectangle": "700,40,440,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,153,204",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "255,255,255",
+          "Text": "<font face=\"Arial\" size=\"26\"><text-align=\"center\"><b><font color=\"#ffffff\">Patient Visits</font></b></text-align=\"center\"></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "3": {
+          "Ident": "StiPivotTableElement",
+          "Name": "PivotTableElement1",
+          "Guid": "626b07d4054d157cf428da9d46f90ad8",
+          "ClientRectangle": "0,80,600,520",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "PivotColumn",
+              "Key": "dbde45641d9f19e6947bbc3ca9b3f037",
+              "Expression": "wound_assessments_pivot.YearMonth",
+              "Label": "YearMonth",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Rows": {
+            "0": {
+              "Ident": "PivotRow",
+              "Key": "210f834562a5db750173f483ca0319fc",
+              "Expression": "wound_assessments_pivot.UnitName",
+              "Label": "UnitName",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Summaries": {
+            "0": {
+              "Ident": "PivotSummary",
+              "Key": "c47545f3c06aa7f34d95514fde12712e",
+              "Expression": "Sum(wound_assessments_pivot.WoundCount)",
+              "Label": "WoundCount",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Title": {
+            "Text": "Pivot Table",
+            "Visible": false
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style3",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "PivotTable",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "4": {
+          "Ident": "StiPivotTableElement",
+          "Name": "PivotTableElement2",
+          "Guid": "27eeab21ea5746de9195d4e9bd9184e4",
+          "ClientRectangle": "600,80,600,520",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "PivotColumn",
+              "Key": "6afd470d6fafbb7338e54b4c3018ea7e",
+              "Expression": "patients_pivot.YearMonth",
+              "Label": "YearMonth",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Rows": {
+            "0": {
+              "Ident": "PivotRow",
+              "Key": "2b495f7fa086b66156d8284736a65c54",
+              "Expression": "patients_pivot.UnitName",
+              "Label": "UnitName",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Summaries": {
+            "0": {
+              "Ident": "PivotSummary",
+              "Key": "17f8049c257f38b93979bffda019dd80",
+              "Expression": "Sum(patients_pivot.PatientVisitCount)",
+              "Label": "PatientVisitCount",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Title": {
+            "Text": "Pivot Table",
+            "Visible": false
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style4",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "PivotTable",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    },
+    "2": {
+      "Ident": "StiDashboard",
+      "Name": "Table_All_Time",
+      "Guid": "84e43241526dcba244ba09147cbed109",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement6",
+          "Guid": "9ede46a71a39c60a511a36ca547c90d4",
+          "ClientRectangle": "360,0,440,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,51,102",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "245,245,245",
+          "Text": "<font face=\"Arial\" size=\"26\"><text-align=\"center\"><b><font color=\"#f5f5f5\">All-Time</font></b></text-align=\"center\"></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "1": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement7",
+          "Guid": "07e0fe2306b32e724e92a85587b30fe7",
+          "ClientRectangle": "80,40,440,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "102,26,148",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "255,255,255",
+          "Text": "<font face=\"Arial\" size=\"26\" ><text-align=\"Center\"><b><font-color=\"#ffffff\">Wound Assessments</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "2": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement8",
+          "Guid": "45622d6d598ad22183b340a5df608b9c",
+          "ClientRectangle": "700,40,440,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "51,153,204",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "255,255,255",
+          "Text": "<font face=\"Arial\" size=\"26\"><text-align=\"center\"><b><font color=\"#ffffff\">Patient Visits</font></b></text-align=\"center\"></font>",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "3": {
+          "Ident": "StiPivotTableElement",
+          "Name": "PivotTableElement3",
+          "Guid": "626b07d4054d157cf428da9d46f90ad8",
+          "ClientRectangle": "0,80,600,520",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "PivotColumn",
+              "Key": "dbde45641d9f19e6947bbc3ca9b3f037",
+              "Expression": "wound_assessments_pivot_alltime.YearMonth",
+              "Label": "YearMonth",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Rows": {
+            "0": {
+              "Ident": "PivotRow",
+              "Key": "210f834562a5db750173f483ca0319fc",
+              "Expression": "wound_assessments_pivot_alltime.UnitName",
+              "Label": "UnitName",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Summaries": {
+            "0": {
+              "Ident": "PivotSummary",
+              "Key": "c47545f3c06aa7f34d95514fde12712e",
+              "Expression": "Sum(wound_assessments_pivot_alltime.WoundCount)",
+              "Label": "WoundCount",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Title": {
+            "Text": "Pivot Table",
+            "Visible": false
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style3",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "PivotTable",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "4": {
+          "Ident": "StiPivotTableElement",
+          "Name": "PivotTableElement4",
+          "Guid": "27eeab21ea5746de9195d4e9bd9184e4",
+          "ClientRectangle": "600,80,600,520",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "PivotColumn",
+              "Key": "6afd470d6fafbb7338e54b4c3018ea7e",
+              "Expression": "patient_assessments_pivot_alltimeCopy.YearMonth",
+              "Label": "YearMonth",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Rows": {
+            "0": {
+              "Ident": "PivotRow",
+              "Key": "2b495f7fa086b66156d8284736a65c54",
+              "Expression": "patient_assessments_pivot_alltimeCopy.UnitName",
+              "Label": "UnitName",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Summaries": {
+            "0": {
+              "Ident": "PivotSummary",
+              "Key": "164b49244776dd2e6c4fb8620fb216ab",
+              "Expression": "Sum(patient_assessments_pivot_alltimeCopy.PatientVisitCount)",
+              "Label": "PatientVisitCount",
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "Title": {
+            "Text": "Pivot Table",
+            "Visible": false
+          },
+          "Style": "Custom",
+          "CustomStyleName": "Style4",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "PivotTable",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    },
+    "3": {
+      "Ident": "StiDashboard",
+      "Name": "Instructions",
+      "Guid": "5ce391ae8fcb051f6c4ff1417688e921",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement9",
+          "Guid": "bf12501b6cb056ebf41d72df1426abb6",
+          "ClientRectangle": "100,100,440,480",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"12\"><text-align=\"left\"><font color=\"#333366\"><p><b>Graph:<br></b>This section displays a graphical representation of the trailing 12 months, showing the number of Wound Assessments and Patient Visits conducted each month. At the top of the graph, you can filter the data by unit to focus on specific areas.</p><p><b>Right-Hand Side Indicators:<br></b>The indicators on this side compare unit performance over the last 9 months. Each row corresponds to a unit, with the left-most column showing the unit's name. The middle column presents the average performance for the most recent 3 months (up to the current date). The right-most column shows the percentage change when comparing this 3-month average to the performance of the 6 months preceding that period.</p><p>Essentially, the 6-month period for comparison starts 9 months ago, and the performance from that period is contrasted with the more recent 3-month average.</p><p>The data is broken down into two distinct indicators—Wound Assessments and Patient Visits—each clearly labeled for easy reference.</p></font></text-align=\"left\"></font>",
+          "SizeMode": "WordWrap",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "1": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement10",
+          "Guid": "1984091d95236f1275cc1da4c3956db0",
+          "ClientRectangle": "100,60,440,35",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Top": 0,
+            "Bottom": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b><font color=\"#333366\">Graph_Trailing_12_Months</font></b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 1, 1",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "ForeColor": "214,220,228",
+            "BackColor": "46,117,181",
+            "Visible": false
+          }
+        },
+        "2": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement11",
+          "Guid": "f9c555a9d75add2aa461931f33527cdc",
+          "ClientRectangle": "560,100,440,200",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"12\"><text-align=\"left\"><font color=\"#333366\"><p>This table presents the data from the Graph_Trailing_12_Months tab in a tabular format, designed for export.</p></font></text-align=\"left\"></font>",
+          "SizeMode": "WordWrap",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "3": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement12",
+          "Guid": "46b8f18ed6ea4366084c00cab8b784cd",
+          "ClientRectangle": "560,60,440,35",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Top": 0,
+            "Bottom": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b><font color=\"#333366\">Table_Trailing_12_Months</font></b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 1, 1",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "ForeColor": "214,220,228",
+            "BackColor": "46,117,181",
+            "Visible": false
+          }
+        },
+        "4": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement13",
+          "Guid": "35b63d43ae0772b8d115d456f80f2a51",
+          "ClientRectangle": "560,380,440,200",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"12\"><text-align=\"left\"><font color=\"#333366\"><p>his table follows the same data format as Table_Trailing_12_Months, but instead represents all available data up until the current date, presented in a tabular format for export.</p></font></text-align=\"left\"></font>",
+          "SizeMode": "WordWrap",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "5": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement14",
+          "Guid": "5ba3d16b9620621d297ed5f7858cd26b",
+          "ClientRectangle": "560,340,440,35",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Top": 0,
+            "Bottom": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b><font color=\"#333366\">Table_All_Time</font></b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 1, 1",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "ForeColor": "214,220,228",
+            "BackColor": "46,117,181",
+            "Visible": false
+          }
+        },
+        "6": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement15",
+          "Guid": "12f509116952bbf4cc16950452157c2e",
+          "ClientRectangle": "320,20,440,35",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Top": 0,
+            "Bottom": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"18\"><text-align=\"center\"><b><font color=\"#333366\">Instructions</font></b></text-align=\"center\"></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 1, 1",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "ForeColor": "214,220,228",
+            "BackColor": "46,117,181",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    }
+  }
+}

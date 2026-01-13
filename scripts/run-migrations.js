@@ -40,9 +40,61 @@ const migrations = [
   "011_create_template_catalog.sql",
   "012_create_users_table.sql",
   "013_add_user_ownership.sql",
+  "014_semantic_foundation.sql",
+  "015_clinical_ontology_schema.sql",
+  "016_ontology_audit_log.sql",
+  "017_semantic_nonform_metadata.sql",
+  "018_semantic_field_unique_constraint.sql",
+  "019_discovery_logging.sql",
+  "020_semantic_index_option_unique_constraint.sql",
+  "021_context_discovery_audit.sql",
+  "022_add_customer_to_saved_insights.sql",
+  "023_create_query_history.sql",
+  "024_fix_ai_config_audit_delete.sql",
+  "025_remove_nonform_value_table.sql",
+  "026_add_error_mode_to_query_history.sql",
+  "027_update_ai_config_dual_models.sql",
+  "028_create_query_performance_metrics.sql",
+  "029_ontology_synonyms_schema.sql",
+  "030_semantic_assessment_type_index.sql",
+  "031_extend_nonform_enum_support.sql",
+  "033_intent_classification_logging.sql",
+  "034_audit_measurement_fields.sql",
+  "035_seed_measurement_field_concepts.sql",
+  "036_fix_measurement_field_concepts.sql",
+  "037_force_fix_measurement_field_concepts.sql",
+  "038_add_multiple_concepts_to_fields.sql",
+  "039_correct_measurement_field_concepts.sql",
+  "040_ontology_data_sources.sql",
+  "041_remove_faulty_data_sources_index.sql",
+  "042_semantic_index_concept_id.sql",
+  "043_create_clarification_audit.sql",
+  "044_create_sql_validation_log.sql",
+  "045_create_audit_materialized_views.sql",
 ];
 
-async function runMigrations() {
+/**
+ * Remove migration record (for development only)
+ */
+async function removeMigrationRecord(pool, filename) {
+  try {
+    await pool.query("DELETE FROM migrations WHERE filename = $1", [filename]);
+    console.log(`🗑️  Removed migration record: ${filename}`);
+  } catch (error) {
+    console.warn(`⚠️  Could not remove migration record: ${error.message}`);
+  }
+}
+
+/**
+ * Run migrations with options
+ */
+async function runMigrations(options = {}) {
+  const {
+    force = false, // Force re-run even if already executed
+    from = null, // Start from this migration (inclusive)
+    rerun = null, // Re-run specific migration(s) - comma-separated
+    remove = null, // Remove migration record(s) - comma-separated
+  } = options;
   // Build connection candidates to mitigate common host issues
   const url = new URL(connectionString);
   const candidates = new Set([connectionString]);
@@ -112,18 +164,59 @@ async function runMigrations() {
       console.log("✅ Migrations table created");
     }
 
+    // Handle remove option (development only)
+    if (remove) {
+      const filesToRemove = remove.split(",").map((f) => f.trim());
+      console.log(
+        `🗑️  Removing migration records: ${filesToRemove.join(", ")}`
+      );
+      for (const filename of filesToRemove) {
+        await removeMigrationRecord(pool, filename);
+      }
+      console.log("✅ Migration records removed");
+      return;
+    }
+
     // Get list of executed migrations
     const executedMigrations = await pool.query(
       "SELECT filename FROM migrations"
     );
-    const executedFiles = executedMigrations.rows.map((row) => row.filename);
+    const executedFiles = new Set(
+      executedMigrations.rows.map((row) => row.filename)
+    );
+
+    // Determine which migrations to re-run
+    const migrationsToRerun = rerun
+      ? new Set(rerun.split(",").map((f) => f.trim()))
+      : new Set();
+
+    // Find starting point
+    let startIndex = 0;
+    if (from) {
+      const fromIndex = migrations.indexOf(from);
+      if (fromIndex === -1) {
+        throw new Error(`Migration "${from}" not found in migrations list`);
+      }
+      startIndex = fromIndex;
+      console.log(`📍 Starting from migration: ${from}`);
+    }
 
     console.log("🚀 Starting migrations...");
 
-    for (const migration of migrations) {
-      if (executedFiles.includes(migration)) {
+    for (let i = startIndex; i < migrations.length; i++) {
+      const migration = migrations[i];
+
+      // Skip if already executed (unless force or in rerun list)
+      const shouldRerun = force || migrationsToRerun.has(migration);
+      if (executedFiles.has(migration) && !shouldRerun) {
         console.log(`⏭️  Skipping ${migration} (already executed)`);
         continue;
+      }
+
+      if (shouldRerun && executedFiles.has(migration)) {
+        console.log(`🔄 Re-running ${migration}...`);
+        // Remove old record before re-running
+        await removeMigrationRecord(pool, migration);
       }
 
       console.log(`📝 Running ${migration}...`);
@@ -183,9 +276,66 @@ async function runMigrations() {
   }
 }
 
+// Parse command line arguments
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    force: args.includes("--force") || args.includes("-f"),
+    from:
+      args.find((arg) => arg.startsWith("--from="))?.split("=")[1] ||
+      args.find((arg) => arg.startsWith("--from:"))?.split(":")[1] ||
+      null,
+    rerun:
+      args.find((arg) => arg.startsWith("--rerun="))?.split("=")[1] ||
+      args.find((arg) => arg.startsWith("--rerun:"))?.split(":")[1] ||
+      null,
+    remove:
+      args.find((arg) => arg.startsWith("--remove="))?.split("=")[1] ||
+      args.find((arg) => arg.startsWith("--remove:"))?.split(":")[1] ||
+      null,
+  };
+  return options;
+}
+
 // Run migrations if this script is executed directly
 if (require.main === module) {
-  runMigrations();
+  const options = parseArgs();
+
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    console.log(`
+Migration Script Usage:
+
+  npm run migrate                    # Run all pending migrations
+  npm run migrate -- --force         # Re-run all migrations (development only)
+  npm run migrate -- --from=035      # Start from migration 035_seed_measurement_field_concepts.sql
+  npm run migrate -- --rerun=035,036 # Re-run specific migrations
+  npm run migrate -- --remove=035    # Remove migration record (allows re-run)
+
+Options:
+  --force, -f          Force re-run all migrations (development only)
+  --from=<filename>    Start from specific migration (inclusive)
+  --rerun=<files>      Re-run specific migrations (comma-separated)
+  --remove=<files>     Remove migration records (comma-separated)
+  --help, -h           Show this help message
+
+Examples:
+  # Re-run migration 035
+  npm run migrate -- --rerun=035_seed_measurement_field_concepts.sql
+
+  # Remove migration record to allow re-run
+  npm run migrate -- --remove=035_seed_measurement_field_concepts.sql
+  npm run migrate
+
+  # Start from migration 034
+  npm run migrate -- --from=034_audit_measurement_fields.sql
+`);
+    process.exit(0);
+  }
+
+  runMigrations(options).catch((error) => {
+    console.error("💥 Migration failed:", error);
+    process.exit(1);
+  });
 }
 
 module.exports = { runMigrations };

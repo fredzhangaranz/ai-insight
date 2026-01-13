@@ -85,7 +85,7 @@ export default async function TemplateDetailsPage({
           <CardHeader>
             <div className="flex items-center gap-3">
               <CardTitle className="text-2xl">{template.name}</CardTitle>
-              <StatusBadge status={template.status} />
+              {template.status && <StatusBadge status={template.status} />}
             </div>
             <p className="text-sm text-muted-foreground">
               Intent: {template.intent ?? "unknown"}
@@ -113,13 +113,14 @@ export default async function TemplateDetailsPage({
                 </section>
 
                 {template.placeholdersSpec &&
-                template.placeholdersSpec.length > 0 ? (
+                Array.isArray(template.placeholdersSpec.slots) &&
+                template.placeholdersSpec.slots.length > 0 ? (
                   <section>
                     <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
                       Placeholders
                     </h3>
                     <div className="space-y-2">
-                      {template.placeholdersSpec.map((slot, idx) => (
+                      {template.placeholdersSpec.slots.map((slot, idx) => (
                         <div key={idx} className="rounded border p-3">
                           <div className="flex items-center gap-2">
                             <code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">
@@ -154,13 +155,13 @@ export default async function TemplateDetailsPage({
                   </section>
                 ) : null}
 
-                {template.examples && template.examples.length > 0 ? (
+                {template.questionExamples && Array.isArray(template.questionExamples) && template.questionExamples.length > 0 ? (
                   <section>
                     <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
                       Examples
                     </h3>
                     <div className="space-y-3">
-                      {template.examples.map((example, idx) => (
+                      {template.questionExamples.map((example, idx) => (
                         <div key={idx} className="rounded border p-3">
                           <pre className="text-xs whitespace-pre-wrap">
                             {example}

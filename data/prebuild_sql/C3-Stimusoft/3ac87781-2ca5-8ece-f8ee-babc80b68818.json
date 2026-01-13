@@ -1,0 +1,477 @@
+﻿{
+  "ReportVersion": "2024.2.6",
+  "ReportGuid": "3ac87781-2ca5-8ece-f8ee-babc80b68818",
+  "ReportName": "WCPSkinSubCountStackedBarChart",
+  "ReportAlias": "WCPSkinSubCountStackedBarChart",
+  "ReportCreated": "/Date(1729731784000+1300)/",
+  "ReportChanged": "/Date(1734056306000+1300)/",
+  "EngineVersion": "EngineV2",
+  "CalculationMode": "Interpretation",
+  "ReportUnit": "Centimeters",
+  "Dictionary": {
+    "DataSources": {
+      "0": {
+        "Ident": "StiSqlSource",
+        "Name": "DataSource",
+        "Alias": "DataSource",
+        "Columns": {
+          "0": {
+            "Name": "Year",
+            "NameInSource": "Year",
+            "Alias": "Year",
+            "Type": "System.Int32"
+          },
+          "1": {
+            "Name": "MonthNumber",
+            "NameInSource": "MonthNumber",
+            "Alias": "MonthNumber",
+            "Type": "System.Int32"
+          },
+          "2": {
+            "Name": "Month",
+            "NameInSource": "Month",
+            "Alias": "Month",
+            "Type": "System.String"
+          },
+          "3": {
+            "Name": "MonthYear",
+            "NameInSource": "MonthYear",
+            "Alias": "MonthYear",
+            "Type": "System.String"
+          },
+          "4": {
+            "Name": "Year-Month",
+            "NameInSource": "Year-Month",
+            "Alias": "Year-Month",
+            "Type": "System.String"
+          },
+          "5": {
+            "Name": "ProviderId",
+            "NameInSource": "ProviderId",
+            "Alias": "ProviderId",
+            "Type": "System.String"
+          },
+          "6": {
+            "Name": "ProviderName",
+            "NameInSource": "ProviderName",
+            "Alias": "ProviderName",
+            "Type": "System.String"
+          },
+          "7": {
+            "Name": "SkinSubType",
+            "NameInSource": "SkinSubType",
+            "Alias": "SkinSubType",
+            "Type": "System.String"
+          },
+          "8": {
+            "Name": "Skin Sub Count",
+            "NameInSource": "Skin Sub Count",
+            "Alias": "Skin Sub Count",
+            "Type": "System.Int32"
+          }
+        },
+        "NameInSource": "Silhouette",
+        "SqlCommand": "Use [Silhouettewcpsil0test]\n\nEXEC sp_set_session_context @key = 'all_access', @value = 1\n\n;WITH TimePeriod([Year],[MonthNumber],[Month],[MonthYear],[MonthYearSortable]) AS\n(\nselect distinct rd.year, rd.month,\nDATENAME(MONTH,DATEADD(MONTH, rd.month - 1, CAST('2008-01-01' AS datetime))) as month_name,\nDATENAME(MONTH,DATEADD(MONTH, rd.month - 1, CAST('2008-01-01' AS datetime))) + ' ' + CONVERT(VARCHAR(4), rd.year),\nCONVERT(VARCHAR(4), rd.year) + '-' + RIGHT('0' + CONVERT(VARCHAR(2), rd.month), 2)\nfrom rpt.DimDate rd where rd.year >= 2024 and rd.date <= GETDATE()\n),\nProviders(id, name) AS\n(\nselect  distinct ra.createdByUserFk, ra.createdByUserName from \n  rpt.Assessment ra\n),\nTimePeriod_Providers([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName]) AS\n(\nselect * from TimePeriod CROSS JOIN Providers\n where [Year] <= YEAR(GETDATE())\n),\nSkinSubProducts (name) AS\n(\n  select Distinct note.value as notename from rpt.note note\n  inner join rpt.AttributeType att on att.id = note.attributeTypeFk\n  where att.variablename like 'product_applied'\n),\nTPP_SSP([Year], [MonthNumber], [Month], [MonthYear], [MonthYearSortable], [ProviderId], [ProviderName], [SkinSubType]) AS\n(\nselect * from TimePeriod_Providers Cross join SkinSubProducts\n),\nSkinSubTypeForAssessments ([Year], [MonthNumber], [ProviderId], [SkinSubType], [AssessmentId]) AS\n(\n         select Year(asst.date), month(asst.date), asst.createdByUserFk, note.value, asst.id\n\t\t from rpt.Note note\n\t\t inner join rpt.Assessment asst on asst.id = note.assessmentFk\n         inner join rpt.AttributeType att on att.id = note.attributeTypeFk\n         where att.variableName like 'product_applied'\n\t\t --order by Year(asst.date), month(asst.date), note.value\n),\nSkinSubCountForAssessments ([Year], [MonthNumber], [ProviderId], [AssessmentId], [SkinSubCount]) AS\n(\n         select Year(asst.date), month(asst.date), asst.createdByUserFk, asst.id, count(att.variableName)\n\t\t --select Distinct asst.id\n\t\t from rpt.Note note\n\t\t inner join rpt.Assessment asst on asst.id = note.assessmentFk\n         inner join rpt.AttributeType att on att.id = note.attributeTypeFk\n         where att.variableName like '%lot_number%'\n\t\t group by Year(asst.date), month(asst.date), asst.createdByUserFk, asst.id\n),\nSkinSubCountByTypeForAssessments ([Year], [MonthNumber], [ProviderId], [AssessmentId], [SkinSubType], [SkinSubCount]) AS\n(\n         select ssta.Year, ssta.MonthNumber, ssta.ProviderId, ssta.AssessmentId, ssta.SkinSubType, ssca.SkinSubCount\n\t\t from SkinSubTypeForAssessments ssta\n\t\t inner join SkinSubCountForAssessments ssca on ssta.AssessmentId = ssca.AssessmentId\n)\n--select * from SkinSubCountByTypeForAssessments\n\nselect TPP_SSP.[Year], TPP_SSP.[MonthNumber], TPP_SSP.[Month], TPP_SSP.[MonthYear], TPP_SSP.[MonthYearSortable] as 'Year-Month', TPP_SSP.[ProviderId], TPP_SSP.[ProviderName], TPP_SSP.[SkinSubType], \nsum(case when sscbta.SkinSubCount is not null then sscbta.SkinSubCount else 0 end) as 'Skin Sub Count'\nfrom\nTPP_SSP\nLeft Outer join SkinSubCountByTypeForAssessments sscbta on\nTPP_SSP.[Year] =  sscbta.[Year] and\nTPP_SSP.[MonthNumber] =  sscbta.[MonthNumber] and\nTPP_SSP.[ProviderId] =  sscbta.[ProviderId] and\nTPP_SSP.SkinSubType =  sscbta.SkinSubType\n--where\n--TPP_SSP.[ProviderName] =  'WCPajalfers'\n\nGroup by TPP_SSP.[Year], TPP_SSP.[MonthNumber], TPP_SSP.[Month], TPP_SSP.[MonthYear], TPP_SSP.[MonthYearSortable], TPP_SSP.[ProviderId], [ProviderName], TPP_SSP.[SkinSubType]\n\norder by TPP_SSP.[Year], TPP_SSP.[MonthNumber], TPP_SSP.[ProviderName], TPP_SSP.[SkinSubType]\n"
+      }
+    },
+    "Databases": {
+      "0": {
+        "Ident": "StiSqlDatabase",
+        "Name": "Silhouette",
+        "Alias": "Silhouette",
+        "ConnectionStringEncrypted": "9BrVoVZP+/lqFb3od1RtF9V43ShFTML14k25pWdcd3vVavvPTV0xmcxHub1jBLEP2VpziVtKc8XiRrnsYyzhL8Na94hFWbvx4U2pyQ=="
+      }
+    }
+  },
+  "Pages": {
+    "0": {
+      "Ident": "StiDashboard",
+      "Name": "CAMPS_Usage",
+      "Guid": "ab8268f7ea27523cfa269ec16805f870",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiChartElement",
+          "Name": "ChartElement1",
+          "Guid": "3caa21c3f9590d03b938c2aa6f81263c",
+          "ClientRectangle": "40,120,1120,460",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "Values": {
+            "0": {
+              "Ident": "ValueChartMeter",
+              "Key": "7b4554d6cf548df70ebb05e61d12494b",
+              "Expression": "Sum(DataSource.SkinSubCount)",
+              "Label": "Skin Sub Count",
+              "SeriesType": "StackedColumn",
+              "ShowZeros": "Gap"
+            }
+          },
+          "Arguments": {
+            "0": {
+              "Ident": "ArgumentChartMeter",
+              "Key": "1eb10052736487f5fef4acb497e42d98",
+              "Expression": "[DataSource.Year-Month]",
+              "Label": "Year-Month"
+            }
+          },
+          "DashboardInteraction": {
+            "Ident": "Chart",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Title": {
+            "Text": "Chart",
+            "Visible": false
+          },
+          "ManuallyEnteredChartMeter": {
+            "Ident": "ValueChartMeter",
+            "Key": "315c46451af5f2c761c2b96d8514268a"
+          },
+          "Series": {
+            "Ident": "SeriesChartMeter",
+            "Key": "224d1fd98a7460c0388379b36586753c",
+            "Expression": "DataSource.SkinSubType",
+            "Label": "SkinSubType"
+          },
+          "ArgumentFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "ValueFormat": {
+            "Ident": "StiGeneralFormatService"
+          },
+          "XAxis": {
+            "Labels": {
+              "Color": "51,51,102"
+            },
+            "Range": {
+              "Auto": false
+            },
+            "Title": {
+              "Visible": false
+            },
+            "ShowEdgeValues": "False"
+          },
+          "YAxis": {
+            "Labels": {
+              "Color": "51,51,102"
+            },
+            "Title": {
+              "Text": "CAMPS Applied",
+              "Color": "51,51,102"
+            }
+          },
+          "Legend": {
+            "Labels": {
+              "Font": ";11;;",
+              "Color": "51,51,102"
+            },
+            "HorAlignment": "Center"
+          },
+          "Area": {
+            "SideBySide": true,
+            "GridLinesHor": {
+              "Color": "0,255,255,255"
+            },
+            "GridLinesVert": {
+              "Color": "Transparent"
+            },
+            "InterlacingHor": {
+              "Color": "230,230,230",
+              "Visible": true
+            },
+            "InterlacingVert": {
+              "Color": "Transparent"
+            },
+            "Indicator": {
+              "Title": {
+                "Text": ""
+              }
+            }
+          },
+          "Labels": {
+            "Font": ";12;Bold;",
+            "ForeColor": "51,51,102",
+            "Position": "None"
+          },
+          "Options3D": {
+            "Opacity": 1,
+            "Lighting": "Gradient"
+          },
+          "SeriesColors": {
+            "0": "51,51,102",
+            "1": "51,153,204",
+            "2": "102,26,148",
+            "3": "72,148,26",
+            "4": "102,204,255",
+            "5": "43,188,133",
+            "6": "235,135,102"
+          },
+          "NegativeSeriesColors": {
+            "0": "238,14,27",
+            "1": "210,2,19",
+            "2": "179,3,15",
+            "3": "157,4,12",
+            "4": "127,0,5",
+            "5": "107,0,4"
+          },
+          "Style": "AliceBlue",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiComboBoxElement",
+          "Name": "ComboBoxElement1",
+          "Guid": "b849fd377793221e1a08b060babc10f1",
+          "ClientRectangle": "520,80,220,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "ForeColor": "51,51,102",
+          "Font": ";14;Bold;",
+          "ShowAllValue": true,
+          "KeyMeter": {
+            "Ident": "KeyComboBoxMeter",
+            "Key": "181176d8162a4eda2f390fa1343c4063",
+            "Expression": "DataSource.ProviderName",
+            "Label": "ProviderName"
+          },
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "DashboardInteraction": {
+            "Ident": "Filter",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          }
+        },
+        "2": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement2",
+          "Guid": "049f1f5299b36b2f469e263482a81278",
+          "ClientRectangle": "340,0,460,60",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"22\" ><text-align=\"Center\"><b><font-color=\"#333366\">CAMPS Usage</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "3": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement1",
+          "Guid": "fa23a15582b74153d0c49654b6a92a59",
+          "ClientRectangle": "400,80,120,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Margin": {
+            "Left": 0,
+            "Right": 0
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"14\" ><text-align=\"Center\"><b><font-color=\"#333366\">Provider:</font-color></b></text-align></font>",
+          "SizeMode": "Trimming",
+          "CornerRadius": "10, 10, 0, 0",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        },
+        "4": {
+          "Ident": "StiDatePickerElement",
+          "Name": "DatePickerElement1",
+          "Guid": "266f940cbf17b0fc44009c87091cb36f",
+          "ClientRectangle": "760,80,220,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;",
+          "TextFormat": {
+            "Ident": "StiDateFormatService"
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Style": "AliceBlue",
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    },
+    "1": {
+      "Ident": "StiDashboard",
+      "Name": "Data_Export",
+      "Guid": "505f60a12de79a611bbacaed4a703ca5",
+      "Interaction": {
+        "Ident": "StiInteraction"
+      },
+      "Brush": "solid:51,51,102",
+      "Components": {
+        "0": {
+          "Ident": "StiTableElement",
+          "Name": "TableDataSource",
+          "Guid": "68e273671edb8f0bd578a20536c1decd",
+          "ClientRectangle": "225,100,740,480",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "Columns": {
+            "0": {
+              "Ident": "DimensionColumn",
+              "Key": "d24232540fc1042c40c8472c1c00cac9",
+              "Expression": "[DataSource.Year-Month]",
+              "Label": "Year-Month",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "1": {
+              "Ident": "DimensionColumn",
+              "Key": "00388895e657d1795aaf5ea7b418b254",
+              "Expression": "DataSource.ProviderName",
+              "Label": "ProviderName",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "2": {
+              "Ident": "DimensionColumn",
+              "Key": "0fb4aa4d10637780f2fdd3c39195d9ec",
+              "Expression": "DataSource.SkinSubType",
+              "Label": "SkinSubType",
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            },
+            "3": {
+              "Ident": "DimensionColumn",
+              "Key": "f2c726689631c3f510cf602c684262b4",
+              "Expression": "DataSource.SkinSubCount",
+              "Label": "Skin Sub Count",
+              "HorAlignment": "Right",
+              "TextFormat": {
+                "Ident": "StiNumberFormatService",
+                "DecimalDigits": 0,
+                "GroupSeparator": ",",
+                "UseGroupSeparator": false,
+                "UseLocalSetting": false
+              },
+              "DashboardInteraction": {
+                "Ident": "TableColumn",
+                "OnHover": "None",
+                "OnClick": "None",
+                "HyperlinkDestination": "NewTab"
+              },
+              "Size": {
+                "MinWidth": 30,
+                "MaxWidth": 300
+              }
+            }
+          },
+          "HeaderFont": ";10;;",
+          "FooterFont": ";10;;",
+          "Title": {
+            "Text": "DataSource",
+            "Visible": false
+          },
+          "DashboardInteraction": {
+            "Ident": "Table",
+            "OnHover": "ShowToolTip",
+            "OnClick": "ApplyFilter",
+            "HyperlinkDestination": "NewTab"
+          },
+          "Style": "AliceBlue",
+          "SizeMode": "Fit",
+          "CornerRadius": "0, 0, 0, 0",
+          "Shadow": ";;;"
+        },
+        "1": {
+          "Ident": "StiTextElement",
+          "Name": "TextElement3",
+          "Guid": "5df42f71ca8447f65decb467bd521b0e",
+          "ClientRectangle": "415,40,360,40",
+          "Interaction": {
+            "Ident": "StiInteraction"
+          },
+          "Border": ";;;;",
+          "BackColor": "245,245,245",
+          "DashboardInteraction": {
+            "Ident": "Text",
+            "OnHover": "ShowToolTip",
+            "OnClick": "OpenHyperlink",
+            "HyperlinkDestination": "NewTab"
+          },
+          "ForeColor": "51,51,102",
+          "Text": "<font face=\"Arial\" size=\"22\" ><text-align=\"Center\"><b><font-color=\"#333366\">Exportable Data</font-color></b></text-align></font>",
+          "CornerRadius": "10, 10, 10, 10",
+          "Shadow": ";;;",
+          "Title": {
+            "Text": "Text",
+            "Visible": false
+          }
+        }
+      },
+      "Watermark": {
+        "TextBrush": "solid:50,0,0,0"
+      },
+      "Border": ";;2;;;;;solid:Black",
+      "BackColor": "51,51,102"
+    }
+  }
+}

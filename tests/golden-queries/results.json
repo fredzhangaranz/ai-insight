@@ -1,0 +1,281 @@
+{
+  "suiteVersion": "1.0.0",
+  "executedAt": "2026-01-12T21:55:03.761Z",
+  "totalQueries": 12,
+  "passed": 7,
+  "failed": 5,
+  "passRate": 58.333333333333336,
+  "avgLatency": 905.25,
+  "p50Latency": 596.5,
+  "p95Latency": 2311.399999999998,
+  "p99Latency": 3663.0800000000017,
+  "templateHitRate": 0,
+  "results": [
+    {
+      "queryId": "tp_001",
+      "passed": false,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 4001,
+      "errors": [
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+      ],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:54:56.897Z"
+    },
+    {
+      "queryId": "tp_002",
+      "passed": false,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 583,
+      "errors": [
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+      ],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:54:57.480Z"
+    },
+    {
+      "queryId": "tp_003",
+      "passed": false,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 929,
+      "errors": [
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+      ],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:54:58.409Z"
+    },
+    {
+      "queryId": "tp_004",
+      "passed": false,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 599,
+      "errors": [
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+      ],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:54:59.008Z"
+    },
+    {
+      "queryId": "tp_005",
+      "passed": false,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 928,
+      "errors": [
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+      ],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:54:59.936Z"
+    },
+    {
+      "queryId": "sa_001",
+      "passed": true,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 596,
+      "errors": [],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:55:00.533Z"
+    },
+    {
+      "queryId": "sa_002",
+      "passed": true,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 922,
+      "errors": [],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:55:01.455Z"
+    },
+    {
+      "queryId": "sa_003",
+      "passed": true,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 413,
+      "errors": [],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:55:01.868Z"
+    },
+    {
+      "queryId": "sa_004",
+      "passed": true,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 597,
+      "errors": [],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:55:02.465Z"
+    },
+    {
+      "queryId": "sa_005",
+      "passed": true,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 428,
+      "errors": [],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:55:02.894Z"
+    },
+    {
+      "queryId": "cl_001",
+      "passed": true,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 427,
+      "errors": [],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:55:03.321Z"
+    },
+    {
+      "queryId": "cl_002",
+      "passed": true,
+      "actualMode": "direct",
+      "actualSQL": "",
+      "actualColumns": [],
+      "actualRowCount": 0,
+      "actualLatency": 440,
+      "errors": [],
+      "warnings": [],
+      "executedAt": "2026-01-12T21:55:03.761Z"
+    }
+  ],
+  "byComplexity": {
+    "simple": {
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "passRate": 100
+    },
+    "medium": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "passRate": 100
+    },
+    "complex": {
+      "total": 5,
+      "passed": 0,
+      "failed": 5,
+      "passRate": 0
+    },
+    "clarification": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "passRate": 100
+    }
+  },
+  "byTag": {
+    "temporal_proximity": {
+      "total": 5,
+      "passed": 0,
+      "failed": 5,
+      "passRate": 0
+    },
+    "template_match": {
+      "total": 5,
+      "passed": 0,
+      "failed": 5,
+      "passRate": 0
+    },
+    "area_reduction": {
+      "total": 2,
+      "passed": 0,
+      "failed": 2,
+      "passRate": 0
+    },
+    "healing_outcome": {
+      "total": 2,
+      "passed": 0,
+      "failed": 2,
+      "passRate": 0
+    },
+    "threshold_filtering": {
+      "total": 1,
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
+    },
+    "simple_aggregation": {
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "passRate": 100
+    },
+    "patient_count": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
+    },
+    "wound_type_filtering": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
+    },
+    "measurement": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
+    },
+    "grouping": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
+    },
+    "window_function": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
+    },
+    "clarification": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "passRate": 100
+    },
+    "ambiguous": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
+    },
+    "missing_context": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
+    }
+  }
+}

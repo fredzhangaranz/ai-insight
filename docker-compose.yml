@@ -41,7 +41,7 @@ services:
         - action: rebuild
           path: ./Dockerfile
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     environment:
       - POSTGRES_DB=insight_gen_db
       - POSTGRES_USER=user

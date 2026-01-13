@@ -11,7 +11,7 @@ import { loadDatabaseSchemaContext } from "@/lib/ai/schema-context";
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
-const AI_MODEL_NAME = process.env.AI_MODEL_NAME || "claude-3-sonnet-20240229";
+const AI_MODEL_NAME = process.env.ANTHROPIC_DEFAULT_MODEL_NAME || "claude-3-5-sonnet-latest";
 
 export interface SubQuestionGenerationRequest {
   originalQuestion: string;

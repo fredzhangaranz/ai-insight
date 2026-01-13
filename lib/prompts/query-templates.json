@@ -9,9 +9,14 @@
       ],
       "keywords": ["current", "state", "as-of", "wound state", "validity"],
       "tags": ["state", "temporal"],
+      "intent": "state_query",
+      "status": "Approved",
       "placeholders": ["asOfDate"],
       "sqlPattern": "SELECT ws.id, ws.woundFk, ws.startDate, ws.endDate, wst.name AS woundState FROM rpt.WoundState ws JOIN rpt.WoundStateType wst ON wst.id = ws.woundStateTypeFk WHERE ws.startDate <= {asOfDate} AND (ws.endDate IS NULL OR ws.endDate > {asOfDate})",
-      "version": 1
+      "resultShape": {
+        "columns": ["id", "woundFk", "startDate", "endDate", "woundState"]
+      },
+      "version": 2
     },
     {
       "name": "Earliest and Latest Assessment Per Wound (As Of Date)",
@@ -21,9 +26,20 @@
       ],
       "keywords": ["earliest", "latest", "assessment", "as-of", "window"],
       "tags": ["ranking", "window", "temporal"],
+      "intent": "temporal_ranking_query",
+      "status": "Approved",
       "placeholders": ["asOfDate"],
       "sqlPattern": "WITH AssessmentRanking AS ( SELECT a.id, a.woundFk, a.date, ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date ASC) AS rn_asc, ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.date DESC) AS rn_desc FROM rpt.Assessment a WHERE a.date <= {asOfDate} ) SELECT woundFk AS woundId, MAX(CASE WHEN rn_asc = 1 THEN id END) AS earliestAssessmentId, MAX(CASE WHEN rn_asc = 1 THEN date END) AS earliestDate, MAX(CASE WHEN rn_desc = 1 THEN id END) AS latestAssessmentId, MAX(CASE WHEN rn_desc = 1 THEN date END) AS latestDate FROM AssessmentRanking WHERE rn_asc = 1 OR rn_desc = 1 GROUP BY woundFk",
-      "version": 1
+      "resultShape": {
+        "columns": [
+          "woundId",
+          "earliestAssessmentId",
+          "earliestDate",
+          "latestAssessmentId",
+          "latestDate"
+        ]
+      },
+      "version": 2
     },
     {
       "name": "Latest Measurement Per Wound (As Of Date)",
@@ -33,9 +49,14 @@
       ],
       "keywords": ["latest", "measurement", "dimdate", "as-of"],
       "tags": ["latest", "measurement", "temporal"],
+      "intent": "latest_measurement_query",
+      "status": "Approved",
       "placeholders": ["asOfDate"],
       "sqlPattern": "SELECT t.woundFk, t.areaReduction FROM ( SELECT m.woundFk, m.areaReduction, d.date, ROW_NUMBER() OVER (PARTITION BY m.woundFk ORDER BY d.date DESC) AS rn FROM rpt.Measurement m JOIN rpt.DimDate d ON m.dimDateFk = d.id WHERE d.date <= {asOfDate} ) t WHERE t.rn = 1",
-      "version": 1
+      "resultShape": {
+        "columns": ["woundFk", "areaReduction"]
+      },
+      "version": 2
     },
     {
       "name": "Collect Relevant Notes By variableName",
@@ -45,9 +66,26 @@
       ],
       "keywords": ["note", "attribute", "variableName", "filter"],
       "tags": ["attributes", "note"],
-      "placeholders": ["variableNames[]"],
+      "intent": "attribute_collection_query",
+      "status": "Approved",
+      "placeholders": ["variableNames"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "variableNames",
+            "type": "string",
+            "semantic": "field_name",
+            "required": true,
+            "isArray": true,
+            "description": "Array of variable names to filter by"
+          }
+        ]
+      },
       "sqlPattern": "SELECT n.assessmentFk, at.variableName, n.value FROM rpt.Note n JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id WHERE at.variableName IN ({variableNames})",
-      "version": 1
+      "resultShape": {
+        "columns": ["assessmentFk", "variableName", "value"]
+      },
+      "version": 2
     },
     {
       "name": "Pivot Attributes By variableName (CASE MAX)",
@@ -57,9 +95,14 @@
       ],
       "keywords": ["pivot", "case", "max", "attributes"],
       "tags": ["pivot", "attributes"],
+      "intent": "pivot_query",
+      "status": "Approved",
       "placeholders": ["groupKey", "pivotCases", "groupByCols"],
       "sqlPattern": "SELECT {groupKey}, {pivotCases} FROM Source LEFT JOIN RelevantNotes rn ON Source.latestAssessmentId = rn.assessmentFk GROUP BY {groupByCols}",
-      "version": 1
+      "resultShape": {
+        "columns": ["groupKey", "pivotedColumns"]
+      },
+      "version": 2
     },
     {
       "name": "Unpivot Columns To Rows (UNION ALL)",
@@ -69,9 +112,14 @@
       ],
       "keywords": ["unpivot", "union all", "long form"],
       "tags": ["unpivot"],
+      "intent": "unpivot_query",
+      "status": "Approved",
       "placeholders": ["unions"],
       "sqlPattern": "{unions}",
-      "version": 1
+      "resultShape": {
+        "columns": ["typeName", "typeValue"]
+      },
+      "version": 2
     },
     {
       "name": "Aggregation by Category",
@@ -82,9 +130,14 @@
       ],
       "keywords": ["aggregate", "group by", "average", "count"],
       "tags": ["aggregation", "category"],
+      "intent": "aggregation_by_category",
+      "status": "Approved",
       "placeholders": ["categoryColumn", "numericColumn", "table", "filters?"],
       "sqlPattern": "SELECT {categoryColumn}, AVG({numericColumn}) AS avgValue FROM {table} WHERE {filters?} GROUP BY {categoryColumn}",
-      "version": 1
+      "resultShape": {
+        "columns": ["categoryColumn", "avgValue"]
+      },
+      "version": 2
     },
     {
       "name": "Trend Analysis Over Time",
@@ -95,9 +148,465 @@
       ],
       "keywords": ["trend", "time series", "month", "year"],
       "tags": ["trend", "time"],
+      "intent": "trend_analysis_query",
+      "status": "Approved",
       "placeholders": ["metricExpression", "startDate?", "endDate?"],
       "sqlPattern": "SELECT D.year, D.month, {metricExpression} AS metric FROM rpt.Assessment A JOIN rpt.DimDate D ON A.dimDateFk = D.id WHERE (D.date >= {startDate?}) AND (D.date <= {endDate?}) GROUP BY D.year, D.month ORDER BY D.year, D.month",
-      "version": 1
+      "resultShape": {
+        "columns": ["year", "month", "metric"]
+      },
+      "version": 2
+    },
+    {
+      "name": "Snippet: Baseline Measurement Per Wound",
+      "version": 1,
+      "intent": "snippet_area_reduction",
+      "status": "Approved",
+      "description": "Reusable fragment to find the earliest measurement per wound and establish baseline area/date.",
+      "questionExamples": [
+        "baseline measurement per wound",
+        "first measurement for each wound",
+        "establish wound baseline area"
+      ],
+      "keywords": ["baseline", "measurement", "earliest", "wound area"],
+      "tags": ["snippet", "area-reduction", "baseline"],
+      "placeholders": [],
+      "placeholdersSpec": { "slots": [] },
+      "sqlPattern": "-- Snippet: Baseline measurement per wound\nWITH BaselineMeasurement AS (\n    SELECT\n        a.woundFk,\n        m.area AS baselineArea,\n        a.dimDateFk AS baselineDimDateFk,\n        dd.[date] AS baselineDate,\n        ROW_NUMBER() OVER (PARTITION BY a.woundFk ORDER BY a.[date] ASC) AS rn\n    FROM rpt.Assessment a\n    INNER JOIN rpt.Measurement m ON a.id = m.assessmentFk\n    INNER JOIN rpt.DimDate dd ON a.dimDateFk = dd.id\n    WHERE m.area IS NOT NULL\n)\nSELECT\n    woundFk,\n    baselineArea,\n    baselineDimDateFk,\n    baselineDate\nFROM BaselineMeasurement\nWHERE rn = 1;",
+      "resultShape": {
+        "columns": [
+          "woundFk",
+          "baselineArea",
+          "baselineDimDateFk",
+          "baselineDate"
+        ]
+      },
+      "notes": "Intended as a CTE-style snippet that upstream SQL can reference as BaselineData/BaselineMeasurement."
+    },
+    {
+      "name": "Snippet: Closest Measurement Around Target Date",
+      "version": 1,
+      "intent": "snippet_area_reduction",
+      "status": "Approved",
+      "description": "Reusable fragment to select the closest measurement to a target date with a tolerance window, assuming a BaselineData CTE is available.",
+      "questionExamples": [
+        "closest measurement to 12 weeks",
+        "proximity window around target date",
+        "measurement nearest to time point"
+      ],
+      "keywords": [
+        "measurement proximity",
+        "closest measurement",
+        "tolerance window",
+        "time point",
+        "area"
+      ],
+      "tags": ["snippet", "area-reduction", "proximity"],
+      "placeholders": ["timePointDays", "toleranceDays"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "timePointDays",
+            "type": "int",
+            "semantic": "time_window",
+            "required": true,
+            "description": "Target time point in days from baseline"
+          },
+          {
+            "name": "toleranceDays",
+            "type": "int",
+            "semantic": "time_window",
+            "required": false,
+            "default": 7,
+            "description": "Tolerance window (± days) around the target date"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Closest measurement around target date\n-- Expects an upstream CTE named BaselineData (woundFk, baselineArea, baselineDate)\nWITH MeasurementProximity AS (\n    SELECT\n        bd.woundFk,\n        bd.baselineArea,\n        bd.baselineDate,\n        DATEADD(DAY, {timePointDays}, bd.baselineDate) AS targetDate,\n        a.id AS assessmentId,\n        m.area AS measurementArea,\n        dd.[date] AS measurementDate,\n        ABS(DATEDIFF(DAY, DATEADD(DAY, {timePointDays}, bd.baselineDate), dd.[date])) AS daysFromTarget,\n        ROW_NUMBER() OVER (\n            PARTITION BY bd.woundFk\n            ORDER BY ABS(DATEDIFF(DAY, DATEADD(DAY, {timePointDays}, bd.baselineDate), dd.[date]))\n        ) AS proximityRank\n    FROM BaselineData bd\n    INNER JOIN rpt.Assessment a ON bd.woundFk = a.woundFk\n    INNER JOIN rpt.Measurement m ON a.id = m.assessmentFk\n    INNER JOIN rpt.DimDate dd ON m.dimDateFk = dd.id\n    WHERE ABS(DATEDIFF(DAY, DATEADD(DAY, {timePointDays}, bd.baselineDate), dd.[date])) <= {toleranceDays}\n      AND m.area IS NOT NULL\n)\nSELECT *\nFROM MeasurementProximity\nWHERE proximityRank = 1;",
+      "resultShape": {
+        "columns": [
+          "woundFk",
+          "baselineArea",
+          "baselineDate",
+          "targetDate",
+          "assessmentId",
+          "measurementArea",
+          "measurementDate",
+          "daysFromTarget"
+        ]
+      },
+      "notes": "Compose after BaselineData; produces a single closest measurement per wound for the specified time point."
+    },
+    {
+      "name": "Snippet: Area Reduction with Wound State Overlay",
+      "version": 1,
+      "intent": "snippet_area_reduction",
+      "status": "Approved",
+      "description": "Reusable fragment to compute area reduction and healing achievement, overlaying wound state at the target date.",
+      "questionExamples": [
+        "area reduction calculation snippet",
+        "healing achievement check",
+        "apply wound state at target date"
+      ],
+      "keywords": [
+        "area reduction",
+        "healing outcome",
+        "wound state",
+        "threshold"
+      ],
+      "tags": ["snippet", "area-reduction", "state-overlay"],
+      "placeholders": ["reductionThreshold"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "reductionThreshold",
+            "type": "decimal",
+            "semantic": "percentage",
+            "required": false,
+            "default": 0.75,
+            "description": "Threshold for achieving healing (e.g., 0.75 = <=75% of baseline area)"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Area reduction and wound state overlay\n-- Expects upstream CTEs: ClosestMeasurement (per wound) and optionally WoundStateAtTarget\nWITH WoundStateAtTarget AS (\n    SELECT\n        cm.woundFk,\n        wst.name AS woundStateName,\n        ROW_NUMBER() OVER (PARTITION BY cm.woundFk ORDER BY ws.startDateDimDateFk DESC) AS stateRank\n    FROM ClosestMeasurement cm\n    LEFT JOIN rpt.WoundState ws ON cm.woundFk = ws.woundFk\n    LEFT JOIN rpt.DimDate ddStart ON ws.startDateDimDateFk = ddStart.id\n    LEFT JOIN rpt.DimDate ddEnd ON ws.endDateDimDateFk = ddEnd.id\n    LEFT JOIN rpt.WoundStateType wst ON ws.woundStateTypeFk = wst.id\n    WHERE cm.measurementDate >= ddStart.[date]\n      AND (cm.measurementDate <= ddEnd.[date] OR ddEnd.[date] IS NULL)\n)\nSELECT\n    cm.woundFk,\n    cm.baselineArea,\n    cm.baselineDate,\n    cm.targetDate,\n    cm.measurementArea,\n    cm.measurementDate,\n    cm.daysFromTarget,\n    wst.woundStateName AS woundStateAtTarget,\n    CASE\n        WHEN wst.woundStateName <> 'Open' THEN 1.0\n        ELSE (cm.baselineArea - cm.measurementArea) / cm.baselineArea\n    END AS areaReduction,\n    CASE\n        WHEN wst.woundStateName <> 'Open' THEN 1\n        WHEN cm.measurementArea <= ({reductionThreshold} * cm.baselineArea) THEN 1\n        ELSE 0\n    END AS achievedThreshold\nFROM ClosestMeasurement cm\nLEFT JOIN WoundStateAtTarget wst ON cm.woundFk = wst.woundFk AND wst.stateRank = 1;",
+      "resultShape": {
+        "columns": [
+          "woundFk",
+          "baselineArea",
+          "baselineDate",
+          "targetDate",
+          "measurementArea",
+          "measurementDate",
+          "daysFromTarget",
+          "woundStateAtTarget",
+          "areaReduction",
+          "achievedThreshold"
+        ]
+      },
+      "notes": "Combine with BaselineData and ClosestMeasurement snippets to assemble full area-reduction queries."
+    },
+    {
+      "name": "Snippet: Missing Target Assessment Anti-Join",
+      "version": 1,
+      "intent": "snippet_assessment_correlation",
+      "status": "Approved",
+      "description": "Reusable anti-join pattern to find source assessments that lack a matching target assessment on the same patient/date field.",
+      "questionExamples": [
+        "visits with no billing",
+        "assessments missing discharge",
+        "anti-join between two assessment types"
+      ],
+      "keywords": [
+        "anti-join",
+        "missing",
+        "without",
+        "assessment type",
+        "billing",
+        "visit"
+      ],
+      "tags": ["snippet", "assessment-correlation", "anti-join"],
+      "placeholders": [
+        "sourceAssessmentConcept",
+        "targetAssessmentConcept",
+        "matchingDateField",
+        "customerId"
+      ],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "sourceAssessmentConcept",
+            "type": "string",
+            "semantic": "assessment_type",
+            "required": true
+          },
+          {
+            "name": "targetAssessmentConcept",
+            "type": "string",
+            "semantic": "assessment_type",
+            "required": true
+          },
+          {
+            "name": "matchingDateField",
+            "type": "string",
+            "semantic": "field_name",
+            "required": true
+          },
+          {
+            "name": "customerId",
+            "type": "guid",
+            "semantic": "customer_id",
+            "required": false,
+            "default": "{{customerId}}"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Anti-join missing target assessment\nDECLARE @sourceAssessmentTypeId UNIQUEIDENTIFIER = (\n    SELECT assessment_type_id\n    FROM \"SemanticIndexAssessmentType\"\n    WHERE customer_id = {customerId}\n      AND semantic_concept = {sourceAssessmentConcept}\n    LIMIT 1\n);\n\nDECLARE @targetAssessmentTypeId UNIQUEIDENTIFIER = (\n    SELECT assessment_type_id\n    FROM \"SemanticIndexAssessmentType\"\n    WHERE customer_id = {customerId}\n      AND semantic_concept = {targetAssessmentConcept}\n    LIMIT 1\n);\n\nWITH TargetAssessments AS (\n    SELECT\n        a.patientFk,\n        n.valueDate AS matchingDate\n    FROM rpt.Assessment a\n    INNER JOIN rpt.AssessmentTypeVersion atv ON a.assessmentTypeVersionFk = atv.id\n    INNER JOIN rpt.Note n ON a.id = n.assessmentFk\n    INNER JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id\n    WHERE atv.assessmentTypeId = @targetAssessmentTypeId\n      AND at.variableName = {matchingDateField}\n)\nSELECT\n    p.id AS patientId,\n    CONCAT(p.firstName, ' ', p.lastName) AS patientName,\n    p.domainId AS patientMRN,\n    u.name AS unitName,\n    sourceDate.valueDate AS matchingDateValue,\n    a.createdByUserName AS sourceAssessmentAuthor,\n    a.date AS sourceAssessmentDate,\n    a.id AS sourceAssessmentId\nFROM rpt.Assessment a\nINNER JOIN rpt.AssessmentTypeVersion atv ON a.assessmentTypeVersionFk = atv.id\nINNER JOIN rpt.Note sourceDate ON a.id = sourceDate.assessmentFk\nINNER JOIN rpt.AttributeType at ON sourceDate.attributeTypeFk = at.id\nINNER JOIN rpt.Patient p ON a.patientFk = p.id\nINNER JOIN rpt.Unit u ON p.unitFk = u.id\nLEFT JOIN TargetAssessments ta\n    ON a.patientFk = ta.patientFk\n    AND sourceDate.valueDate = ta.matchingDate\nWHERE atv.assessmentTypeId = @sourceAssessmentTypeId\n  AND at.variableName = {matchingDateField}\n  AND ta.patientFk IS NULL;",
+      "resultShape": {
+        "columns": [
+          "patientId",
+          "patientName",
+          "patientMRN",
+          "unitName",
+          "sourceAssessmentAuthor",
+          "sourceAssessmentDate",
+          "matchingDateValue"
+        ]
+      },
+      "notes": "Reference pattern for assessment correlation gaps; compose with additional filters in LLM-generated SQL."
+    },
+    {
+      "name": "Snippet: Threshold Filter for Area Reduction",
+      "version": 1,
+      "intent": "snippet_area_reduction",
+      "status": "Approved",
+      "description": "Reusable fragment to filter wound measurements by reduction threshold, useful for identifying healed vs. non-healing wounds.",
+      "questionExamples": [
+        "wounds with 25% area reduction",
+        "filter by healing threshold",
+        "wounds that achieved reduction target"
+      ],
+      "keywords": [
+        "threshold",
+        "filter",
+        "area reduction",
+        "achieved",
+        "healing"
+      ],
+      "tags": ["snippet", "area-reduction", "threshold"],
+      "placeholders": ["reductionThreshold"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "reductionThreshold",
+            "type": "decimal",
+            "semantic": "percentage",
+            "required": false,
+            "default": 0.75,
+            "description": "Threshold percentage for successful healing (e.g., 0.75 = <=75% of baseline)"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Threshold filter for area reduction\n-- Expects upstream CTE with columns: woundFk, baselineArea, measurementArea, woundStateName, areaReduction, achievedThreshold\nSELECT *\nFROM AreaReductionData\nWHERE woundStateName = 'Open'\n  AND measurementArea <= ({reductionThreshold} * baselineArea)\n  OR woundStateName <> 'Open';",
+      "resultShape": {
+        "columns": [
+          "woundFk",
+          "baselineArea",
+          "measurementArea",
+          "woundStateName",
+          "areaReduction",
+          "achievedThreshold"
+        ]
+      },
+      "notes": "Compose after Area Reduction with Wound State Overlay; filters for healed wounds or those meeting reduction threshold."
+    },
+    {
+      "name": "Snippet: Assessment Type Lookup by Semantic Concept",
+      "version": 1,
+      "intent": "snippet_shared_pattern",
+      "status": "Approved",
+      "description": "Reusable pattern to resolve semantic assessment concepts to actual assessment type IDs via SemanticIndexAssessmentType.",
+      "questionExamples": [
+        "resolve assessment type from semantic concept",
+        "lookup assessment ID by concept",
+        "get assessment type ID for billing"
+      ],
+      "keywords": [
+        "assessment type",
+        "semantic concept",
+        "lookup",
+        "resolve",
+        "ID"
+      ],
+      "tags": ["snippet", "assessment-type", "lookup"],
+      "placeholders": ["assessmentConcept", "customerId"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "assessmentConcept",
+            "type": "string",
+            "semantic": "assessment_type",
+            "required": true,
+            "description": "Semantic concept name (e.g., 'clinical_wound_assessment', 'billing_documentation')"
+          },
+          {
+            "name": "customerId",
+            "type": "guid",
+            "semantic": "customer_id",
+            "required": false,
+            "default": "{{customerId}}",
+            "description": "Customer ID for scoped lookup"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Assessment type lookup by semantic concept\nDECLARE @assessmentTypeId UNIQUEIDENTIFIER = (\n    SELECT assessment_type_id\n    FROM \"SemanticIndexAssessmentType\"\n    WHERE customer_id = {customerId}\n      AND semantic_concept = {assessmentConcept}\n    LIMIT 1\n);",
+      "resultShape": {
+        "columns": ["assessmentTypeId"]
+      },
+      "notes": "Used as a building block by other snippets; declare once and reference in subsequent CTEs. Reusable across all assessment-type-based queries."
+    },
+    {
+      "name": "Snippet: Target Assessment Collection",
+      "version": 1,
+      "intent": "snippet_assessment_correlation",
+      "status": "Approved",
+      "description": "Reusable CTE to collect all assessments of a target type with a specific date field for correlation matching.",
+      "questionExamples": [
+        "collect billing assessments with date",
+        "target assessment set for correlation",
+        "gather assessments by type and date"
+      ],
+      "keywords": [
+        "target assessment",
+        "collection",
+        "correlation",
+        "date field",
+        "matching"
+      ],
+      "tags": ["snippet", "assessment-correlation", "collection"],
+      "placeholders": ["matchingDateField"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "matchingDateField",
+            "type": "string",
+            "semantic": "field_name",
+            "required": true,
+            "description": "Variable name of the date field to extract (e.g., 'date_of_service', 'assessment_date')"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Target assessment collection\n-- Expects: @targetAssessmentTypeId UNIQUEIDENTIFIER (from Assessment Type Lookup snippet)\nWITH TargetAssessments AS (\n    SELECT\n        a.patientFk,\n        n.valueDate AS matchingDate\n    FROM rpt.Assessment a\n    INNER JOIN rpt.AssessmentTypeVersion atv ON a.assessmentTypeVersionFk = atv.id\n    INNER JOIN rpt.Note n ON a.id = n.assessmentFk\n    INNER JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id\n    WHERE atv.assessmentTypeId = @targetAssessmentTypeId\n      AND at.variableName = {matchingDateField}\n)\nSELECT * FROM TargetAssessments;",
+      "resultShape": {
+        "columns": ["patientFk", "matchingDate"]
+      },
+      "notes": "Compose after Assessment Type Lookup; builds the right-side of an anti-join or correlation."
+    },
+    {
+      "name": "Snippet: Date Window Match for Assessments",
+      "version": 1,
+      "intent": "snippet_assessment_correlation",
+      "status": "Approved",
+      "description": "Reusable pattern to match assessments by date field within a tolerance window, useful for correlating events across types.",
+      "questionExamples": [
+        "match assessments on date within tolerance",
+        "find correlated visits by date proximity",
+        "assessments within date window"
+      ],
+      "keywords": [
+        "date window",
+        "match",
+        "correlation",
+        "tolerance",
+        "proximity"
+      ],
+      "tags": ["snippet", "assessment-correlation", "date-match"],
+      "placeholders": ["toleranceDays"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "toleranceDays",
+            "type": "int",
+            "semantic": "time_window",
+            "required": false,
+            "default": 0,
+            "description": "Number of days tolerance for date matching (default 0 = exact date)"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Date window match for assessments\n-- Expects upstream CTEs: SourceAssessments, TargetAssessments\nWITH DateMatches AS (\n    SELECT\n        sa.assessmentId,\n        sa.patientFk,\n        sa.matchingDate AS sourceDate,\n        ta.matchingDate AS targetDate,\n        ABS(DATEDIFF(DAY, sa.matchingDate, ta.matchingDate)) AS dateDifference\n    FROM SourceAssessments sa\n    INNER JOIN TargetAssessments ta ON sa.patientFk = ta.patientFk\n    WHERE ABS(DATEDIFF(DAY, sa.matchingDate, ta.matchingDate)) <= {toleranceDays}\n)\nSELECT * FROM DateMatches;",
+      "resultShape": {
+        "columns": [
+          "assessmentId",
+          "patientFk",
+          "sourceDate",
+          "targetDate",
+          "dateDifference"
+        ]
+      },
+      "notes": "Flexible date matching; set toleranceDays to 0 for exact match, or higher for range queries."
+    },
+    {
+      "name": "Snippet: Document Age Calculation",
+      "version": 1,
+      "intent": "snippet_workflow_status",
+      "status": "Approved",
+      "description": "Reusable fragment to calculate how many days old an assessment document is from creation date to today.",
+      "questionExamples": [
+        "how old are these documents",
+        "days since document creation",
+        "document age in days"
+      ],
+      "keywords": [
+        "document age",
+        "days old",
+        "age calculation",
+        "creation date",
+        "recency"
+      ],
+      "tags": ["snippet", "workflow", "age-calculation"],
+      "placeholders": [],
+      "placeholdersSpec": {
+        "slots": []
+      },
+      "sqlPattern": "-- Snippet: Document age calculation\n-- Expects upstream CTE with column: createdAt (assessment date)\nWITH DocumentAge AS (\n    SELECT\n        *,\n        DATEDIFF(day, a.date, GETDATE()) AS documentAgeDays\n    FROM rpt.Assessment a\n)\nSELECT * FROM DocumentAge;",
+      "resultShape": {
+        "columns": ["assessmentId", "createdAt", "documentAgeDays"]
+      },
+      "notes": "Standalone snippet for age-based filtering; compose with any assessment query to add age dimension."
+    },
+    {
+      "name": "Snippet: Workflow Enum Status Filter",
+      "version": 1,
+      "intent": "snippet_workflow_status",
+      "status": "Approved",
+      "description": "Reusable fragment to filter assessments by an enum status field.",
+      "questionExamples": [
+        "documents by status",
+        "forms in pending review",
+        "workflow status filter snippet"
+      ],
+      "keywords": [
+        "workflow",
+        "status",
+        "enum",
+        "state",
+        "pending",
+        "complete"
+      ],
+      "tags": ["snippet", "workflow", "enum-filtering"],
+      "placeholders": ["statusFieldVariable", "statusValues"],
+      "placeholdersSpec": {
+        "slots": [
+          {
+            "name": "statusFieldVariable",
+            "type": "string",
+            "semantic": "field_name",
+            "required": true,
+            "description": "Variable name of the status field"
+          },
+          {
+            "name": "statusValues",
+            "type": "string",
+            "semantic": "string",
+            "required": true,
+            "description": "Status values to filter by (expects IN list or parameter expansion)"
+          }
+        ]
+      },
+      "sqlPattern": "-- Snippet: Workflow enum status filter\n-- Expects: @assessmentTypeId UNIQUEIDENTIFIER (from Assessment Type Lookup snippet)\nSELECT\n    p.id AS patientId,\n    CONCAT(p.firstName, ' ', p.lastName) AS patientName,\n    p.domainId AS patientMRN,\n    u.name AS unitName,\n    a.createdByUserName AS documentAuthor,\n    at.name AS statusFieldLabel,\n    n.value AS currentStatus,\n    a.date AS createdAt,\n    DATEDIFF(day, a.date, GETDATE()) AS documentAgeDays,\n    a.id AS assessmentId\nFROM rpt.Assessment a\nINNER JOIN rpt.AssessmentTypeVersion atv ON a.assessmentTypeVersionFk = atv.id\nINNER JOIN rpt.Note n ON a.id = n.assessmentFk\nINNER JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id\nINNER JOIN rpt.Patient p ON a.patientFk = p.id\nINNER JOIN rpt.Unit u ON p.unitFk = u.id\nWHERE atv.assessmentTypeId = @assessmentTypeId\n  AND at.variableName = {statusFieldVariable}\n  AND n.value IN ({statusValues});",
+      "resultShape": {
+        "columns": [
+          "patientId",
+          "patientName",
+          "patientMRN",
+          "unitName",
+          "documentAuthor",
+          "currentStatus",
+          "documentAgeDays",
+          "createdAt"
+        ]
+      },
+      "notes": "Refactored to use Assessment Type Lookup; now works as a composable piece. Compose with document age and other filters."
     }
   ]
 }

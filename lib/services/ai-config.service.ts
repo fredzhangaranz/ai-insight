@@ -8,13 +8,21 @@ export interface AIConfiguration {
   isEnabled: boolean;
   isDefault: boolean;
   configData: {
+    // Dual-model support for performance optimization (Task 1.2)
+    simpleQueryModelId: string;  // Model for simple/fast queries (e.g., Haiku, Flash)
+    complexQueryModelId: string; // Model for complex queries (e.g., Sonnet, Pro)
+
+    // Provider-specific fields
     apiKey?: string;
     baseUrl?: string;
     projectId?: string;
     location?: string;
-    modelId?: string;
+    credentialsPath?: string; // Path to Google Cloud service account credentials JSON
     timeout?: number;
     priority?: number;
+
+    // Legacy field (deprecated, use simpleQueryModelId/complexQueryModelId instead)
+    modelId?: string;
   };
   createdBy: string;
   createdDate: Date;
@@ -403,7 +411,26 @@ export class AIConfigService {
   }
 
   /**
-   * Delete a provider configuration
+   * Delete a provider configuration by ID
+   */
+  async deleteConfigurationById(id: number): Promise<boolean> {
+    const pool = await getInsightGenDbPool();
+
+    try {
+      const result = await pool.query(
+        `DELETE FROM "AIConfiguration" WHERE id = $1`,
+        [id]
+      );
+
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error(`Failed to delete configuration by ID ${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a provider configuration by providerType and providerName
    */
   async deleteConfiguration(
     providerType: string,
@@ -412,12 +439,20 @@ export class AIConfigService {
   ): Promise<boolean> {
     const pool = await getInsightGenDbPool();
 
-    const result = await pool.query(
-      `DELETE FROM "AIConfiguration" WHERE "providerType" = $1 AND "providerName" = $2`,
-      [providerType, providerName]
-    );
+    try {
+      const result = await pool.query(
+        `DELETE FROM "AIConfiguration" WHERE "providerType" = $1 AND "providerName" = $2`,
+        [providerType, providerName]
+      );
 
-    return (result.rowCount ?? 0) > 0;
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error(
+        `Failed to delete configuration ${providerType}:${providerName}:`,
+        error
+      );
+      throw error;
+    }
   }
 
   /**
@@ -712,6 +747,9 @@ export class AIConfigService {
     config: AIConfiguration
   ): Promise<boolean> {
     const apiKey = config.configData.apiKey;
+    const simpleModelId = config.configData.simpleQueryModelId;
+    const complexModelId = config.configData.complexQueryModelId;
+
     if (!apiKey) {
       throw new Error("Anthropic API key not configured");
     }
@@ -721,26 +759,145 @@ export class AIConfigService {
       throw new Error("Invalid Anthropic API key format");
     }
 
-    // Could add actual API call here for deeper validation
-    return true;
+    // Validate model IDs are configured
+    if (!simpleModelId) {
+      throw new Error("Simple query model ID not configured");
+    }
+    if (!complexModelId) {
+      throw new Error("Complex query model ID not configured");
+    }
+
+    // Test both models with actual API calls
+    const baseUrl = config.configData.baseUrl || "https://api.anthropic.com";
+
+    try {
+      // Test simple query model
+      const simpleResponse = await fetch(`${baseUrl}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: simpleModelId,
+          max_tokens: 10,
+          messages: [{ role: "user", content: "test" }],
+        }),
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
+      });
+
+      if (!simpleResponse.ok) {
+        const errorText = await simpleResponse.text();
+        throw new Error(`Simple model (${simpleModelId}) validation failed: ${simpleResponse.status} ${errorText}`);
+      }
+
+      // Test complex query model
+      const complexResponse = await fetch(`${baseUrl}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: complexModelId,
+          max_tokens: 10,
+          messages: [{ role: "user", content: "test" }],
+        }),
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
+      });
+
+      if (!complexResponse.ok) {
+        const errorText = await complexResponse.text();
+        throw new Error(`Complex model (${complexModelId}) validation failed: ${complexResponse.status} ${errorText}`);
+      }
+
+      console.log(`✅ Anthropic validation successful: ${simpleModelId} (simple), ${complexModelId} (complex)`);
+      return true;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Anthropic API validation failed: ${error}`);
+    }
   }
 
   private async validateGoogleConfig(
     config: AIConfiguration
   ): Promise<boolean> {
     const projectId = config.configData.projectId;
+    const simpleModelId = config.configData.simpleQueryModelId;
+    const complexModelId = config.configData.complexQueryModelId;
+    const location = config.configData.location || "us-central1";
+
     if (!projectId) {
       throw new Error("Google Cloud project ID not configured");
     }
 
-    // Could add actual API call here for deeper validation
-    return true;
+    // Validate model IDs are configured
+    if (!simpleModelId) {
+      throw new Error("Simple query model ID not configured");
+    }
+    if (!complexModelId) {
+      throw new Error("Complex query model ID not configured");
+    }
+
+    // Test both models with actual API calls using Vertex AI
+    try {
+      const { VertexAI } = await import("@google-cloud/vertexai");
+
+      // Initialize Vertex with Application Default Credentials
+      const vertexAI = new VertexAI({
+        project: projectId,
+        location: location,
+      });
+
+      // Test simple query model
+      try {
+        const simpleModel = vertexAI.getGenerativeModel({
+          model: simpleModelId,
+        });
+        await simpleModel.generateContent("test");
+      } catch (error) {
+        throw new Error(
+          `Simple model (${simpleModelId}) validation failed: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
+      }
+
+      // Test complex query model
+      try {
+        const complexModel = vertexAI.getGenerativeModel({
+          model: complexModelId,
+        });
+        await complexModel.generateContent("test");
+      } catch (error) {
+        throw new Error(
+          `Complex model (${complexModelId}) validation failed: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
+      }
+
+      console.log(`✅ Google validation successful: ${simpleModelId} (simple), ${complexModelId} (complex)`);
+      return true;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Google Vertex AI validation failed: ${error}`);
+    }
   }
 
   private async validateOpenWebUIConfig(
     config: AIConfiguration
   ): Promise<boolean> {
     const baseUrl = config.configData.baseUrl;
+    const simpleModelId = config.configData.simpleQueryModelId;
+    const complexModelId = config.configData.complexQueryModelId;
+
     if (!baseUrl) {
       throw new Error("Open WebUI base URL not configured");
     }
@@ -751,22 +908,91 @@ export class AIConfigService {
       throw new Error(`Invalid Open WebUI base URL: ${baseUrl}`);
     }
 
-    // Test connection to Open WebUI
+    // Validate model IDs are configured
+    if (!simpleModelId) {
+      throw new Error("Simple query model ID not configured");
+    }
+    if (!complexModelId) {
+      throw new Error("Complex query model ID not configured");
+    }
+
+    const headers = config.configData.apiKey
+      ? {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.configData.apiKey}`,
+        }
+      : {
+          "Content-Type": "application/json",
+        };
+
     try {
-      const response = await fetch(`${baseUrl}/api/v1/models`, {
+      // First, check if we can connect to Open WebUI
+      const modelsResponse = await fetch(`${baseUrl}/api/v1/models`, {
         method: "GET",
         headers: config.configData.apiKey
-          ? {
-              Authorization: `Bearer ${config.configData.apiKey}`,
-            }
+          ? { Authorization: `Bearer ${config.configData.apiKey}` }
           : {},
-        signal: AbortSignal.timeout(5000), // 5 second timeout
+        signal: (AbortSignal as any).timeout?.(5000) || undefined, // 5 second timeout
       });
 
-      return response.ok;
+      if (!modelsResponse.ok) {
+        throw new Error(`Open WebUI connection failed: ${modelsResponse.status}`);
+      }
+
+      // Get list of available models
+      const modelsData = await modelsResponse.json();
+      const availableModels = modelsData.data?.map((m: any) => m.id) || [];
+
+      // Check if both model IDs are available
+      if (!availableModels.includes(simpleModelId)) {
+        throw new Error(`Simple model (${simpleModelId}) not found in Open WebUI. Available models: ${availableModels.join(", ")}`);
+      }
+      if (!availableModels.includes(complexModelId)) {
+        throw new Error(`Complex model (${complexModelId}) not found in Open WebUI. Available models: ${availableModels.join(", ")}`);
+      }
+
+      // Test simple query model with actual API call
+      const simpleResponse = await fetch(`${baseUrl}/api/v1/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: simpleModelId,
+          messages: [{ role: "user", content: "test" }],
+          max_tokens: 10,
+        }),
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
+      });
+
+      if (!simpleResponse.ok) {
+        const errorText = await simpleResponse.text();
+        throw new Error(`Simple model (${simpleModelId}) test failed: ${simpleResponse.status} ${errorText}`);
+      }
+
+      // Test complex query model with actual API call
+      const complexResponse = await fetch(`${baseUrl}/api/v1/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: complexModelId,
+          messages: [{ role: "user", content: "test" }],
+          max_tokens: 10,
+        }),
+        signal: (AbortSignal as any).timeout?.(10000) || undefined, // 10 second timeout
+      });
+
+      if (!complexResponse.ok) {
+        const errorText = await complexResponse.text();
+        throw new Error(`Complex model (${complexModelId}) test failed: ${complexResponse.status} ${errorText}`);
+      }
+
+      console.log(`✅ OpenWebUI validation successful: ${simpleModelId} (simple), ${complexModelId} (complex)`);
+      return true;
     } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
       throw new Error(
-        `Open WebUI connection failed: ${
+        `Open WebUI validation failed: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );

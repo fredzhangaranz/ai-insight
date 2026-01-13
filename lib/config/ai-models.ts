@@ -32,14 +32,14 @@ export interface AIModel {
  */
 export const SUPPORTED_AI_MODELS: AIModel[] = [
   {
-    id: "claude-3-5-sonnet-latest",
+    id: "claude-3-5-sonnet-20241022",
     name: "Claude 3.5 Sonnet",
     provider: "Anthropic",
     description:
       "Anthropic's newest, most intelligent model. Excels at complex reasoning and coding.",
   },
   {
-    id: "claude-3-opus-latest",
+    id: "claude-3-opus-20240229",
     name: "Claude 3 Opus",
     provider: "Anthropic",
     description: "Anthropic's most powerful model for highly complex tasks.",
@@ -52,10 +52,34 @@ export const SUPPORTED_AI_MODELS: AIModel[] = [
       "Google's newest and most capable model, with enhanced reasoning and performance.",
   },
   {
-    id: "gemini-1.5-flash-latest",
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    provider: "Google",
+    description: "Google's fastest and most efficient multimodal model for quick analysis.",
+  },
+  {
+    id: "gemini-1.5-pro",
+    name: "Gemini 1.5 Pro",
+    provider: "Google",
+    description: "Google's powerful model for complex reasoning tasks.",
+  },
+  {
+    id: "gemini-1.5-flash",
     name: "Gemini 1.5 Flash",
     provider: "Google",
-    description: "Google's fastest and most cost-effective multimodal model.",
+    description: "Google's fast and cost-effective multimodal model.",
+  },
+  {
+    id: "gemini-1.5-flash-latest",
+    name: "Gemini 1.5 Flash Latest",
+    provider: "Google",
+    description: "Latest version of Google's fastest multimodal model.",
+  },
+  {
+    id: "gemini-2.0-flash-thinking-exp",
+    name: "Gemini 2.0 Flash Thinking",
+    provider: "Google",
+    description: "Google's experimental model with enhanced reasoning capabilities.",
   },
   {
     id: "llama3.2:3b",
@@ -80,7 +104,7 @@ export const SUPPORTED_AI_MODELS: AIModel[] = [
 /**
  * The default AI model to be used if no selection is made.
  */
-export const DEFAULT_AI_MODEL_ID = "claude-3-5-sonnet-latest";
+export const DEFAULT_AI_MODEL_ID = "claude-3-5-sonnet-20241022";
 
 /**
  * The default AI model object.

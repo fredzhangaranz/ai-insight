@@ -212,8 +212,28 @@ export function SideNav() {
                         >
                           User Management
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/customers")}
+                        >
+                          Customers Setup
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/intent-telemetry")}
+                        >
+                          Intent Telemetry
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => router.push("/admin")}>
                           AI Providers
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/ontology")}
+                        >
+                          Manage Ontology
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/audit")}
+                        >
+                          Audit Dashboard
                         </DropdownMenuItem>
                       </>
                     )}

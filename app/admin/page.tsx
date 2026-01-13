@@ -22,6 +22,7 @@ import {
   XCircleIcon,
   ArrowRightIcon,
   ArrowPathIcon,
+  ChartBarIcon,
 } from "@heroicons/react/24/outline";
 import { Component, ReactNode } from "react";
 
@@ -248,19 +249,6 @@ export default function AdminDashboard() {
               </Link>
             </div>
           </div>
-
-          {/* Development Mode Banner */}
-          {process.env.NODE_ENV !== "production" && (
-            <Alert className="mb-6 border-yellow-200 bg-yellow-50">
-              <ExclamationTriangleIcon className="w-4 h-4 text-yellow-600" />
-              <AlertDescription className="text-yellow-800">
-                <strong>Development Mode:</strong> You are viewing
-                configurations loaded from your <code>.env.local</code> file.
-                Changes made here will not persist. To modify configurations,
-                update your environment variables. Validation is available.
-              </AlertDescription>
-            </Alert>
-          )}
 
           {/* Error Alert */}
           {error && (
@@ -575,6 +563,24 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Intent Classification Telemetry</CardTitle>
+              <CardDescription>
+                Review pattern vs AI usage, latency, and disagreements.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between flex-wrap gap-4">
+              <p className="text-sm text-slate-600">
+                View detailed logs explaining how intents are classified,
+                including “How I got this” details for every query.
+              </p>
+              <Link href="/admin/intent-telemetry">
+                <Button variant="outline">Open Telemetry Page</Button>
+              </Link>
+            </CardContent>
+          </Card>
+
           {/* Quick Actions */}
           <Card>
             <CardHeader>
@@ -589,6 +595,20 @@ export default function AdminDashboard() {
                   <Button variant="outline" className="w-full justify-start">
                     <Cog6ToothIcon className="w-4 h-4 mr-2" />
                     Manage Providers
+                  </Button>
+                </Link>
+
+                <Link href="/admin/query-metrics">
+                  <Button variant="outline" className="w-full justify-start">
+                    <ChartBarIcon className="w-4 h-4 mr-2" />
+                    Query Metrics
+                  </Button>
+                </Link>
+
+                <Link href="/admin/audit">
+                  <Button variant="outline" className="w-full justify-start">
+                    <ChartBarIcon className="w-4 h-4 mr-2" />
+                    Audit Dashboard
                   </Button>
                 </Link>
 

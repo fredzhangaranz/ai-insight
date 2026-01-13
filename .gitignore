@@ -21,6 +21,7 @@ yarn-error.log*
 
 # Google Cloud credentials
 sonorous-seat-467723-d5-979c5538b345.json
+gen-lang-client-0407824953-be1d21a80a7b.json
 
 # vercel
 .vercel
@@ -33,3 +34,6 @@ next-env.d.ts
 .cursor-doc.md
 AGENTS.md
 .DS_Store
+backup_before_upgrade.sql
+CODING_STANDARDS.md
+.claude/

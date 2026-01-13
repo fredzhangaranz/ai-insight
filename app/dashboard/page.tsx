@@ -205,11 +205,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!autoRefresh || panels.length === 0) return;
 
-    const boundPanels = panels.filter((p) => p.insightId);
+    const boundPanels = panels.filter((p: any) => p.insightId);
     if (boundPanels.length === 0) return;
 
     // Execute all bound insights automatically
-    boundPanels.forEach((panel) => {
+    boundPanels.forEach((panel: any) => {
       if (panel.insightId) {
         execute(panel.id, panel.insightId);
       }

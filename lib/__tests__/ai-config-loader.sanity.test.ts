@@ -42,7 +42,7 @@ describe("AIConfigLoader sanity", () => {
   });
 
   it("loads from env in development and does not touch DB", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "development";
     process.env.ANTHROPIC_API_KEY = "sk-ant-test";
 
     const { AIConfigLoader } = await loadLoader();
@@ -55,7 +55,7 @@ describe("AIConfigLoader sanity", () => {
   });
 
   it("in production: throws SetupRequired when DB empty and SEED_ON_BOOT is not true", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
     delete process.env.SEED_ON_BOOT;
 
     const { AIConfigService } = await import("../services/ai-config.service");
@@ -71,7 +71,7 @@ describe("AIConfigLoader sanity", () => {
   });
 
   it("in production: seeds from env when DB empty and SEED_ON_BOOT=true", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as { NODE_ENV?: string }).NODE_ENV = "production";
     process.env.SEED_ON_BOOT = "true";
     process.env.ANTHROPIC_API_KEY = "sk-ant-seed";
 

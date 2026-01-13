@@ -61,11 +61,12 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
 # Open WebUI (optional)
 OPENWEBUI_BASE_URL=http://localhost:8080
 OPENWEBUI_API_KEY=your-api-key
-OPENWEBUI_MODEL_ID=llama3.2:3b
 OPENWEBUI_TIMEOUT=30000
 
-# Default model selection
-AI_MODEL_NAME=claude-3-5-sonnet-latest
+# Default model selection (optional, has defaults)
+ANTHROPIC_DEFAULT_MODEL_NAME=claude-3-5-sonnet-latest
+GOOGLE_DEFAULT_MODEL_NAME=gemini-2.5-pro
+OPENWEBUI_DEFAULT_MODEL_NAME=llama3.2:3b
 ```
 
 ### Production Environment Variables (.env.production)

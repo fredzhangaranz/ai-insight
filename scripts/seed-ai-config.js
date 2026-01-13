@@ -34,7 +34,7 @@ async function seedAIConfig() {
         isDefault: true,
         configData: {
           apiKey: process.env.ANTHROPIC_API_KEY,
-          modelId: process.env.AI_MODEL_NAME || "claude-3-5-sonnet-latest",
+          modelId: process.env.ANTHROPIC_DEFAULT_MODEL_NAME || "claude-3-5-sonnet-latest",
           baseUrl: "https://api.anthropic.com",
         },
       });
@@ -51,7 +51,7 @@ async function seedAIConfig() {
         configData: {
           projectId: process.env.GOOGLE_CLOUD_PROJECT,
           location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-          modelId: "gemini-2.5-pro",
+          modelId: process.env.GOOGLE_DEFAULT_MODEL_NAME || "gemini-2.5-pro",
         },
       });
       console.log("📝 Added Google configuration");
@@ -67,7 +67,7 @@ async function seedAIConfig() {
         configData: {
           baseUrl: process.env.OPENWEBUI_BASE_URL,
           apiKey: process.env.OPENWEBUI_API_KEY,
-          modelId: process.env.OPENWEBUI_MODEL_ID || "local-model",
+          modelId: process.env.OPENWEBUI_DEFAULT_MODEL_NAME || "local-model",
           timeout: parseInt(process.env.OPENWEBUI_TIMEOUT || "30000"),
         },
       });

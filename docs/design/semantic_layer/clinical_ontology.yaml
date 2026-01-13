@@ -259,6 +259,15 @@ concepts:
     description: "Quantitative measures of wound outcomes"
 
     metrics:
+      measurement_date:
+        canonical_name: "Measurement Date"
+        description: "Date or time when a wound measurement or assessment is recorded"
+        units: ["date", "datetime"]
+        data_sources:
+          - "rpt.Measurement.measurementDate"
+          - "rpt.Assessment.assessmentDate"
+          - "rpt.Wound.baselineDate"
+
       healing_rate:
         canonical_name: "Healing Rate"
         description: "Rate of wound area reduction over time"
