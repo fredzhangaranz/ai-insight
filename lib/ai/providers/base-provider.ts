@@ -1,6 +1,8 @@
 import {
   GenerateChartRecommendationsRequest,
   GenerateChartRecommendationsResponse,
+  CompletionParams,
+  ConversationCompletionParams,
   GenerateQueryRequest,
   GenerateQueryResponse,
   IQueryFunnelProvider,
@@ -28,6 +30,7 @@ import {
   validateTemplateExtractionResponse,
 } from "../../prompts/template-extraction.prompt";
 import type { PlaceholdersSpecSlot } from "../../services/template-validator.service";
+import type { ConversationMessage } from "../../types/conversation";
 import { MetricsMonitor } from "../../monitoring";
 import { matchTemplates } from "../../services/query-template.service";
 import type { TemplateMatch } from "../../services/query-template.service";
@@ -65,14 +68,31 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
    * @param options System prompt, user message, and optional parameters
    * @returns The model's response text
    */
-  public async complete(options: {
-    system: string;
-    userMessage: string;
-    maxTokens?: number;
-    temperature?: number;
-  }): Promise<string> {
+  public async complete(options: CompletionParams): Promise<string> {
     const result = await this._executeModel(options.system, options.userMessage);
     return result.responseText;
+  }
+
+  /**
+   * Conversation-aware completion with caching and context.
+   * Providers should override this with their native implementations.
+   */
+  public async completeWithConversation(
+    _request: ConversationCompletionParams
+  ): Promise<string> {
+    throw new Error(
+      "Conversation completion is not implemented for this provider."
+    );
+  }
+
+  /**
+   * Build conversation history prompt for multi-turn context.
+   * Providers should override this with their own formatting.
+   */
+  public buildConversationHistory(_messages: ConversationMessage[]): string {
+    throw new Error(
+      "Conversation history builder is not implemented for this provider."
+    );
   }
 
   /**
@@ -83,6 +103,68 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       return providedContext;
     }
     return loadDatabaseSchemaContext();
+  }
+
+  /**
+   * Build schema context for a specific customer.
+   * This is used for prompt caching in conversation mode.
+   */
+  protected async buildSchemaContext(_customerId: string): Promise<string> {
+    return this.getDatabaseSchemaContext();
+  }
+
+  /**
+   * Build ontology context for a specific customer.
+   * Loads clinical ontology concepts for use in prompt caching.
+   */
+  protected async buildOntologyContext(_customerId: string): Promise<string> {
+    try {
+      const { getInsightGenDbPool } = await import("../../db");
+      const pool = await getInsightGenDbPool();
+      const result = await pool.query(
+        `
+        SELECT
+          concept_name,
+          concept_type
+        FROM public."ClinicalOntology"
+        WHERE is_deprecated = false
+        ORDER BY concept_name
+        LIMIT 30
+        `
+      );
+
+      if (result.rows.length === 0) {
+        return "Clinical ontology: no concepts available.";
+      }
+
+      const lines = result.rows.map(
+        (row: { concept_name: string; concept_type: string }) =>
+          `- ${row.concept_name} (${row.concept_type})`
+      );
+
+      return `Clinical ontology concepts:\n${lines.join("\n")}`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.warn(
+        `[BaseProvider] Failed to load ontology context: ${message}`
+      );
+      return "Clinical ontology context unavailable.";
+    }
+  }
+
+  /**
+   * Build SQL generation instructions for the AI provider.
+   * These instructions are cached along with schema/ontology context.
+   */
+  protected buildSQLInstructions(): string {
+    return [
+      "You are generating SQL for the InsightGen system.",
+      "Return only a SQL query as plain text, no markdown or explanations.",
+      "Only SELECT or WITH queries are allowed.",
+      "Use the provided schema context; do not invent tables or columns.",
+      "Do not include PHI or raw patient identifiers in the response.",
+      "Prefer CTE composition when the question builds on prior results.",
+    ].join("\n");
   }
 
   /**

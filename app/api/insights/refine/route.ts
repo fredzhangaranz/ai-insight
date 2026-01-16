@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getAIProvider } from "@/lib/ai/providers/provider-factory";
+import { getAIProvider } from "@/lib/ai/get-provider";
 import { BaseProvider } from "@/lib/ai/providers/base-provider";
 import { generateSQLWithLLM } from "@/lib/services/semantic/llm-sql-generator.service";
 import { AIConfigLoader } from "@/lib/config/ai-config-loader";

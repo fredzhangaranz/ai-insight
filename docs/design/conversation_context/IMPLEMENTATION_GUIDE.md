@@ -8,37 +8,60 @@
 
 ---
 
+## Implementation Status
+
+| Area             | Status      | Completed On | Notes                                                                     |
+| ---------------- | ----------- | ------------ | ------------------------------------------------------------------------- |
+| Phase 0          | ✅ Complete | 2026-01-14   | PHI protection, soft-delete, compatibility, canonical types, improvements |
+| Phase 1 Step 1.1 | ✅ Complete | 2026-01-15   | Migration already implemented in 046; docs aligned                        |
+| Phase 2 Step 2.1 | ✅ Complete | 2026-01-15   | Added conversation-aware provider interface                               |
+| Phase 2 Step 2.2 | ✅ Complete | 2026-01-15   | Claude prompt caching implementation                                      |
+| Phase 2 Step 2.3 | ✅ Complete | 2026-01-15   | Gemini context caching implementation                                     |
+
+---
+
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Phase 0: Critical Pre-Implementation Fixes](#phase-0-critical-pre-implementation-fixes) ⚠️ **MUST DO FIRST**
-3. [Phase 1: Database & Migrations](#phase-1-database--migrations)
-4. [Phase 2: AI Provider Context Integration](#phase-2-ai-provider-context-integration)
-5. [Phase 3: SQL Composition Service](#phase-3-sql-composition-service)
-6. [Phase 4: API Endpoints](#phase-4-api-endpoints)
-7. [Phase 5: Conversation Hook](#phase-5-conversation-hook)
-8. [Phase 6: UI Components](#phase-6-ui-components)
-9. [Phase 7: Audit Integration](#phase-7-audit-integration)
-10. [Phase 8: Save Insight Integration](#phase-8-save-insight-integration)
-11. [Phase 9: Integration & Testing](#phase-9-integration--testing)
-12. [Phase 10: Migration & Rollout](#phase-10-migration--rollout)
-13. [Testing Checklist](#testing-checklist)
-14. [Troubleshooting](#troubleshooting)
+1. [Implementation Status](#implementation-status)
+2. [Prerequisites](#prerequisites)
+3. [Phase 0: Critical Pre-Implementation Fixes](#phase-0-critical-pre-implementation-fixes) ⚠️ **MUST DO FIRST**
+4. [Phase 1: Database & Migrations](#phase-1-database--migrations)
+5. [Phase 2: AI Provider Context Integration](#phase-2-ai-provider-context-integration)
+6. [Phase 3: SQL Composition Service](#phase-3-sql-composition-service)
+7. [Phase 4: API Endpoints](#phase-4-api-endpoints)
+8. [Phase 5: Conversation Hook](#phase-5-conversation-hook)
+9. [Phase 6: UI Components](#phase-6-ui-components)
+10. [Phase 7: Audit Integration](#phase-7-audit-integration)
+11. [Phase 8: Save Insight Integration](#phase-8-save-insight-integration)
+12. [Phase 9: Integration & Testing](#phase-9-integration--testing)
+13. [Phase 10: Migration & Rollout](#phase-10-migration--rollout)
+14. [Testing Checklist](#testing-checklist)
+15. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Overview: Key Improvements
 
-### Version 2.0 Changes
+### Version 2.1 Changes
 
 This guide now includes production-ready improvements:
 
 1. **✅ AI Vendor Native Context** - Use Claude prompt caching & Gemini context caching (90% token cost reduction)
 2. **✅ Compound SQL Approach** - Build on previous queries via CTEs (no result storage, privacy-safe)
-3. **✅ Save Insight Integration** - Save final composed SQL that's self-contained
-4. **✅ Full Audit Trail** - Track conversation lineage per `auditing-improvement-todo.md`
-5. **✅ Token Efficiency** - Optimized for long conversations (10+ messages)
-6. **✅ Phase 0 Critical Fixes** - PHI protection, soft-delete, compatibility (MUST DO FIRST)
+3. **✅ AI-Driven Composition Decision** - Let AI semantically determine query relationships (no regex patterns)
+4. **✅ Save Insight Integration** - Save final composed SQL that's self-contained
+5. **✅ Full Audit Trail** - Track conversation lineage per `auditing-improvement-todo.md`
+6. **✅ Token Efficiency** - Optimized for long conversations (10+ messages)
+7. **✅ Phase 0 Critical Fixes** - PHI protection, soft-delete, compatibility (MUST DO FIRST)
+
+### Version 2.1 Design Philosophy
+
+**AI-First Approach:** Instead of hardcoding keyword patterns (regex) to detect question relationships, we leverage AI to semantically understand whether questions build on previous results or are independent. This:
+
+- Eliminates brittle regex maintenance
+- Handles implicit references naturally ("Tell me about the older ones")
+- Works in any language
+- Aligns with our project's AI-first philosophy (same as ambiguity detection, intent classification, etc.)
 
 ### Architecture Diagram
 
@@ -99,6 +122,7 @@ No new dependencies needed! All features use existing libraries:
 | **Canonical Types (Phase 0.4)**         | Single source of truth prevents bugs   | All imports use `lib/types/conversation.ts` |
 | **Claude Prompt Caching**               | 90% cost reduction on repeated context | 10-message conversation: $0.11 vs $1.06     |
 | **Gemini Context Caching**              | Similar savings, Gemini 2.0+ support   | Alternative to Claude for same benefits     |
+| **AI-Driven Composition Decision**      | Semantic understanding vs regex        | Handles "female→male" as independent        |
 | **CTE Composition**                     | No temp tables, no result storage      | Privacy-safe, always fresh data             |
 | **Save Last SQL Only**                  | User intent = final query              | Saved insights are self-contained           |
 | **Extend QueryHistory**                 | Track conversation lineage             | Full audit trail for analysis               |
@@ -760,43 +784,43 @@ Before proceeding to Phase 1, verify:
 
 **Fix 0.1: PHI Protection**
 
-- [ ] Created `phi-protection.service.ts`
-- [ ] Updated `MessageMetadata` type with NO PHI allowed
-- [ ] Added `validateNoPHI()` validation in API endpoints
-- [ ] Added unit tests for PHI protection
-- [ ] Verified no patient IDs/names in metadata
+- [x] Created `phi-protection.service.ts`
+- [x] Updated `MessageMetadata` type with NO PHI allowed
+- [x] Added `validateNoPHI()` validation in API endpoints
+- [x] Added unit tests for PHI protection
+- [x] Verified no patient IDs/names in metadata
 
 **Fix 0.2: Soft Delete**
 
-- [ ] Updated migration 030 with `deletedAt` and `supersededByMessageId`
-- [ ] Created edit message API endpoint
-- [ ] Updated conversation loading to filter `deletedAt IS NULL`
-- [ ] Tested edit flow (original + subsequent messages soft-deleted)
+- [x] Updated migration 030 with `deletedAt` and `supersededByMessageId`
+- [x] Created edit message API endpoint
+- [x] Updated conversation loading to filter `deletedAt IS NULL`
+- [x] Tested edit flow (original + subsequent messages soft-deleted)
 
 **Fix 0.3: Conservative Flag**
 
-- [ ] Updated migration 047 with `isFromConversation` boolean
-- [ ] Updated SaveInsightService to use flag
-- [ ] Verified dashboard queries don't filter out conversation insights
-- [ ] Tested saved insights from conversations
+- [x] Updated migration 047 with `isFromConversation` boolean
+- [x] Updated SaveInsightService to use flag
+- [x] Verified dashboard queries don't filter out conversation insights
+- [x] Tested saved insights from conversations
 
 **Fix 0.4: Canonical Types**
 
-- [ ] Updated `lib/types/conversation.ts` with canonical types
-- [ ] Updated all imports to use canonical types
-- [ ] Added type validation tests
-- [ ] Verified TypeScript compilation with no type errors
+- [x] Updated `lib/types/conversation.ts` with canonical types
+- [x] Updated all imports to use canonical types
+- [x] Added type validation tests
+- [x] Verified TypeScript compilation with no type errors
 
 ---
 
 ## Phase 1: Database & Migrations
 
-### Step 1.1: Create Migration File
+### Step 1.1: Review Existing Migration File
 
-**File:** `database/migration/030_create_conversation_tables.sql`
+**File:** `database/migration/046_create_conversation_tables.sql`
 
 ```sql
--- Migration 030: Create conversation threading tables
+-- Migration 046: Create conversation threading tables
 -- Purpose: Support ChatGPT-style multi-turn conversations
 -- Dependencies: 014_semantic_foundation.sql (Customer), 012_create_users_table.sql (Users)
 
@@ -830,7 +854,7 @@ COMMENT ON TABLE "ConversationThreads" IS 'Conversation threads for multi-turn Q
 COMMENT ON COLUMN "ConversationThreads"."userId" IS 'User who owns this conversation';
 COMMENT ON COLUMN "ConversationThreads"."customerId" IS 'Customer scope for this conversation';
 COMMENT ON COLUMN "ConversationThreads"."title" IS 'Auto-generated or user-provided title (first question)';
-COMMENT ON COLUMN "ConversationThreads"."contextCache" IS 'Cached context: entities, filters, last result set';
+COMMENT ON COLUMN "ConversationThreads"."contextCache" IS 'Cached context: non-PHI entities, filters, last result summary';
 COMMENT ON COLUMN "ConversationThreads"."isActive" IS 'False if conversation is archived/deleted';
 
 -- ============================================================================
@@ -843,18 +867,31 @@ CREATE TABLE IF NOT EXISTS "ConversationMessages" (
   "role" VARCHAR(20) NOT NULL CHECK ("role" IN ('user', 'assistant')),
   "content" TEXT NOT NULL,
   "metadata" JSONB DEFAULT '{}',
-  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "deletedAt" TIMESTAMPTZ DEFAULT NULL,
+  "supersededByMessageId" UUID REFERENCES "ConversationMessages"("id")
 );
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_conversation_messages_thread
 ON "ConversationMessages" ("threadId", "createdAt" ASC);
 
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_active
+ON "ConversationMessages" ("threadId", "createdAt" ASC)
+WHERE "deletedAt" IS NULL;
+
+-- Index for edit chain traversal
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_superseded
+ON "ConversationMessages" ("supersededByMessageId")
+WHERE "supersededByMessageId" IS NOT NULL;
+
 -- Comments
 COMMENT ON TABLE "ConversationMessages" IS 'Individual messages within conversation threads';
 COMMENT ON COLUMN "ConversationMessages"."role" IS 'user or assistant';
 COMMENT ON COLUMN "ConversationMessages"."content" IS 'Question text (user) or response text (assistant)';
 COMMENT ON COLUMN "ConversationMessages"."metadata" IS 'SQL, model, timing, result summary for assistant messages';
+COMMENT ON COLUMN "ConversationMessages"."deletedAt" IS 'Soft delete timestamp. NULL = active, set = deleted';
+COMMENT ON COLUMN "ConversationMessages"."supersededByMessageId" IS 'If this message was edited, points to the new version';
 
 -- ============================================================================
 -- TRIGGER: Auto-update thread timestamp
@@ -871,9 +908,49 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_update_thread_timestamp
-AFTER INSERT ON "ConversationMessages"
+AFTER INSERT OR UPDATE ON "ConversationMessages"
 FOR EACH ROW
+WHEN (
+  TG_OP = 'INSERT' OR
+  (TG_OP = 'UPDATE' AND (
+    NEW."deletedAt" IS DISTINCT FROM OLD."deletedAt" OR
+    NEW."supersededByMessageId" IS DISTINCT FROM OLD."supersededByMessageId"
+  ))
+)
 EXECUTE FUNCTION update_conversation_thread_timestamp();
+
+-- ============================================================================
+-- TRIGGER: Validate supersededByMessageId is in same thread
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION validate_superseded_same_thread()
+RETURNS TRIGGER AS $$
+DECLARE
+  superseded_thread_id UUID;
+BEGIN
+  IF NEW."supersededByMessageId" IS NOT NULL THEN
+    SELECT "threadId" INTO superseded_thread_id
+    FROM "ConversationMessages"
+    WHERE id = NEW."supersededByMessageId";
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'supersededByMessageId % does not exist', NEW."supersededByMessageId";
+    END IF;
+
+    IF superseded_thread_id != NEW."threadId" THEN
+      RAISE EXCEPTION 'supersededByMessageId must reference a message in the same thread';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_validate_superseded_same_thread
+BEFORE INSERT OR UPDATE ON "ConversationMessages"
+FOR EACH ROW
+WHEN (NEW."supersededByMessageId" IS NOT NULL)
+EXECUTE FUNCTION validate_superseded_same_thread();
 
 COMMIT;
 ```
@@ -887,7 +964,7 @@ npm run migrate
 **Expected Output:**
 
 ```
-Running migration: 030_create_conversation_tables.sql
+Running migration: 046_create_conversation_tables.sql
 ✓ Created table ConversationThreads
 ✓ Created table ConversationMessages
 ✓ Created indexes
@@ -1084,6 +1161,11 @@ export class ClaudeProvider implements BaseProvider {
 
 **File:** `lib/ai/providers/gemini-provider.ts`
 
+> **⚠️ SINGLE-INSTANCE DEPLOYMENT NOTE:**  
+> The reference implementation below uses Redis for cache storage to support multi-instance deployments.  
+> For single-instance deployments, an in-memory Map can be used instead (see actual implementation).  
+> Trade-off: In-memory cache won't survive server restarts, but eliminates Redis dependency.
+
 ```typescript
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type {
@@ -1158,7 +1240,7 @@ export class GeminiProvider implements BaseProvider {
       displayName: `schema-${cacheKey}`,
     });
 
-    // Store reference in Redis
+    // Store reference in Redis (or in-memory Map for single-instance)
     await redis.set(
       `gemini:cache:${cacheKey}`,
       cachedContent.name,
@@ -1255,6 +1337,8 @@ curl -X POST http://localhost:3000/api/insights/conversation/send \
 
 This phase implements the Compound SQL Approach using CTEs to build on previous queries without storing result data.
 
+**Key Design Decision:** Instead of using brittle regex patterns to detect question relationships, we leverage AI to semantically understand whether the current question builds on previous results. This aligns with our AI-first philosophy and mirrors how ChatGPT handles conversation context.
+
 ### Step 3.1: Create SQL Composer Service
 
 **File:** `lib/services/sql-composer.service.ts`
@@ -1269,32 +1353,149 @@ export interface ComposedQuery {
   reasoning?: string;
 }
 
+export interface CompositionDecision {
+  shouldCompose: boolean;
+  reasoning: string;
+  confidence: number;
+}
+
 export class SqlComposerService {
   /**
-   * Determine if current question should build on previous query
+   * Use AI to determine if current question builds on previous query.
+   * This replaces brittle regex patterns with semantic understanding.
+   *
+   * Examples:
+   * - "Show female patients" → "Which ones are older than 40?" = COMPOSE (filtering previous)
+   * - "Show female patients" → "Show male patients" = FRESH (different subset)
+   * - "Show patients with wounds" → "What's their average age?" = COMPOSE (aggregating previous)
+   * - "How many patients?" → "How many clinics?" = FRESH (different entity)
    */
-  shouldComposeQuery(currentQuestion: string, previousSql?: string): boolean {
-    if (!previousSql) return false;
+  async shouldComposeQuery(
+    currentQuestion: string,
+    previousQuestion: string,
+    previousSql: string,
+    provider: BaseProvider
+  ): Promise<CompositionDecision> {
+    const prompt = this.buildCompositionDecisionPrompt(
+      previousQuestion,
+      currentQuestion,
+      previousSql
+    );
 
-    // Check for reference pronouns
-    const referenceWords =
-      /\b(which ones?|those|they|them|these|that|the same)\b/i;
-    if (referenceWords.test(currentQuestion)) return true;
+    try {
+      const response = await provider.complete({
+        system: this.getCompositionDecisionSystemPrompt(),
+        userMessage: prompt,
+        temperature: 0.0, // Deterministic for consistent decisions
+      });
 
-    // Check for aggregation without explicit entity
-    const aggregationWords = /\b(average|total|count|sum|how many)\b/i;
-    if (aggregationWords.test(currentQuestion)) {
-      // If question is vague (no explicit entity), likely referencing previous
-      const hasExplicitEntity =
-        /\b(patient|wound|assessment|clinic|form)\b/i.test(currentQuestion);
-      return !hasExplicitEntity;
+      const parsed = this.parseCompositionDecision(response);
+      return parsed;
+    } catch (error) {
+      console.error(
+        "[SqlComposerService] Failed to determine composition:",
+        error
+      );
+      // Fallback: assume fresh query on error
+      return {
+        shouldCompose: false,
+        reasoning:
+          "Error determining relationship; generating fresh query for safety",
+        confidence: 0.0,
+      };
     }
-
-    return false;
   }
 
   /**
-   * Compose SQL that builds on previous query
+   * Build prompt for composition decision
+   */
+  private buildCompositionDecisionPrompt(
+    previousQuestion: string,
+    currentQuestion: string,
+    previousSql: string
+  ): string {
+    return `
+You are analyzing a conversation about healthcare data to determine query relationships.
+
+**Previous question:** "${previousQuestion}"
+
+**Previous SQL:**
+\`\`\`sql
+${previousSql}
+\`\`\`
+
+**Current question:** "${currentQuestion}"
+
+**Task:** Determine if the current question BUILDS ON the previous question's results, or is an INDEPENDENT question.
+
+**BUILDS ON (shouldCompose: true):**
+- Filtering previous results: "Show female patients" → "Which ones are older than 40?"
+- Aggregating previous results: "Show patients with wounds" → "What's their average age?"
+- Refining previous query: "List all assessments" → "Only show from last month"
+- Using pronouns referencing previous: "Show patients" → "Which ones have diabetes?"
+
+**INDEPENDENT (shouldCompose: false):**
+- Different subset of same entity: "Show female patients" → "Show male patients"
+- Completely different entity: "How many patients?" → "How many clinics?"
+- Different time period (new analysis): "Show Q1 data" → "Show Q2 data"
+- Parallel question (not building): "Count active wounds" → "Count healed wounds"
+
+Return JSON with your analysis:
+{
+  "shouldCompose": boolean,
+  "reasoning": "brief explanation of why you chose this",
+  "confidence": number between 0.0 and 1.0
+}
+`;
+  }
+
+  /**
+   * System prompt for composition decisions
+   */
+  private getCompositionDecisionSystemPrompt(): string {
+    return `You are a SQL query relationship analyzer for healthcare data conversations.
+
+Your task is to determine if a current question builds upon (filters/aggregates/refines) previous query results, 
+or is an independent question requiring fresh data retrieval.
+
+Key principles:
+- Questions with pronouns (which ones, those, they) almost always build on previous
+- Questions with vague aggregations (what's the average?, how many?) without entity names likely build on previous
+- Questions with explicit entity names (show male patients, count clinics) are usually independent
+- Time period shifts without pronouns are usually independent (Q1 → Q2)
+
+Return ONLY a valid JSON object. No markdown, no explanations outside JSON.`;
+  }
+
+  /**
+   * Parse AI response for composition decision
+   */
+  private parseCompositionDecision(response: string): CompositionDecision {
+    // Extract JSON from response (handle markdown wrapping)
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("No JSON found in composition decision response");
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Validate response structure
+    if (typeof parsed.shouldCompose !== "boolean") {
+      throw new Error(
+        "Invalid composition decision: missing shouldCompose boolean"
+      );
+    }
+
+    return {
+      shouldCompose: parsed.shouldCompose,
+      reasoning: parsed.reasoning || "No reasoning provided",
+      confidence: parsed.confidence || 1.0,
+    };
+  }
+
+  /**
+   * Compose SQL that builds on previous query.
+   * Called after shouldComposeQuery() returns true.
    */
   async composeQuery(
     previousSql: string,
@@ -1440,6 +1641,40 @@ Return ONLY the JSON object. No markdown, no explanation outside the JSON.
     };
   }
 }
+```
+
+### Benefits of AI-Driven Composition Decision
+
+| Aspect                     | Old Regex Approach                   | New AI Approach                           |
+| -------------------------- | ------------------------------------ | ----------------------------------------- |
+| **Semantic understanding** | ❌ Keyword matching only             | ✅ True intent recognition                |
+| **Edge cases**             | ❌ Must hardcode each pattern        | ✅ Handles naturally                      |
+| **Maintainability**        | ❌ Update regex patterns             | ✅ Self-adapting                          |
+| **Language support**       | ❌ English-specific patterns         | ✅ Language-agnostic                      |
+| **Consistency**            | ❌ Different from other AI decisions | ✅ Aligned with project AI-first approach |
+
+**Example Decisions:**
+
+```typescript
+// Scenario 1: Clear composition
+Q1: "Show female patients"
+Q2: "Which ones are older than 40?"
+Decision: { shouldCompose: true, reasoning: "Uses pronoun 'which ones' referencing previous female patients", confidence: 0.95 }
+
+// Scenario 2: Independent queries
+Q1: "How many female patients?"
+Q2: "How many male patients?"
+Decision: { shouldCompose: false, reasoning: "Different subset (male vs female), parallel independent queries", confidence: 0.9 }
+
+// Scenario 3: Implicit reference
+Q1: "Show patients with active wounds"
+Q2: "Tell me about the older ones"
+Decision: { shouldCompose: true, reasoning: "'older ones' implicitly references patients from previous query", confidence: 0.85 }
+
+// Scenario 4: Different entity
+Q1: "Show all assessments in Q1"
+Q2: "How many clinics do we have?"
+Decision: { shouldCompose: false, reasoning: "Completely different entity (assessments vs clinics)", confidence: 1.0 }
 ```
 
 ### Step 3.2: Add SQL Composition Prompt
@@ -1630,20 +1865,39 @@ export async function POST(req: NextRequest) {
     // Step 3: Load conversation history
     const conversationHistory = await loadConversationHistory(currentThreadId);
 
-    // Step 4: Determine if we should compose on previous query
+    // Step 4: Use AI to determine if we should compose on previous query
     const sqlComposer = new SqlComposerService();
+    const provider = await getAIProvider(modelId);
     const lastMessage = conversationHistory[conversationHistory.length - 1];
-    const shouldCompose =
-      lastMessage &&
-      sqlComposer.shouldComposeQuery(question, lastMessage.metadata?.sql);
+
+    let compositionDecision = {
+      shouldCompose: false,
+      reasoning: "No previous query",
+      confidence: 1.0,
+    };
+
+    if (lastMessage?.metadata?.sql) {
+      compositionDecision = await sqlComposer.shouldComposeQuery(
+        question,
+        lastMessage.content,
+        lastMessage.metadata.sql,
+        provider
+      );
+
+      console.log(
+        `[Composition Decision] ${
+          compositionDecision.shouldCompose ? "COMPOSE" : "FRESH"
+        } ` +
+          `(confidence: ${compositionDecision.confidence}): ${compositionDecision.reasoning}`
+      );
+    }
 
     let result;
     let compositionStrategy: "cte" | "merged_where" | "fresh" = "fresh";
     let parentQueryHistoryId: number | undefined;
 
-    if (shouldCompose && lastMessage?.metadata?.sql) {
-      // Compose on previous SQL
-      const provider = await getAIProvider(modelId);
+    if (compositionDecision.shouldCompose && lastMessage?.metadata?.sql) {
+      // Compose on previous SQL using AI-determined strategy
       const composed = await sqlComposer.composeQuery(
         lastMessage.metadata.sql,
         lastMessage.content,
@@ -1659,6 +1913,7 @@ export async function POST(req: NextRequest) {
         originalQuestion: question,
         previousQuestion: lastMessage.content,
         compositionStrategy: composed.strategy,
+        compositionReasoning: compositionDecision.reasoning,
         reasoning: composed.reasoning,
       });
 
@@ -1666,7 +1921,8 @@ export async function POST(req: NextRequest) {
       parentQueryHistoryId = lastMessage.metadata?.queryHistoryId;
     } else {
       // Fresh query (normal flow with conversation context)
-      const provider = await getAIProvider(modelId);
+      // Note: Conversation context still helps AI understand domain,
+      // but we're not building on previous SQL results
 
       // Use AI vendor context caching
       const sqlResponse = await provider.completeWithConversation({
@@ -4073,14 +4329,40 @@ describe("Conversation Flow", () => {
    - [ ] Check API logs for token usage (~600 tokens, 90% cached)
    - [ ] Verify cache hit in logs
 
-3. **SQL Composition Strategies**
+3. **AI-Driven Composition Decision Testing**
+
+   - [ ] Test explicit composition: "Show female patients" → "Which ones are older than 40?"
+
+     - Check logs show: `[Composition Decision] COMPOSE (confidence: 0.9+): Uses pronoun...`
+     - Verify CTE composition in SQL
+
+   - [ ] Test independent queries: "How many female patients?" → "How many male patients?"
+
+     - Check logs show: `[Composition Decision] FRESH (confidence: 0.9+): Different subset...`
+     - Verify fresh SQL with no CTE
+
+   - [ ] Test implicit reference: "Show patients with wounds" → "Tell me about the older ones"
+
+     - Check logs show: `[Composition Decision] COMPOSE (confidence: 0.8+): 'older ones' references...`
+     - Verify CTE composition
+
+   - [ ] Test different entity: "Show assessments" → "How many clinics?"
+
+     - Check logs show: `[Composition Decision] FRESH (confidence: 1.0): Different entity...`
+     - Verify fresh SQL
+
+   - [ ] Test vague aggregation: "Show patients" → "What's the average age?"
+     - Check logs show: `[Composition Decision] COMPOSE (confidence: 0.85+): Aggregating previous...`
+     - Verify CTE composition with aggregation
+
+4. **SQL Composition Strategies**
 
    - [ ] Test CTE composition: "Show patients" → "Which ones have wounds?"
    - [ ] Test fresh query: "Show patients" → "How many clinics?"
    - [ ] Test merged WHERE: Simple filter additions
    - [ ] Verify correct strategy logged in QueryHistory
 
-4. **Save Insight from Conversation**
+5. **Save Insight from Conversation**
 
    - [ ] Have a 3-message conversation
    - [ ] Click "Save" on final result
@@ -4089,7 +4371,7 @@ describe("Conversation Flow", () => {
    - [ ] Re-run saved insight from dashboard
    - [ ] Verify results match (SQL is self-contained)
 
-5. **Audit Trail**
+6. **Audit Trail**
 
    - [ ] Complete a conversation
    - [ ] Go to Admin > Audit > Conversations
@@ -4098,7 +4380,7 @@ describe("Conversation Flow", () => {
    - [ ] Verify parent-child relationships
    - [ ] Check composition strategy breakdown
 
-6. **Edit Flow**
+7. **Edit Flow**
 
    - [ ] Ask question
    - [ ] Get response
@@ -4108,25 +4390,25 @@ describe("Conversation Flow", () => {
    - [ ] Second message is discarded
    - [ ] New response generated
 
-7. **New Chat**
+8. **New Chat**
 
    - [ ] Click "New Chat"
    - [ ] Conversation clears
    - [ ] Customer/Model selection retained
    - [ ] Can start fresh conversation
 
-8. **Error Handling**
+9. **Error Handling**
 
    - [ ] Invalid SQL → see error message
    - [ ] Network failure → can retry
    - [ ] Cancel during loading → request cancelled
    - [ ] Audit logs error even on failure
 
-9. **Privacy Validation**
-   - [ ] Run conversation with patient data
-   - [ ] Check ConversationMessages metadata
-   - [ ] Verify NO actual patient data stored
-   - [ ] Only SQL and result summaries (row count, columns)
+10. **Privacy Validation**
+    - [ ] Run conversation with patient data
+    - [ ] Check ConversationMessages metadata
+    - [ ] Verify NO actual patient data stored
+    - [ ] Only SQL and result summaries (row count, columns)
 
 ---
 
@@ -4373,8 +4655,8 @@ LIMIT 10;
 
 ---
 
-**Document Version:** 2.1 (with Phase 0 Critical Fixes)  
-**Last Updated:** 2026-01-14  
+**Document Version:** 2.1 (AI-Driven Composition Decision)  
+**Last Updated:** 2026-01-16  
 **Status:** Production-Ready Implementation Guide
 
 **⚠️ CRITICAL: Start with Phase 0 (2 days)**
