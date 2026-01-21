@@ -17,6 +17,9 @@
 | Phase 2 Step 2.1 | ✅ Complete | 2026-01-15   | Added conversation-aware provider interface                               |
 | Phase 2 Step 2.2 | ✅ Complete | 2026-01-15   | Claude prompt caching implementation                                      |
 | Phase 2 Step 2.3 | ✅ Complete | 2026-01-15   | Gemini context caching implementation                                     |
+| Phase 2 Step 2.4 | ✅ Complete | 2026-01-19   | Provider factory updated with conversation support and failover           |
+| Phase 3 Step 3.1 | ✅ Complete | 2026-01-20   | SqlComposerService implemented for composition decisions and validation   |
+| Phase 3 Step 3.2 | ✅ Complete | 2026-01-20   | SQL composition prompt examples added                                     |
 
 ---
 
@@ -1278,7 +1281,20 @@ export class GeminiProvider implements BaseProvider {
 }
 ```
 
-### Step 2.4: Update Provider Factory
+### Step 2.4: Update Provider Factory ✅ **COMPLETE**
+
+**Status:** Already implemented with production-grade enhancements
+
+**Actual Implementation:** `lib/ai/providers/provider-factory.ts`
+
+The actual implementation exceeds the reference design with:
+- ✅ Model-based provider selection (not just string matching)
+- ✅ Provider health checks and automatic failover
+- ✅ Graceful degradation when primary provider unavailable
+- ✅ Supports Claude, Gemini, and OpenWebUI providers
+- ✅ Both `completeWithConversation()` and `buildConversationHistory()` implemented in providers
+
+**Reference Design (Simple Version):**
 
 **File:** `lib/ai/get-provider.ts`
 
@@ -1299,6 +1315,8 @@ export async function getAIProvider(modelId?: string): Promise<BaseProvider> {
   }
 }
 ```
+
+**Note:** The production implementation in `provider-factory.ts` is more robust and should be used as the source of truth.
 
 ### Step 2.5: Performance Testing
 
@@ -1328,6 +1346,27 @@ curl -X POST http://localhost:3000/api/insights/conversation/send \
 
 # Expected: ~600 tokens (90% cached)
 ```
+
+### Phase 2 Completion Summary
+
+**Status:** ✅ **COMPLETE** (2026-01-19)
+
+All Phase 2 steps have been implemented:
+
+- [x] **Step 2.1:** Updated BaseProvider Interface with conversation-aware methods ✅
+- [x] **Step 2.2:** Claude Provider with prompt caching (`cache_control`) ✅
+- [x] **Step 2.3:** Gemini Provider with context caching (`cachedContent` API) ✅
+- [x] **Step 2.4:** Provider factory updated with conversation support ✅
+- [ ] **Step 2.5:** Performance testing (pending integration testing)
+
+**Key Achievements:**
+- ✅ Both Claude and Gemini providers support `completeWithConversation()` with native caching
+- ✅ Token usage logging with cache efficiency metrics implemented
+- ✅ Provider factory includes health checks and automatic failover
+- ✅ Conversation history building limits to last 5 messages (~1000 tokens)
+- ✅ Interface definitions in `IQueryFunnelProvider` complete
+
+**Next Step:** Phase 3 - SQL Composition Service
 
 ---
 
@@ -4566,11 +4605,11 @@ LIMIT 10;
 
 **Phase 1-3: Core Infrastructure**
 
-- [ ] Migrations 030, 046, 047 completed
-- [ ] ClaudeProvider with prompt caching working
-- [ ] GeminiProvider with context caching working
-- [ ] SqlComposerService generating correct CTEs
-- [ ] Token usage shows 80%+ reduction
+- [x] Migrations 030, 046, 047 completed (Phase 1 ✅)
+- [x] ClaudeProvider with prompt caching working (Phase 2.2 ✅)
+- [x] GeminiProvider with context caching working (Phase 2.3 ✅)
+- [ ] SqlComposerService generating correct CTEs (Phase 3 - pending)
+- [ ] Token usage shows 80%+ reduction (Phase 2.5 - testing pending)
 
 **Phase 4-5: API & Hooks**
 
