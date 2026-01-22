@@ -28,6 +28,10 @@ import type {
 import type { InsightResult } from "@/lib/hooks/useInsights";
 import { normalizeJson } from "@/lib/utils/normalize-json";
 import { addResultToCache, trimContextCache } from "@/lib/services/context-cache.service";
+import {
+  SendConversationMessageSchema,
+  validateRequest,
+} from "@/lib/validation/conversation-schemas";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -40,24 +44,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { threadId, customerId, question, modelId } = body || {};
-    const normalizedCustomerId = String(customerId || "").trim();
-    const normalizedQuestion = String(question || "").trim();
 
-    if (!normalizedCustomerId) {
+    // Validate request with Zod
+    const validation = validateRequest(SendConversationMessageSchema, body);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: "customerId is required" },
+        {
+          error: validation.error,
+          details: validation.details,
+        },
         { status: 400 }
       );
     }
 
-    if (!normalizedQuestion) {
-      return NextResponse.json(
-        { error: "question is required" },
-        { status: 400 }
-      );
-    }
-
+    const { threadId, customerId, question, modelId } = validation.data;
     const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       FROM "UserCustomers"
       WHERE "userId" = $1 AND "customerId" = $2
       `,
-      [userId, normalizedCustomerId]
+      [userId, customerId]
     );
 
     if (customerAccessResult.rows.length === 0) {
@@ -92,8 +92,8 @@ export async function POST(req: NextRequest) {
         `,
         [
           userId,
-          normalizedCustomerId,
-          normalizedQuestion.slice(0, 100),
+          customerId,
+          question.slice(0, 100),
           JSON.stringify({}),
         ]
       );
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
       VALUES ($1, 'user', $2, $3)
       RETURNING id, "createdAt"
       `,
-      [currentThreadId, normalizedQuestion, JSON.stringify({})]
+      [currentThreadId, question, JSON.stringify({})]
     );
 
     const userMessageId = userMsgResult.rows[0].id;
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
 
     if (lastAssistant?.metadata?.sql && previousQuestion) {
       const decision = await sqlComposer.shouldComposeQuery(
-        normalizedQuestion,
+        question,
         previousQuestion,
         lastAssistant.metadata.sql,
         baseProvider
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
         const composed = await sqlComposer.composeQuery(
           lastAssistant.metadata.sql,
           previousQuestion,
-          normalizedQuestion,
+          question,
           baseProvider
         );
 
@@ -189,8 +189,8 @@ export async function POST(req: NextRequest) {
     if (!sqlText) {
       const generatedSql = await provider.completeWithConversation({
         conversationHistory,
-        currentQuestion: normalizedQuestion,
-        customerId: normalizedCustomerId,
+        currentQuestion: question,
+        customerId: customerId,
       });
       sqlText = generatedSql.trim();
       compositionStrategy = "fresh";
@@ -250,8 +250,8 @@ export async function POST(req: NextRequest) {
       result.sql ||
       (result.error ? `-- Query failed: ${result.error.message}` : "");
     const queryHistoryId = await logQueryHistory({
-      question: normalizedQuestion,
-      customerId: normalizedCustomerId,
+      question: question,
+      customerId: customerId,
       userId,
       sql: historySql,
       mode: historyMode,

@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
+import {
+  CreateConversationThreadSchema,
+  validateRequest,
+} from "@/lib/validation/conversation-schemas";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -13,17 +17,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const normalizedCustomerId = String(body?.customerId || "").trim();
-    const rawTitle = String(body?.title || "").trim();
-    const title = rawTitle ? rawTitle.slice(0, 100) : null;
 
-    if (!normalizedCustomerId) {
+    // Validate request with Zod
+    const validation = validateRequest(CreateConversationThreadSchema, body);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: "customerId is required" },
+        {
+          error: validation.error,
+          details: validation.details,
+        },
         { status: 400 }
       );
     }
 
+    const { customerId, title } = validation.data;
     const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
 
@@ -33,7 +40,7 @@ export async function POST(req: NextRequest) {
       FROM "UserCustomers"
       WHERE "userId" = $1 AND "customerId" = $2
       `,
-      [userId, normalizedCustomerId]
+      [userId, customerId]
     );
 
     if (accessResult.rows.length === 0) {
@@ -53,7 +60,7 @@ export async function POST(req: NextRequest) {
       VALUES ($1, $2, $3, $4)
       RETURNING id, "createdAt"
       `,
-      [userId, normalizedCustomerId, title, JSON.stringify({})]
+      [userId, customerId, title || null, JSON.stringify({})]
     );
 
     return NextResponse.json({

@@ -20,6 +20,11 @@
 | Phase 2 Step 2.4 | ✅ Complete | 2026-01-19   | Provider factory updated with conversation support and failover           |
 | Phase 3 Step 3.1 | ✅ Complete | 2026-01-20   | SqlComposerService implemented for composition decisions and validation   |
 | Phase 3 Step 3.2 | ✅ Complete | 2026-01-20   | SQL composition prompt examples added                                     |
+| Phase 4 Step 4.1 | ✅ Complete | 2026-01-20   | Conversation types defined (canonical types + metadata)                   |
+| Phase 4 Step 4.2 | ✅ Complete | 2026-01-20   | Conversation send endpoint with composition, audit, cache update          |
+| Phase 4 Step 4.3 | ✅ Complete | 2026-01-20   | Conversation thread fetch endpoint with normalized metadata               |
+| Phase 4 Step 4.4 | ✅ Complete | 2026-01-20   | Conversation thread creation endpoint                                     |
+| Phase 4 Step 4.5 | ✅ Complete | 2026-01-20   | Conversation history endpoint with pagination and previews                |
 
 ---
 
