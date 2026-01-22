@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
-import { PHIProtectionService } from "@/lib/services/phi-protection.service";
 
 export async function GET(
   _req: NextRequest,
@@ -15,6 +15,7 @@ export async function GET(
   }
 
   try {
+    const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
     const { threadId } = params;
 
@@ -24,7 +25,7 @@ export async function GET(
       FROM "ConversationThreads"
       WHERE id = $1 AND "userId" = $2
       `,
-      [threadId, session.user.id]
+      [threadId, userId]
     );
 
     if (threadResult.rows.length === 0) {
@@ -40,7 +41,7 @@ export async function GET(
       FROM "UserCustomers"
       WHERE "userId" = $1 AND "customerId" = $2
       `,
-      [session.user.id, thread.customerId]
+      [userId, thread.customerId]
     );
 
     if (customerAccessResult.rows.length === 0) {
@@ -65,8 +66,14 @@ export async function GET(
     );
 
     return NextResponse.json({
-      thread,
-      messages: messagesResult.rows,
+      thread: {
+        ...thread,
+        contextCache: normalizeJson(thread.contextCache),
+      },
+      messages: messagesResult.rows.map((row) => ({
+        ...row,
+        metadata: normalizeJson(row.metadata),
+      })),
     });
   } catch (error) {
     console.error("[GET /api/insights/conversation/:threadId] Error:", error);
@@ -78,4 +85,18 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+function normalizeJson(value: unknown) {
+  if (!value) {
+    return {};
+  }
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  return value;
 }

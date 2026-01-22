@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
 import { getAIProvider } from "@/lib/ai/get-provider";
 import type { BaseProvider } from "@/lib/ai/providers/base-provider";
@@ -14,8 +15,16 @@ import {
   getSQLValidator,
   type SQLValidationResult,
 } from "@/lib/services/sql-validator.service";
+import {
+  SqlValidationAuditService,
+  type LogSqlValidationInput,
+} from "@/lib/services/audit/sql-validation-audit.service";
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
-import type { ConversationMessage, ResultSummary } from "@/lib/types/conversation";
+import type {
+  ConversationMessage,
+  MessageMetadata,
+  ResultSummary,
+} from "@/lib/types/conversation";
 import type { InsightResult } from "@/lib/hooks/useInsights";
 
 export async function POST(req: NextRequest) {
@@ -47,7 +56,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userId = Number.parseInt(session.user.id, 10);
+    const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
 
     const customerAccessResult = await pool.query(
@@ -208,7 +217,7 @@ export async function POST(req: NextRequest) {
       result.results?.columns || []
     );
 
-    const assistantMetadata = {
+    let assistantMetadata: MessageMetadata = {
       modelUsed: resolvedModelId,
       sql: result.sql,
       mode: result.mode,
@@ -233,10 +242,42 @@ export async function POST(req: NextRequest) {
       ]
     );
 
+    const assistantMessageId = assistantMsgResult.rows[0].id;
+    const historyMode = result.error ? "error" : result.mode;
+    const historySql =
+      result.sql ||
+      (result.error ? `-- Query failed: ${result.error.message}` : "");
+    const queryHistoryId = await logQueryHistory({
+      question: normalizedQuestion,
+      customerId: normalizedCustomerId,
+      userId,
+      sql: historySql,
+      mode: historyMode,
+      resultCount: result.results?.rows.length || 0,
+      sqlValidation: result.sqlValidation,
+      semanticContext: { compositionStrategy },
+    });
+
+    if (queryHistoryId) {
+      assistantMetadata = {
+        ...assistantMetadata,
+        queryHistoryId,
+      };
+
+      await pool.query(
+        `
+        UPDATE "ConversationMessages"
+        SET "metadata" = $1
+        WHERE id = $2
+        `,
+        [JSON.stringify(assistantMetadata), assistantMessageId]
+      );
+    }
+
     await updateContextCache(
       currentThreadId,
       normalizedCustomerId,
-      assistantMsgResult.rows[0].id,
+      assistantMessageId,
       safeResultSummary
     );
 
@@ -244,7 +285,7 @@ export async function POST(req: NextRequest) {
       threadId: currentThreadId,
       userMessageId,
       message: {
-        id: assistantMsgResult.rows[0].id,
+        id: assistantMessageId,
         role: "assistant",
         content: generateResponseText(result),
         result,
@@ -390,6 +431,112 @@ async function executeSql(
       },
     };
   }
+}
+
+async function logQueryHistory(input: {
+  question: string;
+  customerId: string;
+  userId: number;
+  sql: string;
+  mode: string;
+  resultCount: number;
+  semanticContext?: Record<string, unknown>;
+  sqlValidation?: SQLValidationResult;
+}): Promise<number | null> {
+  try {
+    const pool = await getInsightGenDbPool();
+    const result = await pool.query(
+      `
+      INSERT INTO "QueryHistory"
+        ("customerId", "userId", question, sql, mode, "resultCount", "semanticContext")
+      VALUES
+        ($1::uuid, $2, $3, $4, $5, $6, $7)
+      RETURNING id
+      `,
+      [
+        input.customerId,
+        input.userId,
+        input.question,
+        input.sql,
+        input.mode,
+        input.resultCount,
+        input.semanticContext ? JSON.stringify(input.semanticContext) : null,
+      ]
+    );
+
+    const queryHistoryId = result.rows[0]?.id as number | undefined;
+
+    if (queryHistoryId && input.sqlValidation) {
+      const validationInput = buildSqlValidationAuditInput({
+        sql: input.sql,
+        mode: input.mode,
+        sqlValidation: input.sqlValidation,
+        intentType: input.semanticContext?.intent as string | undefined,
+      });
+
+      if (validationInput) {
+        await SqlValidationAuditService.logValidation({
+          ...validationInput,
+          queryHistoryId,
+        });
+      }
+    }
+
+    return queryHistoryId ?? null;
+  } catch (error) {
+    console.warn(
+      "[/api/insights/conversation/send] Failed to log query history:",
+      error
+    );
+    return null;
+  }
+}
+
+function buildSqlValidationAuditInput(input: {
+  sql: string;
+  mode: string;
+  sqlValidation: SQLValidationResult;
+  intentType?: string;
+}): Omit<LogSqlValidationInput, "queryHistoryId"> | null {
+  const { sql, mode, sqlValidation, intentType } = input;
+
+  if (!sqlValidation) {
+    return null;
+  }
+
+  const errors = Array.isArray(sqlValidation.errors) ? sqlValidation.errors : [];
+  const errorMessage = errors.map((error) => error.message).join(" | ") || undefined;
+  const suggestionText =
+    errors.map((error) => error.suggestion).filter(Boolean).join(" | ") ||
+    undefined;
+  const suggestionProvided = Boolean(suggestionText);
+
+  let errorType: LogSqlValidationInput["errorType"] | undefined;
+  if (!sqlValidation.isValid && errors.length > 0) {
+    const hasStructuralViolation = errors.some((error) =>
+      ["GROUP_BY_VIOLATION", "ORDER_BY_VIOLATION", "AGGREGATE_VIOLATION"].includes(
+        error.type
+      )
+    );
+
+    if (hasStructuralViolation) {
+      errorType = "semantic_error";
+    } else if (errorMessage) {
+      errorType = SqlValidationAuditService.classifyErrorType(errorMessage);
+    }
+  }
+
+  return {
+    sqlGenerated: sql,
+    intentType,
+    mode,
+    isValid: sqlValidation.isValid,
+    errorType,
+    errorMessage,
+    suggestionProvided,
+    suggestionText,
+    validationDurationMs: (sqlValidation as any).validationDurationMs ?? undefined,
+  };
 }
 
 async function updateContextCache(
