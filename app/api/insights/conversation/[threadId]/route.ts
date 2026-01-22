@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
+import { normalizeJson } from "@/lib/utils/normalize-json";
 
 export async function GET(
   _req: NextRequest,
@@ -85,18 +86,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
-
-function normalizeJson(value: unknown) {
-  if (!value) {
-    return {};
-  }
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return {};
-    }
-  }
-  return value;
 }

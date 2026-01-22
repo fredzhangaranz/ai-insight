@@ -26,6 +26,8 @@ import type {
   ResultSummary,
 } from "@/lib/types/conversation";
 import type { InsightResult } from "@/lib/hooks/useInsights";
+import { normalizeJson } from "@/lib/utils/normalize-json";
+import { addResultToCache, trimContextCache } from "@/lib/services/context-cache.service";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -330,37 +332,9 @@ async function loadConversationHistory(
       threadId: row.threadId || threadId,
       role: row.role,
       content: row.content,
-      metadata: normalizeMetadata(row.metadata),
+      metadata: normalizeJson(row.metadata),
       createdAt: row.createdAt,
     }));
-}
-
-function normalizeMetadata(value: unknown) {
-  if (!value) {
-    return {};
-  }
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return {};
-    }
-  }
-  return value;
-}
-
-function normalizeContextCache(value: unknown) {
-  if (!value) {
-    return {};
-  }
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return {};
-    }
-  }
-  return value as Record<string, unknown>;
 }
 
 function findLastAssistantWithQuestion(
@@ -555,31 +529,28 @@ async function updateContextCache(
     [threadId]
   );
 
-  const existingCache =
+  const existingCache = normalizeJson(
     existingCacheResult.rows.length > 0
-      ? normalizeContextCache(existingCacheResult.rows[0].contextCache)
-      : {};
+      ? existingCacheResult.rows[0].contextCache
+      : {}
+  );
 
-  const existingReferenced = Array.isArray(existingCache.referencedResultSets)
-    ? existingCache.referencedResultSets
-    : [];
-  const nextReferenced = [
-    ...existingReferenced.filter(
-      (entry) => entry.messageId !== assistantMessageId
-    ),
+  // Add new result set to cache and apply trimming (max 10 messages)
+  const contextCache = addResultToCache(
+    {
+      customerId,
+      ...existingCache,
+    },
     {
       messageId: assistantMessageId,
       rowCount: resultSummary.rowCount,
       columns: resultSummary.columns,
       entityHashes: resultSummary.entityHashes,
-    },
-  ];
+    }
+  );
 
-  const contextCache = {
-    ...existingCache,
-    customerId,
-    referencedResultSets: nextReferenced,
-  };
+  // Trim to prevent unbounded growth
+  const trimmedCache = trimContextCache(contextCache);
 
   await pool.query(
     `
@@ -587,7 +558,7 @@ async function updateContextCache(
     SET "contextCache" = $1
     WHERE id = $2
     `,
-    [JSON.stringify(contextCache), threadId]
+    [JSON.stringify(trimmedCache), threadId]
   );
 }
 
