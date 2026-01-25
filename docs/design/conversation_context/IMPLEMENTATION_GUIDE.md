@@ -27,6 +27,18 @@
 | Phase 4 Step 4.5 | ✅ Complete | 2026-01-20   | Conversation history endpoint with pagination and previews                |
 | Phase 5 Step 5.1 | ✅ Complete | 2026-01-23   | useConversation hook for send/edit/load flows                             |
 | Phase 5 Step 5.2 | ✅ Complete | 2026-01-23   | Refinement generator service                                              |
+| Phase 6 Step 6.1 | ✅ Complete | 2026-01-23   | Conversation input component                                              |
+| Phase 6 Step 6.2 | ✅ Complete | 2026-01-23   | User message component                                                    |
+| Phase 6 Step 6.3 | ✅ Complete | 2026-01-23   | Assistant message component                                               |
+| Phase 6 Step 6.4 | ✅ Complete | 2026-01-23   | Results table component                                                   |
+| Phase 6 Step 6.5 | ✅ Complete | 2026-01-23   | Message actions component                                                 |
+| Phase 6 Step 6.6 | ⏳ Pending  | —            | Loading & thinking state for follow-ups, progressive display              |
+| Phase 6 Step 6.7 | ⏳ Pending  | —            | Expandable "How I got this" context section for follow-ups                 |
+| Phase 6 Step 6.8 | ⏳ Pending  | —            | Context awareness badge showing "Based on X answers"                       |
+| Phase 6 Step 6.9 | ⏳ Pending  | —            | Loading status in input area during AI processing                         |
+| Phase 6 Step 6.10| ⏳ Pending  | —            | Smart scroll & message grouping for long conversations                     |
+| Phase 6 Step 6.11| ⏳ Pending  | —            | Query composition strategy indicator (CTE/fresh/optimized)                |
+| Phase 6 Step 6.12| ⏳ Pending  | —            | SQL preview in thinking details with syntax highlighting                  |
 
 ---
 
@@ -41,10 +53,11 @@
 7. [Phase 4: API Endpoints](#phase-4-api-endpoints)
 8. [Phase 5: Conversation Hook](#phase-5-conversation-hook)
 9. [Phase 6: UI Components](#phase-6-ui-components)
-10. [Phase 7: Audit Integration](#phase-7-audit-integration)
-11. [Phase 8: Save Insight Integration](#phase-8-save-insight-integration)
-12. [Phase 9: Integration & Testing](#phase-9-integration--testing)
-13. [Phase 10: Migration & Rollout](#phase-10-migration--rollout)
+10. [Phase 7: Smart Suggestions](#phase-7-smart-suggestions)
+11. [Phase 8: Audit Integration](#phase-8-audit-integration)
+12. [Phase 9: Save Insight Integration](#phase-9-save-insight-integration)
+13. [Phase 10: Integration & Testing](#phase-10-integration--testing)
+14. [Phase 11: Migration & Rollout](#phase-11-migration--rollout)
 14. [Testing Checklist](#testing-checklist)
 15. [Troubleshooting](#troubleshooting)
 
@@ -3075,11 +3088,376 @@ export function MessageActions({
 }
 ```
 
+### Step 6.6: Add Loading & Thinking State to AssistantMessage
+
+**Goal:** Show real-time progress indication for follow-up questions, maintaining UX parity with initial questions.
+
+**Acceptance Criteria:**
+- ✅ AI loading state displays immediately when processing follow-up question
+- ✅ Animated indicator shows "AI is thinking..." with spinner
+- ✅ Thinking steps stream in real-time and display progressively
+- ✅ For follow-ups, thinking details are collapsed by default but expandable
+- ✅ First question thinking remains expanded by default (backward compatible)
+- ✅ No layout shift when thinking section appears/disappears
+- ✅ Works alongside existing results display
+
+**File:** `app/insights/new/components/AssistantMessage.tsx`
+
+**Implementation Notes:**
+
+1. **Detect if message is follow-up:** Add a prop `isFollowUp?: boolean` to track whether this is the first message in a thread
+   - If first message (or no prior messages in thread), expand thinking by default
+   - If follow-up, collapse thinking by default
+
+2. **Update rendering logic:**
+   - Move `ThinkingStream` outside the `message.isLoading` check
+   - Show it whenever `message.result?.thinking` exists, regardless of loading state
+   - This allows thinking to render progressively as steps arrive
+
+3. **Loading state visualization:**
+   ```typescript
+   // When isLoading && !message.result?.thinking yet:
+   // Show: "🤔 AI is analyzing your follow-up..."
+   // Style: Light gray pill with animated spinner
+   ```
+
+4. **Collapse control for follow-ups:**
+   - Modify `ThinkingStream` component to accept `collapsedByDefault?: boolean`
+   - Pass `collapsedByDefault={isFollowUp}` from AssistantMessage
+   - Allow user to expand via chevron (already exists)
+
+5. **Smart scroll anchor:**
+   - Add `ref` to the thinking section
+   - Parent container should not auto-scroll past the thinking steps if user was reading them
+
 ---
 
-## Phase 5: Smart Suggestions
+### Step 6.7: Add Expandable "How I Got This" Context Section
 
-### Step 5.1: Create Suggestion Generator Service
+**Goal:** Let users discover reasoning details for follow-up questions without cluttering initial view.
+
+**Acceptance Criteria:**
+- ✅ Expandable section appears below AI message in follow-ups
+- ✅ Header shows: "How I got this answer (X steps, Y.Zs)"
+- ✅ Default collapsed state for follow-ups; expanded for first question
+- ✅ Chevron icon toggles expansion
+- ✅ Smooth animation on expand/collapse
+- ✅ Uses same `ThinkingStream` component for consistency
+- ✅ Details include thinking steps, confidence scores, metrics
+- ✅ Clear visual separation from main message content
+
+**File:** `app/insights/new/components/AssistantMessage.tsx`
+
+**Implementation Notes:**
+
+1. **Modify component structure:**
+   ```
+   AssistantMessage
+   ├── AI avatar + message content + timestamp
+   ├── [OPTIONAL] Results table (if available)
+   ├── [OPTIONAL] Message Actions (save, copy, chart, etc.)
+   ├── [NEW] Thinking Context Section (collapsed by default for follow-ups)
+   │   └── ThinkingStream (reused component)
+   └── [OPTIONAL] Error state
+   ```
+
+2. **Conditional collapse behavior:**
+   - First message in thread: `ThinkingStream` with `collapsed={false}`
+   - Follow-up message: `ThinkingStream` with `collapsed={true}`
+   - Use `isFollowUp` prop to determine this
+
+3. **Visual styling:**
+   - Add subtle top border to separate from results
+   - Thinking section background: light gray (matches ThinkingStream default)
+   - Chevron indicator on header for click affordance
+   - On expand: smooth fade-in animation
+
+4. **Pass metadata to ThinkingStream:**
+   - Title: "How I got this answer" (use existing default)
+   - Steps: `message.result?.thinking || []`
+   - Collapsed: `isFollowUp && collapsed` state
+   - Allow collapse: `true`
+
+---
+
+### Step 6.8: Add Context Awareness Badge
+
+**Goal:** Show users at a glance whether answer builds on previous context or is independent.
+
+**Acceptance Criteria:**
+- ✅ Badge displays next to or below AI avatar
+- ✅ Shows: "Based on X previous answers" or "New question"
+- ✅ Visual color coding: teal/blue for context-aware, neutral gray for fresh
+- ✅ Clickable to highlight/expand related prior messages
+- ✅ Tooltip explains: "This answer uses context from your previous X questions"
+- ✅ Only shows on follow-ups (not first message)
+- ✅ Compact size: fits inline or on new line without breaking layout
+
+**File:** `app/insights/new/components/AssistantMessage.tsx`
+
+**Implementation Notes:**
+
+1. **Data structure for tracking context:**
+   - Extend `message` object with `contextDependencies?: { count: number; messageIds: string[] }`
+   - Populate from API response when sending follow-up
+   - AI composer service already tracks this internally; expose via API
+
+2. **Component placement:**
+   ```
+   ┌─────────────────────────────────┐
+   │ AI │ Message content             │
+   │    │ "Based on 2 answers" 👈 NEW │
+   │    │ 2 mins ago                  │
+   └─────────────────────────────────┘
+   ```
+
+3. **Badge styling:**
+   - Size: small pill (px-2 py-1, text-xs)
+   - Colors:
+     - `bg-blue-50 text-blue-700` (context-aware)
+     - `bg-gray-50 text-gray-600` (fresh/independent)
+   - Icon: link chain (↗) for context-aware
+
+4. **Interactivity:**
+   - Hover shows tooltip: "Uses context from questions: '...' and '...'"
+   - Click highlights or scrolls to related messages in conversation
+   - Optional: add light background highlight to related messages
+
+---
+
+### Step 6.9: Add Loading Status in Input Area
+
+**Goal:** Provide user feedback that AI is processing follow-up, especially on slower networks.
+
+**Acceptance Criteria:**
+- ✅ Status message appears above input when AI is responding
+- ✅ Shows: "⏳ AI is analyzing your follow-up..." with spinner
+- ✅ Disappears when response arrives or on error
+- ✅ Includes estimated time or "might take a moment"
+- ✅ Non-intrusive; uses existing error/status zone
+- ✅ Accessible with clear text (not icon-only)
+- ✅ Graceful on mobile (stacks well with input)
+
+**File:** `app/insights/new/components/ConversationPanel.tsx` (container) or `ConversationInput.tsx`
+
+**Implementation Notes:**
+
+1. **Reuse existing status zone:**
+   - ConversationPanel already has error display above/below messages
+   - Add new conditional: if `isLoading && messages.length > 0`, show status
+   - Keep same styling as error messages (subtle pill)
+
+2. **Status message content:**
+   ```
+   When first request:
+   "✨ AI is composing your insights..."
+   
+   When follow-up:
+   "⏳ AI is analyzing your follow-up question..." (with spinner)
+   ```
+
+3. **Spinner animation:**
+   - Use existing Loader2 icon from lucide-react (already imported)
+   - Animate with `animate-spin` class
+   - Color: subtle blue (matches UI theme)
+
+4. **Mobile consideration:**
+   - On narrow screens, place status message ABOVE input box
+   - Ensure it doesn't hide textarea
+   - Stack: [Status] → [Textarea + Send Button]
+
+5. **Dismissible:**
+   - Optional close (X) button if user wants to dismiss
+   - Or auto-dismiss when response arrives
+
+---
+
+### Step 6.10: Improve Scroll & Message Grouping for Conversations
+
+**Goal:** Help users navigate long conversations and understand message flow.
+
+**Acceptance Criteria:**
+- ✅ Auto-scroll to new assistant message when it arrives
+- ✅ Scroll only triggers for follow-ups (not cluttering on first message)
+- ✅ Smart scroll: keeps prior thinking visible if user was reading
+- ✅ Visual grouping: subtle separator or background between Q&A pairs
+- ✅ Clear message flow: easy to scan and follow conversation
+- ✅ On mobile: scroll doesn't cover input field
+- ✅ Respects user scroll position: don't auto-scroll if user is reading old messages
+
+**File:** `app/insights/new/components/ConversationPanel.tsx`
+
+**Implementation Notes:**
+
+1. **Smart auto-scroll logic:**
+   ```typescript
+   useEffect(() => {
+     if (!isLoading && messages.length > 2) { // Only on follow-ups
+       const lastMessage = messages[messages.length - 1];
+       if (lastMessage?.role === "assistant") {
+         // Scroll to last assistant message
+         lastAssistantRef.current?.scrollIntoView({ 
+           behavior: "smooth", 
+           block: "center" // Keep some context above
+         });
+       }
+     }
+   }, [messages, isLoading]);
+   ```
+
+2. **Visual grouping:**
+   - Add subtle background color to each user-assistant pair
+   - Alternate light colors or use subtle borders
+   - Example:
+     ```
+     User message:     [bg-blue-50 rounded-lg p-3]
+     Assistant message: [bg-white border-2 p-4]
+     ─────────────────  [subtle divider]
+     User message:      [bg-blue-50 rounded-lg p-3]
+     Assistant message: [bg-white border-2 p-4]
+     ```
+
+3. **Message grouping container:**
+   - Wrap each user-assistant pair in a container
+   - Add margin and light separator line
+   - Or use alternating background stripes
+
+4. **Scroll anchor refs:**
+   - Add `ref` to last assistant message container
+   - Use this for scroll-into-view behavior
+   - Don't scroll if user is manually scrolled up
+
+5. **Scroll detection (optional):**
+   - Track user scroll position
+   - If user is reading old messages (scrolled up), don't force scroll
+   - Only auto-scroll if they were at bottom of conversation
+
+---
+
+### Step 6.11: Add Query Composition Strategy Indicator
+
+**Goal:** Provide transparency on how follow-up query was constructed (CTE, fresh, optimized).
+
+**Acceptance Criteria:**
+- ✅ Small indicator shows query strategy: "📎 Built on previous result (CTE)" or "✨ Fresh query"
+- ✅ Located in thinking section or message footer
+- ✅ Clickable to see SQL preview (next step)
+- ✅ Color-coded: teal for CTE, blue for fresh, purple for optimized
+- ✅ Short, scannable text (2-3 words)
+- ✅ Appears only on follow-ups
+- ✅ Tooltip explains strategy briefly
+
+**File:** `app/insights/new/components/AssistantMessage.tsx`
+
+**Implementation Notes:**
+
+1. **Composition strategy metadata:**
+   - API response includes: `compositionStrategy?: 'cte' | 'fresh' | 'optimized'`
+   - Determine in SQL composer service based on AI decision
+   - Store in `message.metadata.compositionStrategy`
+
+2. **Visual indicator placement:**
+   ```
+   ┌─────────────────────────────┐
+   │ AI │ Message                 │
+   │    │ How I got this (steps)  │
+   │    │ 📎 Built on previous    │ ← NEW
+   │    │ Results table...        │
+   └─────────────────────────────┘
+   ```
+
+3. **Strategy descriptions:**
+   - `cte`: "📎 Built on previous result (CTE)" → teal badge
+   - `fresh`: "✨ Fresh query (independent)" → gray badge
+   - `optimized`: "⚡ Optimized version of previous" → purple badge
+
+4. **Tooltip content:**
+   ```
+   CTE: "This query combines your previous results using a database CTE. 
+         No data stored, always fresh results."
+   
+   Fresh: "This query is independent and doesn't rely on previous results."
+   
+   Optimized: "This query reuses the structure of your previous query
+              but with new filters or refinements."
+   ```
+
+5. **Interaction:**
+   - Click badge → show/scroll to SQL in thinking section (Step 6.12)
+   - Or link to expanded view with SQL preview
+
+---
+
+### Step 6.12: Add SQL Preview in Thinking Details
+
+**Goal:** Let users verify AI correctly understood their question and generated appropriate SQL.
+
+**Acceptance Criteria:**
+- ✅ SQL appears in expandable section within "How I got this"
+- ✅ Code-highlighted SQL with syntax colors
+- ✅ Copy button for easy sharing/testing
+- ✅ Only shown when expanded (not cluttering)
+- ✅ CTE composition shows full composed query with WITH clause
+- ✅ Labels for CTE name, main query, what each part does
+- ✅ On mobile: horizontal scroll if needed, not breaking layout
+
+**File:** Create `app/insights/new/components/SQLPreview.tsx`
+
+**Implementation Notes:**
+
+1. **Component structure:**
+   ```
+   SQLPreview
+   ├── Header: "Generated SQL"
+   ├── Strategy badge (from 6.11)
+   ├── Copy button
+   ├── Syntax-highlighted code block
+   └── Optional: Performance metrics
+   ```
+
+2. **Integration into ThinkingStream:**
+   - Add SQL as a "sub-detail" in the final thinking step
+   - Or as separate section in AssistantMessage
+
+3. **Syntax highlighting:**
+   - Use existing highlight library (check package.json for suggestions)
+   - Or simple CSS for keyword coloring:
+     ```css
+     .sql-keyword { color: #d73a49; font-weight: bold; }
+     .sql-identifier { color: #24292e; }
+     .sql-string { color: #032f62; }
+     ```
+
+4. **CTE-specific rendering:**
+   ```typescript
+   if (compositionStrategy === 'cte') {
+     // Show:
+     // WITH previous_result AS (
+     //   SELECT ... FROM ...
+     // )
+     // SELECT ... FROM previous_result ...
+     
+     // Add annotations:
+     // "↓ Previous result"
+     // "↓ Main query that builds on it"
+   }
+   ```
+
+5. **Copy functionality:**
+   - Button copies full SQL to clipboard
+   - Toast notification: "SQL copied to clipboard"
+   - Include button in code block header
+
+6. **Mobile layout:**
+   - Use horizontal scroll container if SQL is long
+   - Monospace font at smaller size: `text-xs font-mono`
+   - Ensure copy button is always accessible
+
+---
+
+## Phase 7: Smart Suggestions
+
+### Step 7.1: Create Suggestion Generator Service
 
 **File:** `lib/services/suggestion-generator.service.ts`
 
@@ -3184,7 +3562,7 @@ export function generateSmartSuggestions(
 }
 ```
 
-### Step 5.2: Create Refinement Generator Service
+### Step 7.2: Create Refinement Generator Service
 
 **File:** `lib/services/refinement-generator.service.ts`
 
@@ -3253,7 +3631,7 @@ export function generateRefinements(result?: InsightResult): string[] {
 }
 ```
 
-### Step 5.3: Create SmartSuggestions Component
+### Step 7.3: Create SmartSuggestions Component
 
 **File:** `app/insights/new/components/SmartSuggestions.tsx`
 
@@ -3343,13 +3721,13 @@ export function SmartSuggestions({
 
 ---
 
-## Phase 7: Audit Integration
+## Phase 8: Audit Integration
 
 ### Overview
 
 This phase extends the existing QueryHistory table to track conversation lineage and composition strategies, per `auditing-improvement-todo.md`.
 
-### Step 7.1: Create Audit Migration
+### Step 8.1: Create Audit Migration
 
 **File:** `database/migration/046_conversation_audit_tracking.sql`
 
@@ -3401,7 +3779,7 @@ IS 'References previous query in conversation chain';
 COMMIT;
 ```
 
-### Step 7.2: Run Migration
+### Step 8.2: Run Migration
 
 ```bash
 npm run migrate
@@ -3417,7 +3795,7 @@ Running migration: 046_conversation_audit_tracking.sql
 Migration completed successfully
 ```
 
-### Step 7.3: Create Conversation Audit Service
+### Step 8.3: Create Conversation Audit Service
 
 **File:** `lib/services/conversation-audit.service.ts`
 
@@ -3607,7 +3985,7 @@ export class ConversationAuditService {
 }
 ```
 
-### Step 7.4: Add Audit Dashboard API
+### Step 8.4: Add Audit Dashboard API
 
 **File:** `app/api/admin/audit/conversations/route.ts`
 
@@ -3660,7 +4038,7 @@ export async function GET(req: NextRequest) {
 }
 ```
 
-### Step 7.5: Audit Dashboard UI Component
+### Step 8.5: Audit Dashboard UI Component
 
 **File:** `app/admin/audit/conversation-metrics.tsx`
 
@@ -3744,13 +4122,13 @@ export function ConversationMetricsCard() {
 
 ---
 
-## Phase 8: Save Insight Integration
+## Phase 9: Save Insight Integration
 
 ### Overview
 
 This phase enables saving insights from conversations, storing the final composed SQL that's self-contained and re-runnable.
 
-### Step 8.1: Extend SavedInsights Schema
+### Step 9.1: Extend SavedInsights Schema
 
 **File:** `database/migration/047_save_insight_conversation_link.sql`
 
@@ -3784,7 +4162,7 @@ IS 'How insight was created: standard, template, or contextual (from conversatio
 COMMIT;
 ```
 
-### Step 8.2: Create Save Insight Service
+### Step 9.2: Create Save Insight Service
 
 **File:** `lib/services/save-insight.service.ts`
 
@@ -3919,7 +4297,7 @@ export class SaveInsightService {
 }
 ```
 
-### Step 8.3: Add Save Insight API Endpoint
+### Step 9.3: Add Save Insight API Endpoint
 
 **File:** `app/api/insights/conversation/save/route.ts`
 
@@ -3979,7 +4357,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-### Step 8.4: Update MessageActions Component
+### Step 9.4: Update MessageActions Component
 
 **File:** `app/insights/new/components/MessageActions.tsx` (UPDATE)
 
@@ -4018,9 +4396,9 @@ const handleSaveInsight = async () => {
 
 ---
 
-## Phase 9: Integration & Testing
+## Phase 10: Integration & Testing
 
-### Step 9.1: Update Main Page
+### Step 10.1: Update Main Page
 
 **File:** `app/insights/conversation/page.tsx`
 
@@ -4186,9 +4564,9 @@ export default function ConversationPage() {
 
 ---
 
-## Phase 10: Migration & Rollout
+## Phase 11: Migration & Rollout
 
-### Step 10.1: Feature Flag Setup
+### Step 11.1: Feature Flag Setup
 
 **File:** `lib/config/feature-flags.ts`
 
@@ -4205,7 +4583,7 @@ export function getFeatureFlags(): FeatureFlags {
 }
 ```
 
-### Step 10.2: Update Environment Variables
+### Step 11.2: Update Environment Variables
 
 **File:** `.env.local.example`
 
@@ -4214,7 +4592,7 @@ export function getFeatureFlags(): FeatureFlags {
 NEXT_PUBLIC_ENABLE_CONVERSATION_UI=false
 ```
 
-### Step 10.3: Gradual Rollout Strategy
+### Step 11.3: Gradual Rollout Strategy
 
 1. **Week 1: Internal Testing**
 
@@ -4632,21 +5010,21 @@ LIMIT 10;
 - [ ] MessageActions with Save button functional
 - [ ] Conversation flow feels natural
 
-**Phase 7-8: Audit & Save**
+**Phase 8-9: Audit & Save**
 
 - [ ] QueryHistory tracking conversation lineage
 - [ ] Audit dashboard showing metrics
 - [ ] Save Insight creating self-contained SQL
 - [ ] Saved insights re-running successfully
 
-**Phase 9: Testing**
+**Phase 10: Testing**
 
 - [ ] Unit tests passing (15+ test cases)
 - [ ] Integration tests passing (10+ scenarios)
 - [ ] Manual testing completed (all 9 scenarios)
 - [ ] No patient data leaked in audit logs
 
-**Phase 10: Rollout**
+**Phase 11: Rollout**
 
 - [ ] Feature flag configured
 - [ ] Internal testing with 3+ users
@@ -4728,13 +5106,14 @@ LIMIT 10;
    - Conversation Hook
    - UI Components
 
-4. **Phase 7-9:** Audit & Testing (Days 15-18)
+4. **Phase 7-10:** Smart Suggestions, Audit & Testing (Days 15-18)
 
+   - Smart Suggestions
    - Audit Integration
    - Save Insight Integration
    - Integration & Testing
 
-5. **Phase 10:** Rollout (Day 19+)
+5. **Phase 11:** Rollout (Day 19+)
    - Feature Flag & Gradual Rollout
 
 **Estimated Timeline:** 3-4 weeks (including Phase 0 fixes)
