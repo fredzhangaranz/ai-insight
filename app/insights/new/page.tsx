@@ -3,6 +3,7 @@
 "use client";
 
 import { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { CustomerSelector } from "./components/CustomerSelector";
 import { ModelSelector } from "./components/ModelSelector";
@@ -18,6 +19,7 @@ export default function NewInsightPage() {
   const [customerId, setCustomerId] = useState<string>("");
   const [question, setQuestion] = useState<string>("");
   const [modelId, setModelId] = useState<string>(""); // Will be set by ModelSelector from config
+  const [conversationThreadId, setConversationThreadId] = useState<string | undefined>();
 
   const {
     result,
@@ -34,6 +36,41 @@ export default function NewInsightPage() {
     if (!customerId || !question.trim()) return;
     await ask(question, customerId, modelId);
   };
+
+  // Auto-create conversation thread when we get a result from the first question
+  React.useEffect(() => {
+    if (result && result.sql && result.mode !== "clarification" && !result.error) {
+      const createConversationThread = async () => {
+        try {
+          const response = await fetch("/api/insights/conversation/thread/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customerId,
+              initialQuestion: result.question,
+              initialSql: result.sql,
+              initialResult: result.results,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setConversationThreadId(data.threadId);
+            if (process.env.NODE_ENV === "development") {
+              console.log(
+                `[NewInsightPage] Created conversation thread for follow-ups: ${data.threadId}`
+              );
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to create conversation thread:", err);
+          // This is not critical - follow-ups will still work with a new thread
+        }
+      };
+
+      createConversationThread();
+    }
+  }, [result, customerId]);
 
   const handleClarificationSubmit = async (
     clarifications: Record<string, string>,
@@ -262,6 +299,7 @@ export default function NewInsightPage() {
               modelId={modelId}
               onRefine={setQuestion}
               onRerun={handleRerun}
+              threadId={conversationThreadId}
             />
           )}
 

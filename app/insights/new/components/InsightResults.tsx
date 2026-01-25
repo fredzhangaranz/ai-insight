@@ -18,6 +18,7 @@ interface InsightResultsProps {
   modelId?: string;
   onRefine: (question: string) => void;
   onRerun?: (newSql: string, newQuestion: string) => void;
+  threadId?: string; // From first question, for conversation continuity
 }
 
 export function InsightResults({
@@ -25,7 +26,8 @@ export function InsightResults({
   customerId,
   modelId,
   onRefine,
-  onRerun
+  onRerun,
+  threadId, // Add this prop
 }: InsightResultsProps) {
   const [stepPreviewApproved, setStepPreviewApproved] = useState(false);
   const [refinementInput, setRefinementInput] = useState("");
@@ -240,7 +242,7 @@ export function InsightResults({
           />
         )}
 
-        <ConversationPanel customerId={customerId} modelId={modelId} />
+        <ConversationPanel customerId={customerId} modelId={modelId} initialThreadId={threadId} />
       </div>
 
       {/* Actions Panel - Save, Export, etc. */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, RotateCcw } from "lucide-react";
 import { useConversation } from "@/lib/hooks/useConversation";
@@ -11,11 +11,13 @@ import { AssistantMessage } from "./AssistantMessage";
 interface ConversationPanelProps {
   customerId: string;
   modelId?: string;
+  initialThreadId?: string; // From first question, to continue in same thread
 }
 
 export function ConversationPanel({
   customerId,
   modelId,
+  initialThreadId,
 }: ConversationPanelProps) {
   const [input, setInput] = useState("");
   const {
@@ -26,6 +28,19 @@ export function ConversationPanel({
     editMessage,
     startNewConversation,
   } = useConversation();
+
+  // Set initial threadId if provided (from first question)
+  useEffect(() => {
+    if (initialThreadId && typeof window !== "undefined") {
+      // Restore the threadId to localStorage so useConversation can use it
+      localStorage.setItem("conversation_threadId", initialThreadId);
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[ConversationPanel] Set initial threadId from first question: ${initialThreadId}`
+        );
+      }
+    }
+  }, [initialThreadId]);
 
   const handleSend = async () => {
     const trimmed = input.trim();
