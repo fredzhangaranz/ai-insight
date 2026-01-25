@@ -5,6 +5,7 @@
 
 /**
  * Removes markdown code blocks (```sql ... ```) that may wrap SQL queries.
+ * Also removes standalone "sql" or "SQL" lines that LLMs sometimes add.
  * Also trims leading/trailing whitespace.
  */
 export function cleanSqlQuery(sql: string): string {
@@ -13,6 +14,11 @@ export function cleanSqlQuery(sql: string): string {
   cleaned = cleaned.replace(/^```(?:sql|text)?\s*\n?/i, "");
   // Remove trailing markdown code block
   cleaned = cleaned.replace(/\n?```\s*$/i, "");
+  // Remove standalone "sql" or "SQL" label that LLMs sometimes add
+  // Handles: "sql\nSELECT...", "sql SELECT...", "sql: SELECT...", "sql-SELECT...", etc.
+  // Matches "sql" at start, followed by any whitespace (including newlines), colons, or dashes
+  // Note: - is at end of character class to be literal, not a range
+  cleaned = cleaned.replace(/^sql[\s:\n-]*/i, "");
   return cleaned.trim();
 }
 
@@ -43,7 +49,11 @@ export function stripLeadingComments(sqlQuery: string): string {
  * Used for security validation before execution.
  */
 export function normalizeSqlForValidation(sqlQuery: string): string {
-  const strippedQuery = stripLeadingComments(sqlQuery).trimStart();
+  let strippedQuery = stripLeadingComments(sqlQuery).trimStart();
+  // Remove standalone "sql" or "SQL" label that LLMs sometimes add
+  // Handles: "sql\nSELECT...", "sql SELECT...", "sql: SELECT...", etc.
+  // Note: - is at end of character class to be literal, not a range
+  strippedQuery = strippedQuery.replace(/^sql[\s:\n-]*/i, "");
   // Remove leading semicolons and whitespace
   return strippedQuery.replace(/^[;\s]+/, "").trim();
 }

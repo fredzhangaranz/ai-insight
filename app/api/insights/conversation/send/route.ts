@@ -158,6 +158,22 @@ export async function POST(req: NextRequest) {
       userMessageId
     );
 
+    // 🔍 LOGGING LAYER 1: Check conversation history retrieval
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log(
+        `[Layer 1: History Retrieval] Loaded ${conversationHistory.length} messages`
+      );
+      conversationHistory.forEach((msg, idx) => {
+        console.log(
+          `  [${idx}] role=${msg.role}, has_sql=${!!msg.metadata?.sql}, ` +
+          `has_result_summary=${!!msg.metadata?.resultSummary}`
+        );
+        if (msg.metadata?.sql) {
+          console.log(`       SQL: ${msg.metadata.sql.slice(0, 100)}...`);
+        }
+      });
+    }
+
     const sqlComposer = new SqlComposerService();
     const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
     const provider = await getAIProvider(resolvedModelId);
@@ -165,6 +181,23 @@ export async function POST(req: NextRequest) {
 
     const { assistantMessage: lastAssistant, previousQuestion } =
       findLastAssistantWithQuestion(conversationHistory);
+
+    // 🔍 LOGGING LAYER 2: Check composition decision criteria
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log(
+        `[Layer 2: Composition Decision] lastAssistant=${!!lastAssistant}, ` +
+        `lastAssistant.sql=${!!lastAssistant?.metadata?.sql}, ` +
+        `previousQuestion=${!!previousQuestion}`
+      );
+      if (lastAssistant?.metadata?.sql) {
+        console.log(
+          `       Prior SQL: ${lastAssistant.metadata.sql.slice(0, 100)}...`
+        );
+      }
+      if (previousQuestion) {
+        console.log(`       Prior Question: ${previousQuestion.slice(0, 100)}...`);
+      }
+    }
 
     let compositionStrategy: CompositionStrategy = COMPOSITION_STRATEGIES.FRESH;
     let sqlText = "";
@@ -223,6 +256,18 @@ export async function POST(req: NextRequest) {
     }
 
     if (!sqlText) {
+      // 🔍 LOGGING LAYER 3: Fresh query generation path
+      if (process.env.DEBUG_COMPOSITION === "true") {
+        console.log(
+          `[Layer 3: Fresh Query Generation] Passing ${conversationHistory.length} messages to provider`
+        );
+        conversationHistory.forEach((msg, idx) => {
+          console.log(
+            `  [${idx}] role=${msg.role}, sql=${!!msg.metadata?.sql}, content_len=${msg.content?.length || 0}`
+          );
+        });
+      }
+
       const generatedSql = await provider.completeWithConversation({
         conversationHistory,
         currentQuestion: question,
@@ -275,6 +320,19 @@ export async function POST(req: NextRequest) {
 
     phiProtection.validateNoPHI(assistantMetadata);
 
+    // 🔍 LOGGING LAYER 6: Before storing in database
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log(`[Layer 6: Store Metadata] About to store assistant message`);
+      console.log(
+        `  SQL length: ${assistantMetadata.sql?.length || 0} chars`
+      );
+      console.log(`  SQL preview: ${assistantMetadata.sql?.slice(0, 100) || "NONE"}...`);
+      console.log(
+        `  Result summary: ${JSON.stringify(assistantMetadata.resultSummary)}`
+      );
+      console.log(`  Full metadata keys: ${Object.keys(assistantMetadata).join(",")}`);
+    }
+
     const assistantMsgResult = await pool.query(
       `
       INSERT INTO "ConversationMessages"
@@ -288,6 +346,31 @@ export async function POST(req: NextRequest) {
         JSON.stringify(assistantMetadata),
       ]
     );
+
+    // 🔍 LOGGING LAYER 6B: Verify storage
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      const insertedId = assistantMsgResult.rows[0].id;
+      console.log(
+        `[Layer 6B: Verify Storage] Inserted message ID: ${insertedId}`
+      );
+      
+      // Do a quick select to verify what was stored
+      const verifyResult = await pool.query(
+        `SELECT metadata FROM "ConversationMessages" WHERE id = $1`,
+        [insertedId]
+      );
+      if (verifyResult.rows.length > 0) {
+        const storedMeta = verifyResult.rows[0].metadata;
+        const parsedMeta = typeof storedMeta === "string" ? JSON.parse(storedMeta) : storedMeta;
+        console.log(
+          `[Layer 6B] Verified stored metadata: keys=${Object.keys(parsedMeta).join(",")}, ` +
+          `has_sql=${!!parsedMeta.sql}`
+        );
+        if (parsedMeta.sql) {
+          console.log(`[Layer 6B] Stored SQL: ${parsedMeta.sql.slice(0, 100)}...`);
+        }
+      }
+    }
 
     const assistantMessageId = assistantMsgResult.rows[0].id;
     const historyMode = result.error ? "error" : result.mode;
@@ -370,16 +453,47 @@ async function loadConversationHistory(
     [threadId]
   );
 
+  // 🔍 LOGGING LAYER 1B: Raw database retrieval
+  if (process.env.DEBUG_COMPOSITION === "true") {
+    console.log(
+      `[Layer 1B: Raw DB Query] Found ${result.rows.length} raw messages`
+    );
+    result.rows.forEach((row, idx) => {
+      const metadataObj = typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata;
+      console.log(
+        `  [RAW ${idx}] role=${row.role}, id=${row.id}, ` +
+        `metadata_keys=${Object.keys(metadataObj || {}).join(",")}, ` +
+        `has_sql=${!!metadataObj?.sql}`
+      );
+      if (metadataObj?.sql) {
+        console.log(`           SQL: ${metadataObj.sql.slice(0, 80)}...`);
+      }
+    });
+  }
+
   return result.rows
     .filter((row) => row.id !== excludeMessageId)
-    .map((row) => ({
-      id: row.id,
-      threadId: row.threadId || threadId,
-      role: row.role,
-      content: row.content,
-      metadata: normalizeJson(row.metadata),
-      createdAt: row.createdAt,
-    }));
+    .map((row) => {
+      const normalized = normalizeJson(row.metadata);
+      
+      // 🔍 LOGGING LAYER 1C: After normalization
+      if (process.env.DEBUG_COMPOSITION === "true") {
+        console.log(
+          `  [NORMALIZED] role=${row.role}, ` +
+          `normalized_keys=${Object.keys(normalized).join(",")}, ` +
+          `has_sql=${!!normalized.sql}`
+        );
+      }
+
+      return {
+        id: row.id,
+        threadId: row.threadId || threadId,
+        role: row.role,
+        content: row.content,
+        metadata: normalized,
+        createdAt: row.createdAt,
+      };
+    });
 }
 
 function findLastAssistantWithQuestion(

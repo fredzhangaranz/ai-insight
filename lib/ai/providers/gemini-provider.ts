@@ -239,6 +239,14 @@ export class GeminiProvider extends BaseProvider {
     const fullPrompt =
       conversationPrompt + "\n\nCurrent question: " + params.currentQuestion;
 
+    // 🔍 LOGGING LAYER 5: Final prompt to LLM
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log("=".repeat(80));
+      console.log("[Layer 5: Prompt to LLM]");
+      console.log(fullPrompt);
+      console.log("=".repeat(80));
+    }
+
     // Log prompts if enabled
     if (process.env.LOG_LLM_PROMPTS === "true") {
       console.log("=".repeat(80));
@@ -354,7 +362,29 @@ export class GeminiProvider extends BaseProvider {
    * Keeps last 5 messages to balance context vs token usage (~200 tokens per message = 1000 tokens).
    */
   public buildConversationHistory(messages: ConversationMessage[]): string {
+    // 🔍 LOGGING LAYER 4: Provider receives messages
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log(
+        `[Layer 4: Provider.buildConversationHistory] Received ${messages.length} messages`
+      );
+      messages.forEach((msg, idx) => {
+        console.log(
+          `  [${idx}] role=${msg.role}, has_sql=${!!msg.metadata?.sql}, ` +
+          `result_summary=${!!msg.metadata?.resultSummary}`
+        );
+        if (msg.role === "user") {
+          console.log(`       Q: ${msg.content.slice(0, 60)}...`);
+        }
+        if (msg.metadata?.sql) {
+          console.log(`       SQL: ${msg.metadata.sql.slice(0, 80)}...`);
+        }
+      });
+    }
+
     if (messages.length === 0) {
+      if (process.env.DEBUG_COMPOSITION === "true") {
+        console.log(`[Layer 4] EMPTY: Returning first question message`);
+      }
       return "This is the first question in the conversation.";
     }
 
@@ -362,9 +392,13 @@ export class GeminiProvider extends BaseProvider {
     const CONVERSATION_HISTORY_LIMIT = 5;
     const recent = messages.slice(-CONVERSATION_HISTORY_LIMIT);
 
+    let assistantCount = 0;
+    let userCount = 0;
+
     for (const msg of recent) {
       if (msg.role === "user") {
         history += `User asked: "${msg.content}"\n`;
+        userCount++;
         continue;
       }
 
@@ -379,7 +413,24 @@ export class GeminiProvider extends BaseProvider {
         }
 
         history += "\n\n";
+        assistantCount++;
+      } else if (msg.role === "assistant" && !msg.metadata?.sql) {
+        // 🔍 LOGGING LAYER 4B: Assistant message without SQL
+        if (process.env.DEBUG_COMPOSITION === "true") {
+          console.log(
+            `[Layer 4B] SKIPPED assistant message: no SQL in metadata. ` +
+            `metadata_keys=${Object.keys(msg.metadata || {}).join(",")}`
+          );
+        }
       }
+    }
+
+    // 🔍 LOGGING LAYER 4C: Final history summary
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log(
+        `[Layer 4C] History built: ${userCount} user msgs, ${assistantCount} assistant msgs`
+      );
+      console.log(`[Layer 4C] Final history:\n${history.slice(0, 200)}...`);
     }
 
     history += "\nInstructions:\n";
