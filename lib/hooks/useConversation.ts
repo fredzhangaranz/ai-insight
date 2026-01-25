@@ -22,7 +22,19 @@ interface SendMessageOptions {
 }
 
 export function useConversation(): UseConversationReturn {
-  const [threadId, setThreadId] = useState<string | null>(null);
+  // Initialize threadId from localStorage to survive component remounts
+  const [threadId, setThreadId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("conversation_threadId");
+      if (stored) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[useConversation] Restored threadId from localStorage: ${stored}`);
+        }
+        return stored;
+      }
+    }
+    return null;
+  });
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -102,10 +114,14 @@ export function useConversation(): UseConversationReturn {
         }
 
         if (!threadId) {
+          const newThreadId = data.threadId;
           if (process.env.NODE_ENV === "development") {
-            console.log(`[useConversation] ✅ Setting threadId to: ${data.threadId}`);
+            console.log(`[useConversation] ✅ Setting threadId to: ${newThreadId}`);
+            console.log(`[useConversation] Persisting threadId to localStorage`);
           }
-          setThreadId(data.threadId);
+          // Persist to localStorage so it survives component remounts
+          localStorage.setItem("conversation_threadId", newThreadId);
+          setThreadId(newThreadId);
         }
 
         setMessages((prev) => {
@@ -214,6 +230,15 @@ export function useConversation(): UseConversationReturn {
   const startNewConversation = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    
+    // Clear localStorage when starting new conversation
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("conversation_threadId");
+      if (process.env.NODE_ENV === "development") {
+        console.log("[useConversation] Cleared threadId from localStorage (new conversation)");
+      }
+    }
+    
     setThreadId(null);
     setMessages([]);
     setCustomerId(null);
