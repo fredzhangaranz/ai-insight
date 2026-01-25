@@ -8,12 +8,14 @@ import { ThinkingStream, ThinkingStep } from "./ThinkingStream";
 import { ActionsPanel } from "./ActionsPanel";
 import { StepPreview } from "./StepPreview";
 import { ConversationalRefinement } from "./ConversationalRefinement";
+import { ConversationPanel } from "./ConversationPanel";
 import { InspectionPanel } from "./InspectionPanel";
 import { InsightResult } from "@/lib/hooks/useInsights";
 
 interface InsightResultsProps {
   result: InsightResult;
   customerId: string;
+  modelId?: string;
   onRefine: (question: string) => void;
   onRerun?: (newSql: string, newQuestion: string) => void;
 }
@@ -21,6 +23,7 @@ interface InsightResultsProps {
 export function InsightResults({
   result,
   customerId,
+  modelId,
   onRefine,
   onRerun
 }: InsightResultsProps) {
@@ -236,6 +239,8 @@ export function InsightResults({
             initialInput={refinementInput}
           />
         )}
+
+        <ConversationPanel customerId={customerId} modelId={modelId} />
       </div>
 
       {/* Actions Panel - Save, Export, etc. */}

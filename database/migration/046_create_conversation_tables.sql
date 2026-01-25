@@ -78,9 +78,20 @@ COMMENT ON COLUMN "ConversationMessages"."supersededByMessageId" IS 'If this mes
 CREATE OR REPLACE FUNCTION update_conversation_thread_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
-  UPDATE "ConversationThreads"
-  SET "updatedAt" = NOW()
-  WHERE "id" = NEW."threadId";
+  -- Always update timestamp on INSERT
+  -- On UPDATE, only update if deletedAt or supersededByMessageId changed
+  IF TG_OP = 'INSERT' THEN
+    UPDATE "ConversationThreads"
+    SET "updatedAt" = NOW()
+    WHERE "id" = NEW."threadId";
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF (NEW."deletedAt" IS DISTINCT FROM OLD."deletedAt" OR
+        NEW."supersededByMessageId" IS DISTINCT FROM OLD."supersededByMessageId") THEN
+      UPDATE "ConversationThreads"
+      SET "updatedAt" = NOW()
+      WHERE "id" = NEW."threadId";
+    END IF;
+  END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -88,13 +99,6 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_update_thread_timestamp
 AFTER INSERT OR UPDATE ON "ConversationMessages"
 FOR EACH ROW
-WHEN (
-  TG_OP = 'INSERT' OR 
-  (TG_OP = 'UPDATE' AND (
-    NEW."deletedAt" IS DISTINCT FROM OLD."deletedAt" OR
-    NEW."supersededByMessageId" IS DISTINCT FROM OLD."supersededByMessageId"
-  ))
-)
 EXECUTE FUNCTION update_conversation_thread_timestamp();
 
 -- ============================================================================

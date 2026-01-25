@@ -35,26 +35,6 @@ export async function GET(
 
     const thread = threadResult.rows[0];
 
-    // Verify user has access to this customer
-    const customerAccessResult = await pool.query(
-      `
-      SELECT 1
-      FROM "UserCustomers"
-      WHERE "userId" = $1 AND "customerId" = $2
-      `,
-      [userId, thread.customerId]
-    );
-
-    if (customerAccessResult.rows.length === 0) {
-      return NextResponse.json(
-        {
-          error: "Access denied",
-          details: "You do not have access to this customer's data",
-        },
-        { status: 403 }
-      );
-    }
-
     const messagesResult = await pool.query(
       `
       SELECT *

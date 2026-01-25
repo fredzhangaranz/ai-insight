@@ -225,4 +225,143 @@ describe("SqlComposerService", () => {
       )
     ).rejects.toThrow("failed safety validation");
   });
+
+  describe("Composition Decision Logic", () => {
+    it("should compose when question uses pronouns (which ones)", async () => {
+      const service = new SqlComposerService();
+      const provider = new TestProvider([
+        JSON.stringify({
+          shouldCompose: true,
+          reasoning: "Question uses pronoun 'which ones' referencing previous results",
+          confidence: 0.95,
+        }),
+      ]);
+
+      const decision = await service.shouldComposeQuery(
+        "Which ones are older than 40?",
+        "Show female patients",
+        "SELECT * FROM Patient WHERE gender = 'Female'",
+        provider
+      );
+
+      expect(decision.shouldCompose).toBe(true);
+      expect(decision.confidence).toBeGreaterThan(0.8);
+    });
+
+    it("should compose when aggregating previous results", async () => {
+      const service = new SqlComposerService();
+      const provider = new TestProvider([
+        JSON.stringify({
+          shouldCompose: true,
+          reasoning: "Question aggregates previous results (average age)",
+          confidence: 0.9,
+        }),
+      ]);
+
+      const decision = await service.shouldComposeQuery(
+        "What's their average age?",
+        "Show patients with wounds",
+        "SELECT * FROM Patient WHERE id IN (SELECT patientFk FROM Wound)",
+        provider
+      );
+
+      expect(decision.shouldCompose).toBe(true);
+    });
+
+    it("should NOT compose when question is about different entity", async () => {
+      const service = new SqlComposerService();
+      const provider = new TestProvider([
+        JSON.stringify({
+          shouldCompose: false,
+          reasoning: "Different entity: patients vs clinics",
+          confidence: 0.95,
+        }),
+      ]);
+
+      const decision = await service.shouldComposeQuery(
+        "How many clinics?",
+        "How many patients?",
+        "SELECT COUNT(*) FROM Patient",
+        provider
+      );
+
+      expect(decision.shouldCompose).toBe(false);
+    });
+
+    it("should NOT compose when question asks for different subset", async () => {
+      const service = new SqlComposerService();
+      const provider = new TestProvider([
+        JSON.stringify({
+          shouldCompose: false,
+          reasoning: "Different subset: female vs male patients",
+          confidence: 0.9,
+        }),
+      ]);
+
+      const decision = await service.shouldComposeQuery(
+        "Show male patients",
+        "Show female patients",
+        "SELECT * FROM Patient WHERE gender = 'Female'",
+        provider
+      );
+
+      expect(decision.shouldCompose).toBe(false);
+    });
+
+    it("should compose when refining previous query with additional filters", async () => {
+      const service = new SqlComposerService();
+      const provider = new TestProvider([
+        JSON.stringify({
+          shouldCompose: true,
+          reasoning: "Refining previous query with time filter",
+          confidence: 0.85,
+        }),
+      ]);
+
+      const decision = await service.shouldComposeQuery(
+        "Only show from last month",
+        "List all assessments",
+        "SELECT * FROM Assessment",
+        provider
+      );
+
+      expect(decision.shouldCompose).toBe(true);
+    });
+
+    it("should NOT compose when time period shifts without pronouns", async () => {
+      const service = new SqlComposerService();
+      const provider = new TestProvider([
+        JSON.stringify({
+          shouldCompose: false,
+          reasoning: "Time period shift without pronouns indicates new analysis",
+          confidence: 0.88,
+        }),
+      ]);
+
+      const decision = await service.shouldComposeQuery(
+        "Show Q2 data",
+        "Show Q1 data",
+        "SELECT * FROM Assessment WHERE assessmentDate >= '2024-01-01' AND assessmentDate < '2024-04-01'",
+        provider
+      );
+
+      expect(decision.shouldCompose).toBe(false);
+    });
+
+    it("handles error gracefully and defaults to fresh query", async () => {
+      const service = new SqlComposerService();
+      const errorProvider = new TestProvider([]); // No responses = will throw
+
+      const decision = await service.shouldComposeQuery(
+        "Which ones?",
+        "Show patients",
+        "SELECT * FROM Patient",
+        errorProvider
+      );
+
+      expect(decision.shouldCompose).toBe(false);
+      expect(decision.confidence).toBe(0.0);
+      expect(decision.reasoning).toMatch("Error determining relationship");
+    });
+  });
 });

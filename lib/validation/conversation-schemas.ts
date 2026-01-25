@@ -33,6 +33,11 @@ export const SendConversationMessageSchema = z.object({
     .max(100, "modelId must be less than 100 characters")
     .optional()
     .describe("Optional AI model ID to use"),
+  userMessageId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe("Optional existing user message ID for re-execution"),
 });
 
 export type SendConversationMessageRequest = z.infer<

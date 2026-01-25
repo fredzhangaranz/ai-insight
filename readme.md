@@ -161,6 +161,22 @@ CREATE TABLE "SubQuestions" (
 
 ### Environment Setup
 
+#### Debugging: LLM Prompt Logging
+
+To log all prompts sent to the LLM API for debugging and prompt optimization, add this to your `.env.local`:
+
+```env
+LOG_LLM_PROMPTS=true
+```
+
+When enabled, this will log:
+- System prompts
+- User messages
+- Conversation history
+- Temperature and other parameters
+
+**Note:** This generates a lot of output, so only enable it when debugging prompt issues.
+
 1. Clone the repository
 2. Install dependencies:
 

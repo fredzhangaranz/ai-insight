@@ -259,6 +259,7 @@ export default function NewInsightPage() {
             <InsightResults
               result={result}
               customerId={customerId}
+              modelId={modelId}
               onRefine={setQuestion}
               onRerun={handleRerun}
             />

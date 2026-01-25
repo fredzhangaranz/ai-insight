@@ -3,9 +3,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
+import type { Pool } from "pg";
 import { getAIProvider } from "@/lib/ai/get-provider";
 import type { BaseProvider } from "@/lib/ai/providers/base-provider";
-import { SqlComposerService } from "@/lib/services/sql-composer.service";
+import {
+  SqlComposerService,
+  COMPOSITION_STRATEGIES,
+  type CompositionStrategy,
+} from "@/lib/services/sql-composer.service";
 import { PHIProtectionService } from "@/lib/services/phi-protection.service";
 import {
   executeCustomerQuery,
@@ -32,6 +37,7 @@ import {
   SendConversationMessageSchema,
   validateRequest,
 } from "@/lib/validation/conversation-schemas";
+import { cleanSqlQuery } from "@/lib/utils/sql-cleaning";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -57,32 +63,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { threadId, customerId, question, modelId } = validation.data;
+    const { threadId, customerId, question, modelId, userMessageId: userMessageIdParam } =
+      validation.data;
+    const normalizedCustomerId = customerId;
+    const normalizedQuestion = question;
+    const normalizedUserMessageId = userMessageIdParam || null;
     const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
-
-    const customerAccessResult = await pool.query(
-      `
-      SELECT 1
-      FROM "UserCustomers"
-      WHERE "userId" = $1 AND "customerId" = $2
-      `,
-      [userId, customerId]
-    );
-
-    if (customerAccessResult.rows.length === 0) {
-      return NextResponse.json(
-        {
-          error: "Access denied",
-          details: "You do not have access to this customer's data",
-        },
-        { status: 403 }
-      );
-    }
 
     let currentThreadId = threadId;
 
     if (!currentThreadId) {
+      if (normalizedUserMessageId) {
+        return NextResponse.json(
+          { error: "userMessageId requires an existing thread" },
+          { status: 400 }
+        );
+      }
+
       const result = await pool.query(
         `
         INSERT INTO "ConversationThreads"
@@ -123,17 +121,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const userMsgResult = await pool.query(
-      `
-      INSERT INTO "ConversationMessages"
-        ("threadId", "role", "content", "metadata")
-      VALUES ($1, 'user', $2, $3)
-      RETURNING id, "createdAt"
-      `,
-      [currentThreadId, question, JSON.stringify({})]
-    );
+    let userMessageId: string | undefined = normalizedUserMessageId || undefined;
 
-    const userMessageId = userMsgResult.rows[0].id;
+    if (userMessageId) {
+      const validation = await validateUserMessage(
+        userMessageId,
+        currentThreadId,
+        normalizedCustomerId,
+        normalizedQuestion,
+        userId,
+        pool
+      );
+
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.error },
+          { status: validation.status }
+        );
+      }
+    } else {
+      const userMsgResult = await pool.query(
+        `
+        INSERT INTO "ConversationMessages"
+          ("threadId", "role", "content", "metadata")
+        VALUES ($1, 'user', $2, $3)
+        RETURNING id, "createdAt"
+        `,
+        [currentThreadId, question, JSON.stringify({})]
+      );
+
+      userMessageId = userMsgResult.rows[0].id;
+    }
 
     const conversationHistory = await loadConversationHistory(
       currentThreadId,
@@ -148,7 +166,7 @@ export async function POST(req: NextRequest) {
     const { assistantMessage: lastAssistant, previousQuestion } =
       findLastAssistantWithQuestion(conversationHistory);
 
-    let compositionStrategy: "cte" | "merged_where" | "fresh" = "fresh";
+    let compositionStrategy: CompositionStrategy = COMPOSITION_STRATEGIES.FRESH;
     let sqlText = "";
 
     if (lastAssistant?.metadata?.sql && previousQuestion) {
@@ -173,10 +191,28 @@ export async function POST(req: NextRequest) {
           baseProvider
         );
 
+        console.log(
+          `[SqlComposerService] Composed SQL (strategy: ${composed.strategy}):`,
+          composed.sql?.slice(0, 500)
+        );
+
         const validation = sqlComposer.validateComposedSql(composed.sql);
         if (validation.valid) {
-          sqlText = composed.sql?.trim() || "";
-          compositionStrategy = composed.strategy;
+          const cleanedComposed = composed.sql?.trim() || "";
+          // Additional safety check: ensure SQL starts with SELECT or WITH
+          const upperComposed = cleanedComposed.toUpperCase().trim();
+          if (
+            upperComposed.startsWith("SELECT") ||
+            upperComposed.startsWith("WITH")
+          ) {
+            sqlText = cleanedComposed;
+            compositionStrategy = composed.strategy;
+          } else {
+            console.warn(
+              "[SqlComposerService] Composed SQL does not start with SELECT or WITH; falling back to fresh query.",
+              `First 100 chars: ${cleanedComposed.slice(0, 100)}`
+            );
+          }
         } else {
           console.warn(
             "[SqlComposerService] Composed SQL failed validation; falling back to fresh query.",
@@ -193,14 +229,23 @@ export async function POST(req: NextRequest) {
         customerId: customerId,
       });
       sqlText = generatedSql.trim();
-      compositionStrategy = "fresh";
+      compositionStrategy = COMPOSITION_STRATEGIES.FRESH;
     }
 
     if (!sqlText) {
       throw new Error("AI provider did not return SQL");
     }
 
-    const execution = await executeSql(sqlText, normalizedCustomerId);
+    // Clean SQL: remove markdown code blocks if present
+    const cleanedSql = cleanSqlQuery(sqlText);
+
+    // Log the SQL that will be executed (first 500 chars for debugging)
+    console.log(
+      `[Conversation Send] Executing SQL (${compositionStrategy}):`,
+      cleanedSql.slice(0, 500)
+    );
+
+    const execution = await executeSql(cleanedSql, normalizedCustomerId);
     const executionTimeMs = Date.now() - startTime;
 
     const result: InsightResult = {
@@ -560,6 +605,88 @@ async function updateContextCache(
     `,
     [JSON.stringify(trimmedCache), threadId]
   );
+}
+
+/**
+ * Validates that a user message ID exists, belongs to the thread,
+ * matches the customer, and has the correct content.
+ * Returns validation result with error details if invalid.
+ */
+async function validateUserMessage(
+  userMessageId: string,
+  currentThreadId: string,
+  normalizedCustomerId: string,
+  normalizedQuestion: string,
+  userId: number,
+  pool: Pool
+): Promise<{ valid: true } | { valid: false; error: string; status: number }> {
+  const existingMessageResult = await pool.query(
+    `
+    SELECT m.id,
+           m."threadId",
+           m.role,
+           m.content,
+           m."deletedAt",
+           t."customerId"
+    FROM "ConversationMessages" m
+    JOIN "ConversationThreads" t ON t.id = m."threadId"
+    WHERE m.id = $1 AND t."userId" = $2
+    `,
+    [userMessageId, userId]
+  );
+
+  if (existingMessageResult.rows.length === 0) {
+    return {
+      valid: false,
+      error: "User message not found or access denied",
+      status: 404,
+    };
+  }
+
+  const existingMessage = existingMessageResult.rows[0];
+
+  if (existingMessage.threadId !== currentThreadId) {
+    return {
+      valid: false,
+      error: "userMessageId does not belong to the thread",
+      status: 400,
+    };
+  }
+
+  if (existingMessage.customerId !== normalizedCustomerId) {
+    return {
+      valid: false,
+      error: "userMessageId does not match customer",
+      status: 400,
+    };
+  }
+
+  if (existingMessage.role !== "user") {
+    return {
+      valid: false,
+      error: "userMessageId must reference a user message",
+      status: 400,
+    };
+  }
+
+  if (existingMessage.deletedAt) {
+    return {
+      valid: false,
+      error: "userMessageId references a deleted message",
+      status: 409,
+    };
+  }
+
+  const existingContent = String(existingMessage.content || "").trim();
+  if (existingContent !== normalizedQuestion) {
+    return {
+      valid: false,
+      error: "Question does not match existing message content",
+      status: 400,
+    };
+  }
+
+  return { valid: true };
 }
 
 function generateResponseText(result: InsightResult): string {

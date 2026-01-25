@@ -169,6 +169,25 @@ export class ClaudeProvider extends BaseProvider {
     const fullPrompt =
       conversationPrompt + "\n\nCurrent question: " + params.currentQuestion;
 
+    // Log prompts if enabled
+    if (process.env.LOG_LLM_PROMPTS === "true") {
+      console.log("=".repeat(80));
+      console.log(`[ClaudeProvider.completeWithConversation] Model: ${this.modelId}`);
+      console.log("-".repeat(80));
+      console.log("[SYSTEM PROMPTS]:");
+      systemPrompt.forEach((prompt, idx) => {
+        console.log(`[System Prompt ${idx + 1}]:`);
+        console.log(prompt.text);
+        console.log("-".repeat(80));
+      });
+      console.log("[USER MESSAGE (Conversation History + Current Question)]:");
+      console.log(fullPrompt);
+      console.log("-".repeat(80));
+      console.log(`[TEMPERATURE]: ${params.temperature ?? 0.1}`);
+      console.log(`[MAX TOKENS]: ${params.maxTokens || 4096}`);
+      console.log("=".repeat(80));
+    }
+
     const response = await this.anthropic.messages.create({
       model: this.modelId,
       max_tokens: params.maxTokens || 4096,

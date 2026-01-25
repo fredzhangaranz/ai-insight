@@ -1,8 +1,20 @@
 import type { BaseProvider } from "@/lib/ai/providers/base-provider";
 
+/**
+ * Composition strategies for building follow-up queries.
+ */
+export const COMPOSITION_STRATEGIES = {
+  CTE: "cte",
+  MERGED_WHERE: "merged_where",
+  FRESH: "fresh",
+} as const;
+
+export type CompositionStrategy =
+  typeof COMPOSITION_STRATEGIES[keyof typeof COMPOSITION_STRATEGIES];
+
 export interface ComposedQuery {
   sql: string;
-  strategy: "cte" | "merged_where" | "fresh";
+  strategy: CompositionStrategy;
   isBuildingOnPrevious: boolean;
   reasoning?: string;
 }
@@ -28,6 +40,19 @@ export class SqlComposerService {
       currentQuestion,
       previousSql
     );
+
+    // Log prompts if enabled
+    if (process.env.LOG_LLM_PROMPTS === "true") {
+      console.log("=".repeat(80));
+      console.log("[SqlComposerService.shouldComposeQuery]");
+      console.log("-".repeat(80));
+      console.log("[SYSTEM PROMPT]:");
+      console.log(this.getCompositionDecisionSystemPrompt());
+      console.log("-".repeat(80));
+      console.log("[USER PROMPT]:");
+      console.log(prompt);
+      console.log("=".repeat(80));
+    }
 
     try {
       const response = await provider.complete({
@@ -175,6 +200,19 @@ Return ONLY a valid JSON object. No markdown, no explanations outside JSON.`;
       currentQuestion
     );
 
+    // Log prompts if enabled
+    if (process.env.LOG_LLM_PROMPTS === "true") {
+      console.log("=".repeat(80));
+      console.log("[SqlComposerService.composeQuery]");
+      console.log("-".repeat(80));
+      console.log("[SYSTEM PROMPT]:");
+      console.log(this.getCompositionSystemPrompt());
+      console.log("-".repeat(80));
+      console.log("[USER PROMPT]:");
+      console.log(prompt);
+      console.log("=".repeat(80));
+    }
+
     const response = await provider.complete({
       system: this.getCompositionSystemPrompt(),
       userMessage: prompt,
@@ -226,7 +264,7 @@ Task: Generate SQL that builds on the previous query.
 
 Return JSON:
 {
-  "strategy": "cte" | "merged_where" | "fresh",
+  "strategy": "${COMPOSITION_STRATEGIES.CTE}" | "${COMPOSITION_STRATEGIES.MERGED_WHERE}" | "${COMPOSITION_STRATEGIES.FRESH}",
   "sql": "...",
   "reasoning": "why this strategy was chosen"
 }
@@ -294,7 +332,7 @@ Return ONLY the JSON object. No markdown, no explanation outside the JSON.
     if (
       !parsed.sql ||
       typeof parsed.sql !== "string" ||
-      !["cte", "merged_where", "fresh"].includes(parsed.strategy)
+      !Object.values(COMPOSITION_STRATEGIES).includes(parsed.strategy)
     ) {
       throw new Error(
         "Invalid composition response: missing or invalid sql/strategy"
@@ -304,7 +342,7 @@ Return ONLY the JSON object. No markdown, no explanation outside the JSON.
     return {
       sql: parsed.sql,
       strategy: parsed.strategy,
-      isBuildingOnPrevious: parsed.strategy !== "fresh",
+      isBuildingOnPrevious: parsed.strategy !== COMPOSITION_STRATEGIES.FRESH,
       reasoning: parsed.reasoning || "No reasoning provided",
     };
   }

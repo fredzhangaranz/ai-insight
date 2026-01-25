@@ -69,6 +69,23 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
    * @returns The model's response text
    */
   public async complete(options: CompletionParams): Promise<string> {
+    // Log prompts if enabled (set LOG_LLM_PROMPTS=true in .env.local)
+    if (process.env.LOG_LLM_PROMPTS === "true") {
+      console.log("=".repeat(80));
+      console.log(`[BaseProvider.complete] Model: ${this.modelId}`);
+      console.log("-".repeat(80));
+      console.log("[SYSTEM PROMPT]:");
+      console.log(options.system);
+      console.log("-".repeat(80));
+      console.log("[USER MESSAGE]:");
+      console.log(options.userMessage);
+      console.log("-".repeat(80));
+      if (options.temperature !== undefined) {
+        console.log(`[TEMPERATURE]: ${options.temperature}`);
+      }
+      console.log("=".repeat(80));
+    }
+
     const result = await this._executeModel(options.system, options.userMessage);
     return result.responseText;
   }

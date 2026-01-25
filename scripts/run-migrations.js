@@ -71,6 +71,8 @@ const migrations = [
   "043_create_clarification_audit.sql",
   "044_create_sql_validation_log.sql",
   "045_create_audit_materialized_views.sql",
+  "046_create_conversation_tables.sql",
+  "047_save_insight_conversation_link.sql",
 ];
 
 /**

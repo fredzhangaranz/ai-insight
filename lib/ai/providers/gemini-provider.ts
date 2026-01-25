@@ -239,6 +239,23 @@ export class GeminiProvider extends BaseProvider {
     const fullPrompt =
       conversationPrompt + "\n\nCurrent question: " + params.currentQuestion;
 
+    // Log prompts if enabled
+    if (process.env.LOG_LLM_PROMPTS === "true") {
+      console.log("=".repeat(80));
+      console.log(`[GeminiProvider.completeWithConversation] Model: ${this.modelId}`);
+      console.log("-".repeat(80));
+      console.log("[CONVERSATION HISTORY + CURRENT QUESTION]:");
+      console.log(fullPrompt);
+      console.log("-".repeat(80));
+      if (params.temperature !== undefined) {
+        console.log(`[TEMPERATURE]: ${params.temperature}`);
+      }
+      if (params.maxTokens) {
+        console.log(`[MAX TOKENS]: ${params.maxTokens}`);
+      }
+      console.log("=".repeat(80));
+    }
+
     const generate = async (cachedContent?: string): Promise<{ text: string; usage: any }> => {
       const config: Record<string, unknown> = {
         cachedContent,

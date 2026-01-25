@@ -25,6 +25,8 @@
 | Phase 4 Step 4.3 | ✅ Complete | 2026-01-20   | Conversation thread fetch endpoint with normalized metadata               |
 | Phase 4 Step 4.4 | ✅ Complete | 2026-01-20   | Conversation thread creation endpoint                                     |
 | Phase 4 Step 4.5 | ✅ Complete | 2026-01-20   | Conversation history endpoint with pagination and previews                |
+| Phase 5 Step 5.1 | ✅ Complete | 2026-01-23   | useConversation hook for send/edit/load flows                             |
+| Phase 5 Step 5.2 | ✅ Complete | 2026-01-23   | Refinement generator service                                              |
 
 ---
 

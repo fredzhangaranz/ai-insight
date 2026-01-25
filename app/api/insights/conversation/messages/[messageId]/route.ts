@@ -57,31 +57,6 @@ export async function PATCH(
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
-      // Verify user has access to the customer
-      const customerAccessResult = await client.query(
-        `
-        SELECT 1
-        FROM "UserCustomers"
-        WHERE "userId" = $1 AND "customerId" = (
-          SELECT "customerId"
-          FROM "ConversationThreads"
-          WHERE id = $2
-        )
-        `,
-        [session.user.id, original.threadId]
-      );
-
-      if (customerAccessResult.rows.length === 0) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "Access denied",
-            details: "You do not have access to this customer's data",
-          },
-          { status: 403 }
-        );
-      }
-
       if (original.role !== "user") {
         await client.query("ROLLBACK");
         return NextResponse.json(
