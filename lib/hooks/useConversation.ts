@@ -63,16 +63,26 @@ export function useConversation(): UseConversationReturn {
       setCustomerId(targetCustomerId);
 
       try {
+        // 🔍 LOGGING: Check threadId before sending
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[useConversation] Sending message: threadId=${threadId || "null"}, ` +
+            `will_send_to_api=${threadId ? "yes" : "no"}`
+          );
+        }
+
+        const requestBody = {
+          ...(threadId && { threadId }),
+          customerId: targetCustomerId,
+          question: trimmedQuestion,
+          ...(modelId && { modelId }),
+          ...(options?.userMessageId && { userMessageId: options.userMessageId }),
+        };
+
         const response = await fetch("/api/insights/conversation/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...(threadId && { threadId }),
-            customerId: targetCustomerId,
-            question: trimmedQuestion,
-            ...(modelId && { modelId }),
-            ...(options?.userMessageId && { userMessageId: options.userMessageId }),
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal,
         });
 
@@ -83,7 +93,18 @@ export function useConversation(): UseConversationReturn {
 
         const data = await response.json();
 
+        // 🔍 LOGGING: Check threadId after response
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[useConversation] Response received: returned_threadId=${data.threadId}, ` +
+            `current_threadId=${threadId}, will_update=${!threadId ? "yes" : "no"}`
+          );
+        }
+
         if (!threadId) {
+          if (process.env.NODE_ENV === "development") {
+            console.log(`[useConversation] ✅ Setting threadId to: ${data.threadId}`);
+          }
           setThreadId(data.threadId);
         }
 
@@ -105,6 +126,14 @@ export function useConversation(): UseConversationReturn {
             ...data.message,
             threadId: data.threadId,
           });
+
+          // 🔍 LOGGING: Check updated message list
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `[useConversation] Updated messages: count=${nextMessages.length}, ` +
+              `threadIds=${[...new Set(nextMessages.map(m => m.threadId))].join(",")}`
+            );
+          }
 
           return nextMessages;
         });

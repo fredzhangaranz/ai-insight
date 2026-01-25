@@ -56,7 +56,13 @@ export class SqlValidationAuditService {
    * Truncate string to fit database column limits
    */
   private static truncateToLength(value: string | null | undefined, maxLength: number, fieldName?: string): string | null {
-    if (!value) return null;
+    if (value == null) return null; // Handle null or undefined
+    if (typeof value !== 'string') {
+      // Convert non-string values to string, or return null if not convertible
+      const stringValue = String(value);
+      console.warn(`[SqlValidationAudit] Converting ${fieldName || 'value'} from ${typeof value} to string: ${stringValue}`);
+      value = stringValue;
+    }
     if (value.length <= maxLength) return value;
     console.warn(`[SqlValidationAudit] Truncating ${fieldName || 'value'} from ${value.length} to ${maxLength} characters`);
     return value.substring(0, maxLength);
