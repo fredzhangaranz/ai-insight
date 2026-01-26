@@ -10,6 +10,7 @@ interface ConversationInputProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   disabled?: boolean;
+  disabledReason?: "loading" | "no-customer";
   placeholder?: string;
 }
 
@@ -18,6 +19,7 @@ export function ConversationInput({
   onChange,
   onSubmit,
   disabled = false,
+  disabledReason,
   placeholder = "Ask a question...",
 }: ConversationInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,7 +76,11 @@ export function ConversationInput({
       </Button>
 
       <p className="text-xs text-gray-500 mt-2">
-        {disabled ? "Select a customer to get started" : "Press Ctrl+Enter to send"}
+        {disabledReason === "no-customer"
+          ? "Select a customer to get started"
+          : disabledReason === "loading"
+          ? "Waiting for the response..."
+          : "Press Ctrl+Enter to send"}
       </p>
     </div>
   );

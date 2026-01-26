@@ -32,13 +32,13 @@
 | Phase 6 Step 6.3 | ✅ Complete | 2026-01-23   | Assistant message component                                               |
 | Phase 6 Step 6.4 | ✅ Complete | 2026-01-23   | Results table component                                                   |
 | Phase 6 Step 6.5 | ✅ Complete | 2026-01-23   | Message actions component                                                 |
-| Phase 6 Step 6.6 | ⏳ Pending  | —            | Loading & thinking state for follow-ups, progressive display              |
-| Phase 6 Step 6.7 | ⏳ Pending  | —            | Expandable "How I got this" context section for follow-ups                 |
-| Phase 6 Step 6.8 | ⏳ Pending  | —            | Context awareness badge showing "Based on X answers"                       |
-| Phase 6 Step 6.9 | ⏳ Pending  | —            | Loading status in input area during AI processing                         |
-| Phase 6 Step 6.10| ⏳ Pending  | —            | Smart scroll & message grouping for long conversations                     |
-| Phase 6 Step 6.11| ⏳ Pending  | —            | Query composition strategy indicator (CTE/fresh/optimized)                |
-| Phase 6 Step 6.12| ⏳ Pending  | —            | SQL preview in thinking details with syntax highlighting                  |
+| Phase 6 Step 6.6 | ✅ Complete | 2026-01-26   | Loading & thinking state for follow-ups, progressive display              |
+| Phase 6 Step 6.7 | ✅ Complete | 2026-01-26   | Expandable "How I got this" context section for follow-ups                 |
+| Phase 6 Step 6.8 | ✅ Complete | 2026-01-26   | Context awareness badge showing "Based on X answers"                       |
+| Phase 6 Step 6.9 | ✅ Complete | 2026-01-26   | Loading status in input area during AI processing                         |
+| Phase 6 Step 6.10| ✅ Complete | 2026-01-26   | Smart scroll & message grouping for long conversations                     |
+| Phase 6 Step 6.11| ✅ Complete | 2026-01-26   | Query composition strategy indicator (CTE/fresh/optimized)                |
+| Phase 6 Step 6.12| ✅ Complete | 2026-01-26   | SQL preview in thinking details with syntax highlighting                  |
 
 ---
 

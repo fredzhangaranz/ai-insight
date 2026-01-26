@@ -1,9 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import type { ConversationMessage } from "@/lib/types/conversation";
 
+type ConversationMessageState = ConversationMessage & {
+  isLoading?: boolean;
+};
+
 interface UseConversationReturn {
   threadId: string | null;
-  messages: ConversationMessage[];
+  messages: ConversationMessageState[];
   isLoading: boolean;
   error: Error | null;
   sendMessage: (
@@ -35,7 +39,7 @@ export function useConversation(): UseConversationReturn {
     }
     return null;
   });
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [messages, setMessages] = useState<ConversationMessageState[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -54,21 +58,39 @@ export function useConversation(): UseConversationReturn {
       abortControllerRef.current = controller;
 
       const trimmedQuestion = question.trim();
-      const tempId = options?.skipOptimistic ? null : `temp-${Date.now()}`;
-      const pendingUserMessage: ConversationMessage | null = tempId
+      const tempIdBase = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const tempUserId = options?.skipOptimistic ? null : `temp-user-${tempIdBase}`;
+      const tempAssistantId = `temp-assistant-${tempIdBase}`;
+      const createdAtBase = Date.now();
+      const pendingUserMessage: ConversationMessageState | null = tempUserId
         ? {
-            id: tempId,
+            id: tempUserId,
             threadId: threadId || "",
             role: "user",
             content: trimmedQuestion,
             metadata: {},
-            createdAt: new Date(),
+            createdAt: new Date(createdAtBase),
           }
         : null;
 
-      if (pendingUserMessage) {
-        setMessages((prev) => [...prev, pendingUserMessage]);
-      }
+      const pendingAssistantMessage: ConversationMessageState = {
+        id: tempAssistantId,
+        threadId: threadId || "",
+        role: "assistant",
+        content: "",
+        metadata: {},
+        createdAt: new Date(createdAtBase + 1),
+        isLoading: true,
+      };
+
+      setMessages((prev) => {
+        const next = [...prev];
+        if (pendingUserMessage) {
+          next.push(pendingUserMessage);
+        }
+        next.push(pendingAssistantMessage);
+        return next;
+      });
 
       setIsLoading(true);
       setError(null);
@@ -125,9 +147,9 @@ export function useConversation(): UseConversationReturn {
         }
 
         setMessages((prev) => {
-          const withoutTemp = tempId
-            ? prev.filter((msg) => msg.id !== tempId)
-            : prev;
+          const withoutTemp = prev.filter(
+            (msg) => msg.id !== tempUserId && msg.id !== tempAssistantId
+          );
           const nextMessages = [...withoutTemp];
 
           if (pendingUserMessage) {
@@ -155,15 +177,18 @@ export function useConversation(): UseConversationReturn {
         });
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
+          setMessages((prev) =>
+            prev.filter((msg) => msg.id !== tempUserId && msg.id !== tempAssistantId)
+          );
           return;
         }
 
         const nextError = err instanceof Error ? err : new Error("Unknown error");
         setError(nextError);
 
-        if (tempId) {
-          setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
-        }
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== tempUserId && msg.id !== tempAssistantId)
+        );
       } finally {
         setIsLoading(false);
         abortControllerRef.current = null;

@@ -309,11 +309,17 @@ export async function POST(req: NextRequest) {
       result.results?.columns || []
     );
 
+    const contextDependencies =
+      lastAssistant?.id && compositionStrategy !== COMPOSITION_STRATEGIES.FRESH
+        ? { count: 1, messageIds: [lastAssistant.id] }
+        : undefined;
+
     let assistantMetadata: MessageMetadata = {
       modelUsed: resolvedModelId,
       sql: result.sql,
       mode: result.mode,
       compositionStrategy,
+      contextDependencies,
       resultSummary: safeResultSummary,
       executionTimeMs,
     };

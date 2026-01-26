@@ -48,6 +48,10 @@ export interface MessageMetadata {
   sql?: string;
   mode?: "template" | "direct" | "funnel" | "clarification" | "conversation";
   compositionStrategy?: "cte" | "merged_where" | "fresh";
+  contextDependencies?: {
+    count: number;
+    messageIds: string[];
+  };
   queryHistoryId?: number;
   resultSummary?: ResultSummary;
   executionTimeMs?: number;

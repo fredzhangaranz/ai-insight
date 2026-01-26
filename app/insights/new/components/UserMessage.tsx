@@ -43,7 +43,7 @@ export function UserMessage({ message, onEdit }: UserMessageProps) {
   };
 
   return (
-    <div className="flex justify-end mb-6">
+    <div className="flex justify-end mb-6" id={`message-${message.id}`}>
       <div className="max-w-2xl">
         {isEditing ? (
           <div className="bg-blue-50 border-2 border-blue-300 rounded-2xl p-4">
