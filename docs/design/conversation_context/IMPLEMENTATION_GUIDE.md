@@ -39,6 +39,15 @@
 | Phase 6 Step 6.10| ✅ Complete | 2026-01-26   | Smart scroll & message grouping for long conversations                     |
 | Phase 6 Step 6.11| ✅ Complete | 2026-01-26   | Query composition strategy indicator (CTE/fresh/optimized)                |
 | Phase 6 Step 6.12| ✅ Complete | 2026-01-26   | SQL preview in thinking details with syntax highlighting                  |
+| Phase 7 Step 7.1 | ✅ Complete | 2026-01-26   | Rule-based suggestion generator service                                   |
+| Phase 7 Step 7.2 | ✅ Complete | 2026-01-26   | Refinement generator service                                              |
+| Phase 7 Step 7.3 | ✅ Complete | 2026-01-26   | SmartSuggestions UI + ConversationPanel wiring (rule-based)               |
+| Phase 7 Step 7.4 | ⏳ Pending  | —            | Background AI suggestion prompt + generator (post-release)                |
+| Phase 7 Step 7.5 | ⏳ Pending  | —            | Suggestions API endpoint (non-blocking, post-release)                     |
+| Phase 7 Step 7.6 | ⏳ Pending  | —            | SmartSuggestion type update (reasoning optional, post-release)            |
+| Phase 7 Step 7.7 | ⏳ Pending  | —            | SmartSuggestions UI for AI reasoning (post-release)                       |
+| Phase 7 Step 7.8 | ⏳ Pending  | —            | ConversationPanel background fetch (post-release)                         |
+| Phase 7 Step 7.9 | ⏳ Pending  | —            | Tests for AI suggestion parsing + UI (post-release)                       |
 
 ---
 
@@ -3455,269 +3464,89 @@ export function MessageActions({
 
 ---
 
-## Phase 7: Smart Suggestions
+## Phase 7: Smart Suggestions (Current: Rule-Based, Deferred: Background AI)
 
-### Step 7.1: Create Suggestion Generator Service
+### Current Implementation (Rule-Based)
+
+For the upcoming release, we ship rule-based suggestions derived from SQL and result metadata. This keeps the SQL provider contract unchanged and avoids any blocking changes.
+
+**Files:**
+- `lib/services/suggestion-generator.service.ts`
+- `lib/services/refinement-generator.service.ts`
+- `app/insights/new/components/SmartSuggestions.tsx`
+- `app/insights/new/components/ConversationPanel.tsx`
+
+#### Step 7.1: Rule-Based Suggestion Generator Service
 
 **File:** `lib/services/suggestion-generator.service.ts`
 
-```typescript
-import type { InsightResult } from "@/lib/hooks/useInsights";
-import type { SmartSuggestion } from "@/lib/types/conversation";
+- Detects aggregation/time/patient/wound patterns from SQL + columns.
+- Returns top 4 suggestions by confidence.
 
-/**
- * Generate smart follow-up suggestions based on query result
- */
-export function generateSmartSuggestions(
-  result?: InsightResult
-): SmartSuggestion[] {
-  if (!result || !result.results || !result.sql) {
-    return [];
-  }
-
-  const suggestions: SmartSuggestion[] = [];
-  const sql = result.sql;
-  const { columns, rows } = result.results;
-
-  // Analyze SQL to determine query characteristics
-  const hasAggregation = /COUNT|SUM|AVG|MAX|MIN/i.test(sql);
-  const hasGroupBy = /GROUP BY/i.test(sql);
-  const hasTimeColumn = columns.some((col) =>
-    /date|time|created|updated/i.test(col)
-  );
-  const hasPatientId = columns.some((col) => /patient/i.test(col));
-  const hasWoundData = columns.some((col) =>
-    /wound|area|depth|size/i.test(col)
-  );
-
-  // For aggregated results → suggest drill-down
-  if (hasAggregation && hasGroupBy && rows.length > 0) {
-    suggestions.push({
-      text: "Show me the individual records",
-      icon: "🔎",
-      category: "drill-down",
-      confidence: 0.9,
-    });
-  }
-
-  // For time-series data → suggest comparisons
-  if (hasTimeColumn) {
-    suggestions.push({
-      text: "Compare to previous period",
-      icon: "⚖️",
-      category: "comparison",
-      confidence: 0.85,
-    });
-
-    if (hasGroupBy) {
-      suggestions.push({
-        text: "Show monthly breakdown",
-        icon: "📊",
-        category: "trend",
-        confidence: 0.8,
-      });
-    }
-  }
-
-  // For patient lists → suggest analysis
-  if (hasPatientId && !hasAggregation && rows.length > 0) {
-    suggestions.push({
-      text: "Which ones are improving?",
-      icon: "📈",
-      category: "related",
-      confidence: 0.85,
-    });
-
-    suggestions.push({
-      text: "Group by clinic or location",
-      icon: "🏥",
-      category: "related",
-      confidence: 0.75,
-    });
-  }
-
-  // For wound data → suggest metrics
-  if (hasWoundData) {
-    suggestions.push({
-      text: "Show healing rates",
-      icon: "💊",
-      category: "related",
-      confidence: 0.8,
-    });
-
-    if (!hasAggregation && rows.length > 1) {
-      suggestions.push({
-        text: "Find outliers",
-        icon: "🎯",
-        category: "related",
-        confidence: 0.75,
-      });
-    }
-  }
-
-  // Sort by confidence and limit to top 4
-  return suggestions
-    .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
-    .slice(0, 4);
-}
-```
-
-### Step 7.2: Create Refinement Generator Service
+#### Step 7.2: Refinement Generator Service
 
 **File:** `lib/services/refinement-generator.service.ts`
 
-```typescript
-import type { InsightResult } from "@/lib/hooks/useInsights";
+- Generates refinement prompts (limit, time window, filters, sorting).
 
-/**
- * Generate context-aware refinement suggestions
- */
-export function generateRefinements(result?: InsightResult): string[] {
-  if (!result || !result.results || !result.sql) {
-    return [];
-  }
+#### Step 7.3: SmartSuggestions UI + Wiring
 
-  const refinements: string[] = [];
-  const sql = result.sql;
-  const rowCount = result.results.rows.length;
+**Files:** `app/insights/new/components/SmartSuggestions.tsx`, `app/insights/new/components/ConversationPanel.tsx`
 
-  // Always offer explanation
-  refinements.push("Explain what you found");
+- Displays follow-up suggestions and refinements.
+- Click fills input but does not auto-send.
 
-  // If many rows, suggest limiting
-  if (rowCount > 10) {
-    refinements.push("Show only top 10 results");
-  }
+---
 
-  if (rowCount > 50) {
-    refinements.push("Show only top 5 results");
-  }
+### Deferred (Post-Release): Background AI Suggestions
 
-  // If has time filter, suggest changing it
-  if (/DATEADD|DATEDIFF/i.test(sql)) {
-    if (!/MONTH.*6/i.test(sql)) {
-      refinements.push("Change to last 6 months");
-    }
-    if (!/YEAR.*1/i.test(sql)) {
-      refinements.push("Change to last year");
-    }
-    if (!/DAY.*30/i.test(sql)) {
-      refinements.push("Change to last 30 days");
-    }
-  }
+We will return to **Option 2 (background AI call)** after Phase 8 and deployment. This keeps main results instant while making AI suggestions a progressive enhancement.
 
-  // If excludes inactive, suggest including them
-  if (/isActive\s*=\s*1|isActive\s*=\s*true/i.test(sql)) {
-    refinements.push("Include inactive records too");
-  }
+#### Step 7.4: Suggestion Prompt + Generator (Background)
+- **File:** `lib/prompts/suggestion-generation.prompt.ts` (NEW)
+- AI returns `{ suggestions: [...] }` with optional reasoning.
 
-  // If limited columns (< 5), suggest adding more
-  if (result.results.columns.length < 5) {
-    refinements.push("Add more columns");
-  }
+#### Step 7.5: Suggestions API Endpoint (Non-Blocking)
+- **File:** `app/api/insights/conversation/suggestions/route.ts` (NEW)
+- Returns `{ suggestions: [] }` on failure (non-blocking).
 
-  // If no ORDER BY, suggest sorting
-  if (!/ORDER BY/i.test(sql)) {
-    refinements.push("Sort the results");
-  }
+#### Step 7.6: Update SmartSuggestion Type (Reasoning Optional)
+- **File:** `lib/types/conversation.ts`
+- `reasoning?: string`
 
-  // If has WHERE clause, suggest removing filters
-  if (/WHERE/i.test(sql)) {
-    refinements.push("Remove all filters");
-  }
+#### Step 7.7: SmartSuggestions UI for AI Reasoning
+- Render AI reasoning when present.
+- Keep rule-based fallback during rollout.
 
-  // Limit to 5 refinements
-  return refinements.slice(0, 5);
-}
-```
+#### Step 7.8: ConversationPanel Background Fetch
+- Fetch suggestions after assistant response.
+- Store by `messageId` and render when available.
 
-### Step 7.3: Create SmartSuggestions Component
+#### Step 7.9: Tests (Parsing + UI)
+- Verify parsing and UI render for AI suggestions.
 
-**File:** `app/insights/new/components/SmartSuggestions.tsx`
+---
 
-```typescript
-"use client";
+### Performance & Cost Impact (Current vs Deferred)
 
-import { useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { generateSmartSuggestions } from "@/lib/services/suggestion-generator.service";
-import { generateRefinements } from "@/lib/services/refinement-generator.service";
-import type { ConversationMessage } from "@/lib/types/conversation";
+| Metric | Rule-Based (Now) | Background AI (Deferred) |
+|--------|------------------|--------------------------|
+| API calls per response | 1 | 2 |
+| Token usage | 100% | ~110% |
+| Main response latency | 2.5s | 2.5s |
+| Suggestion quality | Low/medium | High |
 
-interface SmartSuggestionsProps {
-  lastMessage: ConversationMessage;
-  onSuggestionClick: (text: string) => void;
-}
+### Success Criteria (Current)
 
-export function SmartSuggestions({
-  lastMessage,
-  onSuggestionClick,
-}: SmartSuggestionsProps) {
-  const suggestions = useMemo(
-    () => generateSmartSuggestions(lastMessage.result),
-    [lastMessage.result]
-  );
+- [x] Rule-based suggestions appear after results
+- [x] Refinement suggestions appear when applicable
+- [x] Click fills input without auto-send
 
-  const refinements = useMemo(
-    () => generateRefinements(lastMessage.result),
-    [lastMessage.result]
-  );
+### Success Criteria (Deferred)
 
-  // Don't show if no suggestions
-  if (suggestions.length === 0 && refinements.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="space-y-4 my-6">
-      {/* Follow-up Suggestions */}
-      {suggestions.length > 0 && (
-        <div>
-          <p className="text-sm text-gray-600 mb-2 flex items-center gap-2">
-            💡 You might want to ask:
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((suggestion, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                onClick={() => onSuggestionClick(suggestion.text)}
-                className="text-left hover:bg-blue-50 hover:border-blue-300 transition-colors"
-              >
-                <span className="mr-2">{suggestion.icon}</span>
-                {suggestion.text}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Refinement Suggestions */}
-      {refinements.length > 0 && (
-        <div>
-          <p className="text-sm text-gray-600 mb-2 flex items-center gap-2">
-            ✨ Or refine the current result:
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {refinements.map((refinement, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="sm"
-                onClick={() => onSuggestionClick(refinement)}
-                className="text-left hover:bg-gray-100 transition-colors"
-              >
-                {refinement}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-```
+- [ ] Background AI suggestions appear when available
+- [ ] Main conversation flow unchanged if suggestions fail
+- [ ] Tests pass for AI suggestions parsing + UI
 
 ---
 

@@ -242,7 +242,12 @@ export function InsightResults({
           />
         )}
 
-        <ConversationPanel customerId={customerId} modelId={modelId} initialThreadId={threadId} />
+        <ConversationPanel
+          customerId={customerId}
+          modelId={modelId}
+          initialThreadId={threadId}
+          initialResult={result}
+        />
       </div>
 
       {/* Actions Panel - Save, Export, etc. */}

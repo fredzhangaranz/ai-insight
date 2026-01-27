@@ -7,17 +7,21 @@ import { useConversation } from "@/lib/hooks/useConversation";
 import { ConversationInput } from "./ConversationInput";
 import { UserMessage } from "./UserMessage";
 import { AssistantMessage } from "./AssistantMessage";
+import { SmartSuggestions } from "./SmartSuggestions";
+import type { InsightResult } from "@/lib/hooks/useInsights";
 
 interface ConversationPanelProps {
   customerId: string;
   modelId?: string;
   initialThreadId?: string; // From first question, to continue in same thread
+  initialResult?: InsightResult; // From initial question, for suggestions
 }
 
 export function ConversationPanel({
   customerId,
   modelId,
   initialThreadId,
+  initialResult,
 }: ConversationPanelProps) {
   const [input, setInput] = useState("");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -79,6 +83,16 @@ export function ConversationPanel({
     [sortedMessages]
   );
   const lastAssistantId = lastAssistantMessage?.id ?? null;
+  const lastAssistantWithResult = useMemo(
+    () =>
+      [...sortedMessages].reverse().find(
+        (message) =>
+          message.role === "assistant" && !message.isLoading && message.result
+      ),
+    [sortedMessages]
+  );
+  const suggestionResult = lastAssistantWithResult?.result ?? initialResult;
+  const showRefinements = Boolean(lastAssistantWithResult);
   const statusText = hasPriorAssistant
     ? "AI is analyzing your follow-up question..."
     : "AI is composing your insights...";
@@ -195,6 +209,14 @@ export function ConversationPanel({
         <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
           Ask a follow-up question to start a conversation.
         </div>
+      )}
+
+      {suggestionResult && !isLoading && (
+        <SmartSuggestions
+          result={suggestionResult}
+          showRefinements={showRefinements}
+          onSuggestionClick={(text) => setInput(text)}
+        />
       )}
 
       {isLoading && (

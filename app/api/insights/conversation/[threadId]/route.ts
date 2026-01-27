@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
 import { normalizeJson } from "@/lib/utils/normalize-json";
+import type { InsightResult } from "@/lib/hooks/useInsights";
 
 export async function GET(
   _req: NextRequest,
@@ -51,10 +52,30 @@ export async function GET(
         ...thread,
         contextCache: normalizeJson(thread.contextCache),
       },
-      messages: messagesResult.rows.map((row) => ({
-        ...row,
-        metadata: normalizeJson(row.metadata),
-      })),
+      messages: messagesResult.rows.map((row) => {
+        const metadata = normalizeJson(row.metadata);
+        const message: any = {
+          ...row,
+          metadata,
+        };
+
+        // Reconstruct InsightResult from metadata for assistant messages
+        if (row.role === "assistant" && metadata.sql) {
+          const result: InsightResult = {
+            mode: metadata.mode || "direct",
+            question: row.content,
+            thinking: [],
+            sql: metadata.sql,
+            results: {
+              rows: [],
+              columns: metadata.resultSummary?.columns || [],
+            },
+          };
+          message.result = result;
+        }
+
+        return message;
+      }),
     });
   } catch (error) {
     console.error("[GET /api/insights/conversation/:threadId] Error:", error);
