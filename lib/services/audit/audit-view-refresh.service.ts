@@ -8,6 +8,7 @@ const AUDIT_VIEWS = [
   "QueryPerformanceDaily",
   "QueryAuditExplorer",
   "QueryAuditDetail",
+  "ConversationQueryHistory",
 ] as const;
 
 async function refreshView(viewName: string): Promise<void> {

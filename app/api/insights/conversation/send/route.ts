@@ -24,6 +24,7 @@ import {
   SqlValidationAuditService,
   type LogSqlValidationInput,
 } from "@/lib/services/audit/sql-validation-audit.service";
+import { ConversationAuditService } from "@/lib/services/audit/conversation-audit.service";
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
 import type {
   ConversationMessage,
@@ -383,6 +384,16 @@ export async function POST(req: NextRequest) {
     const historySql =
       result.sql ||
       (result.error ? `-- Query failed: ${result.error.message}` : "");
+    const parentQueryHistoryId =
+      compositionStrategy !== COMPOSITION_STRATEGIES.FRESH &&
+      lastAssistant?.metadata?.queryHistoryId
+        ? Number(lastAssistant.metadata.queryHistoryId)
+        : undefined;
+    const normalizedParentQueryHistoryId =
+      typeof parentQueryHistoryId === "number" &&
+      Number.isFinite(parentQueryHistoryId)
+        ? parentQueryHistoryId
+        : undefined;
     const queryHistoryId = await logQueryHistory({
       question: question,
       customerId: customerId,
@@ -392,6 +403,10 @@ export async function POST(req: NextRequest) {
       resultCount: result.results?.rows.length || 0,
       sqlValidation: result.sqlValidation,
       semanticContext: { compositionStrategy },
+      threadId: currentThreadId,
+      messageId: assistantMessageId,
+      compositionStrategy,
+      parentQueryHistoryId: normalizedParentQueryHistoryId,
     });
 
     if (queryHistoryId) {
@@ -581,29 +596,25 @@ async function logQueryHistory(input: {
   resultCount: number;
   semanticContext?: Record<string, unknown>;
   sqlValidation?: SQLValidationResult;
+  threadId: string;
+  messageId: string;
+  compositionStrategy: CompositionStrategy;
+  parentQueryHistoryId?: number;
 }): Promise<number | null> {
   try {
-    const pool = await getInsightGenDbPool();
-    const result = await pool.query(
-      `
-      INSERT INTO "QueryHistory"
-        ("customerId", "userId", question, sql, mode, "resultCount", "semanticContext")
-      VALUES
-        ($1::uuid, $2, $3, $4, $5, $6, $7)
-      RETURNING id
-      `,
-      [
-        input.customerId,
-        input.userId,
-        input.question,
-        input.sql,
-        input.mode,
-        input.resultCount,
-        input.semanticContext ? JSON.stringify(input.semanticContext) : null,
-      ]
-    );
-
-    const queryHistoryId = result.rows[0]?.id as number | undefined;
+    const queryHistoryId = await ConversationAuditService.logConversationQuery({
+      threadId: input.threadId,
+      messageId: input.messageId,
+      question: input.question,
+      sql: input.sql,
+      customerId: input.customerId,
+      userId: input.userId,
+      mode: input.mode,
+      resultCount: input.resultCount,
+      compositionStrategy: input.compositionStrategy,
+      parentQueryHistoryId: input.parentQueryHistoryId,
+      semanticContext: input.semanticContext ?? null,
+    });
 
     if (queryHistoryId && input.sqlValidation) {
       const validationInput = buildSqlValidationAuditInput({

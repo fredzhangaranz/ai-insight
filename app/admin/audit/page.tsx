@@ -7,6 +7,7 @@ import { isAuditDashboardEnabled } from "@/lib/config/audit-flags";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/app/components/loading-dots";
+import { ConversationMetricsCard } from "./conversation-metrics";
 
 interface AuditSummary {
   totalQueries: number;
@@ -146,6 +147,8 @@ export default function AuditDashboardPage() {
               </CardContent>
             </Card>
           )}
+
+          {enabled && <ConversationMetricsCard />}
 
           {enabled && (
             <div className="grid gap-4 md:grid-cols-2">

@@ -10,44 +10,49 @@
 
 ## Implementation Status
 
-| Area             | Status      | Completed On | Notes                                                                     |
-| ---------------- | ----------- | ------------ | ------------------------------------------------------------------------- |
-| Phase 0          | ✅ Complete | 2026-01-14   | PHI protection, soft-delete, compatibility, canonical types, improvements |
-| Phase 1 Step 1.1 | ✅ Complete | 2026-01-15   | Migration already implemented in 046; docs aligned                        |
-| Phase 2 Step 2.1 | ✅ Complete | 2026-01-15   | Added conversation-aware provider interface                               |
-| Phase 2 Step 2.2 | ✅ Complete | 2026-01-15   | Claude prompt caching implementation                                      |
-| Phase 2 Step 2.3 | ✅ Complete | 2026-01-15   | Gemini context caching implementation                                     |
-| Phase 2 Step 2.4 | ✅ Complete | 2026-01-19   | Provider factory updated with conversation support and failover           |
-| Phase 3 Step 3.1 | ✅ Complete | 2026-01-20   | SqlComposerService implemented for composition decisions and validation   |
-| Phase 3 Step 3.2 | ✅ Complete | 2026-01-20   | SQL composition prompt examples added                                     |
-| Phase 4 Step 4.1 | ✅ Complete | 2026-01-20   | Conversation types defined (canonical types + metadata)                   |
-| Phase 4 Step 4.2 | ✅ Complete | 2026-01-20   | Conversation send endpoint with composition, audit, cache update          |
-| Phase 4 Step 4.3 | ✅ Complete | 2026-01-20   | Conversation thread fetch endpoint with normalized metadata               |
-| Phase 4 Step 4.4 | ✅ Complete | 2026-01-20   | Conversation thread creation endpoint                                     |
-| Phase 4 Step 4.5 | ✅ Complete | 2026-01-20   | Conversation history endpoint with pagination and previews                |
-| Phase 5 Step 5.1 | ✅ Complete | 2026-01-23   | useConversation hook for send/edit/load flows                             |
-| Phase 5 Step 5.2 | ✅ Complete | 2026-01-23   | Refinement generator service                                              |
-| Phase 6 Step 6.1 | ✅ Complete | 2026-01-23   | Conversation input component                                              |
-| Phase 6 Step 6.2 | ✅ Complete | 2026-01-23   | User message component                                                    |
-| Phase 6 Step 6.3 | ✅ Complete | 2026-01-23   | Assistant message component                                               |
-| Phase 6 Step 6.4 | ✅ Complete | 2026-01-23   | Results table component                                                   |
-| Phase 6 Step 6.5 | ✅ Complete | 2026-01-23   | Message actions component                                                 |
-| Phase 6 Step 6.6 | ✅ Complete | 2026-01-26   | Loading & thinking state for follow-ups, progressive display              |
-| Phase 6 Step 6.7 | ✅ Complete | 2026-01-26   | Expandable "How I got this" context section for follow-ups                 |
-| Phase 6 Step 6.8 | ✅ Complete | 2026-01-26   | Context awareness badge showing "Based on X answers"                       |
-| Phase 6 Step 6.9 | ✅ Complete | 2026-01-26   | Loading status in input area during AI processing                         |
-| Phase 6 Step 6.10| ✅ Complete | 2026-01-26   | Smart scroll & message grouping for long conversations                     |
-| Phase 6 Step 6.11| ✅ Complete | 2026-01-26   | Query composition strategy indicator (CTE/fresh/optimized)                |
-| Phase 6 Step 6.12| ✅ Complete | 2026-01-26   | SQL preview in thinking details with syntax highlighting                  |
-| Phase 7 Step 7.1 | ✅ Complete | 2026-01-26   | Rule-based suggestion generator service                                   |
-| Phase 7 Step 7.2 | ✅ Complete | 2026-01-26   | Refinement generator service                                              |
-| Phase 7 Step 7.3 | ✅ Complete | 2026-01-26   | SmartSuggestions UI + ConversationPanel wiring (rule-based)               |
-| Phase 7 Step 7.4 | ⏳ Pending  | —            | Background AI suggestion prompt + generator (post-release)                |
-| Phase 7 Step 7.5 | ⏳ Pending  | —            | Suggestions API endpoint (non-blocking, post-release)                     |
-| Phase 7 Step 7.6 | ⏳ Pending  | —            | SmartSuggestion type update (reasoning optional, post-release)            |
-| Phase 7 Step 7.7 | ⏳ Pending  | —            | SmartSuggestions UI for AI reasoning (post-release)                       |
-| Phase 7 Step 7.8 | ⏳ Pending  | —            | ConversationPanel background fetch (post-release)                         |
-| Phase 7 Step 7.9 | ⏳ Pending  | —            | Tests for AI suggestion parsing + UI (post-release)                       |
+| Area              | Status      | Completed On | Notes                                                                            |
+| ----------------- | ----------- | ------------ | -------------------------------------------------------------------------------- |
+| Phase 0           | ✅ Complete | 2026-01-14   | PHI protection, soft-delete, compatibility, canonical types, improvements        |
+| Phase 1 Step 1.1  | ✅ Complete | 2026-01-15   | Migration already implemented in 046; docs aligned                               |
+| Phase 2 Step 2.1  | ✅ Complete | 2026-01-15   | Added conversation-aware provider interface                                      |
+| Phase 2 Step 2.2  | ✅ Complete | 2026-01-15   | Claude prompt caching implementation                                             |
+| Phase 2 Step 2.3  | ✅ Complete | 2026-01-15   | Gemini context caching implementation                                            |
+| Phase 2 Step 2.4  | ✅ Complete | 2026-01-19   | Provider factory updated with conversation support and failover                  |
+| Phase 3 Step 3.1  | ✅ Complete | 2026-01-20   | SqlComposerService implemented for composition decisions and validation          |
+| Phase 3 Step 3.2  | ✅ Complete | 2026-01-20   | SQL composition prompt examples added                                            |
+| Phase 4 Step 4.1  | ✅ Complete | 2026-01-20   | Conversation types defined (canonical types + metadata)                          |
+| Phase 4 Step 4.2  | ✅ Complete | 2026-01-20   | Conversation send endpoint with composition, audit, cache update                 |
+| Phase 4 Step 4.3  | ✅ Complete | 2026-01-20   | Conversation thread fetch endpoint with normalized metadata                      |
+| Phase 4 Step 4.4  | ✅ Complete | 2026-01-20   | Conversation thread creation endpoint                                            |
+| Phase 4 Step 4.5  | ✅ Complete | 2026-01-20   | Conversation history endpoint with pagination and previews                       |
+| Phase 5 Step 5.1  | ✅ Complete | 2026-01-23   | useConversation hook for send/edit/load flows                                    |
+| Phase 5 Step 5.2  | ✅ Complete | 2026-01-23   | Refinement generator service                                                     |
+| Phase 6 Step 6.1  | ✅ Complete | 2026-01-23   | Conversation input component                                                     |
+| Phase 6 Step 6.2  | ✅ Complete | 2026-01-23   | User message component                                                           |
+| Phase 6 Step 6.3  | ✅ Complete | 2026-01-23   | Assistant message component                                                      |
+| Phase 6 Step 6.4  | ✅ Complete | 2026-01-23   | Results table component                                                          |
+| Phase 6 Step 6.5  | ✅ Complete | 2026-01-23   | Message actions component                                                        |
+| Phase 6 Step 6.6  | ✅ Complete | 2026-01-26   | Loading & thinking state for follow-ups, progressive display                     |
+| Phase 6 Step 6.7  | ✅ Complete | 2026-01-26   | Expandable "How I got this" context section for follow-ups                       |
+| Phase 6 Step 6.8  | ✅ Complete | 2026-01-26   | Context awareness badge showing "Based on X answers"                             |
+| Phase 6 Step 6.9  | ✅ Complete | 2026-01-26   | Loading status in input area during AI processing                                |
+| Phase 6 Step 6.10 | ✅ Complete | 2026-01-26   | Smart scroll & message grouping for long conversations                           |
+| Phase 6 Step 6.11 | ✅ Complete | 2026-01-26   | Query composition strategy indicator (CTE/fresh/optimized)                       |
+| Phase 6 Step 6.12 | ✅ Complete | 2026-01-26   | SQL preview in thinking details with syntax highlighting                         |
+| Phase 7 Step 7.1  | ✅ Complete | 2026-01-26   | Rule-based suggestion generator service                                          |
+| Phase 7 Step 7.2  | ✅ Complete | 2026-01-26   | Refinement generator service                                                     |
+| Phase 7 Step 7.3  | ✅ Complete | 2026-01-26   | SmartSuggestions UI + ConversationPanel wiring (rule-based)                      |
+| Phase 7 Step 7.4  | ⏳ Pending  | —            | Background AI suggestion prompt + generator (post-release)                       |
+| Phase 7 Step 7.5  | ⏳ Pending  | —            | Suggestions API endpoint (non-blocking, post-release)                            |
+| Phase 7 Step 7.6  | ⏳ Pending  | —            | SmartSuggestion type update (reasoning optional, post-release)                   |
+| Phase 7 Step 7.7  | ⏳ Pending  | —            | SmartSuggestions UI for AI reasoning (post-release)                              |
+| Phase 7 Step 7.8  | ⏳ Pending  | —            | ConversationPanel background fetch (post-release)                                |
+| Phase 7 Step 7.9  | ⏳ Pending  | —            | Tests for AI suggestion parsing + UI (post-release)                              |
+| Phase 8 Step 8.1  | ✅ Complete | 2026-02-02   | Migration 048: QueryHistory conversation columns + ConversationQueryHistory view |
+| Phase 8 Step 8.2  | ✅ Complete | 2026-02-02   | Migration run (manual)                                                           |
+| Phase 8 Step 8.3  | ✅ Complete | 2026-02-02   | ConversationAuditService (log/lineage/metrics/breakdown, view-only reads)        |
+| Phase 8 Step 8.4  | ✅ Complete | 2026-02-02   | Admin audit conversations API (feature guard, cache, requireAdmin)               |
+| Phase 8 Step 8.5  | ✅ Complete | 2026-02-02   | ConversationMetricsCard on audit dashboard (LoadingDots, error state)            |
 
 ---
 
@@ -67,8 +72,8 @@
 12. [Phase 9: Save Insight Integration](#phase-9-save-insight-integration)
 13. [Phase 10: Integration & Testing](#phase-10-integration--testing)
 14. [Phase 11: Migration & Rollout](#phase-11-migration--rollout)
-14. [Testing Checklist](#testing-checklist)
-15. [Troubleshooting](#troubleshooting)
+15. [Testing Checklist](#testing-checklist)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -206,7 +211,7 @@ export class PHIProtectionService {
    */
   createSafeResultSummary(
     rows: any[],
-    columns: string[]
+    columns: string[],
   ): {
     rowCount: number;
     columns: string[];
@@ -276,7 +281,7 @@ export class PHIProtectionService {
     if (phiFound.length > 0) {
       throw new Error(
         `PHI detected in metadata at: ${phiFound.join(", ")}. ` +
-          `HIPAA violation prevented. Remove PHI before storing.`
+          `HIPAA violation prevented. Remove PHI before storing.`,
       );
     }
   }
@@ -329,7 +334,7 @@ const phiProtection = new PHIProtectionService();
 // Create SAFE result summary (no PHI)
 const safeResultSummary = phiProtection.createSafeResultSummary(
   result.results?.rows || [],
-  result.results?.columns || []
+  result.results?.columns || [],
 );
 
 const assistantMetadata = {
@@ -354,7 +359,7 @@ const assistantMsgResult = await pool.query(
     currentThreadId,
     generateResponseText(result),
     JSON.stringify(assistantMetadata),
-  ]
+  ],
 );
 ```
 
@@ -459,7 +464,7 @@ import { pool } from "@/lib/db";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { messageId: string } }
+  { params }: { params: { messageId: string } },
 ) {
   const session = await getServerSession(authOptions);
 
@@ -475,14 +480,14 @@ export async function PATCH(
     if (!newContent?.trim()) {
       return NextResponse.json(
         { error: "newContent is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // 1. Load original message
     const originalMsg = await pool.query(
       `SELECT * FROM "ConversationMessages" WHERE id = $1`,
-      [messageId]
+      [messageId],
     );
 
     if (originalMsg.rows.length === 0) {
@@ -496,7 +501,7 @@ export async function PATCH(
       `UPDATE "ConversationMessages" 
        SET "deletedAt" = NOW() 
        WHERE id = $1`,
-      [messageId]
+      [messageId],
     );
 
     // 3. Soft-delete all subsequent messages in this thread
@@ -506,7 +511,7 @@ export async function PATCH(
        WHERE "threadId" = $1 
          AND "createdAt" > $2
          AND "deletedAt" IS NULL`,
-      [original.threadId, original.createdAt]
+      [original.threadId, original.createdAt],
     );
 
     // 4. Create new user message
@@ -519,7 +524,7 @@ export async function PATCH(
         original.threadId,
         newContent,
         JSON.stringify({ wasEdited: true, editedAt: new Date() }),
-      ]
+      ],
     );
 
     // 5. Link old message to new one
@@ -527,7 +532,7 @@ export async function PATCH(
       `UPDATE "ConversationMessages" 
        SET "supersededByMessageId" = $1 
        WHERE id = $2`,
-      [newUserMsg.rows[0].id, messageId]
+      [newUserMsg.rows[0].id, messageId],
     );
 
     // 6. Re-run query with new content
@@ -543,7 +548,7 @@ export async function PATCH(
     console.error("[PATCH /messages/:id] Error:", error);
     return NextResponse.json(
       { error: "Failed to edit message" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -560,7 +565,7 @@ const messagesResult = await pool.query(
    WHERE "threadId" = $1 
      AND "deletedAt" IS NULL  -- ← Only active messages
    ORDER BY "createdAt" ASC`,
-  [threadId]
+  [threadId],
 );
 ```
 
@@ -608,7 +613,7 @@ export class SaveInsightService {
     messageId: string,
     customerId: string,
     userId: number,
-    userTitle?: string
+    userTitle?: string,
   ): Promise<SavedInsight> {
     // ... existing code ...
 
@@ -620,7 +625,7 @@ export class SaveInsightService {
       VALUES ($1, $2, $3, $4, true, $5, $6)
       RETURNING *
     `,
-      [title, finalSql, customerId, userId, threadId, messageId]
+      [title, finalSql, customerId, userId, threadId, messageId],
     );
 
     return result.rows[0];
@@ -1051,7 +1056,7 @@ export interface BaseProvider {
 
   // NEW: Conversation-aware completion with caching
   completeWithConversation(
-    params: ConversationCompletionParams
+    params: ConversationCompletionParams,
   ): Promise<string>;
 
   // NEW: Build conversation history prompt
@@ -1085,7 +1090,7 @@ export class ClaudeProvider implements BaseProvider {
    * Caches: schema, ontology, SQL instructions (90% savings)
    */
   async completeWithConversation(
-    params: ConversationCompletionParams
+    params: ConversationCompletionParams,
   ): Promise<string> {
     // Build system prompt with caching
     const systemPrompt = [
@@ -1108,7 +1113,7 @@ export class ClaudeProvider implements BaseProvider {
 
     // Build conversation history (NOT cached - changes each message)
     const conversationPrompt = this.buildConversationHistory(
-      params.conversationHistory
+      params.conversationHistory,
     );
 
     const fullPrompt =
@@ -1215,7 +1220,7 @@ export class GeminiProvider implements BaseProvider {
   }
 
   async completeWithConversation(
-    params: ConversationCompletionParams
+    params: ConversationCompletionParams,
   ): Promise<string> {
     // Get or create cached content
     const cacheKey = await this.getCacheKey(params.customerId);
@@ -1225,7 +1230,7 @@ export class GeminiProvider implements BaseProvider {
       // First time: Create cached content
       cachedContent = await this.createCachedContent(
         cacheKey,
-        params.customerId
+        params.customerId,
       );
     }
 
@@ -1237,7 +1242,7 @@ export class GeminiProvider implements BaseProvider {
 
     // Build conversation prompt
     const conversationPrompt = this.buildConversationHistory(
-      params.conversationHistory
+      params.conversationHistory,
     );
 
     const fullPrompt =
@@ -1277,7 +1282,7 @@ export class GeminiProvider implements BaseProvider {
       `gemini:cache:${cacheKey}`,
       cachedContent.name,
       "EX",
-      3600 // 1 hour TTL
+      3600, // 1 hour TTL
     );
 
     return cachedContent;
@@ -1317,6 +1322,7 @@ export class GeminiProvider implements BaseProvider {
 **Actual Implementation:** `lib/ai/providers/provider-factory.ts`
 
 The actual implementation exceeds the reference design with:
+
 - ✅ Model-based provider selection (not just string matching)
 - ✅ Provider health checks and automatic failover
 - ✅ Graceful degradation when primary provider unavailable
@@ -1389,6 +1395,7 @@ All Phase 2 steps have been implemented:
 - [ ] **Step 2.5:** Performance testing (pending integration testing)
 
 **Key Achievements:**
+
 - ✅ Both Claude and Gemini providers support `completeWithConversation()` with native caching
 - ✅ Token usage logging with cache efficiency metrics implemented
 - ✅ Provider factory includes health checks and automatic failover
@@ -1442,12 +1449,12 @@ export class SqlComposerService {
     currentQuestion: string,
     previousQuestion: string,
     previousSql: string,
-    provider: BaseProvider
+    provider: BaseProvider,
   ): Promise<CompositionDecision> {
     const prompt = this.buildCompositionDecisionPrompt(
       previousQuestion,
       currentQuestion,
-      previousSql
+      previousSql,
     );
 
     try {
@@ -1462,7 +1469,7 @@ export class SqlComposerService {
     } catch (error) {
       console.error(
         "[SqlComposerService] Failed to determine composition:",
-        error
+        error,
       );
       // Fallback: assume fresh query on error
       return {
@@ -1480,7 +1487,7 @@ export class SqlComposerService {
   private buildCompositionDecisionPrompt(
     previousQuestion: string,
     currentQuestion: string,
-    previousSql: string
+    previousSql: string,
   ): string {
     return `
 You are analyzing a conversation about healthcare data to determine query relationships.
@@ -1550,7 +1557,7 @@ Return ONLY a valid JSON object. No markdown, no explanations outside JSON.`;
     // Validate response structure
     if (typeof parsed.shouldCompose !== "boolean") {
       throw new Error(
-        "Invalid composition decision: missing shouldCompose boolean"
+        "Invalid composition decision: missing shouldCompose boolean",
       );
     }
 
@@ -1569,12 +1576,12 @@ Return ONLY a valid JSON object. No markdown, no explanations outside JSON.`;
     previousSql: string,
     previousQuestion: string,
     currentQuestion: string,
-    provider: BaseProvider
+    provider: BaseProvider,
   ): Promise<ComposedQuery> {
     const prompt = this.buildCompositionPrompt(
       previousSql,
       previousQuestion,
-      currentQuestion
+      currentQuestion,
     );
 
     const response = await provider.complete({
@@ -1592,7 +1599,7 @@ Return ONLY a valid JSON object. No markdown, no explanations outside JSON.`;
   private buildCompositionPrompt(
     previousSql: string,
     previousQuestion: string,
-    currentQuestion: string
+    currentQuestion: string,
   ): string {
     return `
 Previous question: "${previousQuestion}"
@@ -1886,7 +1893,7 @@ export async function POST(req: NextRequest) {
     if (!customerId || !question?.trim()) {
       return NextResponse.json(
         { error: "customerId and question are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -1900,7 +1907,7 @@ export async function POST(req: NextRequest) {
          ("userId", "customerId", "title", "contextCache") 
          VALUES ($1, $2, $3, $4) 
          RETURNING id`,
-        [userId, customerId, question.slice(0, 100), JSON.stringify({})]
+        [userId, customerId, question.slice(0, 100), JSON.stringify({})],
       );
       currentThreadId = result.rows[0].id;
     } else {
@@ -1908,13 +1915,13 @@ export async function POST(req: NextRequest) {
       const result = await pool.query(
         `SELECT id FROM "ConversationThreads" 
          WHERE id = $1 AND "userId" = $2`,
-        [currentThreadId, userId]
+        [currentThreadId, userId],
       );
 
       if (result.rows.length === 0) {
         return NextResponse.json(
           { error: "Thread not found or access denied" },
-          { status: 404 }
+          { status: 404 },
         );
       }
     }
@@ -1925,7 +1932,7 @@ export async function POST(req: NextRequest) {
        ("threadId", "role", "content", "metadata") 
        VALUES ($1, 'user', $2, $3) 
        RETURNING id, "createdAt"`,
-      [currentThreadId, question, JSON.stringify({})]
+      [currentThreadId, question, JSON.stringify({})],
     );
 
     const userMessageId = userMsgResult.rows[0].id;
@@ -1949,14 +1956,14 @@ export async function POST(req: NextRequest) {
         question,
         lastMessage.content,
         lastMessage.metadata.sql,
-        provider
+        provider,
       );
 
       console.log(
         `[Composition Decision] ${
           compositionDecision.shouldCompose ? "COMPOSE" : "FRESH"
         } ` +
-          `(confidence: ${compositionDecision.confidence}): ${compositionDecision.reasoning}`
+          `(confidence: ${compositionDecision.confidence}): ${compositionDecision.reasoning}`,
       );
     }
 
@@ -1970,7 +1977,7 @@ export async function POST(req: NextRequest) {
         lastMessage.metadata.sql,
         lastMessage.content,
         question,
-        provider
+        provider,
       );
 
       compositionStrategy = composed.strategy;
@@ -2004,7 +2011,7 @@ export async function POST(req: NextRequest) {
       result = await orchestrator.executeSQLFromLLM(
         sqlResponse,
         customerId,
-        question
+        question,
       );
     }
 
@@ -2032,7 +2039,7 @@ export async function POST(req: NextRequest) {
         currentThreadId,
         generateResponseText(result),
         JSON.stringify(assistantMetadata),
-      ]
+      ],
     );
 
     // Step 6: Log to audit trail
@@ -2056,7 +2063,7 @@ export async function POST(req: NextRequest) {
       `UPDATE "ConversationMessages" 
        SET metadata = $1 
        WHERE id = $2`,
-      [JSON.stringify(assistantMetadata), assistantMsgResult.rows[0].id]
+      [JSON.stringify(assistantMetadata), assistantMsgResult.rows[0].id],
     );
 
     // Step 7: Update context cache
@@ -2084,7 +2091,7 @@ export async function POST(req: NextRequest) {
         error: "Failed to send message",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -2093,14 +2100,14 @@ export async function POST(req: NextRequest) {
  * Load conversation history from database
  */
 async function loadConversationHistory(
-  threadId: string
+  threadId: string,
 ): Promise<ConversationMessage[]> {
   const result = await pool.query(
     `SELECT id, role, content, metadata, "createdAt"
      FROM "ConversationMessages" 
      WHERE "threadId" = $1 
      ORDER BY "createdAt" ASC`,
-    [threadId]
+    [threadId],
   );
 
   return result.rows.map((row) => ({
@@ -2130,7 +2137,7 @@ async function updateContextCache(threadId: string, result: any) {
     `UPDATE "ConversationThreads" 
      SET "contextCache" = $1 
      WHERE id = $2`,
-    [JSON.stringify(contextCache), threadId]
+    [JSON.stringify(contextCache), threadId],
   );
 }
 
@@ -2172,7 +2179,7 @@ import { pool } from "@/lib/db";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { threadId: string } }
+  { params }: { params: { threadId: string } },
 ) {
   const session = await getServerSession(authOptions);
 
@@ -2188,7 +2195,7 @@ export async function GET(
     const threadResult = await pool.query(
       `SELECT * FROM "ConversationThreads" 
        WHERE id = $1 AND "userId" = $2`,
-      [threadId, userId]
+      [threadId, userId],
     );
 
     if (threadResult.rows.length === 0) {
@@ -2202,7 +2209,7 @@ export async function GET(
       `SELECT * FROM "ConversationMessages" 
        WHERE "threadId" = $1 
        ORDER BY "createdAt" ASC`,
-      [threadId]
+      [threadId],
     );
 
     const messages = messagesResult.rows.map((row) => ({
@@ -2231,7 +2238,7 @@ export async function GET(
     console.error("[/api/insights/conversation/:threadId] Error:", error);
     return NextResponse.json(
       { error: "Failed to load conversation" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -2261,7 +2268,7 @@ export async function POST(req: NextRequest) {
     if (!customerId) {
       return NextResponse.json(
         { error: "customerId is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -2272,7 +2279,7 @@ export async function POST(req: NextRequest) {
        ("userId", "customerId", "title", "contextCache") 
        VALUES ($1, $2, $3, $4) 
        RETURNING id, "createdAt"`,
-      [userId, customerId, title || null, JSON.stringify({})]
+      [userId, customerId, title || null, JSON.stringify({})],
     );
 
     return NextResponse.json({
@@ -2283,7 +2290,7 @@ export async function POST(req: NextRequest) {
     console.error("[/api/insights/conversation/new] Error:", error);
     return NextResponse.json(
       { error: "Failed to create conversation" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -2361,7 +2368,7 @@ export async function GET(req: NextRequest) {
        FROM "ConversationThreads" 
        WHERE "userId" = $1 AND "isActive" = true
        ${customerId ? 'AND "customerId" = $2' : ""}`,
-      customerId ? [userId, customerId] : [userId]
+      customerId ? [userId, customerId] : [userId],
     );
 
     return NextResponse.json({
@@ -2380,7 +2387,7 @@ export async function GET(req: NextRequest) {
     console.error("[/api/insights/conversation/history] Error:", error);
     return NextResponse.json(
       { error: "Failed to load history" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -2409,7 +2416,7 @@ interface UseConversationReturn {
   sendMessage: (
     question: string,
     customerId: string,
-    modelId?: string
+    modelId?: string,
   ) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   startNewConversation: () => void;
@@ -2503,7 +2510,7 @@ export function useConversation(): UseConversationReturn {
         abortControllerRef.current = null;
       }
     },
-    [threadId]
+    [threadId],
   );
 
   /**
@@ -2521,7 +2528,7 @@ export function useConversation(): UseConversationReturn {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ newContent }),
-          }
+          },
         );
 
         if (!response.ok) {
@@ -2548,7 +2555,7 @@ export function useConversation(): UseConversationReturn {
         setIsLoading(false);
       }
     },
-    []
+    [],
   );
 
   /**
@@ -2569,7 +2576,7 @@ export function useConversation(): UseConversationReturn {
 
     try {
       const response = await fetch(
-        `/api/insights/conversation/${loadThreadId}`
+        `/api/insights/conversation/${loadThreadId}`,
       );
 
       if (!response.ok) {
@@ -3102,6 +3109,7 @@ export function MessageActions({
 **Goal:** Show real-time progress indication for follow-up questions, maintaining UX parity with initial questions.
 
 **Acceptance Criteria:**
+
 - ✅ AI loading state displays immediately when processing follow-up question
 - ✅ Animated indicator shows "AI is thinking..." with spinner
 - ✅ Thinking steps stream in real-time and display progressively
@@ -3124,6 +3132,7 @@ export function MessageActions({
    - This allows thinking to render progressively as steps arrive
 
 3. **Loading state visualization:**
+
    ```typescript
    // When isLoading && !message.result?.thinking yet:
    // Show: "🤔 AI is analyzing your follow-up..."
@@ -3146,6 +3155,7 @@ export function MessageActions({
 **Goal:** Let users discover reasoning details for follow-up questions without cluttering initial view.
 
 **Acceptance Criteria:**
+
 - ✅ Expandable section appears below AI message in follow-ups
 - ✅ Header shows: "How I got this answer (X steps, Y.Zs)"
 - ✅ Default collapsed state for follow-ups; expanded for first question
@@ -3160,6 +3170,7 @@ export function MessageActions({
 **Implementation Notes:**
 
 1. **Modify component structure:**
+
    ```
    AssistantMessage
    ├── AI avatar + message content + timestamp
@@ -3194,6 +3205,7 @@ export function MessageActions({
 **Goal:** Show users at a glance whether answer builds on previous context or is independent.
 
 **Acceptance Criteria:**
+
 - ✅ Badge displays next to or below AI avatar
 - ✅ Shows: "Based on X previous answers" or "New question"
 - ✅ Visual color coding: teal/blue for context-aware, neutral gray for fresh
@@ -3212,6 +3224,7 @@ export function MessageActions({
    - AI composer service already tracks this internally; expose via API
 
 2. **Component placement:**
+
    ```
    ┌─────────────────────────────────┐
    │ AI │ Message content             │
@@ -3239,6 +3252,7 @@ export function MessageActions({
 **Goal:** Provide user feedback that AI is processing follow-up, especially on slower networks.
 
 **Acceptance Criteria:**
+
 - ✅ Status message appears above input when AI is responding
 - ✅ Shows: "⏳ AI is analyzing your follow-up..." with spinner
 - ✅ Disappears when response arrives or on error
@@ -3257,10 +3271,11 @@ export function MessageActions({
    - Keep same styling as error messages (subtle pill)
 
 2. **Status message content:**
+
    ```
    When first request:
    "✨ AI is composing your insights..."
-   
+
    When follow-up:
    "⏳ AI is analyzing your follow-up question..." (with spinner)
    ```
@@ -3286,6 +3301,7 @@ export function MessageActions({
 **Goal:** Help users navigate long conversations and understand message flow.
 
 **Acceptance Criteria:**
+
 - ✅ Auto-scroll to new assistant message when it arrives
 - ✅ Scroll only triggers for follow-ups (not cluttering on first message)
 - ✅ Smart scroll: keeps prior thinking visible if user was reading
@@ -3299,15 +3315,17 @@ export function MessageActions({
 **Implementation Notes:**
 
 1. **Smart auto-scroll logic:**
+
    ```typescript
    useEffect(() => {
-     if (!isLoading && messages.length > 2) { // Only on follow-ups
+     if (!isLoading && messages.length > 2) {
+       // Only on follow-ups
        const lastMessage = messages[messages.length - 1];
        if (lastMessage?.role === "assistant") {
          // Scroll to last assistant message
-         lastAssistantRef.current?.scrollIntoView({ 
-           behavior: "smooth", 
-           block: "center" // Keep some context above
+         lastAssistantRef.current?.scrollIntoView({
+           behavior: "smooth",
+           block: "center", // Keep some context above
          });
        }
      }
@@ -3348,6 +3366,7 @@ export function MessageActions({
 **Goal:** Provide transparency on how follow-up query was constructed (CTE, fresh, optimized).
 
 **Acceptance Criteria:**
+
 - ✅ Small indicator shows query strategy: "📎 Built on previous result (CTE)" or "✨ Fresh query"
 - ✅ Located in thinking section or message footer
 - ✅ Clickable to see SQL preview (next step)
@@ -3366,6 +3385,7 @@ export function MessageActions({
    - Store in `message.metadata.compositionStrategy`
 
 2. **Visual indicator placement:**
+
    ```
    ┌─────────────────────────────┐
    │ AI │ Message                 │
@@ -3381,12 +3401,13 @@ export function MessageActions({
    - `optimized`: "⚡ Optimized version of previous" → purple badge
 
 4. **Tooltip content:**
+
    ```
-   CTE: "This query combines your previous results using a database CTE. 
+   CTE: "This query combines your previous results using a database CTE.
          No data stored, always fresh results."
-   
+
    Fresh: "This query is independent and doesn't rely on previous results."
-   
+
    Optimized: "This query reuses the structure of your previous query
               but with new filters or refinements."
    ```
@@ -3402,6 +3423,7 @@ export function MessageActions({
 **Goal:** Let users verify AI correctly understood their question and generated appropriate SQL.
 
 **Acceptance Criteria:**
+
 - ✅ SQL appears in expandable section within "How I got this"
 - ✅ Code-highlighted SQL with syntax colors
 - ✅ Copy button for easy sharing/testing
@@ -3415,6 +3437,7 @@ export function MessageActions({
 **Implementation Notes:**
 
 1. **Component structure:**
+
    ```
    SQLPreview
    ├── Header: "Generated SQL"
@@ -3432,20 +3455,27 @@ export function MessageActions({
    - Use existing highlight library (check package.json for suggestions)
    - Or simple CSS for keyword coloring:
      ```css
-     .sql-keyword { color: #d73a49; font-weight: bold; }
-     .sql-identifier { color: #24292e; }
-     .sql-string { color: #032f62; }
+     .sql-keyword {
+       color: #d73a49;
+       font-weight: bold;
+     }
+     .sql-identifier {
+       color: #24292e;
+     }
+     .sql-string {
+       color: #032f62;
+     }
      ```
 
 4. **CTE-specific rendering:**
+
    ```typescript
-   if (compositionStrategy === 'cte') {
+   if (compositionStrategy === "cte") {
      // Show:
      // WITH previous_result AS (
      //   SELECT ... FROM ...
      // )
      // SELECT ... FROM previous_result ...
-     
      // Add annotations:
      // "↓ Previous result"
      // "↓ Main query that builds on it"
@@ -3471,6 +3501,7 @@ export function MessageActions({
 For the upcoming release, we ship rule-based suggestions derived from SQL and result metadata. This keeps the SQL provider contract unchanged and avoids any blocking changes.
 
 **Files:**
+
 - `lib/services/suggestion-generator.service.ts`
 - `lib/services/refinement-generator.service.ts`
 - `app/insights/new/components/SmartSuggestions.tsx`
@@ -3503,38 +3534,44 @@ For the upcoming release, we ship rule-based suggestions derived from SQL and re
 We will return to **Option 2 (background AI call)** after Phase 8 and deployment. This keeps main results instant while making AI suggestions a progressive enhancement.
 
 #### Step 7.4: Suggestion Prompt + Generator (Background)
+
 - **File:** `lib/prompts/suggestion-generation.prompt.ts` (NEW)
 - AI returns `{ suggestions: [...] }` with optional reasoning.
 
 #### Step 7.5: Suggestions API Endpoint (Non-Blocking)
+
 - **File:** `app/api/insights/conversation/suggestions/route.ts` (NEW)
 - Returns `{ suggestions: [] }` on failure (non-blocking).
 
 #### Step 7.6: Update SmartSuggestion Type (Reasoning Optional)
+
 - **File:** `lib/types/conversation.ts`
 - `reasoning?: string`
 
 #### Step 7.7: SmartSuggestions UI for AI Reasoning
+
 - Render AI reasoning when present.
 - Keep rule-based fallback during rollout.
 
 #### Step 7.8: ConversationPanel Background Fetch
+
 - Fetch suggestions after assistant response.
 - Store by `messageId` and render when available.
 
 #### Step 7.9: Tests (Parsing + UI)
+
 - Verify parsing and UI render for AI suggestions.
 
 ---
 
 ### Performance & Cost Impact (Current vs Deferred)
 
-| Metric | Rule-Based (Now) | Background AI (Deferred) |
-|--------|------------------|--------------------------|
-| API calls per response | 1 | 2 |
-| Token usage | 100% | ~110% |
-| Main response latency | 2.5s | 2.5s |
-| Suggestion quality | Low/medium | High |
+| Metric                 | Rule-Based (Now) | Background AI (Deferred) |
+| ---------------------- | ---------------- | ------------------------ |
+| API calls per response | 1                | 2                        |
+| Token usage            | 100%             | ~110%                    |
+| Main response latency  | 2.5s             | 2.5s                     |
+| Suggestion quality     | Low/medium       | High                     |
 
 ### Success Criteria (Current)
 
@@ -3558,12 +3595,12 @@ This phase extends the existing QueryHistory table to track conversation lineage
 
 ### Step 8.1: Create Audit Migration
 
-**File:** `database/migration/046_conversation_audit_tracking.sql`
+**File:** `database/migration/048_conversation_audit_tracking.sql`
 
 ```sql
--- Migration 046: Add conversation tracking to QueryHistory
--- Purpose: Track SQL composition lineage and conversation context
--- Dependencies: 030_create_conversation_tables.sql, existing QueryHistory
+-- Migration 048: Add conversation audit tracking to QueryHistory
+-- Purpose: Track conversation lineage and composition strategies
+-- Dependencies: 023_create_query_history.sql, 046_create_conversation_tables.sql
 
 BEGIN;
 
@@ -3581,6 +3618,9 @@ ADD COLUMN IF NOT EXISTS "parentQueryId" INTEGER
 -- Indexes for conversation lineage queries
 CREATE INDEX IF NOT EXISTS idx_query_history_conversation_thread
 ON "QueryHistory" ("conversationThreadId", "createdAt" DESC);
+
+CREATE INDEX IF NOT EXISTS idx_query_history_conversation_message
+ON "QueryHistory" ("conversationMessageId");
 
 CREATE INDEX IF NOT EXISTS idx_query_history_parent_query
 ON "QueryHistory" ("parentQueryId");
@@ -3605,6 +3645,34 @@ IS 'How SQL was composed: cte, merged_where, or fresh';
 COMMENT ON COLUMN "QueryHistory"."parentQueryId"
 IS 'References previous query in conversation chain';
 
+-- Conversation-only audit view (materialized). Audit reads use this view
+-- (enforced by audit-query-guard); refreshed by audit-view-refresh.service.
+CREATE MATERIALIZED VIEW IF NOT EXISTS "ConversationQueryHistory" AS
+SELECT
+  qh.id,
+  qh."conversationThreadId",
+  qh."conversationMessageId",
+  qh."parentQueryId",
+  qh."isComposedQuery",
+  qh."compositionStrategy",
+  qh.question,
+  qh.sql,
+  qh."resultCount",
+  qh."customerId",
+  qh."userId",
+  qh."createdAt"
+FROM "QueryHistory" qh
+WHERE qh."conversationThreadId" IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_query_history_unique
+  ON "ConversationQueryHistory"(id);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_query_history_thread
+  ON "ConversationQueryHistory"("conversationThreadId", "createdAt" DESC);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_query_history_parent
+  ON "ConversationQueryHistory"("parentQueryId");
+
 COMMIT;
 ```
 
@@ -3617,16 +3685,19 @@ npm run migrate
 **Expected Output:**
 
 ```
-Running migration: 046_conversation_audit_tracking.sql
+Running migration: 048_conversation_audit_tracking.sql
 ✓ Added columns to QueryHistory
 ✓ Created indexes
 ✓ Added comments
+✓ Created materialized view ConversationQueryHistory
 Migration completed successfully
 ```
 
 ### Step 8.3: Create Conversation Audit Service
 
-**File:** `lib/services/conversation-audit.service.ts`
+**File:** `lib/services/audit/conversation-audit.service.ts`
+
+The implemented service reads from the materialized view **ConversationQueryHistory** (not the raw `QueryHistory` table) for all read operations; `audit-query-guard` enforces view-only access. Writes (log) insert into `QueryHistory`.
 
 ```typescript
 import { pool } from "@/lib/db";
@@ -3666,7 +3737,7 @@ export class ConversationAuditService {
    * Log query with conversation context
    */
   async logConversationQuery(
-    params: ConversationQueryLogParams
+    params: ConversationQueryLogParams,
   ): Promise<number> {
     const result = await pool.query(
       `
@@ -3701,7 +3772,7 @@ export class ConversationAuditService {
         params.parentQueryHistoryId || null,
         params.resultCount,
         params.executionTimeMs,
-      ]
+      ],
     );
 
     return result.rows[0].id;
@@ -3752,7 +3823,7 @@ export class ConversationAuditService {
       FROM lineage 
       ORDER BY path
     `,
-      [threadId]
+      [threadId],
     );
 
     return result.rows;
@@ -3763,7 +3834,7 @@ export class ConversationAuditService {
    */
   async getConversationMetrics(
     startDate: Date,
-    endDate: Date
+    endDate: Date,
   ): Promise<ConversationMetrics> {
     const result = await pool.query(
       `
@@ -3783,7 +3854,7 @@ export class ConversationAuditService {
         GROUP BY "conversationThreadId"
       ) thread_stats
     `,
-      [startDate, endDate]
+      [startDate, endDate],
     );
 
     return result.rows[0];
@@ -3806,7 +3877,7 @@ export class ConversationAuditService {
       GROUP BY "compositionStrategy"
       ORDER BY count DESC
     `,
-      [startDate, endDate]
+      [startDate, endDate],
     );
 
     return result.rows;
@@ -3850,7 +3921,7 @@ export async function GET(req: NextRequest) {
 
   // Metrics overview
   const startDate = new Date(
-    searchParams.get("startDate") || Date.now() - 7 * 24 * 60 * 60 * 1000
+    searchParams.get("startDate") || Date.now() - 7 * 24 * 60 * 60 * 1000,
   );
   const endDate = new Date(searchParams.get("endDate") || Date.now());
 
@@ -3949,6 +4020,23 @@ export function ConversationMetricsCard() {
 }
 ```
 
+### Phase 8 Code Review (2026-02-02)
+
+**Taste:** 🟢 Good
+
+- Migration 048 uses a **materialized view** `ConversationQueryHistory` for audit reads (not in original guide); aligns with existing audit pattern and query guard.
+- **Audit query guard** enforces view-only reads (`ConversationQueryHistory` allowed, `QueryHistory` forbidden); tests cover ConversationQueryHistory and readonly list.
+- **Conversation send** wires `ConversationAuditService.logConversationQuery` via `logQueryHistory` with thread/message/composition/parent; fire-and-forget on failure preserves request flow.
+- **API** uses `requireAdmin`, `ensureAuditDashboardEnabled`, and `getAuditCache`; date validation and cache key by period; 400/500 handled.
+- **UI** uses `LoadingDots`, error state, and typed response; card fits existing audit dashboard layout.
+
+**Fatal flaws:** None. No raw `QueryHistory` in audit read paths; write path is single INSERT; defaults and error handling are consistent.
+
+**Direction for improvement**
+
+- **Optional:** Consider adding a short comment in `conversation-audit.service.ts` that `ConversationQueryHistory` is refreshed by `audit-view-refresh.service` so readers know why reads are view-based.
+- **ConversationMetricsCard:** Remove or gate the `console.log` in the audit page’s feature-flag check for production (or use a debug-only logger).
+
 ---
 
 ## Phase 9: Save Insight Integration
@@ -4019,14 +4107,14 @@ export class SaveInsightService {
     messageId: string,
     customerId: string,
     userId: number,
-    userTitle?: string
+    userTitle?: string,
   ): Promise<SavedInsight> {
     // Load the specific message
     const messageResult = await pool.query(
       `SELECT content, metadata 
        FROM "ConversationMessages" 
        WHERE id = $1 AND "threadId" = $2`,
-      [messageId, threadId]
+      [messageId, threadId],
     );
 
     if (messageResult.rows.length === 0) {
@@ -4054,7 +4142,7 @@ export class SaveInsightService {
       VALUES ($1, $2, $3, $4, 'contextual', $5, $6)
       RETURNING *
     `,
-      [title, finalSql, customerId, userId, threadId, messageId]
+      [title, finalSql, customerId, userId, threadId, messageId],
     );
 
     return result.rows[0];
@@ -4065,7 +4153,7 @@ export class SaveInsightService {
    */
   private async generateTitle(
     threadId: string,
-    messageId: string
+    messageId: string,
   ): Promise<string> {
     // Load conversation up to this message
     const result = await pool.query(
@@ -4080,7 +4168,7 @@ export class SaveInsightService {
         )
       ORDER BY "createdAt" ASC
     `,
-      [threadId, messageId]
+      [threadId, messageId],
     );
 
     const userQuestions = result.rows
@@ -4102,11 +4190,11 @@ export class SaveInsightService {
    */
   async runSavedInsight(
     insightId: number,
-    customerId: string
+    customerId: string,
   ): Promise<QueryResult> {
     const result = await pool.query(
       `SELECT sql FROM "SavedInsights" WHERE id = $1 AND customerId = $2`,
-      [insightId, customerId]
+      [insightId, customerId],
     );
 
     if (result.rows.length === 0) {
@@ -4150,7 +4238,7 @@ export async function POST(req: NextRequest) {
     if (!threadId || !messageId || !customerId) {
       return NextResponse.json(
         { error: "threadId, messageId, and customerId are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -4162,7 +4250,7 @@ export async function POST(req: NextRequest) {
       messageId,
       customerId,
       userId,
-      title
+      title,
     );
 
     return NextResponse.json({
@@ -4180,7 +4268,7 @@ export async function POST(req: NextRequest) {
         error: "Failed to save insight",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -4474,7 +4562,7 @@ describe("useConversation", () => {
       await result.current.sendMessage(
         "Show me patients",
         "customer-123",
-        "gpt-4"
+        "gpt-4",
       );
     });
 
@@ -4566,7 +4654,6 @@ describe("Conversation Flow", () => {
 ### Manual Testing Scenarios
 
 1. **Basic Conversation Flow**
-
    - [ ] Ask first question: "Show female patients"
    - [ ] Verify response with results
    - [ ] Ask follow-up: "Which ones are older than 40?"
@@ -4575,7 +4662,6 @@ describe("Conversation Flow", () => {
    - [ ] Check QueryHistory shows compositionStrategy = "cte"
 
 2. **Token Caching Verification**
-
    - [ ] Start conversation (first message)
    - [ ] Check API logs for token usage (~5200 tokens)
    - [ ] Send second message
@@ -4583,24 +4669,19 @@ describe("Conversation Flow", () => {
    - [ ] Verify cache hit in logs
 
 3. **AI-Driven Composition Decision Testing**
-
    - [ ] Test explicit composition: "Show female patients" → "Which ones are older than 40?"
-
      - Check logs show: `[Composition Decision] COMPOSE (confidence: 0.9+): Uses pronoun...`
      - Verify CTE composition in SQL
 
    - [ ] Test independent queries: "How many female patients?" → "How many male patients?"
-
      - Check logs show: `[Composition Decision] FRESH (confidence: 0.9+): Different subset...`
      - Verify fresh SQL with no CTE
 
    - [ ] Test implicit reference: "Show patients with wounds" → "Tell me about the older ones"
-
      - Check logs show: `[Composition Decision] COMPOSE (confidence: 0.8+): 'older ones' references...`
      - Verify CTE composition
 
    - [ ] Test different entity: "Show assessments" → "How many clinics?"
-
      - Check logs show: `[Composition Decision] FRESH (confidence: 1.0): Different entity...`
      - Verify fresh SQL
 
@@ -4609,14 +4690,12 @@ describe("Conversation Flow", () => {
      - Verify CTE composition with aggregation
 
 4. **SQL Composition Strategies**
-
    - [ ] Test CTE composition: "Show patients" → "Which ones have wounds?"
    - [ ] Test fresh query: "Show patients" → "How many clinics?"
    - [ ] Test merged WHERE: Simple filter additions
    - [ ] Verify correct strategy logged in QueryHistory
 
 5. **Save Insight from Conversation**
-
    - [ ] Have a 3-message conversation
    - [ ] Click "Save" on final result
    - [ ] Verify title includes progression (Q1 → Q3)
@@ -4625,7 +4704,6 @@ describe("Conversation Flow", () => {
    - [ ] Verify results match (SQL is self-contained)
 
 6. **Audit Trail**
-
    - [ ] Complete a conversation
    - [ ] Go to Admin > Audit > Conversations
    - [ ] Verify thread appears with metrics
@@ -4634,7 +4712,6 @@ describe("Conversation Flow", () => {
    - [ ] Check composition strategy breakdown
 
 7. **Edit Flow**
-
    - [ ] Ask question
    - [ ] Get response
    - [ ] Click Edit on first question
@@ -4644,14 +4721,12 @@ describe("Conversation Flow", () => {
    - [ ] New response generated
 
 8. **New Chat**
-
    - [ ] Click "New Chat"
    - [ ] Conversation clears
    - [ ] Customer/Model selection retained
    - [ ] Can start fresh conversation
 
 9. **Error Handling**
-
    - [ ] Invalid SQL → see error message
    - [ ] Network failure → can retry
    - [ ] Cancel during loading → request cancelled
@@ -4715,7 +4790,7 @@ psql -d your_db -c "SELECT role, content, metadata FROM \"ConversationMessages\"
 // Check if shouldComposeQuery is returning true
 const shouldCompose = sqlComposer.shouldComposeQuery(
   "Which ones are older than 40?", // Current question
-  "SELECT * FROM Patient" // Previous SQL
+  "SELECT * FROM Patient", // Previous SQL
 );
 console.log("Should compose:", shouldCompose); // Should be true
 ```
@@ -4796,7 +4871,7 @@ LIMIT 10;
 
 **Solution:**
 
-1. Ensure migration 046 ran successfully
+1. Ensure migration 048 ran successfully (conversation audit tracking + ConversationQueryHistory view)
 2. Verify `ConversationAuditService.logConversationQuery()` is called
 3. Check for errors in audit logging (should be fire-and-forget)
 4. Verify foreign key constraints are satisfied
@@ -4902,8 +4977,8 @@ LIMIT 10;
 
 **Database Migrations:**
 
-- `database/migration/030_create_conversation_tables.sql` - Core tables
-- `database/migration/046_conversation_audit_tracking.sql` - Audit extension
+- `database/migration/046_create_conversation_tables.sql` - Conversation threading tables
+- `database/migration/048_conversation_audit_tracking.sql` - Audit extension + ConversationQueryHistory view
 - `database/migration/047_save_insight_conversation_link.sql` - Save link
 
 ---
@@ -4917,26 +4992,22 @@ LIMIT 10;
 **Implementation Steps:**
 
 1. **Phase 0:** Critical Pre-Implementation Fixes (Days 1-2) ⚠️ **MUST DO FIRST**
-
    - Fix 0.1: PHI Protection (hash entity IDs)
    - Fix 0.2: Soft-Delete Edit Behavior
    - Fix 0.3: Conservative Flag for SavedInsights
    - Fix 0.4: Canonical Types Definition
 
 2. **Phase 1-3:** Core Infrastructure (Days 3-7)
-
    - Database Migrations
    - AI Provider Context Integration
    - SQL Composition Service
 
 3. **Phase 4-6:** API & UI (Days 8-14)
-
    - API Endpoints
    - Conversation Hook
    - UI Components
 
 4. **Phase 7-10:** Smart Suggestions, Audit & Testing (Days 15-18)
-
    - Smart Suggestions
    - Audit Integration
    - Save Insight Integration
