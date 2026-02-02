@@ -73,6 +73,7 @@ const migrations = [
   "045_create_audit_materialized_views.sql",
   "046_create_conversation_tables.sql",
   "047_save_insight_conversation_link.sql",
+  "048_conversation_audit_tracking.sql",
 ];
 
 /**
@@ -119,7 +120,7 @@ async function runMigrations(options = {}) {
     for (const candidate of candidates) {
       const cUrl = new URL(candidate);
       console.log(
-        `🔌 Connecting to database... (${cUrl.host}${cUrl.pathname})`
+        `🔌 Connecting to database... (${cUrl.host}${cUrl.pathname})`,
       );
       pool = new Pool({ ...dbConfig, connectionString: candidate });
       for (let attempt = 1; attempt <= 5; attempt++) {
@@ -135,7 +136,7 @@ async function runMigrations(options = {}) {
           console.warn(
             `⏳ Attempt ${attempt} failed for ${cUrl.host}: ${
               err?.message || err
-            }`
+            }`,
           );
           await new Promise((r) => setTimeout(r, 1000 * attempt));
         }
@@ -170,7 +171,7 @@ async function runMigrations(options = {}) {
     if (remove) {
       const filesToRemove = remove.split(",").map((f) => f.trim());
       console.log(
-        `🗑️  Removing migration records: ${filesToRemove.join(", ")}`
+        `🗑️  Removing migration records: ${filesToRemove.join(", ")}`,
       );
       for (const filename of filesToRemove) {
         await removeMigrationRecord(pool, filename);
@@ -181,10 +182,10 @@ async function runMigrations(options = {}) {
 
     // Get list of executed migrations
     const executedMigrations = await pool.query(
-      "SELECT filename FROM migrations"
+      "SELECT filename FROM migrations",
     );
     const executedFiles = new Set(
-      executedMigrations.rows.map((row) => row.filename)
+      executedMigrations.rows.map((row) => row.filename),
     );
 
     // Determine which migrations to re-run
@@ -229,7 +230,7 @@ async function runMigrations(options = {}) {
           "..",
           "database",
           "migration",
-          migration
+          migration,
         );
         const sql = fs.readFileSync(migrationPath, "utf8");
 
@@ -258,7 +259,7 @@ async function runMigrations(options = {}) {
             // Ignore duplicate key errors
             if (insertError.code !== "23505") {
               console.warn(
-                `Warning: Could not record migration: ${insertError.message}`
+                `Warning: Could not record migration: ${insertError.message}`,
               );
             }
           }

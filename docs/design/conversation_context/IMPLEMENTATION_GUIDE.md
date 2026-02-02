@@ -10,49 +10,53 @@
 
 ## Implementation Status
 
-| Area              | Status      | Completed On | Notes                                                                            |
-| ----------------- | ----------- | ------------ | -------------------------------------------------------------------------------- |
-| Phase 0           | ✅ Complete | 2026-01-14   | PHI protection, soft-delete, compatibility, canonical types, improvements        |
-| Phase 1 Step 1.1  | ✅ Complete | 2026-01-15   | Migration already implemented in 046; docs aligned                               |
-| Phase 2 Step 2.1  | ✅ Complete | 2026-01-15   | Added conversation-aware provider interface                                      |
-| Phase 2 Step 2.2  | ✅ Complete | 2026-01-15   | Claude prompt caching implementation                                             |
-| Phase 2 Step 2.3  | ✅ Complete | 2026-01-15   | Gemini context caching implementation                                            |
-| Phase 2 Step 2.4  | ✅ Complete | 2026-01-19   | Provider factory updated with conversation support and failover                  |
-| Phase 3 Step 3.1  | ✅ Complete | 2026-01-20   | SqlComposerService implemented for composition decisions and validation          |
-| Phase 3 Step 3.2  | ✅ Complete | 2026-01-20   | SQL composition prompt examples added                                            |
-| Phase 4 Step 4.1  | ✅ Complete | 2026-01-20   | Conversation types defined (canonical types + metadata)                          |
-| Phase 4 Step 4.2  | ✅ Complete | 2026-01-20   | Conversation send endpoint with composition, audit, cache update                 |
-| Phase 4 Step 4.3  | ✅ Complete | 2026-01-20   | Conversation thread fetch endpoint with normalized metadata                      |
-| Phase 4 Step 4.4  | ✅ Complete | 2026-01-20   | Conversation thread creation endpoint                                            |
-| Phase 4 Step 4.5  | ✅ Complete | 2026-01-20   | Conversation history endpoint with pagination and previews                       |
-| Phase 5 Step 5.1  | ✅ Complete | 2026-01-23   | useConversation hook for send/edit/load flows                                    |
-| Phase 5 Step 5.2  | ✅ Complete | 2026-01-23   | Refinement generator service                                                     |
-| Phase 6 Step 6.1  | ✅ Complete | 2026-01-23   | Conversation input component                                                     |
-| Phase 6 Step 6.2  | ✅ Complete | 2026-01-23   | User message component                                                           |
-| Phase 6 Step 6.3  | ✅ Complete | 2026-01-23   | Assistant message component                                                      |
-| Phase 6 Step 6.4  | ✅ Complete | 2026-01-23   | Results table component                                                          |
-| Phase 6 Step 6.5  | ✅ Complete | 2026-01-23   | Message actions component                                                        |
-| Phase 6 Step 6.6  | ✅ Complete | 2026-01-26   | Loading & thinking state for follow-ups, progressive display                     |
-| Phase 6 Step 6.7  | ✅ Complete | 2026-01-26   | Expandable "How I got this" context section for follow-ups                       |
-| Phase 6 Step 6.8  | ✅ Complete | 2026-01-26   | Context awareness badge showing "Based on X answers"                             |
-| Phase 6 Step 6.9  | ✅ Complete | 2026-01-26   | Loading status in input area during AI processing                                |
-| Phase 6 Step 6.10 | ✅ Complete | 2026-01-26   | Smart scroll & message grouping for long conversations                           |
-| Phase 6 Step 6.11 | ✅ Complete | 2026-01-26   | Query composition strategy indicator (CTE/fresh/optimized)                       |
-| Phase 6 Step 6.12 | ✅ Complete | 2026-01-26   | SQL preview in thinking details with syntax highlighting                         |
-| Phase 7 Step 7.1  | ✅ Complete | 2026-01-26   | Rule-based suggestion generator service                                          |
-| Phase 7 Step 7.2  | ✅ Complete | 2026-01-26   | Refinement generator service                                                     |
-| Phase 7 Step 7.3  | ✅ Complete | 2026-01-26   | SmartSuggestions UI + ConversationPanel wiring (rule-based)                      |
-| Phase 7 Step 7.4  | ⏳ Pending  | —            | Background AI suggestion prompt + generator (post-release)                       |
-| Phase 7 Step 7.5  | ⏳ Pending  | —            | Suggestions API endpoint (non-blocking, post-release)                            |
-| Phase 7 Step 7.6  | ⏳ Pending  | —            | SmartSuggestion type update (reasoning optional, post-release)                   |
-| Phase 7 Step 7.7  | ⏳ Pending  | —            | SmartSuggestions UI for AI reasoning (post-release)                              |
-| Phase 7 Step 7.8  | ⏳ Pending  | —            | ConversationPanel background fetch (post-release)                                |
-| Phase 7 Step 7.9  | ⏳ Pending  | —            | Tests for AI suggestion parsing + UI (post-release)                              |
-| Phase 8 Step 8.1  | ✅ Complete | 2026-02-02   | Migration 048: QueryHistory conversation columns + ConversationQueryHistory view |
-| Phase 8 Step 8.2  | ✅ Complete | 2026-02-02   | Migration run (manual)                                                           |
-| Phase 8 Step 8.3  | ✅ Complete | 2026-02-02   | ConversationAuditService (log/lineage/metrics/breakdown, view-only reads)        |
-| Phase 8 Step 8.4  | ✅ Complete | 2026-02-02   | Admin audit conversations API (feature guard, cache, requireAdmin)               |
-| Phase 8 Step 8.5  | ✅ Complete | 2026-02-02   | ConversationMetricsCard on audit dashboard (LoadingDots, error state)            |
+| Area               | Status      | Completed On | Notes                                                                            |
+| ------------------ | ----------- | ------------ | -------------------------------------------------------------------------------- |
+| Phase 0            | ✅ Complete | 2026-01-14   | PHI protection, soft-delete, compatibility, canonical types, improvements        |
+| Phase 1 Step 1.1   | ✅ Complete | 2026-01-15   | Migration already implemented in 046; docs aligned                               |
+| Phase 2 Step 2.1   | ✅ Complete | 2026-01-15   | Added conversation-aware provider interface                                      |
+| Phase 2 Step 2.2   | ✅ Complete | 2026-01-15   | Claude prompt caching implementation                                             |
+| Phase 2 Step 2.3   | ✅ Complete | 2026-01-15   | Gemini context caching implementation                                            |
+| Phase 2 Step 2.4   | ✅ Complete | 2026-01-19   | Provider factory updated with conversation support and failover                  |
+| Phase 3 Step 3.1   | ✅ Complete | 2026-01-20   | SqlComposerService implemented for composition decisions and validation          |
+| Phase 3 Step 3.2   | ✅ Complete | 2026-01-20   | SQL composition prompt examples added                                            |
+| Phase 4 Step 4.1   | ✅ Complete | 2026-01-20   | Conversation types defined (canonical types + metadata)                          |
+| Phase 4 Step 4.2   | ✅ Complete | 2026-01-20   | Conversation send endpoint with composition, audit, cache update                 |
+| Phase 4 Step 4.3   | ✅ Complete | 2026-01-20   | Conversation thread fetch endpoint with normalized metadata                      |
+| Phase 4 Step 4.4   | ✅ Complete | 2026-01-20   | Conversation thread creation endpoint                                            |
+| Phase 4 Step 4.5   | ✅ Complete | 2026-01-20   | Conversation history endpoint with pagination and previews                       |
+| Phase 5 Step 5.1   | ✅ Complete | 2026-01-23   | useConversation hook for send/edit/load flows                                    |
+| Phase 5 Step 5.2   | ✅ Complete | 2026-01-23   | Refinement generator service                                                     |
+| Phase 6 Step 6.1   | ✅ Complete | 2026-01-23   | Conversation input component                                                     |
+| Phase 6 Step 6.2   | ✅ Complete | 2026-01-23   | User message component                                                           |
+| Phase 6 Step 6.3   | ✅ Complete | 2026-01-23   | Assistant message component                                                      |
+| Phase 6 Step 6.4   | ✅ Complete | 2026-01-23   | Results table component                                                          |
+| Phase 6 Step 6.5   | ✅ Complete | 2026-01-23   | Message actions component                                                        |
+| Phase 6 Step 6.6   | ✅ Complete | 2026-01-26   | Loading & thinking state for follow-ups, progressive display                     |
+| Phase 6 Step 6.7   | ✅ Complete | 2026-01-26   | Expandable "How I got this" context section for follow-ups                       |
+| Phase 6 Step 6.8   | ✅ Complete | 2026-01-26   | Context awareness badge showing "Based on X answers"                             |
+| Phase 6 Step 6.9   | ✅ Complete | 2026-01-26   | Loading status in input area during AI processing                                |
+| Phase 6 Step 6.10  | ✅ Complete | 2026-01-26   | Smart scroll & message grouping for long conversations                           |
+| Phase 6 Step 6.11  | ✅ Complete | 2026-01-26   | Query composition strategy indicator (CTE/fresh/optimized)                       |
+| Phase 6 Step 6.12  | ✅ Complete | 2026-01-26   | SQL preview in thinking details with syntax highlighting                         |
+| Phase 7 Step 7.1   | ✅ Complete | 2026-01-26   | Rule-based suggestion generator service                                          |
+| Phase 7 Step 7.2   | ✅ Complete | 2026-01-26   | Refinement generator service                                                     |
+| Phase 7 Step 7.3   | ✅ Complete | 2026-01-26   | SmartSuggestions UI + ConversationPanel wiring (rule-based)                      |
+| Phase 7 Step 7.4   | ⏳ Pending  | —            | Background AI suggestion prompt + generator (post-release)                       |
+| Phase 7 Step 7.5   | ⏳ Pending  | —            | Suggestions API endpoint (non-blocking, post-release)                            |
+| Phase 7 Step 7.6   | ⏳ Pending  | —            | SmartSuggestion type update (reasoning optional, post-release)                   |
+| Phase 7 Step 7.7   | ⏳ Pending  | —            | SmartSuggestions UI for AI reasoning (post-release)                              |
+| Phase 7 Step 7.8   | ⏳ Pending  | —            | ConversationPanel background fetch (post-release)                                |
+| Phase 7 Step 7.9   | ⏳ Pending  | —            | Tests for AI suggestion parsing + UI (post-release)                              |
+| Phase 8 Step 8.1   | ✅ Complete | 2026-02-02   | Migration 048: QueryHistory conversation columns + ConversationQueryHistory view |
+| Phase 8 Step 8.2   | ✅ Complete | 2026-02-02   | Migration run (manual)                                                           |
+| Phase 8 Step 8.3   | ✅ Complete | 2026-02-02   | ConversationAuditService (log/lineage/metrics/breakdown, view-only reads)        |
+| Phase 8 Step 8.4   | ✅ Complete | 2026-02-02   | Admin audit conversations API (feature guard, cache, requireAdmin)               |
+| Phase 8 Step 8.5   | ✅ Complete | 2026-02-02   | ConversationMetricsCard on audit dashboard (LoadingDots, error state)            |
+| Phase 9 Step 9.1   | ✅ Complete | 2026-02-02   | Migration 047: SavedInsights schema (executionMode, conversation link)           |
+| Phase 9 Step 9.2   | ✅ Complete | 2026-02-02   | SaveInsightService (saveFromConversation, runSavedInsight, list)                 |
+| Phase 9 Step 9.3   | ✅ Complete | 2026-02-02   | Save insight API endpoints (POST save, GET list)                                 |
+| Phase 10 Step 10.1 | ✅ Complete | 2026-02-02   | Conversation main page (layout, message flow, suggestions, save action)          |
 
 ---
 
@@ -4274,6 +4278,30 @@ export async function POST(req: NextRequest) {
 }
 ```
 
+### Phase 9 Code Review (2026-02-02)
+
+**Taste:** 🟢 Good
+
+- **Migration 047** uses `executionMode` enum (standard/template/contextual) vs boolean `isFromConversation`; enables future modes and backward compatible with UPDATE for existing data.
+- **SaveInsightService** (static methods):
+  - `saveFromConversation()` validates message exists (not deleted), extracts SQL from metadata, generates title via conversation progression ("first → last"), normalizes customerId to UUID, prevents PHI leakage.
+  - `runSavedInsight()` fetches SQL (self-contained via CTEs), executes it fresh, returns columns + rows.
+  - `listConversationInsights()` uses parametrized queries, safe pagination, filters by executionMode='contextual'.
+- **API** (POST/GET):
+  - POST validates required fields, extracts userId via session, fire-and-forget on failure, 404 on not found.
+  - GET pagination: min 0, max 100, hasMore flag for client; customerId required.
+- **Database design:** Backward compatible (executionMode with default); conversation link optional; executionMode narrows scope for metrics.
+
+**Fatal flaws:** None. Foreign keys are nullable (optional); executionMode defaults to 'standard'; title generation truncates to prevent overflow; no direct PHI in title (hashed if needed).
+
+**Direction for improvement**
+
+- **Optional:** Add a `deleteSavedInsight()` method for UI delete flow (set isActive=false).
+- **Optional:** Add a `duplicateSavedInsight()` to fork conversations into new insights.
+- **Session handling:** Extract session user ID early to fail fast if missing.
+
+---
+
 ### Step 9.4: Update MessageActions Component
 
 **File:** `app/insights/new/components/MessageActions.tsx` (UPDATE)
@@ -4478,6 +4506,26 @@ export default function ConversationPage() {
   );
 }
 ```
+
+### Phase 10 Code Review (2026-02-02)
+
+**Taste:** 🟢 Good
+
+- **Layout:** Fixed header (customer/model selectors) → scrollable content (messages) → sticky input; responsive and accessible.
+- **State management:** Uses `useConversation` hook for all message handling; local UI state for `question`, `customerId`, `modelId`.
+- **Empty state:** Clear affordance (emoji, tips, example questions) invites users to start.
+- **Message flow:** Maps over messages, renders UserMessage/AssistantMessage by role; auto-scroll to latest; suggestions appear after assistant message when not loading.
+- **Input validation:** Send disabled when `!customerId || isLoading`; clears input after send.
+- **Suggestion integration:** Click fills input without auto-submit (UX best practice).
+- **New Chat:** Clears messages and input state atomically.
+
+**Fatal flaws:** None. State management is simple; no global refs; render props are stable; event handlers memoized indirectly via stable identities.
+
+**Direction for improvement**
+
+- **Optional:** Add error toast on failed message (catch in sendMessage and display).
+- **Optional:** Show thinking state in header while AI processes (visual feedback).
+- **Optional:** Add keyboard shortcut (Cmd+K) to focus input.
 
 ---
 

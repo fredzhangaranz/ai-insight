@@ -26,7 +26,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { HomeIcon } from "@/components/heroicons";
 import { Squares2x2Icon } from "@/components/heroicons";
 import { ClipboardDocumentIcon } from "@/components/heroicons";
 import { SparklesIcon } from "@/components/heroicons";
@@ -37,10 +36,16 @@ import { useAuth } from "@/lib/hooks/useAuth";
 
 const items = [
   {
-    href: "/home",
-    label: "Home",
-    icon: HomeIcon,
-    match: ["/home"],
+    href: "/insights/new",
+    label: "Create Insight",
+    icon: SparklesIcon,
+    match: ["/home", "/insights/new", "/analysis", "/analysis/schema"],
+  },
+  {
+    href: "/insights/saved",
+    label: "Saved Insights",
+    icon: ClipboardDocumentIcon,
+    match: ["/insights", "/insights/saved", "/insights/[id]"],
   },
   {
     href: "/dashboard",
@@ -49,22 +54,10 @@ const items = [
     match: ["/dashboard"],
   },
   {
-    href: "/insights",
-    label: "Insights",
-    icon: ClipboardDocumentIcon,
-    match: ["/insights"],
-  },
-  {
     href: "/templates",
     label: "Templates",
     icon: DocumentDuplicateIcon,
     match: ["/templates"],
-  },
-  {
-    href: "/insights/new",
-    label: "Create Insight",
-    icon: SparklesIcon,
-    match: ["/insights/new", "/analysis", "/analysis/schema"],
   },
 ];
 
@@ -156,7 +149,7 @@ export function SideNav() {
                 const Icon = it.icon as any;
                 const active = it.match.some(
                   (prefix: string) =>
-                    pathname === prefix || pathname.startsWith(`${prefix}/`)
+                    pathname === prefix || pathname.startsWith(`${prefix}/`),
                 );
                 return (
                   <SidebarMenuItem key={it.href}>
