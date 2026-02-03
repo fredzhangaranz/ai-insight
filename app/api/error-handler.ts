@@ -40,7 +40,7 @@ export function apiError(
   message: string,
   statusCode: number,
   details?: any,
-  requestId?: string
+  requestId?: string,
 ): NextResponse {
   const errorResponse: ApiErrorPayload = {
     error,
@@ -57,7 +57,7 @@ export function apiError(
   console.error(
     `API Error (${statusCode}) - ${error}: ${message}`,
     requestId ? `[Request ID: ${requestId}]` : "",
-    details ? `\nDetails: ${JSON.stringify(details, null, 2)}` : ""
+    details ? `\nDetails: ${JSON.stringify(details, null, 2)}` : "",
   );
 
   return NextResponse.json(errorResponse, { status: statusCode });
@@ -71,7 +71,7 @@ export function apiError(
  * @returns A wrapped handler with error handling
  */
 export function withErrorHandling<T = any>(
-  handler: (req: NextRequest, context?: any) => Promise<NextResponse<T>>
+  handler: (req: NextRequest, context?: any) => Promise<NextResponse<T>>,
 ) {
   return async (req: NextRequest, context?: any): Promise<NextResponse> => {
     const requestId =
@@ -94,7 +94,7 @@ export function withErrorHandling<T = any>(
           "No AI providers are configured. Configure a provider in Admin or enable seeding in production.",
           503,
           error,
-          requestId
+          requestId,
         );
       }
 
@@ -104,7 +104,7 @@ export function withErrorHandling<T = any>(
           "No usable AI provider is available right now. Please check provider health in Admin.",
           503,
           error,
-          requestId
+          requestId,
         );
       }
 
@@ -114,7 +114,7 @@ export function withErrorHandling<T = any>(
           msg.replace(/^MisconfiguredProvider:\s*/, ""),
           400,
           error,
-          requestId
+          requestId,
         );
       }
 
@@ -125,7 +125,7 @@ export function withErrorHandling<T = any>(
           "Invalid request data",
           400,
           error,
-          requestId
+          requestId,
         );
       }
 
@@ -135,7 +135,7 @@ export function withErrorHandling<T = any>(
           "Database connection error. Please try again later.",
           503,
           error,
-          requestId
+          requestId,
         );
       }
 
@@ -145,7 +145,7 @@ export function withErrorHandling<T = any>(
           "Request timed out. Please try again.",
           408,
           error,
-          requestId
+          requestId,
         );
       }
 
@@ -155,7 +155,17 @@ export function withErrorHandling<T = any>(
           "Network connection error. Please check your connection and try again.",
           503,
           error,
-          requestId
+          requestId,
+        );
+      }
+
+      if (error.name === "ConnectionEncryptionError") {
+        return apiError(
+          ErrorType.INTERNAL_SERVER_ERROR,
+          "Customer database connection could not be used. Check that DB_ENCRYPTION_KEY is set and matches the key used when the customer was configured.",
+          503,
+          error,
+          requestId,
         );
       }
 
@@ -165,7 +175,7 @@ export function withErrorHandling<T = any>(
         "An unexpected error occurred. Please try again later.",
         500,
         error,
-        requestId
+        requestId,
       );
     }
   };
@@ -181,19 +191,19 @@ export const createErrorResponse = {
   unauthorized: (
     message: string = "Unauthorized",
     details?: any,
-    requestId?: string
+    requestId?: string,
   ) => apiError(ErrorType.UNAUTHORIZED, message, 401, details, requestId),
 
   forbidden: (
     message: string = "Forbidden",
     details?: any,
-    requestId?: string
+    requestId?: string,
   ) => apiError(ErrorType.FORBIDDEN, message, 403, details, requestId),
 
   notFound: (
     message: string = "Resource not found",
     details?: any,
-    requestId?: string
+    requestId?: string,
   ) => apiError(ErrorType.NOT_FOUND, message, 404, details, requestId),
 
   validationError: (message: string, details?: any, requestId?: string) =>
@@ -202,19 +212,19 @@ export const createErrorResponse = {
   databaseError: (
     message: string = "Database error",
     details?: any,
-    requestId?: string
+    requestId?: string,
   ) => apiError(ErrorType.DATABASE_ERROR, message, 503, details, requestId),
 
   aiServiceError: (
     message: string = "AI service error",
     details?: any,
-    requestId?: string
+    requestId?: string,
   ) => apiError(ErrorType.AI_SERVICE_ERROR, message, 503, details, requestId),
 
   internalError: (
     message: string = "Internal server error",
     details?: any,
-    requestId?: string
+    requestId?: string,
   ) =>
     apiError(ErrorType.INTERNAL_SERVER_ERROR, message, 500, details, requestId),
 };

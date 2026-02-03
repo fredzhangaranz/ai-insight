@@ -124,12 +124,44 @@ npm run seed-admin
 # Output:
 # ✅ Admin user created: admin@yourdomain.local
 
+# Seed AI configuration (only if not done by setup wizard)
+npm run seed-ai-config
+
+# Output:
+# 🌱 Starting AI configuration seeding...
+# 📝 Added Anthropic configuration
+# OR
+# 📝 Added Google configuration
+# ✅ Successfully seeded X AI configuration(s)
+
+# Load clinical ontology (only if Google Vertex AI is configured)
+# Required environment variables: GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION, GOOGLE_APPLICATION_CREDENTIALS
+npm run ontology:load
+
+# Output:
+# 🚀 Loading clinical ontology...
+# 📖 Reading ontology file: docs/design/semantic_layer/clinical_ontology.yaml
+# ✅ Parsed 150 concepts from YAML
+# 🔄 Generating embeddings via Google Gemini...
+# ✅ Generated 150 embeddings
+# 💾 Upserting concepts to database...
+# ✅ Upserted 150 new concepts, 0 updated
+# 🎉 Ontology loader completed successfully!
+
 # Load template catalog
 npm run seed-template-catalog
 
 # Output:
 # ✅ Template catalog seeded successfully
 ```
+
+**Note:** Ontology loading (`npm run ontology:load`) is optional and requires:
+
+- Google Vertex AI enabled and configured
+- `GOOGLE_CLOUD_PROJECT` environment variable set
+- Google authentication credentials (service account or user login)
+
+If you skip this step, semantic ontology mapping features will not be available, but the application will work normally. See **docs/design/semantic_layer/SETUP_ONTOLOGY_LOADER.md** for detailed Google Vertex AI setup.
 
 ### Step 6: Start Development Server
 
@@ -155,10 +187,12 @@ start http://localhost:3005  # Windows
 ```
 
 **Login:**
+
 - Username: `admin` (from `ADMIN_USERNAME`)
 - Password: Value from `ADMIN_PASSWORD`
 
 **Check:**
+
 - ✅ Dashboard loads
 - ✅ Can create insights
 - ✅ Templates visible
@@ -235,6 +269,11 @@ npm run check-tables
 ```bash
 npm run seed-admin
 npm run seed-template-catalog
+
+# Optional: Load clinical ontology (requires Google Vertex AI)
+# See Step 5 in Beta Deployment for detailed instructions
+npm run seed-ai-config
+npm run ontology:load
 ```
 
 ### Step 6: Build Docker Image (Optional)
@@ -257,11 +296,13 @@ docker run -d \
 ### Step 7: Start Application
 
 **Option A: Direct execution**
+
 ```bash
 NODE_ENV=production npm run start
 ```
 
 **Option B: With process manager (PM2)**
+
 ```bash
 npm install -g pm2
 pm2 start npm --name "insight-gen" -- run start
@@ -356,6 +397,27 @@ npm run seed-admin
 
 # Verify in database
 psql "$INSIGHT_GEN_DB_URL" -c "SELECT username, email FROM \"Users\" LIMIT 5;"
+```
+
+### Ontology Loading Fails
+
+```bash
+# If you see: "Missing GOOGLE_CLOUD_PROJECT"
+# Google Vertex AI is not configured. Either:
+# 1. Skip ontology loading (optional feature)
+# 2. Configure Google Vertex AI per docs/design/semantic_layer/SETUP_ONTOLOGY_LOADER.md
+
+# Check Google configuration
+grep GOOGLE .env.local
+
+# Verify Google credentials are accessible
+test -f "$GOOGLE_APPLICATION_CREDENTIALS" && echo "Credentials file found" || echo "Credentials file not found"
+
+# If credentials missing, set up per:
+# https://cloud.google.com/docs/authentication/application-default-credentials
+
+# Try loading again
+npm run ontology:load
 ```
 
 ### Port 3005 Already in Use

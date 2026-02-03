@@ -1,6 +1,8 @@
 import { Pool } from "pg";
 import { NextResponse } from "next/server";
-import { getInsightGenDbPool, getSilhouetteDbPool } from "@/lib/db";
+import { getInsightGenDbPool } from "@/lib/db";
+import { getSqlServerPool } from "@/lib/services/sqlserver/client";
+import { getCustomerById } from "@/lib/services/customer-service";
 import { shapeDataForChart } from "@/lib/data-shaper";
 import type { ChartType } from "@/lib/chart-contracts";
 
@@ -75,6 +77,21 @@ function validateCreate(input: CreateInsightInput) {
 }
 
 function validateAndFixQuery(sql: string): string {
+  // SQL Server does not support LIMIT/OFFSET; convert LIMIT n to TOP n and remove LIMIT/OFFSET
+  const limitMatch = sql.match(/\bLIMIT\s+(\d+)(?:\s+OFFSET\s+\d+)?\s*$/im);
+  if (limitMatch) {
+    const n = limitMatch[1];
+    sql = sql.replace(/\s*OFFSET\s+\d+\s*$/im, "").trim();
+    sql = sql.replace(/\s*LIMIT\s+\d+\s*$/im, "").trim();
+    if (!sql.match(/\bTOP\s+\d+\b/i)) {
+      if (sql.match(/\bSELECT\s+DISTINCT\b/i)) {
+        sql = sql.replace(/\bSELECT\s+DISTINCT\b/i, `SELECT DISTINCT TOP ${n}`);
+      } else {
+        sql = sql.replace(/\bSELECT\b/i, `SELECT TOP ${n}`);
+      }
+    }
+  }
+
   // Fix ORDER BY alias referring to CASE alias
   const orderByAliasRegex = /ORDER BY\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i;
   const match = sql.match(orderByAliasRegex);
@@ -119,6 +136,7 @@ export class InsightService {
     search?: string;
     activeOnly?: boolean;
     userId: number;
+    customerId?: string | null;
   }): Promise<SavedInsight[]> {
     const pool = await getInsightGenDbPool();
     const conds: string[] = ['"userId" = $1'];
@@ -138,13 +156,25 @@ export class InsightService {
       values.push(`%${params.search}%`);
       i++;
     }
+    // Filter by customerId if provided (null means show insights without customerId)
+    if (params.customerId !== undefined) {
+      if (params.customerId === null) {
+        conds.push(`"customerId" IS NULL`);
+      } else {
+        conds.push(`"customerId" = $${i++}`);
+        values.push(params.customerId);
+      }
+    }
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
     const sql = `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt" FROM "SavedInsights" ${where} ORDER BY "updatedAt" DESC LIMIT 100`;
     const res = await pool.query(sql, values);
     return res.rows as any;
   }
 
-  async getById(id: number, ownerId?: number): Promise<SavedInsight | null> {
+  async getById(
+    id: number,
+    ownerId?: number,
+  ): Promise<(SavedInsight & { customerId?: string | null }) | null> {
     const pool = await getInsightGenDbPool();
     const values: any[] = [id];
     let where = `id = $1`;
@@ -153,7 +183,7 @@ export class InsightService {
       where += ` AND "userId" = $2`;
     }
     const res = await pool.query(
-      `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt" FROM "SavedInsights" WHERE ${where}`,
+      `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "customerId", "createdAt", "updatedAt" FROM "SavedInsights" WHERE ${where}`,
       values,
     );
     return res.rows[0] || null;
@@ -273,6 +303,7 @@ export class InsightService {
   async execute(
     id: number,
     ownerId: number,
+    customerId?: string | null,
   ): Promise<{
     rows: any[];
     chart: { chartType: ChartType; data: any };
@@ -280,7 +311,35 @@ export class InsightService {
     const insight = await this.getById(id, ownerId);
     if (!insight || !insight.isActive) return null;
     const sqlText = validateAndFixQuery(insight.sql);
-    const pool = await getSilhouetteDbPool();
+
+    // Use customer-specific DB pool if customerId is provided (either from insight or parameter)
+    const targetCustomerId = customerId || insight.customerId;
+    if (!targetCustomerId) {
+      throw new Error(
+        "Customer ID is required to execute insight. Please select a customer.",
+      );
+    }
+
+    // Get customer and decrypt connection string
+    const customer = await getCustomerById(targetCustomerId, false, true);
+    if (!customer) {
+      throw new Error(`Customer not found: ${targetCustomerId}`);
+    }
+    if (!customer.dbConnectionEncrypted) {
+      throw new Error(
+        `Customer ${targetCustomerId} does not have a database connection configured`,
+      );
+    }
+
+    // Import decryption service
+    const { decryptConnectionString } =
+      await import("@/lib/services/security/connection-encryption.service");
+    const connectionString = decryptConnectionString(
+      customer.dbConnectionEncrypted,
+    );
+
+    // Get customer-specific DB pool
+    const pool = await getSqlServerPool(connectionString);
     const req = pool.request();
     const result = await req.query(sqlText);
     const rows = result.recordset || [];

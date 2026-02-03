@@ -74,6 +74,7 @@ const migrations = [
   "046_create_conversation_tables.sql",
   "047_save_insight_conversation_link.sql",
   "048_conversation_audit_tracking.sql",
+  "049_add_customer_to_dashboards.sql",
 ];
 
 /**

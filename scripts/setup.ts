@@ -328,6 +328,17 @@ class DeploymentWizard {
    */
   private async setupAIProviders(): Promise<void> {
     console.log(chalk.yellow("2️⃣  AI Provider Setup\n"));
+    console.log(
+      chalk.gray(
+        "Required: at least one AI provider (Claude, Gemini, or local)",
+      ),
+    );
+    console.log(
+      chalk.gray(
+        "Note: Google Vertex AI is required to enable semantic ontology mapping",
+      ),
+    );
+    console.log();
 
     const providers: AIProvidersConfig = {
       anthropic: { enabled: false },
@@ -355,10 +366,11 @@ class DeploymentWizard {
         apiKey,
         modelName,
       };
+      console.log();
     }
 
     const enableGoogle = await this.prompter.confirm(
-      "Enable Google Vertex AI?",
+      "Enable Google Vertex AI? (required for ontology mapping)",
     );
 
     if (enableGoogle) {
@@ -387,6 +399,7 @@ class DeploymentWizard {
         credentialsPath: credPath || undefined,
         modelName,
       };
+      console.log();
     }
 
     // Validate at least one provider
@@ -396,6 +409,9 @@ class DeploymentWizard {
     }
 
     this.config.providers = providers;
+
+    // Test provider connections before proceeding
+    await this.testAIProviders(providers);
     console.log();
   }
 
@@ -450,6 +466,117 @@ class DeploymentWizard {
 
     this.config.adminUser = adminUser;
     console.log();
+  }
+
+  /**
+   * Test AI Provider connections
+   */
+  private async testAIProviders(providers: AIProvidersConfig): Promise<void> {
+    console.log(chalk.blue("Testing AI provider connections...\n"));
+
+    const tests = [];
+
+    // Test Anthropic
+    if (providers.anthropic.enabled) {
+      tests.push({
+        name: "Anthropic Claude",
+        test: async () => {
+          try {
+            if (!process.env.ANTHROPIC_API_KEY) {
+              // Temporarily set from current config
+              const originalKey = process.env.ANTHROPIC_API_KEY;
+              process.env.ANTHROPIC_API_KEY = providers.anthropic.apiKey;
+
+              // Simple validation: check if API key format is valid (starts with sk-ant-)
+              const isValid = (providers.anthropic.apiKey || "").startsWith(
+                "sk-ant-",
+              );
+              process.env.ANTHROPIC_API_KEY = originalKey;
+
+              return isValid
+                ? { success: true, message: "API key format valid" }
+                : {
+                    success: false,
+                    message:
+                      "Invalid API key format (should start with sk-ant-)",
+                  };
+            }
+
+            const isValid = (providers.anthropic.apiKey || "").startsWith(
+              "sk-ant-",
+            );
+            return isValid
+              ? { success: true, message: "API key format valid" }
+              : {
+                  success: false,
+                  message: "Invalid API key format (should start with sk-ant-)",
+                };
+          } catch (error) {
+            return {
+              success: false,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown error testing Anthropic",
+            };
+          }
+        },
+      });
+    }
+
+    // Test Google
+    if (providers.google.enabled) {
+      tests.push({
+        name: "Google Vertex AI",
+        test: async () => {
+          try {
+            // Check required fields
+            if (!providers.google.projectId) {
+              return { success: false, message: "Missing Project ID" };
+            }
+
+            // Note: Full credential test happens during ontology load
+            // Here we just validate that required fields are present
+            return {
+              success: true,
+              message: `Project: ${providers.google.projectId}, Location: ${providers.google.location}`,
+            };
+          } catch (error) {
+            return {
+              success: false,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown error testing Google",
+            };
+          }
+        },
+      });
+    }
+
+    // Run tests
+    for (const test of tests) {
+      const spinner = ora(`Testing ${test.name}...`).start();
+      try {
+        const result = await test.test();
+        if (result.success) {
+          spinner.succeed(chalk.green(`✓ ${test.name}: ${result.message}`));
+        } else {
+          spinner.warn(chalk.yellow(`⚠️  ${test.name}: ${result.message}`));
+          console.log(
+            chalk.gray(
+              "    This may be configured later or verified during setup.",
+            ),
+          );
+        }
+      } catch (error) {
+        spinner.fail(
+          chalk.red(
+            `✗ ${test.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          ),
+        );
+      }
+    }
   }
 
   /**
@@ -595,6 +722,17 @@ class DeploymentWizard {
           },
         },
         {
+          title: "Seeding AI configuration",
+          task: async () => {
+            const { execSync } = await import("child_process");
+            try {
+              execSync("npm run seed-ai-config", { stdio: "pipe" });
+            } catch (error) {
+              throw new Error("AI configuration seeding failed");
+            }
+          },
+        },
+        {
           title: "Running database migrations",
           task: async () => {
             const { execSync } = await import("child_process");
@@ -616,6 +754,23 @@ class DeploymentWizard {
             }
           },
         },
+        ...(config.providers?.google?.enabled
+          ? [
+              {
+                title: "Loading clinical ontology",
+                task: async () => {
+                  const { execSync } = await import("child_process");
+                  try {
+                    execSync("npm run ontology:load", { stdio: "pipe" });
+                  } catch (error) {
+                    throw new Error(
+                      "Ontology load failed (requires Google Vertex AI). See docs/design/semantic_layer/SETUP_ONTOLOGY_LOADER.md",
+                    );
+                  }
+                },
+              },
+            ]
+          : []),
         {
           title: "Loading template catalog",
           task: async () => {

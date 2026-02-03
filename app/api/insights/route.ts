@@ -23,12 +23,14 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const scope = searchParams.get("scope") as any;
   const formId = searchParams.get("formId") || undefined;
   const search = searchParams.get("search") || undefined;
+  const customerId = searchParams.get("customerId") || undefined;
   const list = await insightService.list({
     scope,
     formId,
     search,
     activeOnly: true,
     userId,
+    customerId: customerId || undefined,
   });
   return NextResponse.json({ items: list });
 });

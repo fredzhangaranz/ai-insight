@@ -1,6 +1,20 @@
 # Setup Guide: Ontology Loader with Google Gemini
 
-## Quick Setup (5 minutes)
+## Beta setup (recommended)
+
+If you use the deployment wizard with **Google Vertex AI** enabled, ontology loading is included and runs in the correct order:
+
+```bash
+pnpm setup:beta
+```
+
+The wizard will (in order): save configuration → **seed AI configuration** → run migrations → create admin user → **load clinical ontology** (only when Google is enabled, blocking) → load template catalog. No need to run `seed-ai-config` or `ontology:load` manually.
+
+---
+
+## Manual Quick Setup (5 minutes)
+
+Use this if you are not using `pnpm setup:beta` or need to re-run ontology load later.
 
 ### 1. Set Environment Variables
 

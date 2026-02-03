@@ -4,6 +4,7 @@ import type React from "react";
 import { SessionProvider, useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { AIModelProvider } from "@/lib/context/AIModelContext";
+import { CustomerProvider } from "@/lib/context/CustomerContext";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SideNav } from "@/app/components/shell/SideNav";
 import { MustChangePasswordBanner } from "@/app/components/profile/MustChangePasswordBanner";
@@ -51,8 +52,10 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <SessionProvider>
       <AIModelProvider>
-        <AppContent>{children}</AppContent>
-        <Toaster />
+        <CustomerProvider>
+          <AppContent>{children}</AppContent>
+          <Toaster />
+        </CustomerProvider>
       </AIModelProvider>
     </SessionProvider>
   );

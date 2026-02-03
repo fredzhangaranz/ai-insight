@@ -21,15 +21,29 @@ export const POST = withErrorHandling(
     if (!insightId || Number.isNaN(insightId)) {
       return createErrorResponse.badRequest("insightId is required");
     }
+
+    const { searchParams } = new URL(req.url);
+    const customerId = searchParams.get("customerId");
+    if (!customerId) {
+      return createErrorResponse.badRequest(
+        "customerId query parameter is required",
+      );
+    }
+
     const userId = parseSessionUserId(authResult.user.id);
     if (userId === null) {
       return createErrorResponse.badRequest("Invalid user id in session");
     }
     try {
-      const d = await dashboardService.bindPanel(panelId, insightId, {
-        id: userId,
-        username: authResult.user.username || authResult.user.name,
-      });
+      const d = await dashboardService.bindPanel(
+        panelId,
+        insightId,
+        {
+          id: userId,
+          username: authResult.user.username || authResult.user.name,
+        },
+        customerId,
+      );
       return NextResponse.json(d);
     } catch (error: any) {
       if (error instanceof Error && error.message === "InsightNotFound") {

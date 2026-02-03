@@ -18,10 +18,23 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   if (userId === null) {
     return createErrorResponse.badRequest("Invalid user id in session");
   }
-  const d = await dashboardService.getOrCreateDefault({
-    id: userId,
-    username: authResult.user.username || authResult.user.name,
-  });
+
+  const { searchParams } = new URL(req.url);
+  const customerId = searchParams.get("customerId");
+
+  if (!customerId) {
+    return createErrorResponse.badRequest(
+      "customerId query parameter is required",
+    );
+  }
+
+  const d = await dashboardService.getOrCreateDefault(
+    {
+      id: userId,
+      username: authResult.user.username || authResult.user.name,
+    },
+    customerId,
+  );
   return NextResponse.json(d);
 });
 
@@ -32,9 +45,20 @@ export const PUT = withErrorHandling(async (req: NextRequest) => {
   if (userId === null) {
     return createErrorResponse.badRequest("Invalid user id in session");
   }
+
+  const { searchParams } = new URL(req.url);
+  const customerId = searchParams.get("customerId");
+
+  if (!customerId) {
+    return createErrorResponse.badRequest(
+      "customerId query parameter is required",
+    );
+  }
+
   const body = await req.json();
   const d = await dashboardService.updateDefault(
     { id: userId, username: authResult.user.username || authResult.user.name },
+    customerId,
     { layout: body.layout, panels: body.panels },
   );
   return NextResponse.json(d);

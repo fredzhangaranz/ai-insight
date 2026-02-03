@@ -48,26 +48,30 @@ export class DashboardService {
     return DashboardService.instance;
   }
 
-  async getOrCreateDefault(owner: DashboardOwner): Promise<DashboardRecord> {
+  async getOrCreateDefault(
+    owner: DashboardOwner,
+    customerId: string,
+  ): Promise<DashboardRecord> {
     const pool = await getInsightGenDbPool();
     const existing = await pool.query(
-      `SELECT id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt" 
+      `SELECT id, name, layout, panels, "createdBy", "userId", "customerId", "createdAt", "updatedAt" 
        FROM "Dashboards" 
-       WHERE name = $1 AND "userId" = $2 
+       WHERE name = $1 AND "userId" = $2 AND "customerId" = $3::uuid
        ORDER BY "createdAt" ASC 
        LIMIT 1`,
-      ["default", owner.id],
+      ["default", owner.id, customerId],
     );
     if (existing.rows[0]) return normalizeDashboardRow(existing.rows[0]);
 
     const res = await pool.query(
-      `INSERT INTO "Dashboards" (name, layout, panels, "createdBy", "userId") VALUES ($1, $2, $3, $4, $5) RETURNING id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt"`,
+      `INSERT INTO "Dashboards" (name, layout, panels, "createdBy", "userId", "customerId") VALUES ($1, $2, $3, $4, $5, $6::uuid) RETURNING id, name, layout, panels, "createdBy", "userId", "customerId", "createdAt", "updatedAt"`,
       [
         "default",
         JSON.stringify(DEFAULT_LAYOUT),
         JSON.stringify(DEFAULT_PANELS),
         owner.username || null,
         owner.id,
+        customerId,
       ],
     );
     return normalizeDashboardRow(res.rows[0]);
@@ -75,10 +79,11 @@ export class DashboardService {
 
   async updateDefault(
     owner: DashboardOwner,
+    customerId: string,
     payload: { layout?: any; panels?: any },
   ): Promise<DashboardRecord> {
-    const current = await this.getOrCreateDefault(owner);
-    const updated = await this.update(current.id, owner, {
+    const current = await this.getOrCreateDefault(owner, customerId);
+    const updated = await this.update(current.id, owner, customerId, {
       layout: payload.layout ?? current.layout,
       panels: payload.panels ?? current.panels,
     });
@@ -89,8 +94,9 @@ export class DashboardService {
     panelId: string,
     insightId: number,
     owner: DashboardOwner,
+    customerId: string,
   ): Promise<DashboardRecord> {
-    const current = await this.getOrCreateDefault(owner);
+    const current = await this.getOrCreateDefault(owner, customerId);
     const insight = await insightService.getById(insightId, owner.id);
     if (!insight) {
       throw new Error("InsightNotFound");
@@ -102,7 +108,7 @@ export class DashboardService {
     const panel = next.panels.panels.find((p: any) => p.id === panelId);
     if (!panel) throw new Error("PanelNotFound");
     panel.insightId = insightId;
-    const updated = await this.update(current.id, owner, {
+    const updated = await this.update(current.id, owner, customerId, {
       panels: next.panels,
     });
     if (!updated) {
@@ -111,34 +117,39 @@ export class DashboardService {
     return updated;
   }
 
-  async list(owner: DashboardOwner): Promise<DashboardRecord[]> {
-    await this.getOrCreateDefault(owner);
+  async list(
+    owner: DashboardOwner,
+    customerId: string,
+  ): Promise<DashboardRecord[]> {
+    await this.getOrCreateDefault(owner, customerId);
     const pool = await getInsightGenDbPool();
     const res = await pool.query(
-      `SELECT id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt"
+      `SELECT id, name, layout, panels, "createdBy", "userId", "customerId", "createdAt", "updatedAt"
        FROM "Dashboards"
-       WHERE "userId" = $1
+       WHERE "userId" = $1 AND "customerId" = $2::uuid
        ORDER BY "updatedAt" DESC`,
-      [owner.id],
+      [owner.id, customerId],
     );
     return res.rows.map(normalizeDashboardRow);
   }
 
   async create(
     owner: DashboardOwner,
+    customerId: string,
     payload: { name: string; layout?: any; panels?: any },
   ): Promise<DashboardRecord> {
     const pool = await getInsightGenDbPool();
     const res = await pool.query(
-      `INSERT INTO "Dashboards" (name, layout, panels, "createdBy", "userId")
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt"`,
+      `INSERT INTO "Dashboards" (name, layout, panels, "createdBy", "userId", "customerId")
+       VALUES ($1, $2, $3, $4, $5, $6::uuid)
+       RETURNING id, name, layout, panels, "createdBy", "userId", "customerId", "createdAt", "updatedAt"`,
       [
         payload.name,
         JSON.stringify(payload.layout ?? DEFAULT_LAYOUT),
         JSON.stringify(payload.panels ?? DEFAULT_PANELS),
         owner.username ?? null,
         owner.id,
+        customerId,
       ],
     );
     return normalizeDashboardRow(res.rows[0]);
@@ -147,13 +158,14 @@ export class DashboardService {
   async get(
     id: number,
     owner: DashboardOwner,
+    customerId: string,
   ): Promise<DashboardRecord | null> {
     const pool = await getInsightGenDbPool();
     const res = await pool.query(
-      `SELECT id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt"
+      `SELECT id, name, layout, panels, "createdBy", "userId", "customerId", "createdAt", "updatedAt"
        FROM "Dashboards"
-       WHERE id = $1 AND "userId" = $2`,
-      [id, owner.id],
+       WHERE id = $1 AND "userId" = $2 AND "customerId" = $3::uuid`,
+      [id, owner.id, customerId],
     );
     if (!res.rows[0]) return null;
     return normalizeDashboardRow(res.rows[0]);
@@ -162,6 +174,7 @@ export class DashboardService {
   async update(
     id: number,
     owner: DashboardOwner,
+    customerId: string,
     payload: { name?: string; layout?: any; panels?: any },
   ): Promise<DashboardRecord | null> {
     const fields: string[] = [];
@@ -182,18 +195,19 @@ export class DashboardService {
     }
 
     if (fields.length === 0) {
-      return await this.get(id, owner);
+      return await this.get(id, owner, customerId);
     }
 
     const pool = await getInsightGenDbPool();
     values.push(id);
     values.push(owner.id);
+    values.push(customerId);
 
     const res = await pool.query(
       `UPDATE "Dashboards"
        SET ${fields.join(", ")}, "updatedAt" = NOW()
-       WHERE id = $${index} AND "userId" = $${index + 1}
-       RETURNING id, name, layout, panels, "createdBy", "userId", "createdAt", "updatedAt"`,
+       WHERE id = $${index} AND "userId" = $${index + 1} AND "customerId" = $${index + 2}::uuid
+       RETURNING id, name, layout, panels, "createdBy", "userId", "customerId", "createdAt", "updatedAt"`,
       values,
     );
 
@@ -201,11 +215,15 @@ export class DashboardService {
     return normalizeDashboardRow(res.rows[0]);
   }
 
-  async delete(id: number, owner: DashboardOwner): Promise<boolean> {
+  async delete(
+    id: number,
+    owner: DashboardOwner,
+    customerId: string,
+  ): Promise<boolean> {
     const pool = await getInsightGenDbPool();
     const res = await pool.query(
-      `DELETE FROM "Dashboards" WHERE id = $1 AND "userId" = $2`,
-      [id, owner.id],
+      `DELETE FROM "Dashboards" WHERE id = $1 AND "userId" = $2 AND "customerId" = $3::uuid`,
+      [id, owner.id, customerId],
     );
     return res.rowCount > 0;
   }

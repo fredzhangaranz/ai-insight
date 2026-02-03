@@ -3,15 +3,40 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChartComponent } from "@/app/components/charts/chart-component";
 import type { ChartType } from "@/lib/chart-contracts";
+import { useCustomer } from "@/lib/context/CustomerContext";
+import { CustomerSelector } from "@/app/insights/new/components/CustomerSelector";
 
 type InsightItem = {
   id: number;
   name: string;
   scope: string;
   formId?: string | null;
+  chartType?: string | null;
 };
 
+/** Map chartType to display label: Chart, Table, or Text */
+function getInsightTypeLabel(chartType?: string | null): string {
+  if (!chartType) return "Text";
+  switch (chartType.toLowerCase()) {
+    case "bar":
+    case "line":
+    case "pie":
+    case "kpi":
+      return "Chart";
+    case "table":
+      return "Table";
+    default:
+      return "Text";
+  }
+}
+
 export default function DashboardPage() {
+  const {
+    selectedCustomerId,
+    setSelectedCustomerId,
+    loading: customerLoading,
+    error: customerError,
+  } = useCustomer();
   const [dashboard, setDashboard] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,17 +54,27 @@ export default function DashboardPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   useEffect(() => {
+    if (customerLoading || !selectedCustomerId) return;
+
     const load = async () => {
       try {
-        const res = await fetch("/api/dashboards/default", {
-          cache: "no-store",
-        });
+        setLoading(true);
+        setError(null);
+        setExecutions({});
+        const res = await fetch(
+          `/api/dashboards/default?customerId=${selectedCustomerId}`,
+          {
+            cache: "no-store",
+          },
+        );
         if (!res.ok) throw new Error("Failed to load dashboard");
         const d = await res.json();
         setDashboard(d);
         // Load assessment forms for name lookup (for form-scoped insights)
         try {
-          const fr = await fetch("/api/assessment-forms");
+          const fr = await fetch(
+            `/api/assessment-forms?customerId=${selectedCustomerId}`,
+          );
           if (fr.ok) {
             const list = await fr.json();
             console.log("Assessment forms loaded:", list);
@@ -62,14 +97,17 @@ export default function DashboardPage() {
       }
     };
     load();
-  }, []);
+  }, [selectedCustomerId, customerLoading]);
 
   const panels = useMemo(() => dashboard?.panels?.panels || [], [dashboard]);
 
   const openPicker = async (panelId: string) => {
+    if (!selectedCustomerId) return;
     setPickerOpen({ panelId });
     try {
-      const res = await fetch(`/api/insights?scope=&search=`);
+      const res = await fetch(
+        `/api/insights?scope=&search=&customerId=${selectedCustomerId}`,
+      );
       const data = await res.json();
       const items: InsightItem[] = data.items || [];
       setInsights(items);
@@ -106,12 +144,19 @@ export default function DashboardPage() {
   };
 
   const bind = async (panelId: string, insightId: number) => {
-    await fetch(`/api/dashboards/panel/${panelId}/bind`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ insightId }),
-    });
-    const res = await fetch("/api/dashboards/default", { cache: "no-store" });
+    if (!selectedCustomerId) return;
+    await fetch(
+      `/api/dashboards/panel/${panelId}/bind?customerId=${selectedCustomerId}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ insightId }),
+      },
+    );
+    const res = await fetch(
+      `/api/dashboards/default?customerId=${selectedCustomerId}`,
+      { cache: "no-store" },
+    );
     const d = await res.json();
     setDashboard(d);
     setPickerOpen(null);
@@ -145,10 +190,14 @@ export default function DashboardPage() {
   };
 
   const execute = async (panelId: string, insightId: number) => {
+    if (!selectedCustomerId) return;
     setExecutions((prev) => ({ ...prev, [panelId]: null }));
-    const res = await fetch(`/api/insights/${insightId}/execute`, {
-      method: "POST",
-    });
+    const res = await fetch(
+      `/api/insights/${insightId}/execute?customerId=${selectedCustomerId}`,
+      {
+        method: "POST",
+      },
+    );
     const data = await res.json();
     if (!res.ok) {
       setExecutions((p) => ({ ...p, [panelId]: null }));
@@ -172,7 +221,6 @@ export default function DashboardPage() {
             if (r.ok) {
               const info = await r.json();
               setInsightsById((prev) => ({ ...prev, [id]: info }));
-              // if form-scoped, ensure form name is loaded by version ID
               const formId = info?.formId;
               if (info?.scope === "form" && formId && !formsById[formId]) {
                 try {
@@ -205,7 +253,6 @@ export default function DashboardPage() {
     const boundPanels = panels.filter((p: any) => p.insightId);
     if (boundPanels.length === 0) return;
 
-    // Execute all bound insights automatically
     boundPanels.forEach((panel: any) => {
       if (panel.insightId) {
         execute(panel.id, panel.insightId);
@@ -213,13 +260,38 @@ export default function DashboardPage() {
     });
   }, [autoRefresh, panels]);
 
+  if (customerLoading) return <div className="p-6">Loading customers...</div>;
+  if (customerError)
+    return (
+      <div className="p-6 text-sm text-red-600">
+        Error loading customers: {customerError}
+      </div>
+    );
+  if (!selectedCustomerId) {
+    return (
+      <div className="p-6">
+        <div className="text-sm text-gray-600 mb-4">
+          No customer selected. Please select a customer to view the dashboard.
+        </div>
+        <CustomerSelector value="" onChange={setSelectedCustomerId} />
+      </div>
+    );
+  }
   if (loading) return <div className="p-6">Loading...</div>;
   if (error) return <div className="p-6 text-sm text-red-600">{error}</div>;
 
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <div className="space-y-2">
+          <h1 className="text-xl font-semibold">Dashboard</h1>
+          <div className="max-w-md">
+            <CustomerSelector
+              value={selectedCustomerId || ""}
+              onChange={setSelectedCustomerId}
+            />
+          </div>
+        </div>
         <div className="flex items-center space-x-2">
           <label
             htmlFor="auto-refresh"
@@ -361,13 +433,20 @@ export default function DashboardPage() {
                     onClick={() => bind(pickerOpen.panelId, it.id)}
                   >
                     <div className="font-medium text-sm">{it.name}</div>
-                    <div className="text-xs text-gray-500">
-                      {it.scope}
-                      {it.scope === "form" && it.formId && formsById[it.formId]
-                        ? ` • ${formsById[it.formId].name} v${
-                            formsById[it.formId].version
-                          }`
-                        : ""}
+                    <div className="text-xs text-gray-500 flex items-center gap-2">
+                      <span className="font-medium text-slate-600 uppercase tracking-wide">
+                        {getInsightTypeLabel(it.chartType)}
+                      </span>
+                      <span>
+                        {it.scope}
+                        {it.scope === "form" &&
+                        it.formId &&
+                        formsById[it.formId]
+                          ? ` • ${formsById[it.formId].name} v${
+                              formsById[it.formId].version
+                            }`
+                          : ""}
+                      </span>
                     </div>
                   </button>
                 ))

@@ -21,7 +21,12 @@ export const POST = withErrorHandling(
     if (userId === null) {
       return createErrorResponse.badRequest("Invalid user id in session");
     }
-    const result = await insightService.execute(id, userId);
+
+    // Accept customerId from query parameter (optional, will use insight's customerId if not provided)
+    const { searchParams } = new URL(_req.url);
+    const customerId = searchParams.get("customerId") || undefined;
+
+    const result = await insightService.execute(id, userId, customerId);
     if (!result)
       return createErrorResponse.notFound("Insight not found or inactive");
     return NextResponse.json(result);
