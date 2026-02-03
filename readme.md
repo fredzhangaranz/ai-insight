@@ -449,7 +449,7 @@ For detailed information about specific aspects of the project, refer to the doc
   - Query Enrichment: `docs/design/query_enrichment.md`
   - Charting Design: `docs/design/agnostic-charting-design.md`
 - **Database Schema**: `lib/database-schema-context.md`
-- **Deployment**: `README-DEPLOYMENT.md`
+- **Deployment**: `docs/refactoring/DEPLOYMENT_INDEX.md` (beta + production guides)
 
 ## Contributing
 

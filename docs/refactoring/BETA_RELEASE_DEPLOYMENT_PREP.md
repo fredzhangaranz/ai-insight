@@ -683,6 +683,8 @@ insight-gen/
 
 ## Related Documentation
 
+- **Deployment index (all deployment guides):** `docs/refactoring/DEPLOYMENT_INDEX.md` — beta, production, and package guides
+- **Production / Docker deployment:** `docs/refactoring/README-DEPLOYMENT.md`, `docs/refactoring/DEPLOYMENT-PACKAGE.md`
 - **Feature Flags Removal (completed):** `docs/refactoring/FEATURE_FLAGS_REMOVAL_PLAN.md` — all flags removed; features are always on
 - **Database Migrations:** `database/migration/README.md` (if exists, or create)
 - **Architecture:** `readme.md`

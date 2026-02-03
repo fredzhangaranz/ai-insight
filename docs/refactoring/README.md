@@ -74,6 +74,10 @@ This folder contains comprehensive guides for preparing InsightGen for beta rele
 
 ## Quick Navigation
 
+### For Deployment (Beta or Production):
+
+→ **Start with:** [DEPLOYMENT_INDEX.md](./DEPLOYMENT_INDEX.md) — then choose Beta or Production guide
+
 ### For Beta Deployment NOW:
 
 → **Start with:** `BETA_RELEASE_DEPLOYMENT_PREP.md`
@@ -140,6 +144,9 @@ This folder contains comprehensive guides for preparing InsightGen for beta rele
 
 - `docs/refactoring/BETA_RELEASE_DEPLOYMENT_PREP.md` ✨
 - `docs/refactoring/FEATURE_FLAGS_REMOVAL_PLAN.md` ✨
+- `docs/refactoring/DEPLOYMENT_INDEX.md` — entry point for all deployment docs
+- `docs/refactoring/README-DEPLOYMENT.md` — production deployment guide (moved from root)
+- `docs/refactoring/DEPLOYMENT-PACKAGE.md` — deployment package guide (moved from root)
 
 ### Existing Files (for reference)
 

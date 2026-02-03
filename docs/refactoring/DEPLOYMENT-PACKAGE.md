@@ -34,9 +34,9 @@ This guide explains how to create and distribute a complete deployment package f
 mkdir insight-gen-deployment-package
 cd insight-gen-deployment-package
 
-# Copy required files
+# Copy required files (from repo root)
 cp ../insight-gen.tar .
-cp ../README-DEPLOYMENT.md .
+cp ../docs/refactoring/README-DEPLOYMENT.md ./README-DEPLOYMENT.md
 cp ../env.production.example .
 cp -r ../scripts/ .
 cp ../docker-compose.prod.yml .
