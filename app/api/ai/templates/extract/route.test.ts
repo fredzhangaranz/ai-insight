@@ -1,40 +1,19 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/config/template-flags", () => ({
-  isTemplateSystemEnabled: vi.fn(() => true),
-}));
-
 vi.mock("@/lib/services/template-extraction.service", () => ({
   extractTemplateDraft: vi.fn(),
 }));
 
 import { POST } from "./route";
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import { extractTemplateDraft } from "@/lib/services/template-extraction.service";
 import { TemplateServiceError } from "@/lib/services/template.service";
 
-const isTemplateSystemEnabledMock =
-  isTemplateSystemEnabled as unknown as Mock;
-const extractTemplateDraftMock =
-  extractTemplateDraft as unknown as Mock;
+const extractTemplateDraftMock = extractTemplateDraft as unknown as Mock;
 
 describe("POST /api/ai/templates/extract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    isTemplateSystemEnabledMock.mockReturnValue(true);
-  });
-
-  it("returns 404 when feature flag is disabled", async () => {
-    isTemplateSystemEnabledMock.mockReturnValue(false);
-
-    const req = new NextRequest("http://localhost/api/ai/templates/extract", {
-      method: "POST",
-      body: JSON.stringify({ questionText: "q", sqlQuery: "SELECT 1" }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(404);
   });
 
   it("returns 400 when body is invalid JSON", async () => {
@@ -127,7 +106,7 @@ describe("POST /api/ai/templates/extract", () => {
 
   it("maps TemplateServiceError to response", async () => {
     extractTemplateDraftMock.mockRejectedValue(
-      new TemplateServiceError("bad payload", 400, { field: "sql" })
+      new TemplateServiceError("bad payload", 400, { field: "sql" }),
     );
 
     const req = new NextRequest("http://localhost/api/ai/templates/extract", {

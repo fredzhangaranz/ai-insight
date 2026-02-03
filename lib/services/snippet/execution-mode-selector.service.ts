@@ -65,7 +65,7 @@ export class ExecutionModeSelector {
     // Decision: Use snippets if available and score is good
     if (
       matchedSnippets.length > 0 &&
-      matchedSnippets[0].relevanceScore > 0.6 &&
+      matchedSnippets[0].relevanceScore >= 0.6 &&
       placeholdersResolved
     ) {
       const reason = `Using ${matchedSnippets.length} relevant snippets (score: ${matchedSnippets[0].relevanceScore.toFixed(2)})`;

@@ -1,47 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@/lib/config/template-flags", () => ({
-  isTemplateSystemEnabled: vi.fn(() => true),
-}));
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ai/providers/provider-factory", () => ({
   getAIProvider: vi.fn(),
 }));
 
 import { extractTemplateDraft } from "./template-extraction.service";
-import { TemplateServiceError } from "./template.service";
 import type {
   TemplateExtractionDraft,
   TemplateExtractionResponse,
 } from "@/lib/ai/providers/i-query-funnel-provider";
-import {
-  isTemplateSystemEnabled,
-} from "@/lib/config/template-flags";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 
-const isTemplateSystemEnabledMock =
-  isTemplateSystemEnabled as unknown as vi.Mock;
 const getAIProviderMock = getAIProvider as unknown as vi.Mock;
 
 describe("template-extraction.service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    isTemplateSystemEnabledMock.mockReturnValue(true);
-  });
-
-  afterEach(() => {
-    isTemplateSystemEnabledMock.mockReturnValue(true);
-  });
-
-  it("throws when template system is disabled", async () => {
-    isTemplateSystemEnabledMock.mockReturnValue(false);
-
-    await expect(
-      extractTemplateDraft({
-        questionText: "How many assessments?",
-        sqlQuery: "SELECT 1",
-      })
-    ).rejects.toBeInstanceOf(TemplateServiceError);
   });
 
   it("normalizes extracted draft, simplifies scaffold, and runs validation", async () => {
@@ -99,27 +73,25 @@ FROM Step2_Results`,
     });
 
     const result = await extractTemplateDraft({
-      questionText: "How many assessments has this patient had in the past 180 days?",
+      questionText:
+        "How many assessments has this patient had in the past 180 days?",
       sqlQuery: draft.sqlPattern,
     });
 
     expect(result.modelId).toBe("claude-3-5-sonnet-latest");
     expect(result.warnings).toContain(
-      "Ensure windowDays default is appropriate."
+      "Ensure windowDays default is appropriate.",
     );
     expect(result.warnings).toContain(
-      "Removed funnel scaffolding (Step*_Results CTEs) from extracted SQL pattern for cleaner templates."
+      "Removed funnel scaffolding (Step*_Results CTEs) from extracted SQL pattern for cleaner templates.",
     );
     expect(result.draft.sqlPattern).not.toMatch(/WITH\s+Step1_Results/i);
     expect(result.draft.name).toBe("Count Assessments by Window");
     expect(result.draft.intent).toBe("aggregation_by_category");
-    expect(result.draft.placeholdersSpec?.slots.map((slot) => slot.name)).toEqual(
-      expect.arrayContaining(["patientId", "minimumAssessments"])
-    );
-    expect(result.draft.keywords).toEqual([
-      "count",
-      "assessments",
-    ]);
+    expect(
+      result.draft.placeholdersSpec?.slots.map((slot) => slot.name),
+    ).toEqual(expect.arrayContaining(["patientId", "minimumAssessments"]));
+    expect(result.draft.keywords).toEqual(["count", "assessments"]);
     expect(result.draft.tags).toEqual(["patient-analysis"]);
     expect(result.draft.examples).toEqual([
       "How many assessments has this patient had in the past 180 days?",

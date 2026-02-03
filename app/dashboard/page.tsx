@@ -12,13 +12,11 @@ type InsightItem = {
 };
 
 export default function DashboardPage() {
-  const uiEnabled = process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true";
-  const apiEnabled = process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true"; // ui gate mirrors api for client
   const [dashboard, setDashboard] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState<null | { panelId: string }>(
-    null
+    null,
   );
   const [insights, setInsights] = useState<InsightItem[]>([]);
   const [executions, setExecutions] = useState<
@@ -63,9 +61,8 @@ export default function DashboardPage() {
         setLoading(false);
       }
     };
-    if (uiEnabled && apiEnabled) load();
-    else setLoading(false);
-  }, [uiEnabled, apiEnabled]);
+    load();
+  }, []);
 
   const panels = useMemo(() => dashboard?.panels?.panels || [], [dashboard]);
 
@@ -81,10 +78,10 @@ export default function DashboardPage() {
         new Set(
           items
             .filter(
-              (i) => i.scope === "form" && i.formId && !formsById[i.formId!]
+              (i) => i.scope === "form" && i.formId && !formsById[i.formId!],
             )
-            .map((i) => i.formId!)
-        )
+            .map((i) => i.formId!),
+        ),
       );
       await Promise.all(
         missing.map(async (fid) => {
@@ -101,7 +98,7 @@ export default function DashboardPage() {
               }));
             }
           } catch (_) {}
-        })
+        }),
       );
     } catch (e) {
       // ignore; shown as empty
@@ -129,7 +126,7 @@ export default function DashboardPage() {
         if (info.scope === "form" && info.formId && !formsById[info.formId]) {
           try {
             const fr = await fetch(
-              `/api/assessment-forms/version/${info.formId}`
+              `/api/assessment-forms/version/${info.formId}`,
             );
             if (fr.ok) {
               const fv = await fr.json();
@@ -180,7 +177,7 @@ export default function DashboardPage() {
               if (info?.scope === "form" && formId && !formsById[formId]) {
                 try {
                   const fr = await fetch(
-                    `/api/assessment-forms/version/${formId}`
+                    `/api/assessment-forms/version/${formId}`,
                   );
                   if (fr.ok) {
                     const fv = await fr.json();
@@ -196,7 +193,7 @@ export default function DashboardPage() {
               }
             }
           } catch (_) {}
-        })
+        }),
       );
     })();
   }, [panels]);
@@ -216,13 +213,6 @@ export default function DashboardPage() {
     });
   }, [autoRefresh, panels]);
 
-  if (!uiEnabled)
-    return (
-      <div className="p-6 text-sm text-gray-600">
-        Dashboard is disabled. Set CHART_INSIGHTS_ENABLED=true and
-        NEXT_PUBLIC_CHART_INSIGHTS_ENABLED=true.
-      </div>
-    );
   if (loading) return <div className="p-6">Loading...</div>;
   if (error) return <div className="p-6 text-sm text-red-600">{error}</div>;
 
@@ -336,7 +326,7 @@ export default function DashboardPage() {
                 {insightsById[p.insightId]?.createdAt && (
                   <div className="absolute bottom-2 right-3 text-[10px] text-gray-400">
                     {new Date(
-                      insightsById[p.insightId].createdAt
+                      insightsById[p.insightId].createdAt,
                     ).toLocaleString()}
                   </div>
                 )}

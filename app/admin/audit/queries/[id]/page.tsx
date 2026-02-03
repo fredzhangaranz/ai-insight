@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ProtectedRoute } from "@/lib/components/auth/ProtectedRoute";
-import { isAuditDashboardEnabled } from "@/lib/config/audit-flags";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/app/components/loading-dots";
@@ -27,7 +32,6 @@ interface QueryDetail {
 }
 
 export default function QueryDetailPage() {
-  const enabled = useMemo(() => isAuditDashboardEnabled(), []);
   const params = useParams();
   const queryId = params?.id as string | undefined;
 
@@ -36,7 +40,7 @@ export default function QueryDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!enabled || !queryId) return;
+    if (!queryId) return;
 
     const loadDetail = async () => {
       setIsLoading(true);
@@ -57,7 +61,7 @@ export default function QueryDetailPage() {
     };
 
     loadDetail();
-  }, [enabled, queryId]);
+  }, [queryId]);
 
   return (
     <ProtectedRoute requireAdmin>
@@ -79,25 +83,21 @@ export default function QueryDetailPage() {
             </div>
           </div>
 
-          {!enabled && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="py-4 text-sm text-amber-800">
-                The audit dashboard is disabled. Set ENABLE_AUDIT_DASHBOARD=true to enable.
+          {error && (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="py-4 text-sm text-red-700">
+                {error}
               </CardContent>
             </Card>
           )}
 
-          {enabled && error && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="py-4 text-sm text-red-700">{error}</CardContent>
-            </Card>
-          )}
-
-          {enabled && (
+          {
             <Card>
               <CardHeader>
                 <CardTitle>Summary</CardTitle>
-                <CardDescription>Primary query attributes and status.</CardDescription>
+                <CardDescription>
+                  Primary query attributes and status.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {isLoading && !detail ? (
@@ -105,15 +105,22 @@ export default function QueryDetailPage() {
                 ) : detail ? (
                   <div className="space-y-4">
                     <div>
-                      <div className="text-xs uppercase text-slate-500">Question</div>
+                      <div className="text-xs uppercase text-slate-500">
+                        Question
+                      </div>
                       <div className="text-slate-900">{detail.question}</div>
                     </div>
                     <div className="flex flex-wrap gap-3">
                       <Badge variant="outline">Mode: {detail.mode}</Badge>
-                      <Badge variant="outline">Results: {detail.resultCount}</Badge>
-                      <Badge variant="outline">Latency: {detail.totalDurationMs ?? "-"} ms</Badge>
                       <Badge variant="outline">
-                        Clarification: {detail.clarificationRequested ? "Yes" : "No"}
+                        Results: {detail.resultCount}
+                      </Badge>
+                      <Badge variant="outline">
+                        Latency: {detail.totalDurationMs ?? "-"} ms
+                      </Badge>
+                      <Badge variant="outline">
+                        Clarification:{" "}
+                        {detail.clarificationRequested ? "Yes" : "No"}
                       </Badge>
                     </div>
                     <div className="text-sm text-slate-500">
@@ -121,17 +128,21 @@ export default function QueryDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-600">No detail available.</div>
+                  <div className="text-sm text-slate-600">
+                    No detail available.
+                  </div>
                 )}
               </CardContent>
             </Card>
-          )}
+          }
 
-          {enabled && detail && (
+          {detail && (
             <Card>
               <CardHeader>
                 <CardTitle>SQL</CardTitle>
-                <CardDescription>Executed SQL (as stored in history).</CardDescription>
+                <CardDescription>
+                  Executed SQL (as stored in history).
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <pre className="whitespace-pre-wrap rounded bg-slate-900 text-slate-100 p-4 text-xs">
@@ -141,17 +152,22 @@ export default function QueryDetailPage() {
             </Card>
           )}
 
-          {enabled && detail && (
+          {detail && (
             <Card>
               <CardHeader>
                 <CardTitle>Clarifications</CardTitle>
-                <CardDescription>Clarification events linked to this query.</CardDescription>
+                <CardDescription>
+                  Clarification events linked to this query.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {detail.clarifications?.length ? (
                   <div className="space-y-3">
                     {detail.clarifications.map((item: any) => (
-                      <div key={item.id} className="rounded border border-slate-200 p-3">
+                      <div
+                        key={item.id}
+                        className="rounded border border-slate-200 p-3"
+                      >
                         <div className="text-sm font-medium text-slate-900">
                           {item.promptText}
                         </div>
@@ -165,25 +181,34 @@ export default function QueryDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-600">No clarifications recorded.</div>
+                  <div className="text-sm text-slate-600">
+                    No clarifications recorded.
+                  </div>
                 )}
               </CardContent>
             </Card>
           )}
 
-          {enabled && detail && (
+          {detail && (
             <Card>
               <CardHeader>
                 <CardTitle>SQL Validation</CardTitle>
-                <CardDescription>Validation events linked to this query.</CardDescription>
+                <CardDescription>
+                  Validation events linked to this query.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {detail.validations?.length ? (
                   <div className="space-y-3">
                     {detail.validations.map((item: any) => (
-                      <div key={item.id} className="rounded border border-slate-200 p-3">
+                      <div
+                        key={item.id}
+                        className="rounded border border-slate-200 p-3"
+                      >
                         <div className="flex flex-wrap gap-2 items-center">
-                          <Badge variant={item.isValid ? "secondary" : "destructive"}>
+                          <Badge
+                            variant={item.isValid ? "secondary" : "destructive"}
+                          >
                             {item.isValid ? "Valid" : "Invalid"}
                           </Badge>
                           <span className="text-xs text-slate-500">
@@ -199,13 +224,15 @@ export default function QueryDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-600">No validation logs recorded.</div>
+                  <div className="text-sm text-slate-600">
+                    No validation logs recorded.
+                  </div>
                 )}
               </CardContent>
             </Card>
           )}
 
-          {enabled && isLoading && <LoadingDots />}
+          {isLoading && <LoadingDots />}
         </div>
       </div>
     </ProtectedRoute>

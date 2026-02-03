@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import {
   checkSimilarTemplates,
   TemplateDraft,
 } from "@/lib/services/template-similarity.service";
 
 export async function POST(req: NextRequest) {
-  if (!isTemplateSystemEnabled()) {
-    return NextResponse.json({ message: "Not Found" }, { status: 404 });
-  }
-
   let body: any;
   try {
     body = await req.json();
   } catch (error) {
     return NextResponse.json(
       { message: "Request body must be valid JSON" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -27,14 +22,14 @@ export async function POST(req: NextRequest) {
   if (!name) {
     return NextResponse.json(
       { message: "'name' is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   if (!intent) {
     return NextResponse.json(
       { message: "'intent' is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -53,7 +48,7 @@ export async function POST(req: NextRequest) {
     console.error("Failed to check for duplicate templates:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

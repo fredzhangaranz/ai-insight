@@ -47,12 +47,6 @@ type InsightOwner = {
   username?: string | null;
 };
 
-function ensureApiEnabled() {
-  if (process.env.CHART_INSIGHTS_API_ENABLED !== "true") {
-    throw new Error("ChartInsightsAPI:Disabled");
-  }
-}
-
 function validateCreate(input: CreateInsightInput) {
   if (!input.name?.trim()) throw new Error("Validation: name required");
   if (!input.question?.trim()) throw new Error("Validation: question required");
@@ -69,7 +63,7 @@ function validateCreate(input: CreateInsightInput) {
       (input as any).assessmentFormVersionFk ?? (input as any).formId;
     if (!formFk) {
       throw new Error(
-        "Validation: assessmentFormVersionFk (or formId) required for scope=form"
+        "Validation: assessmentFormVersionFk (or formId) required for scope=form",
       );
     }
   }
@@ -91,7 +85,7 @@ function validateAndFixQuery(sql: string): string {
     if (caseMatch) {
       sql = sql.replace(
         orderByAliasRegex,
-        `ORDER BY ${caseMatch[0].replace(` AS ${alias}`, "")}`
+        `ORDER BY ${caseMatch[0].replace(` AS ${alias}`, "")}`,
       );
     }
   }
@@ -126,7 +120,6 @@ export class InsightService {
     activeOnly?: boolean;
     userId: number;
   }): Promise<SavedInsight[]> {
-    ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const conds: string[] = ['"userId" = $1'];
     const values: any[] = [params.userId];
@@ -152,7 +145,6 @@ export class InsightService {
   }
 
   async getById(id: number, ownerId?: number): Promise<SavedInsight | null> {
-    ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const values: any[] = [id];
     let where = `id = $1`;
@@ -162,16 +154,15 @@ export class InsightService {
     }
     const res = await pool.query(
       `SELECT id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt" FROM "SavedInsights" WHERE ${where}`,
-      values
+      values,
     );
     return res.rows[0] || null;
   }
 
   async create(
     input: CreateInsightInput,
-    owner: InsightOwner
+    owner: InsightOwner,
   ): Promise<SavedInsight> {
-    ensureApiEnabled();
     validateCreate(input);
     const pool = await getInsightGenDbPool();
     const createdBy = input.createdBy ?? owner.username ?? null;
@@ -194,7 +185,7 @@ export class InsightService {
         input.tags ? JSON.stringify(input.tags) : null,
         createdBy,
         owner.id,
-      ]
+      ],
     );
     return res.rows[0] as any;
   }
@@ -202,9 +193,8 @@ export class InsightService {
   async update(
     id: number,
     input: UpdateInsightInput,
-    owner: InsightOwner
+    owner: InsightOwner,
   ): Promise<SavedInsight | null> {
-    ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const fields: string[] = [];
     const values: any[] = [];
@@ -245,7 +235,7 @@ export class InsightService {
     if (input.chartOptions !== undefined) {
       fields.push(`"chartOptions" = $${i++}`);
       values.push(
-        input.chartOptions ? JSON.stringify(input.chartOptions) : null
+        input.chartOptions ? JSON.stringify(input.chartOptions) : null,
       );
     }
     if (input.description !== undefined) {
@@ -264,31 +254,29 @@ export class InsightService {
     values.push(owner.id);
     const res = await pool.query(
       `UPDATE "SavedInsights" SET ${fields.join(
-        ", "
+        ", ",
       )} WHERE id = $${i} AND "userId" = $${i + 1} RETURNING id, name, question, scope, "assessmentFormVersionFk" as "formId", sql, "chartType", "chartMapping", "chartOptions", description, tags, "isActive", "createdBy", "userId", "createdAt", "updatedAt"`,
-      values
+      values,
     );
     return res.rows[0] || null;
   }
 
   async softDelete(id: number, ownerId: number): Promise<boolean> {
-    ensureApiEnabled();
     const pool = await getInsightGenDbPool();
     const res = await pool.query(
       `UPDATE "SavedInsights" SET "isActive" = FALSE WHERE id = $1 AND "userId" = $2`,
-      [id, ownerId]
+      [id, ownerId],
     );
     return res.rowCount > 0;
   }
 
   async execute(
     id: number,
-    ownerId: number
+    ownerId: number,
   ): Promise<{
     rows: any[];
     chart: { chartType: ChartType; data: any };
   } | null> {
-    ensureApiEnabled();
     const insight = await this.getById(id, ownerId);
     if (!insight || !insight.isActive) return null;
     const sqlText = validateAndFixQuery(insight.sql);
@@ -306,7 +294,7 @@ export class InsightService {
               mapping: insight.chartMapping,
               options: insight.chartOptions,
             },
-            insight.chartType
+            insight.chartType,
           );
     return { rows, chart: { chartType: insight.chartType, data } };
   }

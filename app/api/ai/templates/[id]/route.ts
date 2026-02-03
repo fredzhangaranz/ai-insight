@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import {
   getTemplateById,
   TemplateDraftPayload,
@@ -16,15 +15,14 @@ function parseTemplateId(id: string): number | null {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
-  if (!isTemplateSystemEnabled()) {
-    return NextResponse.json({ message: "Not Found" }, { status: 404 });
-  }
-
   const templateId = parseTemplateId(params.id);
   if (templateId === null) {
-    return NextResponse.json({ message: "Invalid template id" }, { status: 400 });
+    return NextResponse.json(
+      { message: "Invalid template id" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -34,31 +32,36 @@ export async function GET(
     if (error instanceof TemplateServiceError) {
       return NextResponse.json(
         { message: error.message, details: error.details },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Failed to fetch template details:", error);
-    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
-  if (!isTemplateSystemEnabled()) {
-    return NextResponse.json({ message: "Not Found" }, { status: 404 });
-  }
-
   const templateId = parseTemplateId(params.id);
   if (templateId === null) {
-    return NextResponse.json({ message: "Invalid template id" }, { status: 400 });
+    return NextResponse.json(
+      { message: "Invalid template id" },
+      { status: 400 },
+    );
   }
 
   try {
     const payload = (await req.json()) as TemplateDraftPayload;
     const result = await updateTemplateDraft(templateId, payload);
-    return NextResponse.json({ data: result.template, warnings: result.warnings });
+    return NextResponse.json({
+      data: result.template,
+      warnings: result.warnings,
+    });
   } catch (error: any) {
     if (error instanceof TemplateValidationError) {
       return NextResponse.json(
@@ -67,16 +70,19 @@ export async function PATCH(
           errors: error.validation.errors,
           warnings: error.validation.warnings,
         },
-        { status: error.status }
+        { status: error.status },
       );
     }
     if (error instanceof TemplateServiceError) {
       return NextResponse.json(
         { message: error.message, details: error.details },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Failed to update template draft:", error);
-    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }

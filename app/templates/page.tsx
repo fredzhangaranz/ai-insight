@@ -3,7 +3,6 @@ import QuickLinks from "./quick-links";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import {
   listTemplates,
   TemplateListItem,
@@ -41,33 +40,6 @@ function extractUniqueTags(templates: TemplateListItem[]): string[] {
 }
 
 export default async function TemplatesPage() {
-  const featureEnabled = isTemplateSystemEnabled();
-
-  if (!featureEnabled) {
-    return (
-      <div className="container py-12">
-        <Card className="max-w-2xl">
-          <CardHeader>
-            <CardTitle>Template Catalog Disabled</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              The template system is currently disabled. Set
-              <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
-                AI_TEMPLATES_ENABLED=true
-              </code>
-              in your environment to access the catalog.
-            </p>
-            <p>
-              After enabling the flag, reload this page to manage templates or
-              refer to the implementation plan for rollout steps.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   let templates: TemplateListItem[] = [];
   try {
     templates = await listTemplates({ limit: 50 });

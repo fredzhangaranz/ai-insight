@@ -1,12 +1,6 @@
 import { NextResponse } from "next/server";
-import { isAuditDashboardEnabled } from "@/lib/config/audit-flags";
 
-export function ensureAuditDashboardEnabled() {
-  if (!isAuditDashboardEnabled()) {
-    return NextResponse.json(
-      { error: "Audit dashboard disabled" },
-      { status: 404 }
-    );
-  }
+/** Audit dashboard is always enabled; no feature gate. */
+export function ensureAuditDashboardEnabled(): NextResponse | null {
   return null;
 }

@@ -2,7 +2,6 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { getInsightGenDbPool } from "../db";
-import { isTemplateSystemEnabled } from "../config/template-flags";
 import {
   PlaceholdersSpec,
   PlaceholdersSpecSlot,
@@ -92,7 +91,7 @@ const CATALOG_RELATIVE_PATH = path.join(
   process.cwd(),
   "lib",
   "prompts",
-  "query-templates.json"
+  "query-templates.json",
 );
 
 /**
@@ -102,9 +101,7 @@ export async function getTemplates(options?: {
   forceReload?: boolean;
 }): Promise<TemplateCatalog> {
   const forceReload = options?.forceReload === true;
-  const source: TemplateCatalogSource = isTemplateSystemEnabled()
-    ? "db"
-    : "json";
+  const source: TemplateCatalogSource = "db";
 
   if (!forceReload) {
     const cached = catalogCache[source];
@@ -125,7 +122,7 @@ export async function getTemplates(options?: {
   if (validation.warnings.length > 0) {
     console.warn(
       `Query template catalog warnings (${source}):`,
-      validation.warnings.map((w) => w.message).join("; ")
+      validation.warnings.map((w) => w.message).join("; "),
     );
   }
 
@@ -135,7 +132,7 @@ export async function getTemplates(options?: {
 }
 
 async function loadTemplateCatalog(
-  source: TemplateCatalogSource
+  source: TemplateCatalogSource,
 ): Promise<TemplateCatalog> {
   if (source === "db") {
     return loadCatalogFromDb();
@@ -149,8 +146,6 @@ async function loadCatalogFromJson(): Promise<TemplateCatalog> {
   const templates = normalizeCatalogTemplates(parsed?.templates ?? []);
   return { templates };
 }
-
-let hasWarnedAboutDbFallback = false;
 
 async function loadCatalogFromDb(): Promise<TemplateCatalog> {
   try {
@@ -188,25 +183,21 @@ async function loadCatalogFromDb(): Promise<TemplateCatalog> {
          FROM "TemplateUsage" tu
          WHERE tu."templateVersionId" = tv.id
        ) usage ON TRUE
-       WHERE t.status = 'Approved'`
+       WHERE t.status = 'Approved'`,
     );
 
     if (result.rows.length === 0) {
-      warnDbFallback(
-        "no approved templates found in DB (seed may not have been run yet)"
-      );
-      return loadCatalogFromJson();
+      return { templates: [] };
     }
 
     const templates = result.rows.map(transformDbRowToQueryTemplate);
     return { templates };
   } catch (error) {
-    warnDbFallback(
-      `failed to load templates from DB: ${
+    throw new Error(
+      `Failed to load templates from DB: ${
         (error as Error)?.message ?? String(error)
-      }`
+      }`,
     );
-    return loadCatalogFromJson();
   }
 }
 
@@ -307,7 +298,7 @@ function runCatalogValidation(catalog: TemplateCatalog): ValidationResult {
  */
 export async function matchTemplates(
   subQuestion: string,
-  k: number = 2
+  k: number = 2,
 ): Promise<TemplateMatch[]> {
   const catalog = await getTemplates();
   if (!subQuestion || !catalog.templates.length) return [];
@@ -320,7 +311,7 @@ export async function matchTemplates(
 
     const keywordMatches = tplKeywords.filter((kw) => questionTokens.has(kw));
     const nameDescMatches = Array.from(tplNameDescTokens).filter((t) =>
-      questionTokens.has(t)
+      questionTokens.has(t),
     );
 
     let bestExampleScore = 0;
@@ -380,22 +371,11 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
 export function resetTemplateCatalogCache(): void {
   delete catalogCache.json;
   delete catalogCache.db;
-  hasWarnedAboutDbFallback = false;
   catalogIndex = null;
 }
 
 export function reloadTemplateCatalog(): void {
   resetTemplateCatalogCache();
-}
-
-function warnDbFallback(reason: string): void {
-  if (hasWarnedAboutDbFallback) {
-    return;
-  }
-  console.warn(
-    `AI_TEMPLATES_ENABLED is true, but ${reason}. Falling back to JSON catalog.`
-  );
-  hasWarnedAboutDbFallback = true;
 }
 
 function clamp01(value: number): number {
@@ -445,7 +425,7 @@ function transformDbRowToQueryTemplate(row: DbTemplateRow): QueryTemplate {
 }
 
 function normalizePlaceholdersSpec(
-  spec: PlaceholdersSpec | null
+  spec: PlaceholdersSpec | null,
 ): PlaceholdersSpec | null {
   if (!spec?.slots) return spec ?? null;
   const slots = spec.slots
@@ -461,7 +441,7 @@ function normalizePlaceholdersSpec(
         semantic:
           typeof semanticValue === "string" && semanticValue.length > 0
             ? semanticValue
-            : semanticValue ?? null,
+            : (semanticValue ?? null),
       };
     })
     .filter((slot): slot is PlaceholdersSpecSlot => Boolean(slot));
@@ -469,18 +449,18 @@ function normalizePlaceholdersSpec(
 }
 
 function normalizeCatalogStringArray(
-  value: string[] | null | undefined
+  value: string[] | null | undefined,
 ): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const deduped = Array.from(
-    new Set(value.map((item) => String(item).trim()).filter(Boolean))
+    new Set(value.map((item) => String(item).trim()).filter(Boolean)),
   );
   return deduped.length > 0 ? deduped : undefined;
 }
 
 function normalizeLoadedTemplate(template: QueryTemplate): QueryTemplate {
   const normalizedSpec = normalizePlaceholdersSpec(
-    template.placeholdersSpec ?? null
+    template.placeholdersSpec ?? null,
   );
   const placeholdersFromSpec =
     normalizedSpec?.slots?.map((slot) => slot.name) ?? [];
@@ -497,9 +477,7 @@ function normalizeLoadedTemplate(template: QueryTemplate): QueryTemplate {
     notes: normalizeOptionalString(template.notes),
     keywords: normalizeCatalogStringArray(template.keywords),
     tags: normalizeCatalogStringArray(template.tags),
-    questionExamples: normalizeCatalogStringArray(
-      template.questionExamples
-    ),
+    questionExamples: normalizeCatalogStringArray(template.questionExamples),
     placeholders: normalizedPlaceholders,
   };
 
@@ -512,16 +490,14 @@ function normalizeLoadedTemplate(template: QueryTemplate): QueryTemplate {
   return normalizedTemplate;
 }
 
-function normalizeOptionalString(
-  value?: string | null
-): string | undefined {
+function normalizeOptionalString(value?: string | null): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function normalizeCatalogTemplates(
-  templates: QueryTemplate[]
+  templates: QueryTemplate[],
 ): QueryTemplate[] {
   return templates
     .filter((tpl): tpl is QueryTemplate => Boolean(tpl))
@@ -565,7 +541,7 @@ function ensureCatalogIndex(catalog: TemplateCatalog): TemplateCatalogIndex {
 
 export async function getTemplateById(
   templateId: number,
-  options?: { forceReload?: boolean }
+  options?: { forceReload?: boolean },
 ): Promise<QueryTemplate | undefined> {
   if (!Number.isFinite(templateId)) {
     return undefined;
@@ -577,7 +553,7 @@ export async function getTemplateById(
 
 export async function getTemplatesByIntent(
   intent: string,
-  options?: { forceReload?: boolean }
+  options?: { forceReload?: boolean },
 ): Promise<QueryTemplate[]> {
   const key = normalizeIntentKey(intent);
   if (!key) return [];

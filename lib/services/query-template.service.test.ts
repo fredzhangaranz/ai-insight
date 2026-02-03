@@ -1,4 +1,3 @@
-import * as fs from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db", () => ({
@@ -16,15 +15,14 @@ import {
 
 const mockGetInsightGenDbPool = getInsightGenDbPool as unknown as vi.Mock;
 
-describe("query template catalog feature flag gating", () => {
-  let warnSpy: ReturnType<typeof vi.spyOn<typeof console, "warn">> | null = null;
+describe("query template catalog", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn<typeof console, "warn">> | null =
+    null;
 
   beforeEach(() => {
     resetTemplateCatalogCache();
     vi.clearAllMocks();
-    warnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => undefined);
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     mockGetInsightGenDbPool.mockReset();
   });
 
@@ -32,97 +30,27 @@ describe("query template catalog feature flag gating", () => {
     resetTemplateCatalogCache();
     warnSpy?.mockRestore();
     warnSpy = null;
-    delete process.env.AI_TEMPLATES_ENABLED;
   });
 
-  it("loads JSON catalog when feature flag is disabled", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "false";
-    const readFileSpy = vi.spyOn(fs.promises, "readFile");
-
-    const catalog = await getTemplates({ forceReload: true });
-
-    expect(readFileSpy).toHaveBeenCalledOnce();
-    expect(Array.isArray(catalog.templates)).toBe(true);
-    expect(catalog.templates.length).toBeGreaterThan(0);
-
-    readFileSpy.mockRestore();
-  });
-
-  it("reloads catalog when toggling feature flag without restart", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "false";
-    const readFileSpy = vi.spyOn(fs.promises, "readFile");
-    const mockQuery = vi.fn().mockResolvedValue({
-      rows: [
-        {
-          templateId: 1,
-          templateVersionId: 11,
-          name: "From DB",
-          description: null,
-          intent: "aggregation_by_category",
-          status: "Approved",
-          sqlPattern: "SELECT 1",
-          placeholdersSpec: { slots: [{ name: "patientId" }] },
-          keywords: ["demo"],
-          tags: ["tag"],
-          examples: ["example"],
-          version: 1,
-          successCount: 8,
-          usageCount: 10,
-        },
-      ],
-    });
-    mockGetInsightGenDbPool.mockResolvedValue({
-      query: mockQuery,
-    } as any);
-
-    await getTemplates({ forceReload: true });
-    expect(readFileSpy).toHaveBeenCalledTimes(1);
-
-    process.env.AI_TEMPLATES_ENABLED = "true";
-    const catalog = await getTemplates({ forceReload: true });
-    expect(mockGetInsightGenDbPool).toHaveBeenCalledTimes(1);
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-    expect(mockQuery.mock.calls[0]?.[0]).toContain("JOIN LATERAL");
-    expect(readFileSpy).toHaveBeenCalledTimes(1);
-    expect(catalog.templates[0].placeholders).toEqual(["patientId"]);
-
-    await getTemplates();
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-
-    readFileSpy.mockRestore();
-  });
-
-  it("falls back to JSON when DB returns no rows", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "true";
-    const readFileSpy = vi.spyOn(fs.promises, "readFile");
+  it("returns empty catalog when DB returns no rows", async () => {
     mockGetInsightGenDbPool.mockResolvedValue({
       query: vi.fn().mockResolvedValue({ rows: [] }),
     } as any);
 
     const catalog = await getTemplates({ forceReload: true });
 
-    expect(catalog.templates.length).toBeGreaterThan(0);
-    expect(readFileSpy).toHaveBeenCalledTimes(1);
-
-    readFileSpy.mockRestore();
+    expect(catalog.templates).toEqual([]);
   });
 
-  it("falls back to JSON when DB query throws", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "true";
-    const readFileSpy = vi.spyOn(fs.promises, "readFile");
+  it("throws when DB query fails", async () => {
     mockGetInsightGenDbPool.mockRejectedValue(new Error("db unavailable"));
 
-    const catalog = await getTemplates({ forceReload: true });
-
-    expect(Array.isArray(catalog.templates)).toBe(true);
-    expect(readFileSpy).toHaveBeenCalledTimes(1);
-
-    readFileSpy.mockRestore();
+    await expect(getTemplates({ forceReload: true })).rejects.toThrow(
+      "db unavailable",
+    );
   });
 
   it("boosts templates with higher success rate", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "true";
-
     const mockQuery = vi.fn().mockResolvedValue({
       rows: [
         {
@@ -170,7 +98,6 @@ describe("query template catalog feature flag gating", () => {
   });
 
   it("exposes helper to fetch template by id using memoized index", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "true";
     const mockQuery = vi.fn().mockResolvedValue({
       rows: [
         {
@@ -208,7 +135,6 @@ describe("query template catalog feature flag gating", () => {
   });
 
   it("returns normalized intent matches via helper lookup", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "true";
     const mockQuery = vi.fn().mockResolvedValue({
       rows: [
         {
@@ -252,38 +178,44 @@ describe("query template catalog feature flag gating", () => {
 
     mockGetInsightGenDbPool.mockResolvedValue({ query: mockQuery } as any);
 
-    const templates = await getTemplatesByIntent("  temporal_proximity_query ", {
-      forceReload: true,
-    });
+    const templates = await getTemplatesByIntent(
+      "  temporal_proximity_query ",
+      {
+        forceReload: true,
+      },
+    );
 
     expect(templates).toHaveLength(2);
     expect(templates.map((tpl) => tpl.templateId).sort()).toEqual([11, 12]);
     expect(mockQuery).toHaveBeenCalledTimes(1);
   });
 
-  it("normalizes json catalog templates when feature flag disabled", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "false";
-    const customCatalog = {
-      templates: [
+  it("normalizes DB template fields", async () => {
+    const mockQuery = vi.fn().mockResolvedValue({
+      rows: [
         {
+          templateId: 1,
+          templateVersionId: 11,
           name: "  Demo Template ",
           description: " ",
           intent: "  aggregator  ",
-          questionExamples: [" Example "],
-          keywords: [" foo ", "foo"],
-          tags: ["tag ", "tag"],
-          placeholders: [" value ", ""],
+          status: "Approved",
           sqlPattern: "SELECT 1 FROM table WHERE value = {value}",
-          version: 1,
           placeholdersSpec: {
             slots: [{ name: " value  ", semantic: " metric " }],
           },
+          resultShape: null,
+          notes: null,
+          keywords: [" foo ", "foo"],
+          tags: ["tag ", "tag"],
+          examples: [" Example "],
+          version: 1,
+          successCount: 1,
+          usageCount: 1,
         },
       ],
-    };
-    const readFileSpy = vi
-      .spyOn(fs.promises, "readFile")
-      .mockResolvedValue(JSON.stringify(customCatalog));
+    });
+    mockGetInsightGenDbPool.mockResolvedValue({ query: mockQuery } as any);
 
     const catalog = await getTemplates({ forceReload: true });
 
@@ -294,7 +226,5 @@ describe("query template catalog feature flag gating", () => {
     expect(tpl.tags).toEqual(["tag"]);
     expect(tpl.placeholders).toEqual(["value"]);
     expect(tpl.placeholdersSpec?.slots[0]?.name).toBe("value");
-
-    readFileSpy.mockRestore();
   });
 });

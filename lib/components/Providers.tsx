@@ -17,14 +17,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
 
-  // Show sidebar only when:
-  // 1. Chart insights are enabled
-  // 2. User is authenticated (session exists)
-  // 3. Not on login page
-  const shouldShowSidebar =
-    process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true" &&
-    status === "authenticated" &&
-    pathname !== "/login";
+  // Show sidebar when authenticated and not on login page
+  const shouldShowSidebar = status === "authenticated" && pathname !== "/login";
 
   if (shouldShowSidebar) {
     return (

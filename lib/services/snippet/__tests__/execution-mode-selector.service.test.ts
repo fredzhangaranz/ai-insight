@@ -172,7 +172,7 @@ describe("ExecutionModeSelector (2-mode simplified)", () => {
       });
 
       expect(decision.mode).toBe("semantic");
-      expect(decision.reason).toContain("no relevant snippets");
+      expect(decision.reason).toContain("No relevant snippets");
     });
 
     it("selects semantic mode when snippet score too low", () => {

@@ -1,5 +1,4 @@
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import type {
   TemplateExtractionDraft,
@@ -42,12 +41,8 @@ export interface ExtractTemplateDraftResult {
 }
 
 export async function extractTemplateDraft(
-  input: TemplateExtractionInput
+  input: TemplateExtractionInput,
 ): Promise<ExtractTemplateDraftResult> {
-  if (!isTemplateSystemEnabled()) {
-    throw new TemplateServiceError("Template system is disabled", 404);
-  }
-
   const questionText = input.questionText?.trim();
   const sqlQuery = input.sqlQuery?.trim();
 
@@ -69,10 +64,8 @@ export async function extractTemplateDraft(
       schemaContext: input.schemaContext,
     });
 
-  const { draft: normalizedDraft, warnings: normalizationWarnings } = normalizeDraft(
-    extraction.draft,
-    sqlQuery
-  );
+  const { draft: normalizedDraft, warnings: normalizationWarnings } =
+    normalizeDraft(extraction.draft, sqlQuery);
   const placeholders = derivePlaceholders(normalizedDraft);
   const validation = validateTemplate({
     name: normalizedDraft.name,
@@ -96,7 +89,7 @@ export async function extractTemplateDraft(
 
 function normalizeDraft(
   draft: TemplateExtractionDraft,
-  fallbackSql: string
+  fallbackSql: string,
 ): { draft: TemplateDraftPayload; warnings: string[] } {
   const rawSqlPattern = draft.sqlPattern?.trim() || fallbackSql;
   const simplification = simplifyFunnelSqlPattern(rawSqlPattern);
@@ -108,7 +101,7 @@ function normalizeDraft(
 
   const placeholdersSpec = ensureSpecCoverage(
     normalizePlaceholdersSpec(draft.placeholdersSpec),
-    simplification.sql
+    simplification.sql,
   );
 
   return {
@@ -127,7 +120,7 @@ function normalizeDraft(
 }
 
 function normalizePlaceholdersSpec(
-  spec: TemplateExtractionDraft["placeholdersSpec"]
+  spec: TemplateExtractionDraft["placeholdersSpec"],
 ): PlaceholdersSpec | null {
   if (!spec || !Array.isArray(spec.slots)) {
     return null;
@@ -166,10 +159,12 @@ function normalizePlaceholdersSpec(
 
 function ensureSpecCoverage(
   spec: PlaceholdersSpec | null,
-  sqlPattern: string
+  sqlPattern: string,
 ): PlaceholdersSpec | null {
   const slots = spec ? [...spec.slots] : [];
-  const existing = new Set(slots.map((slot) => normalizePlaceholder(slot.name)));
+  const existing = new Set(
+    slots.map((slot) => normalizePlaceholder(slot.name)),
+  );
 
   for (const match of sqlPattern.matchAll(PLACEHOLDER_REGEX)) {
     const rawName = match[1]?.trim();
@@ -218,9 +213,10 @@ function normalizeStringList(values?: string[] | null): string[] {
   return Array.from(seen);
 }
 
-export function simplifyFunnelSqlPattern(
-  sqlPattern: string
-): { sql: string; changed: boolean } {
+export function simplifyFunnelSqlPattern(sqlPattern: string): {
+  sql: string;
+  changed: boolean;
+} {
   const original = sqlPattern ?? "";
   const trimmed = original.trim();
   if (!/^WITH\s/i.test(trimmed)) {
@@ -249,11 +245,7 @@ export function simplifyFunnelSqlPattern(
 
   let simplifiedMain = parsed.mainQuery;
   for (const [name, body] of resolvedBodies.entries()) {
-    simplifiedMain = inlineStepCte(
-      simplifiedMain,
-      name,
-      body
-    );
+    simplifiedMain = inlineStepCte(simplifiedMain, name, body);
   }
 
   if (!simplifiedMain.trim()) {
@@ -262,15 +254,13 @@ export function simplifyFunnelSqlPattern(
 
   // Rebuild WITH clause with non-step CTEs only
   const nonStepCtes = parsed.ctes.filter(
-    (cte) => !STEP_CTE_PATTERN.test(cte.name)
+    (cte) => !STEP_CTE_PATTERN.test(cte.name),
   );
 
   let finalSql = simplifiedMain.trim();
   if (nonStepCtes.length > 0) {
     const cteStrings = nonStepCtes.map((cte) => cte.raw.trim());
-    finalSql = `WITH ${cteStrings.join(
-      ",\n"
-    )}\n${finalSql}`.trim();
+    finalSql = `WITH ${cteStrings.join(",\n")}\n${finalSql}`.trim();
   }
 
   if (/WHERE\s+EXISTS\s*\(\s*SELECT[\s\S]+Step\d+_Results/i.test(finalSql)) {
@@ -330,7 +320,7 @@ function parseWithClause(sql: string): ParsedWithClause | null {
 
 function extractParenthetical(
   text: string,
-  openIndex: number
+  openIndex: number,
 ): { content: string; nextIndex: number } | null {
   let depth = 0;
   let i = openIndex;
@@ -392,11 +382,14 @@ function inlineStepCte(sql: string, stepName: string, body: string): string {
 
       let alias = namePart;
       if (aliasPart) {
-        alias = aliasPart.trim().replace(/^AS\s+/i, "").trim();
+        alias = aliasPart
+          .trim()
+          .replace(/^AS\s+/i, "")
+          .trim();
       }
 
       return `${clause} (\n${trimmedBody}\n) AS ${alias}`;
-    }
+    },
   );
 
   return replaced;

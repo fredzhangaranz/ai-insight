@@ -4,13 +4,6 @@ import { getSilhouetteDbPool, getInsightGenDbPool } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest) {
-  if (process.env.CHART_INSIGHTS_API_ENABLED !== "true") {
-    return NextResponse.json(
-      { message: "Chart Insights API is disabled" },
-      { status: 403 }
-    );
-  }
-
   try {
     // Forms active: count latest version per assessment type
     const mssql = await getSilhouetteDbPool();
@@ -28,16 +21,18 @@ export async function GET(_req: NextRequest) {
     // Insights total: count active saved insights from Postgres
     const pg = await getInsightGenDbPool();
     const insightsRes = await pg.query(
-      'SELECT COUNT(*)::int AS cnt FROM "SavedInsights" WHERE "isActive" = TRUE'
+      'SELECT COUNT(*)::int AS cnt FROM "SavedInsights" WHERE "isActive" = TRUE',
     );
     const insightsTotal = insightsRes.rows?.[0]?.cnt || 0;
 
     return NextResponse.json({ formsActive, insightsTotal });
   } catch (e: any) {
     return NextResponse.json(
-      { message: "Failed to load overview stats", error: e?.message || String(e) },
-      { status: 500 }
+      {
+        message: "Failed to load overview stats",
+        error: e?.message || String(e),
+      },
+      { status: 500 },
     );
   }
 }
-

@@ -18,22 +18,9 @@ describe("template.service listTemplates", () => {
 
   afterEach(() => {
     resetTemplateCatalogCache();
-    delete process.env.AI_TEMPLATES_ENABLED;
-  });
-
-  it("returns JSON-backed templates when feature flag is disabled", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "false";
-
-    const result = await listTemplates({ search: "wound", limit: 5 });
-
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
-    expect(result.every((tpl) => tpl.status === "Approved")).toBe(true);
   });
 
   it("applies filters when querying the database", async () => {
-    process.env.AI_TEMPLATES_ENABLED = "true";
-
     const queryMock = vi.fn().mockResolvedValue({
       rows: [
         {
@@ -57,7 +44,11 @@ describe("template.service listTemplates", () => {
 
     mockGetInsightGenDbPool.mockResolvedValue({ query: queryMock } as any);
 
-    const result = await listTemplates({ status: ["Approved"], search: "demo", limit: 10 });
+    const result = await listTemplates({
+      status: ["Approved"],
+      search: "demo",
+      limit: 10,
+    });
 
     expect(mockGetInsightGenDbPool).toHaveBeenCalledOnce();
     expect(queryMock).toHaveBeenCalledOnce();
@@ -67,4 +58,3 @@ describe("template.service listTemplates", () => {
     expect(result[0]?.successRate).toBeCloseTo(0.5, 1);
   });
 });
-

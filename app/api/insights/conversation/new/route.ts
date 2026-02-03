@@ -34,6 +34,25 @@ export async function POST(req: NextRequest) {
     const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
 
+    const accessResult = await pool.query(
+      `
+      SELECT 1
+      FROM "UserCustomers"
+      WHERE "userId" = $1 AND "customerId" = $2
+      `,
+      [userId, customerId]
+    );
+
+    if (accessResult.rows.length === 0) {
+      return NextResponse.json(
+        {
+          error: "Access denied",
+          details: "You do not have access to this customer's data",
+        },
+        { status: 403 }
+      );
+    }
+
     const result = await pool.query(
       `
       INSERT INTO "ConversationThreads"

@@ -344,7 +344,7 @@ describe('template-placeholder.service - Clarification Generation', () => {
     expect(result.missingPlaceholders).toContain('statusValue');
     expect(result.clarifications).toHaveLength(1);
     expect(result.clarifications[0].placeholder).toBe('statusValue');
-    expect(result.clarifications[0].prompt).toContain('statusValue');
+    expect(result.clarifications[0].prompt).toContain('Status value to filter by');
   });
 
   it('should include enum values in clarification for field variables', async () => {
