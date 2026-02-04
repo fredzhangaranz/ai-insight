@@ -1,6 +1,8 @@
 import {
   GenerateChartRecommendationsRequest,
   GenerateChartRecommendationsResponse,
+  CompletionParams,
+  ConversationCompletionParams,
   GenerateQueryRequest,
   GenerateQueryResponse,
   IQueryFunnelProvider,
@@ -28,10 +30,10 @@ import {
   validateTemplateExtractionResponse,
 } from "../../prompts/template-extraction.prompt";
 import type { PlaceholdersSpecSlot } from "../../services/template-validator.service";
+import type { ConversationMessage } from "../../types/conversation";
 import { MetricsMonitor } from "../../monitoring";
 import { matchTemplates } from "../../services/query-template.service";
 import type { TemplateMatch } from "../../services/query-template.service";
-import { isTemplateSystemEnabled } from "../../config/template-flags";
 import { createTemplateUsage } from "../../services/template-usage.service";
 import { loadDatabaseSchemaContext } from "../schema-context";
 
@@ -54,7 +56,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
    */
   protected abstract _executeModel(
     systemPrompt: string,
-    userMessage: string
+    userMessage: string,
   ): Promise<{
     responseText: string;
     usage: { input_tokens: number; output_tokens: number };
@@ -65,14 +67,51 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
    * @param options System prompt, user message, and optional parameters
    * @returns The model's response text
    */
-  public async complete(options: {
-    system: string;
-    userMessage: string;
-    maxTokens?: number;
-    temperature?: number;
-  }): Promise<string> {
-    const result = await this._executeModel(options.system, options.userMessage);
+  public async complete(options: CompletionParams): Promise<string> {
+    // Log prompts if enabled (set LOG_LLM_PROMPTS=true in .env.local)
+    if (process.env.LOG_LLM_PROMPTS === "true") {
+      console.log("=".repeat(80));
+      console.log(`[BaseProvider.complete] Model: ${this.modelId}`);
+      console.log("-".repeat(80));
+      console.log("[SYSTEM PROMPT]:");
+      console.log(options.system);
+      console.log("-".repeat(80));
+      console.log("[USER MESSAGE]:");
+      console.log(options.userMessage);
+      console.log("-".repeat(80));
+      if (options.temperature !== undefined) {
+        console.log(`[TEMPERATURE]: ${options.temperature}`);
+      }
+      console.log("=".repeat(80));
+    }
+
+    const result = await this._executeModel(
+      options.system,
+      options.userMessage,
+    );
     return result.responseText;
+  }
+
+  /**
+   * Conversation-aware completion with caching and context.
+   * Providers should override this with their native implementations.
+   */
+  public async completeWithConversation(
+    _request: ConversationCompletionParams,
+  ): Promise<string> {
+    throw new Error(
+      "Conversation completion is not implemented for this provider.",
+    );
+  }
+
+  /**
+   * Build conversation history prompt for multi-turn context.
+   * Providers should override this with their own formatting.
+   */
+  public buildConversationHistory(_messages: ConversationMessage[]): string {
+    throw new Error(
+      "Conversation history builder is not implemented for this provider.",
+    );
   }
 
   /**
@@ -83,6 +122,68 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       return providedContext;
     }
     return loadDatabaseSchemaContext();
+  }
+
+  /**
+   * Build schema context for a specific customer.
+   * This is used for prompt caching in conversation mode.
+   */
+  protected async buildSchemaContext(_customerId: string): Promise<string> {
+    return this.getDatabaseSchemaContext();
+  }
+
+  /**
+   * Build ontology context for a specific customer.
+   * Loads clinical ontology concepts for use in prompt caching.
+   */
+  protected async buildOntologyContext(_customerId: string): Promise<string> {
+    try {
+      const { getInsightGenDbPool } = await import("../../db");
+      const pool = await getInsightGenDbPool();
+      const result = await pool.query(
+        `
+        SELECT
+          concept_name,
+          concept_type
+        FROM public."ClinicalOntology"
+        WHERE is_deprecated = false
+        ORDER BY concept_name
+        LIMIT 30
+        `,
+      );
+
+      if (result.rows.length === 0) {
+        return "Clinical ontology: no concepts available.";
+      }
+
+      const lines = result.rows.map(
+        (row: { concept_name: string; concept_type: string }) =>
+          `- ${row.concept_name} (${row.concept_type})`,
+      );
+
+      return `Clinical ontology concepts:\n${lines.join("\n")}`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.warn(
+        `[BaseProvider] Failed to load ontology context: ${message}`,
+      );
+      return "Clinical ontology context unavailable.";
+    }
+  }
+
+  /**
+   * Build SQL generation instructions for the AI provider.
+   * These instructions are cached along with schema/ontology context.
+   */
+  protected buildSQLInstructions(): string {
+    return [
+      "You are generating SQL for the InsightGen system.",
+      "Return only a SQL query as plain text, no markdown or explanations.",
+      "Only SELECT or WITH queries are allowed.",
+      "Use the provided schema context; do not invent tables or columns.",
+      "Do not include PHI or raw patient identifiers in the response.",
+      "Prefer CTE composition when the question builds on prior results.",
+    ].join("\n");
   }
 
   /**
@@ -100,7 +201,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       try {
         // First, try to extract JSON from markdown code blocks (```json ... ```)
         const markdownJsonMatch = responseText.match(
-          /```(?:json)?\s*([\s\S]*?)\s*```/
+          /```(?:json)?\s*([\s\S]*?)\s*```/,
         );
         if (markdownJsonMatch) {
           console.log("Extracting JSON from markdown code block...");
@@ -123,10 +224,10 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
           // If no JSON found, this might be a local LLM that ignored JSON instructions
           // Try to re-prompt with a more explicit JSON request
           console.log(
-            "No JSON found in response, attempting to re-prompt for JSON format..."
+            "No JSON found in response, attempting to re-prompt for JSON format...",
           );
           throw new Error(
-            "AI returned natural language instead of JSON format"
+            "AI returned natural language instead of JSON format",
           );
         }
       } catch (extractError) {
@@ -143,7 +244,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     subQuestions: Array<{
       step: number;
       depends_on: number | null | number[];
-    }>
+    }>,
   ): void {
     const steps = new Set(subQuestions.map((sq) => sq.step));
     for (const sq of subQuestions) {
@@ -154,12 +255,12 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         for (const dep of dependencies) {
           if (!steps.has(dep)) {
             throw new Error(
-              `Step ${sq.step} depends on non-existent step ${dep}`
+              `Step ${sq.step} depends on non-existent step ${dep}`,
             );
           }
           if (dep >= sq.step) {
             throw new Error(
-              `Step ${sq.step} cannot depend on a future or current step ${dep}`
+              `Step ${sq.step} cannot depend on a future or current step ${dep}`,
             );
           }
         }
@@ -172,7 +273,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         throw new Error(
           `Sub-questions must form a continuous sequence starting from 1. Missing step ${
             i + 1
-          }.`
+          }.`,
         );
       }
     }
@@ -352,7 +453,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         // Replace "SELECT DISTINCT" with "SELECT DISTINCT TOP 1000"
         modifiedSql = modifiedSql.replace(
           /\bSELECT\s+DISTINCT\b/i,
-          "SELECT DISTINCT TOP 1000"
+          "SELECT DISTINCT TOP 1000",
         );
       } else {
         // Add TOP 1000 if not present
@@ -377,7 +478,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       const columns = selectMatch[1].split(",").length;
       if (columns > 20) {
         warnings.push(
-          `Large number of columns (${columns}) may impact performance`
+          `Large number of columns (${columns}) may impact performance`,
         );
       }
     }
@@ -390,7 +491,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
    */
   protected validateEnrichmentFields(
     sql: string,
-    requestedFields: string[]
+    requestedFields: string[],
   ): {
     isValid: boolean;
     warnings: string[];
@@ -415,7 +516,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     // Check for SELECT * which is problematic for enrichment
     if (/\bSELECT\s+\*\b/i.test(sql)) {
       warnings.push(
-        "SELECT * detected in enrichment query. This may include extra fields beyond what was requested."
+        "SELECT * detected in enrichment query. This may include extra fields beyond what was requested.",
       );
       extraFields.push("SELECT_*");
     }
@@ -453,8 +554,8 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     if (extraFields.length > 0) {
       warnings.push(
         `Extra fields detected: ${extraFields.join(
-          ", "
-        )}. Only requested enrichment fields should be included.`
+          ", ",
+        )}. Only requested enrichment fields should be included.`,
       );
     }
 
@@ -466,37 +567,37 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
   }
 
   public async generateSubQuestions(
-    request: SubQuestionGenerationRequest
+    request: SubQuestionGenerationRequest,
   ): Promise<SubQuestionGenerationResponse> {
     const metrics = MetricsMonitor.getInstance();
     const aiStartTime = Date.now();
 
     try {
       const schemaContext = this.getDatabaseSchemaContext(
-        request.databaseSchemaContext
+        request.databaseSchemaContext,
       );
       const prompt = constructFunnelSubquestionsPrompt(
         request.originalQuestion,
         request.formDefinition,
         schemaContext,
-        request.scope ?? "form"
+        request.scope ?? "form",
       );
       console.log("AI Prompt for sub-questions generation:", prompt);
 
       let aiResponse = await this._executeModel(
         prompt,
-        "Please break down this complex question into incremental sub-questions."
+        "Please break down this complex question into incremental sub-questions.",
       );
 
       let parsedResponse: any;
       try {
         parsedResponse = await this.parseJsonResponse<any>(
-          aiResponse.responseText
+          aiResponse.responseText,
         );
       } catch (jsonError) {
         // If JSON parsing fails, try a more explicit JSON request
         console.log(
-          "First attempt failed, trying with more explicit JSON instruction..."
+          "First attempt failed, trying with more explicit JSON instruction...",
         );
         const jsonPrompt =
           prompt +
@@ -504,11 +605,11 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
         aiResponse = await this._executeModel(
           jsonPrompt,
-          "Respond with ONLY a JSON object containing the sub-questions breakdown. No other text."
+          "Respond with ONLY a JSON object containing the sub-questions breakdown. No other text.",
         );
 
         parsedResponse = await this.parseJsonResponse<any>(
-          aiResponse.responseText
+          aiResponse.responseText,
         );
       }
       if (!validateFunnelSubquestionsResponse(parsedResponse)) {
@@ -534,8 +635,8 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
           dependencies: Array.isArray(sq.depends_on)
             ? sq.depends_on
             : sq.depends_on !== null
-            ? [sq.depends_on]
-            : [],
+              ? [sq.depends_on]
+              : [],
         })),
       };
     } catch (error: any) {
@@ -554,7 +655,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
   }
 
   public async generateQuery(
-    request: GenerateQueryRequest
+    request: GenerateQueryRequest,
   ): Promise<GenerateQueryResponse> {
     const metrics = MetricsMonitor.getInstance();
     const aiStartTime = Date.now();
@@ -565,15 +666,15 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       if (fieldValidation.rejectedFields.length > 0) {
         throw new Error(
           `Invalid desired fields: ${fieldValidation.rejectedFields.join(
-            ", "
+            ", ",
           )}. ` +
             `Allowed fields: patient.firstName, patient.lastName, patient.dateOfBirth, ` +
-            `wound.anatomyLabel, wound.label, wound.description`
+            `wound.anatomyLabel, wound.label, wound.description`,
         );
       }
 
       const schemaContext = this.getDatabaseSchemaContext(
-        request.databaseSchemaContext
+        request.databaseSchemaContext,
       );
 
       // 1. Match templates (heuristics) and prepare compact injection
@@ -591,7 +692,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
             successRate: m.successRate,
             matchedKeywords: m.matchedKeywords,
             matchedExample: m.matchedExample,
-          }))
+          })),
         );
         matchedTemplates = templateMatches.slice(0, 2).map((m) => ({
           name: m.template.name,
@@ -608,16 +709,16 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         schemaContext,
         fieldValidation.fieldsApplied,
         matchedTemplates,
-        request.scope ?? "form"
+        request.scope ?? "form",
       );
       console.log("AI Prompt for SQL generation:", prompt);
       const aiResponse = await this._executeModel(
         prompt,
-        "Please generate a SQL query for this sub-question."
+        "Please generate a SQL query for this sub-question.",
       );
 
       const parsedResponse = await this.parseJsonResponse<any>(
-        aiResponse.responseText
+        aiResponse.responseText,
       );
       if (!validateFunnelSqlResponse(parsedResponse)) {
         throw new Error("AI returned invalid SQL generation format");
@@ -625,13 +726,13 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
       // 2. Enhanced SQL safety validation and enforcement
       const safetyValidation = this.validateAndEnforceSqlSafety(
-        parsedResponse.generatedSql
+        parsedResponse.generatedSql,
       );
       if (!safetyValidation.isValid) {
         throw new Error(
           `SQL safety validation failed: ${safetyValidation.warnings.join(
-            ", "
-          )}`
+            ", ",
+          )}`,
         );
       }
 
@@ -647,12 +748,12 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       // 3. Validate enrichment fields (check for extra fields)
       const enrichmentValidation = this.validateEnrichmentFields(
         parsedResponse.generatedSql,
-        fieldValidation.fieldsApplied
+        fieldValidation.fieldsApplied,
       );
       if (!enrichmentValidation.isValid) {
         console.warn(
           "Enrichment validation warnings:",
-          enrichmentValidation.warnings
+          enrichmentValidation.warnings,
         );
         // Add warnings to the response but don't fail the request
         safetyValidation.warnings.push(...enrichmentValidation.warnings);
@@ -662,7 +763,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       if (fieldValidation.fieldsApplied.length > 0) {
         parsedResponse.validationNotes +=
           `\nEnrichment applied: ${fieldValidation.fieldsApplied.join(
-            ", "
+            ", ",
           )}. ` + `Join path: ${fieldValidation.joinSummary}`;
       }
 
@@ -673,47 +774,45 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         parsedResponse.matchedQueryTemplate.trim() !== ""
           ? parsedResponse.matchedQueryTemplate
           : matchedTemplates.length > 0
-          ? matchedTemplates[0].name
-          : "None";
+            ? matchedTemplates[0].name
+            : "None";
 
       console.log("Chosen matchedQueryTemplate:", matchedQueryTemplate);
 
       let templateUsageId: number | undefined;
-      if (isTemplateSystemEnabled()) {
-        try {
-          const canonicalMatchedName = matchedQueryTemplate?.trim();
-          const matchedEntry = canonicalMatchedName
-            ? templateMatches.find(
-                (match) =>
-                  match.template.name &&
-                  match.template.name.localeCompare(
-                    canonicalMatchedName,
-                    undefined,
-                    { sensitivity: "accent" }
-                  ) === 0
-              )
-            : undefined;
+      try {
+        const canonicalMatchedName = matchedQueryTemplate?.trim();
+        const matchedEntry = canonicalMatchedName
+          ? templateMatches.find(
+              (match) =>
+                match.template.name &&
+                match.template.name.localeCompare(
+                  canonicalMatchedName,
+                  undefined,
+                  { sensitivity: "accent" },
+                ) === 0,
+            )
+          : undefined;
 
-          const selectedEntry = matchedEntry ?? templateMatches[0];
+        const selectedEntry = matchedEntry ?? templateMatches[0];
 
-          if (selectedEntry?.template.templateVersionId) {
-            const usage = await createTemplateUsage({
-              templateVersionId: selectedEntry.template.templateVersionId,
-              subQuestionId:
-                typeof request.subQuestionId === "number" &&
-                Number.isFinite(request.subQuestionId)
-                  ? request.subQuestionId
-                  : undefined,
-              questionText: request.subQuestion,
-              matchedKeywords: selectedEntry.matchedKeywords,
-              matchedExample: selectedEntry.matchedExample,
-              chosen: true,
-            });
-            templateUsageId = usage.id;
-          }
-        } catch (usageError) {
-          console.warn("Failed to record template usage:", usageError);
+        if (selectedEntry?.template.templateVersionId) {
+          const usage = await createTemplateUsage({
+            templateVersionId: selectedEntry.template.templateVersionId,
+            subQuestionId:
+              typeof request.subQuestionId === "number" &&
+              Number.isFinite(request.subQuestionId)
+                ? request.subQuestionId
+                : undefined,
+            questionText: request.subQuestion,
+            matchedKeywords: selectedEntry.matchedKeywords,
+            matchedExample: selectedEntry.matchedExample,
+            chosen: true,
+          });
+          templateUsageId = usage.id;
         }
+      } catch (usageError) {
+        console.warn("Failed to record template usage:", usageError);
       }
 
       await metrics.logAIMetrics({
@@ -751,14 +850,14 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
   }
 
   public async generateChartRecommendations(
-    request: GenerateChartRecommendationsRequest
+    request: GenerateChartRecommendationsRequest,
   ): Promise<GenerateChartRecommendationsResponse> {
     const metrics = MetricsMonitor.getInstance();
     const aiStartTime = Date.now();
 
     try {
       const schemaContext = this.getDatabaseSchemaContext(
-        request.databaseSchemaContext
+        request.databaseSchemaContext,
       );
       const prompt = constructChartRecommendationsPrompt(
         request.subQuestion,
@@ -766,16 +865,16 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         request.queryResults,
         request.assessmentFormDefinition,
         schemaContext,
-        request.scope ?? "form"
+        request.scope ?? "form",
       );
       console.log("AI Prompt for chart recommendations:", prompt);
       const aiResponse = await this._executeModel(
         prompt,
-        "Please generate chart recommendations for this SQL query and its results."
+        "Please generate chart recommendations for this SQL query and its results.",
       );
 
       const parsedResponse = await this.parseJsonResponse<any>(
-        aiResponse.responseText
+        aiResponse.responseText,
       );
       if (!validateChartRecommendationsResponse(parsedResponse)) {
         throw new Error("AI returned invalid chart recommendations format");
@@ -809,7 +908,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
   }
 
   public async extractTemplateDraft(
-    request: TemplateExtractionRequest
+    request: TemplateExtractionRequest,
   ): Promise<TemplateExtractionResponse> {
     const metrics = MetricsMonitor.getInstance();
     const aiStartTime = Date.now();
@@ -826,39 +925,43 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     }
 
     try {
-      const schemaContext = this.getDatabaseSchemaContext(request.schemaContext);
+      const schemaContext = this.getDatabaseSchemaContext(
+        request.schemaContext,
+      );
       const prompt = constructTemplateExtractionPrompt(
         question,
         sql,
-        schemaContext
+        schemaContext,
       );
       console.log("AI Prompt for template extraction:", prompt);
 
       let aiResponse = await this._executeModel(
         prompt,
-        "Return ONLY the JSON object describing the reusable template."
+        "Return ONLY the JSON object describing the reusable template.",
       );
 
       let parsedResponse: TemplateExtractionAiResponse;
 
       try {
-        parsedResponse = await this.parseJsonResponse<TemplateExtractionAiResponse>(
-          aiResponse.responseText
-        );
+        parsedResponse =
+          await this.parseJsonResponse<TemplateExtractionAiResponse>(
+            aiResponse.responseText,
+          );
       } catch (error) {
         console.log(
-          "Template extraction JSON parse failed, retrying with stricter instructions..."
+          "Template extraction JSON parse failed, retrying with stricter instructions...",
         );
         const jsonPrompt =
           prompt +
           "\n\nIMPORTANT: Respond with ONLY the JSON object. No explanations, markdown, or prose.";
         aiResponse = await this._executeModel(
           jsonPrompt,
-          "Respond with JSON only."
+          "Respond with JSON only.",
         );
-        parsedResponse = await this.parseJsonResponse<TemplateExtractionAiResponse>(
-          aiResponse.responseText
-        );
+        parsedResponse =
+          await this.parseJsonResponse<TemplateExtractionAiResponse>(
+            aiResponse.responseText,
+          );
       }
 
       if (!validateTemplateExtractionResponse(parsedResponse)) {
@@ -904,12 +1007,12 @@ const PLACEHOLDER_REGEX = /\{([a-zA-Z0-9_\[\]\?]+)\}/g;
 
 function normalizeExtractedTemplateDraft(
   response: TemplateExtractionAiResponse,
-  fallbackSql: string
+  fallbackSql: string,
 ): TemplateExtractionDraft {
   const sqlPattern = response.sqlPattern?.trim() || fallbackSql;
   const spec = ensureSpecCoverage(
     normalizePlaceholdersSpec(response.placeholdersSpec),
-    sqlPattern
+    sqlPattern,
   );
 
   return {
@@ -937,7 +1040,7 @@ function normalizeStringList(values?: string[] | null): string[] {
 }
 
 function normalizePlaceholdersSpec(
-  spec: TemplateExtractionAiResponse["placeholdersSpec"]
+  spec: TemplateExtractionAiResponse["placeholdersSpec"],
 ): TemplateExtractionDraft["placeholdersSpec"] {
   if (!spec || !Array.isArray(spec.slots)) {
     return null;
@@ -975,10 +1078,12 @@ function normalizePlaceholdersSpec(
 
 function ensureSpecCoverage(
   spec: TemplateExtractionDraft["placeholdersSpec"],
-  sqlPattern: string
+  sqlPattern: string,
 ): TemplateExtractionDraft["placeholdersSpec"] {
   const slots = spec ? [...spec.slots] : [];
-  const existing = new Set(slots.map((slot) => normalizePlaceholder(slot.name)));
+  const existing = new Set(
+    slots.map((slot) => normalizePlaceholder(slot.name)),
+  );
 
   for (const match of sqlPattern.matchAll(PLACEHOLDER_REGEX)) {
     const raw = match[1]?.trim();

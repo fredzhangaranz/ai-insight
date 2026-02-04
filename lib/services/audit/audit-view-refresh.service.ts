@@ -1,5 +1,4 @@
 import { getInsightGenDbPool } from "@/lib/db";
-import { isAuditDashboardEnabled } from "@/lib/config/audit-flags";
 
 const AUDIT_VIEWS = [
   "QueryHistoryDaily",
@@ -8,6 +7,7 @@ const AUDIT_VIEWS = [
   "QueryPerformanceDaily",
   "QueryAuditExplorer",
   "QueryAuditDetail",
+  "ConversationQueryHistory",
 ] as const;
 
 async function refreshView(viewName: string): Promise<void> {
@@ -21,7 +21,10 @@ export async function refreshAuditMaterializedViews(): Promise<void> {
     try {
       await refreshView(view);
     } catch (error) {
-      console.warn(`[AuditViews] Failed to refresh ${view} concurrently, retrying standard refresh`, error);
+      console.warn(
+        `[AuditViews] Failed to refresh ${view} concurrently, retrying standard refresh`,
+        error,
+      );
       const pool = await getInsightGenDbPool();
       await pool.query(`REFRESH MATERIALIZED VIEW "${view}"`);
     }
@@ -45,7 +48,6 @@ class AuditViewRefreshService {
 
   start(hourlyIntervalMs = 3_600_000): void {
     if (process.env.NODE_ENV !== "production") return;
-    if (!isAuditDashboardEnabled()) return;
     if (this.isRunning) return;
 
     this.isRunning = true;

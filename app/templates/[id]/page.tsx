@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import { getTemplateById } from "@/lib/services/template.service";
 import type { TemplateListItem } from "@/lib/services/template.service";
 
@@ -19,8 +18,8 @@ function StatusBadge({ status }: { status: string }) {
     status === "Approved"
       ? "default"
       : status === "Draft"
-      ? "secondary"
-      : "destructive";
+        ? "secondary"
+        : "destructive";
   return <Badge variant={variant}>{status}</Badge>;
 }
 
@@ -36,22 +35,6 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 export default async function TemplateDetailsPage({
   params,
 }: TemplateDetailsPageProps) {
-  if (!isTemplateSystemEnabled()) {
-    return (
-      <div className="container py-12">
-        <Card className="max-w-2xl">
-          <CardContent className="py-10 text-sm text-muted-foreground">
-            The template system is disabled. Set
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
-              AI_TEMPLATES_ENABLED=true
-            </code>
-            to view template details.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const templateId = Number(params.id);
   if (!Number.isFinite(templateId)) {
     notFound();
@@ -155,7 +138,9 @@ export default async function TemplateDetailsPage({
                   </section>
                 ) : null}
 
-                {template.questionExamples && Array.isArray(template.questionExamples) && template.questionExamples.length > 0 ? (
+                {template.questionExamples &&
+                Array.isArray(template.questionExamples) &&
+                template.questionExamples.length > 0 ? (
                   <section>
                     <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
                       Examples

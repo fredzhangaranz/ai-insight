@@ -6,6 +6,10 @@
  * Should be run during Docker container startup in production
  */
 
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
+require("dotenv").config();
+
 const { getInsightGenDbPool } = require("../lib/db");
 
 async function seedAIConfig() {
@@ -16,7 +20,7 @@ async function seedAIConfig() {
 
     // Check if configurations already exist
     const existing = await pool.query(
-      'SELECT COUNT(*) as count FROM "AIConfiguration"'
+      'SELECT COUNT(*) as count FROM "AIConfiguration"',
     );
     if (existing.rows[0].count > 0) {
       console.log("✅ AI configurations already exist, skipping seed");
@@ -34,7 +38,9 @@ async function seedAIConfig() {
         isDefault: true,
         configData: {
           apiKey: process.env.ANTHROPIC_API_KEY,
-          modelId: process.env.ANTHROPIC_DEFAULT_MODEL_NAME || "claude-3-5-sonnet-latest",
+          modelId:
+            process.env.ANTHROPIC_DEFAULT_MODEL_NAME ||
+            "claude-3-5-sonnet-latest",
           baseUrl: "https://api.anthropic.com",
         },
       });
@@ -77,7 +83,7 @@ async function seedAIConfig() {
     if (configurations.length === 0) {
       console.log("⚠️  No AI configurations found in environment variables");
       console.log(
-        "   Set ANTHROPIC_API_KEY, GOOGLE_CLOUD_PROJECT, or OPENWEBUI_BASE_URL"
+        "   Set ANTHROPIC_API_KEY, GOOGLE_CLOUD_PROJECT, or OPENWEBUI_BASE_URL",
       );
       return;
     }
@@ -99,12 +105,12 @@ async function seedAIConfig() {
           JSON.stringify(config.configData),
           "system-seed",
           "pending",
-        ]
+        ],
       );
     }
 
     console.log(
-      `✅ Successfully seeded ${configurations.length} AI configuration(s)`
+      `✅ Successfully seeded ${configurations.length} AI configuration(s)`,
     );
   } catch (error) {
     console.error("❌ Error seeding AI configuration:", error);

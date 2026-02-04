@@ -1,7 +1,6 @@
 import TemplateEditorForm from "../../template-editor-form";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import { getTemplateById } from "@/lib/services/template.service";
 
 const CANONICAL_INTENTS = [
@@ -20,23 +19,9 @@ interface EditTemplatePageProps {
   params: { id: string };
 }
 
-export default async function EditTemplatePage({ params }: EditTemplatePageProps) {
-  if (!isTemplateSystemEnabled()) {
-    return (
-      <div className="container py-12">
-        <Card className="max-w-2xl">
-          <CardContent className="py-10 text-sm text-muted-foreground">
-            The template system is disabled. Set
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
-              AI_TEMPLATES_ENABLED=true
-            </code>
-            to edit templates.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
+export default async function EditTemplatePage({
+  params,
+}: EditTemplatePageProps) {
   const templateId = Number(params.id);
   if (!Number.isFinite(templateId)) {
     return (
@@ -59,7 +44,7 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
   }
 
   const intents = Array.from(
-    new Set([template.intent ?? "", ...CANONICAL_INTENTS])
+    new Set([template.intent ?? "", ...CANONICAL_INTENTS]),
   ).filter(Boolean) as string[];
 
   return (

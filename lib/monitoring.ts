@@ -181,11 +181,11 @@ export class MetricsMonitor {
       const filterMetrics = metrics.filterMetrics;
       const overrideRate =
         filterMetrics && filterMetrics.totalFilters > 0
-          ? (filterMetrics.overrides / filterMetrics.totalFilters) * 100
+          ? (filterMetrics.overrides / filterMetrics.totalFilters)
           : null;
       const mappingConfidence =
         filterMetrics && filterMetrics.avgMappingConfidence !== null
-          ? filterMetrics.avgMappingConfidence * 100
+          ? filterMetrics.avgMappingConfidence
           : null;
 
       const query = `

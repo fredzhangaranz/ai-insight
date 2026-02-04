@@ -4,6 +4,7 @@ import type React from "react";
 import { SessionProvider, useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { AIModelProvider } from "@/lib/context/AIModelContext";
+import { CustomerProvider } from "@/lib/context/CustomerContext";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SideNav } from "@/app/components/shell/SideNav";
 import { MustChangePasswordBanner } from "@/app/components/profile/MustChangePasswordBanner";
@@ -17,14 +18,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
 
-  // Show sidebar only when:
-  // 1. Chart insights are enabled
-  // 2. User is authenticated (session exists)
-  // 3. Not on login page
-  const shouldShowSidebar =
-    process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true" &&
-    status === "authenticated" &&
-    pathname !== "/login";
+  // Show sidebar when authenticated and not on login page
+  const shouldShowSidebar = status === "authenticated" && pathname !== "/login";
 
   if (shouldShowSidebar) {
     return (
@@ -57,8 +52,10 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <SessionProvider>
       <AIModelProvider>
-        <AppContent>{children}</AppContent>
-        <Toaster />
+        <CustomerProvider>
+          <AppContent>{children}</AppContent>
+          <Toaster />
+        </CustomerProvider>
       </AIModelProvider>
     </SessionProvider>
   );

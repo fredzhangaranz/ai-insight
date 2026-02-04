@@ -5,6 +5,7 @@ const ALLOWED_VIEWS = [
   "QueryPerformanceDaily",
   "QueryAuditExplorer",
   "QueryAuditDetail",
+  "ConversationQueryHistory",
 ] as const;
 
 const FORBIDDEN_TABLES = [

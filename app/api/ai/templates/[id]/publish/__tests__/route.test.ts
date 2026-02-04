@@ -3,14 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 const requireAdminMock = vi.fn();
 const publishTemplateMock = vi.fn();
-const isTemplateSystemEnabledMock = vi.fn();
 
 vi.mock("@/lib/middleware/auth-middleware", () => ({
   requireAdmin: requireAdminMock,
-}));
-
-vi.mock("@/lib/config/template-flags", () => ({
-  isTemplateSystemEnabled: isTemplateSystemEnabledMock,
 }));
 
 vi.mock("@/lib/services/template.service", () => ({
@@ -26,21 +21,19 @@ async function importRoute() {
 describe("/api/ai/templates/[id]/publish", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    isTemplateSystemEnabledMock.mockReturnValue(true);
   });
 
   it("returns auth response when POST unauthorized", async () => {
     const unauthorized = NextResponse.json(
       { error: "Forbidden" },
-      { status: 403 }
+      { status: 403 },
     );
     requireAdminMock.mockResolvedValueOnce(unauthorized);
 
     const { POST } = await importRoute();
-    const req = new NextRequest(
-      "http://localhost/api/ai/templates/1/publish",
-      { method: "POST" }
-    );
+    const req = new NextRequest("http://localhost/api/ai/templates/1/publish", {
+      method: "POST",
+    });
     const res = await POST(req, { params: { id: "1" } });
 
     expect(res).toBe(unauthorized);
@@ -57,10 +50,9 @@ describe("/api/ai/templates/[id]/publish", () => {
     });
 
     const { POST } = await importRoute();
-    const req = new NextRequest(
-      "http://localhost/api/ai/templates/1/publish",
-      { method: "POST" }
-    );
+    const req = new NextRequest("http://localhost/api/ai/templates/1/publish", {
+      method: "POST",
+    });
     const res = await POST(req, { params: { id: "1" } });
 
     expect(publishTemplateMock).toHaveBeenCalledWith(1);

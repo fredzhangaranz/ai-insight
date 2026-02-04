@@ -5,6 +5,7 @@ import * as sql from "mssql";
 import { getCustomerById } from "../customer-service";
 import { decryptConnectionString } from "../security/connection-encryption.service";
 import { parseSqlServerConnectionString } from "@/lib/utils/sqlserver";
+import { normalizeSqlForValidation } from "@/lib/utils/sql-cleaning";
 
 /**
  * Execute SQL query against a customer's database
@@ -55,11 +56,14 @@ export async function executeCustomerQuery(
     await pool.connect();
 
     // Validate query is read-only (ignore leading comments/whitespace)
-    const strippedQuery = stripLeadingComments(sqlQuery).trimStart();
-    // Allow leading semicolons/whitespace before the first statement
-    const normalized = strippedQuery.replace(/^[\\s;]+/, "");
+    const normalized = normalizeSqlForValidation(sqlQuery);
     const trimmedQuery = normalized.toUpperCase();
     if (!trimmedQuery.startsWith("SELECT") && !trimmedQuery.startsWith("WITH")) {
+      // Log the actual query start for debugging
+      console.error(
+        "[CustomerQuery] Invalid query start. First 200 chars:",
+        normalized.slice(0, 200)
+      );
       throw new Error("Only SELECT and WITH queries are allowed");
     }
 
@@ -108,22 +112,3 @@ export function validateAndFixQuery(sqlQuery: string): string {
   return fixed;
 }
 
-/**
- * Remove leading SQL comments (line and block) so validation can inspect the first statement keyword.
- */
-function stripLeadingComments(sqlQuery: string): string {
-  let result = sqlQuery;
-  let previous: string;
-
-  // Remove consecutive leading comments/blank lines
-  do {
-    previous = result;
-    result = result
-      // Strip leading line comments
-      .replace(/^(?:\s*--.*\n)+/u, "")
-      // Strip leading block comments
-      .replace(/^\s*\/\*[\s\S]*?\*\/\s*/u, "");
-  } while (result !== previous);
-
-  return result;
-}

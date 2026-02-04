@@ -10,7 +10,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { TemplateReviewModal } from "./TemplateReviewModal";
 import { TemplateApplyModal } from "./TemplateApplyModal";
-import { TemplateSuggestions, type TemplateSuggestion } from "./TemplateSuggestions";
+import {
+  TemplateSuggestions,
+  type TemplateSuggestion,
+} from "./TemplateSuggestions";
 import type { TemplateDraftPayload } from "@/lib/services/template.service";
 import type { ValidationResult } from "@/lib/services/template-validator.service";
 
@@ -27,7 +30,7 @@ interface FunnelPanelProps {
       explanation?: string;
       validationNotes?: string;
       matchedTemplate?: string;
-    }
+    },
   ) => void;
   onExecuteQuery?: (questionId: string) => void;
   onMarkComplete?: (questionId: string) => void;
@@ -59,7 +62,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   const [editedQuestion, setEditedQuestion] = useState(subQuestion.text);
   const [editedSql, setEditedSql] = useState(subQuestion.sqlQuery || "");
   const [resultViewMode, setResultViewMode] = useState<"json" | "table">(
-    "json"
+    "json",
   );
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [isSavingSql, setIsSavingSql] = useState(false);
@@ -85,7 +88,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   // Save Insight dialog state
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [saveInitial, setSaveInitial] = useState<SaveInsightInitial | null>(
-    null
+    null,
   );
 
   // --- Enrichment (Lean MVP: AI-first Field Inclusion) ---
@@ -100,34 +103,37 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
   const [fieldInput, setFieldInput] = useState<string>("");
   const MAX_FIELDS = 3;
 
-  const [templatesFeatureAvailable, setTemplatesFeatureAvailable] = useState(true);
+  const [templatesFeatureAvailable, setTemplatesFeatureAvailable] =
+    useState(true);
   const [isTemplateReviewOpen, setIsTemplateReviewOpen] = useState(false);
-  const [templateDraft, setTemplateDraft] = useState<TemplateDraftPayload | null>(
-    null
-  );
+  const [templateDraft, setTemplateDraft] =
+    useState<TemplateDraftPayload | null>(null);
   const [templateValidation, setTemplateValidation] =
     useState<ValidationResult | null>(null);
   const [templateWarnings, setTemplateWarnings] = useState<string[]>([]);
   const [templateModelId, setTemplateModelId] = useState<string | undefined>();
   const [isExtractingTemplate, setIsExtractingTemplate] = useState(false);
-  const [templateExtractionError, setTemplateExtractionError] =
-    useState<string | null>(null);
+  const [templateExtractionError, setTemplateExtractionError] = useState<
+    string | null
+  >(null);
   const [isSavingTemplateDraft, setIsSavingTemplateDraft] = useState(false);
-  const [templateSuggestions, setTemplateSuggestions] =
-    useState<TemplateSuggestion[]>([]);
+  const [templateSuggestions, setTemplateSuggestions] = useState<
+    TemplateSuggestion[]
+  >([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [selectedSuggestion, setSelectedSuggestion] =
     useState<TemplateSuggestion | null>(null);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
-  const [localMatchedTemplate, setLocalMatchedTemplate] = useState<string | null>(
-    subQuestion.sqlMatchedTemplate ?? null
-  );
+  const [localMatchedTemplate, setLocalMatchedTemplate] = useState<
+    string | null
+  >(subQuestion.sqlMatchedTemplate ?? null);
   const [lastExecutionSuccessful, setLastExecutionSuccessful] =
     useState<boolean>(false);
-  const [currentTemplateUsageId, setCurrentTemplateUsageId] =
-    useState<number | null>(null);
+  const [currentTemplateUsageId, setCurrentTemplateUsageId] = useState<
+    number | null
+  >(null);
 
   const numericSubQuestionId = useMemo(() => {
     const raw = subQuestion.id?.startsWith("sq-")
@@ -219,7 +225,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           }
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || "Failed to fetch template suggestions"
+            errorData.message || "Failed to fetch template suggestions",
           );
         }
 
@@ -253,7 +259,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     if (!subQuestion.sqlQuery || subQuestion.sqlQuery.trim() === "") {
       const shouldProceed = window.confirm(
         "This sub-question has no SQL query generated yet. Are you sure you want to mark it as complete?\n\n" +
-          "Consider generating and executing a SQL query first to ensure the analysis is thorough."
+          "Consider generating and executing a SQL query first to ensure the analysis is thorough.",
       );
 
       if (!shouldProceed) {
@@ -266,7 +272,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       const response = await fetch(
         `/api/ai/funnel/subquestions/${subQuestion.id.replace(
           "sq-",
-          ""
+          "",
         )}/status`,
         {
           method: "PUT",
@@ -276,7 +282,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           body: JSON.stringify({
             status: "completed",
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -334,7 +340,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       const response = await fetch(
         `/api/ai/funnel/subquestions/${subQuestion.id.replace(
           "sq-",
-          ""
+          "",
         )}/question`,
         {
           method: "PUT",
@@ -344,7 +350,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           body: JSON.stringify({
             questionText: editedQuestion.trim(),
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -411,7 +417,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           body: JSON.stringify({
             sqlQuery: editedSql.trim(),
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -444,7 +450,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     if (!subQuestion.text.trim()) {
       handleError(
         new Error("Cannot generate SQL for empty question"),
-        "Generate SQL"
+        "Generate SQL",
       );
       return;
     }
@@ -504,7 +510,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       setCurrentTemplateUsageId(
         typeof result.templateUsageId === "number"
           ? result.templateUsageId
-          : null
+          : null,
       );
 
       // Save to database cache
@@ -521,7 +527,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
             sqlValidationNotes: validationNotes,
             sqlMatchedTemplate: matchedTemplate,
           }),
-        }
+        },
       );
 
       if (!saveResponse.ok) {
@@ -607,7 +613,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
     if (!subQuestion.sqlQuery) {
       handleError(
         new Error("Generate and execute SQL before saving a template."),
-        "Save as Template"
+        "Save as Template",
       );
       return;
     }
@@ -641,7 +647,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.message || "Failed to extract template draft"
+          errorData.message || "Failed to extract template draft",
         );
       }
 
@@ -675,9 +681,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || "Failed to save template draft"
-        );
+        throw new Error(errorData.message || "Failed to save template draft");
       }
 
       const result = await response.json();
@@ -699,7 +703,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
 
   const handleApplyTemplate = async (
     filledSql: string,
-    metadata: { matchedTemplate: string }
+    metadata: { matchedTemplate: string },
   ) => {
     setIsApplyingTemplate(true);
     try {
@@ -716,7 +720,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
             sqlExplanation: `Template applied: ${metadata.matchedTemplate}`,
             sqlValidationNotes: null,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -739,7 +743,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       setExpandedSections((prev) => ({ ...prev, template: true }));
       handleSuccess(
         `Template ${metadata.matchedTemplate} applied`,
-        "Apply Template"
+        "Apply Template",
       );
     } catch (error: any) {
       handleError(error, "Apply Template");
@@ -771,7 +775,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
       // Add line breaks after common SQL keywords
       .replace(
         /\b(SELECT|FROM|WHERE|JOIN|LEFT JOIN|INNER JOIN|RIGHT JOIN|GROUP BY|ORDER BY|HAVING|UNION|WITH|AS)\b/gi,
-        "\n$1"
+        "\n$1",
       )
       // Add line breaks after commas in SELECT clauses
       .replace(/(,)\s*/g, "$1\n  ")
@@ -791,7 +795,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
         let indent = 0;
         if (
           trimmed.match(
-            /^(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|UNION|WITH)/i
+            /^(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|UNION|WITH)/i,
           )
         ) {
           indent = 0;
@@ -869,7 +873,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           </span>
           <span
             className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-              subQuestion.status
+              subQuestion.status,
             )}`}
           >
             {subQuestion.status}
@@ -981,15 +985,15 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                 isGeneratingSql
                   ? "text-gray-400 cursor-not-allowed"
                   : desiredFields.length > 0
-                  ? "text-orange-600 hover:text-orange-800 font-medium"
-                  : "text-green-600 hover:text-green-800"
+                    ? "text-orange-600 hover:text-orange-800 font-medium"
+                    : "text-green-600 hover:text-green-800"
               }`}
               title={
                 desiredFields.length > 0
                   ? `Generate new SQL query with ${desiredFields.length} additional field(s)`
                   : subQuestion.sqlQuery
-                  ? "Generate new SQL query based on current question"
-                  : "Generate SQL query for this question"
+                    ? "Generate new SQL query based on current question"
+                    : "Generate SQL query for this question"
               }
             >
               {isGeneratingSql ? (
@@ -1004,8 +1008,8 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                     {desiredFields.length > 0
                       ? `Regenerate (${desiredFields.length} fields)`
                       : subQuestion.sqlQuery
-                      ? "Regenerate"
-                      : "Generate"}
+                        ? "Regenerate"
+                        : "Generate"}
                   </span>
                 </span>
               )}
@@ -1099,7 +1103,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                     <button
                       onClick={() =>
                         navigator.clipboard.writeText(
-                          subQuestion.sqlQuery || ""
+                          subQuestion.sqlQuery || "",
                         )
                       }
                       className="text-xs bg-gray-800 text-gray-300 hover:text-white px-2 py-1 rounded opacity-75 hover:opacity-100 transition-opacity"
@@ -1208,16 +1212,21 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           <div className="mt-3 rounded border border-dashed border-blue-200 bg-blue-50/40 p-3 text-xs text-blue-900">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-medium">Promote this SQL to a reusable template</p>
+                <p className="font-medium">
+                  Promote this SQL to a reusable template
+                </p>
                 <p className="text-[11px] text-blue-800">
-                  Execute the query, then review the AI-drafted template before saving.
+                  Execute the query, then review the AI-drafted template before
+                  saving.
                 </p>
               </div>
               <Button
                 size="sm"
                 onClick={handleOpenTemplateReview}
                 disabled={
-                  !lastExecutionSuccessful || isExtractingTemplate || isExecuting
+                  !lastExecutionSuccessful ||
+                  isExtractingTemplate ||
+                  isExecuting
                 }
               >
                 {isExtractingTemplate ? "Preparing..." : "Save as Template"}
@@ -1292,7 +1301,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                         className="text-blue-700 hover:text-blue-900"
                         onClick={() => {
                           setDesiredFields((prev) =>
-                            prev.filter((x) => x !== f)
+                            prev.filter((x) => x !== f),
                           );
                           // Clear results when fields are removed to indicate they need regeneration
                           if (queryResult) {
@@ -1331,24 +1340,24 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                         handleError(
                           new Error(
                             `Field not allowed. Try: ${ALLOWED_FIELDS.join(
-                              ", "
-                            )}`
+                              ", ",
+                            )}`,
                           ),
-                          "Add Field"
+                          "Add Field",
                         );
                         return;
                       }
                       if (desiredFields.includes(candidate as AllowedField)) {
                         handleError(
                           new Error("Field already added"),
-                          "Add Field"
+                          "Add Field",
                         );
                         return;
                       }
                       if (desiredFields.length >= MAX_FIELDS) {
                         handleError(
                           new Error(`You can add up to ${MAX_FIELDS} fields`),
-                          "Add Field"
+                          "Add Field",
                         );
                         return;
                       }
@@ -1383,7 +1392,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
                         if (desiredFields.length >= MAX_FIELDS) {
                           handleError(
                             new Error(`You can add up to ${MAX_FIELDS} fields`),
-                            "Add Field"
+                            "Add Field",
                           );
                           return;
                         }
@@ -1433,17 +1442,15 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium text-gray-700">Results</h3>
             <div className="flex items-center space-x-2">
-              {typeof window !== "undefined" &&
-                process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true" &&
-                subQuestion.sqlQuery && (
-                  <button
-                    onClick={() => openSaveDialog()}
-                    className="px-2.5 py-1 text-xs bg-green-600 text-white rounded"
-                    title="Save this sub-question as a reusable insight"
-                  >
-                    Save Insight
-                  </button>
-                )}
+              {subQuestion.sqlQuery && (
+                <button
+                  onClick={() => openSaveDialog()}
+                  className="px-2.5 py-1 text-xs bg-green-600 text-white rounded"
+                  title="Save this sub-question as a reusable insight"
+                >
+                  Save Insight
+                </button>
+              )}
               {queryResult && queryResult.length > 0 && (
                 <>
                   <span className="text-xs text-gray-500">View:</span>
@@ -1515,8 +1522,8 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
               {resultsCleared
                 ? "Results cleared due to SQL changes. Click Execute to run the updated query."
                 : subQuestion.sqlQuery
-                ? "No results yet. Click Execute to run the query."
-                : "No SQL query generated yet. Generate SQL first, then execute to see results."}
+                  ? "No results yet. Click Execute to run the query."
+                  : "No SQL query generated yet. Generate SQL first, then execute to see results."}
             </div>
           ) : null}
 
@@ -1561,10 +1568,7 @@ export const FunnelPanel: React.FC<FunnelPanelProps> = ({
             subQuestion={subQuestion.text}
             sql={subQuestion.sqlQuery || undefined}
             assessmentFormId={assessmentFormId}
-            canSave={
-              typeof window !== "undefined" &&
-              process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true"
-            }
+            canSave={typeof window !== "undefined"}
             onRequestSave={(payload) => {
               openSaveDialog({
                 chartType: payload.chartType as ChartType,

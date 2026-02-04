@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import {
   extractTemplateDraft,
   type TemplateExtractionInput,
@@ -8,17 +7,13 @@ import {
 import { TemplateServiceError } from "@/lib/services/template.service";
 
 export async function POST(req: NextRequest) {
-  if (!isTemplateSystemEnabled()) {
-    return NextResponse.json({ message: "Not Found" }, { status: 404 });
-  }
-
   let body: any;
   try {
     body = await req.json();
   } catch (error) {
     return NextResponse.json(
       { message: "Request body must be valid JSON" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -30,14 +25,14 @@ export async function POST(req: NextRequest) {
   if (!questionText) {
     return NextResponse.json(
       { message: "'questionText' is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   if (!sqlQuery) {
     return NextResponse.json(
       { message: "'sqlQuery' is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -60,22 +55,19 @@ export async function POST(req: NextRequest) {
     if (error instanceof TemplateServiceError) {
       return NextResponse.json(
         { message: error.message, details: error.details },
-        { status: error.status }
+        { status: error.status },
       );
     }
 
     console.error("Failed to extract template draft:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-function extractStringField(
-  source: any,
-  keys: string[]
-): string | undefined {
+function extractStringField(source: any, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = source?.[key];
     if (typeof value === "string" && value.trim().length > 0) {

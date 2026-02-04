@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProtectedRoute } from "@/lib/components/auth/ProtectedRoute";
-import { isAuditDashboardEnabled } from "@/lib/config/audit-flags";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,7 +45,6 @@ interface ClarificationExample {
 }
 
 export default function ClarificationMetricsPage() {
-  const enabled = useMemo(() => isAuditDashboardEnabled(), []);
   const [data, setData] = useState<ClarificationResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,16 +55,18 @@ export default function ClarificationMetricsPage() {
   const [exampleLoading, setExampleLoading] = useState(false);
 
   const loadMetrics = useCallback(async () => {
-    if (!enabled) return;
     setIsLoading(true);
     setError(null);
 
     const params = new URLSearchParams();
-    if (placeholderSemantic.trim()) params.set("placeholderSemantic", placeholderSemantic.trim());
+    if (placeholderSemantic.trim())
+      params.set("placeholderSemantic", placeholderSemantic.trim());
     if (responseType.trim()) params.set("responseType", responseType.trim());
 
     try {
-      const response = await fetch(`/api/admin/audit/clarifications?${params.toString()}`);
+      const response = await fetch(
+        `/api/admin/audit/clarifications?${params.toString()}`,
+      );
       if (!response.ok) {
         throw new Error("Failed to load clarification metrics");
       }
@@ -72,14 +78,14 @@ export default function ClarificationMetricsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [enabled, placeholderSemantic, responseType]);
+  }, [placeholderSemantic, responseType]);
 
   const loadExamples = async (semantic: string) => {
     setExampleLoading(true);
     setExampleLabel(semantic);
     try {
       const response = await fetch(
-        `/api/admin/audit/clarifications/examples?placeholderSemantic=${encodeURIComponent(semantic)}`
+        `/api/admin/audit/clarifications/examples?placeholderSemantic=${encodeURIComponent(semantic)}`,
       );
       if (!response.ok) {
         throw new Error("Failed to load clarification examples");
@@ -104,13 +110,19 @@ export default function ClarificationMetricsPage() {
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900">Clarification Metrics</h1>
+              <h1 className="text-2xl font-semibold text-slate-900">
+                Clarification Metrics
+              </h1>
               <p className="text-sm text-slate-600">
                 Acceptance and response patterns by placeholder semantic.
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={loadMetrics} disabled={isLoading}>
+              <Button
+                variant="outline"
+                onClick={loadMetrics}
+                disabled={isLoading}
+              >
                 {isLoading ? <LoadingDots /> : "Refresh"}
               </Button>
               <Link href="/admin/audit">
@@ -119,106 +131,114 @@ export default function ClarificationMetricsPage() {
             </div>
           </div>
 
-          {!enabled && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="py-4 text-sm text-amber-800">
-                The audit dashboard is disabled. Set ENABLE_AUDIT_DASHBOARD=true to enable.
-              </CardContent>
-            </Card>
-          )}
-
-          {enabled && error && (
+          {error && (
             <Card className="border-red-200 bg-red-50">
-              <CardContent className="py-4 text-sm text-red-700">{error}</CardContent>
-            </Card>
-          )}
-
-          {enabled && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Filters</CardTitle>
-                <CardDescription>Filter by placeholder or response type.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <Input
-                  placeholder="Placeholder semantic"
-                  value={placeholderSemantic}
-                  onChange={(event) => setPlaceholderSemantic(event.target.value)}
-                />
-                <Input
-                  placeholder="Response type (accepted/custom/abandoned)"
-                  value={responseType}
-                  onChange={(event) => setResponseType(event.target.value)}
-                />
+              <CardContent className="py-4 text-sm text-red-700">
+                {error}
               </CardContent>
             </Card>
           )}
 
-          {enabled && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Daily Metrics</CardTitle>
-                <CardDescription>
-                  Showing {data?.clarifications.length ?? 0} of {data?.total ?? 0}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading && !data ? (
-                  <div className="text-sm text-slate-600">Loading metrics…</div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Placeholder</TableHead>
-                        <TableHead>Response</TableHead>
-                        <TableHead>Count</TableHead>
-                        <TableHead>Avg Time (ms)</TableHead>
-                        <TableHead>Examples</TableHead>
+          <Card>
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+              <CardDescription>
+                Filter by placeholder or response type.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <Input
+                placeholder="Placeholder semantic"
+                value={placeholderSemantic}
+                onChange={(event) => setPlaceholderSemantic(event.target.value)}
+              />
+              <Input
+                placeholder="Response type (accepted/custom/abandoned)"
+                value={responseType}
+                onChange={(event) => setResponseType(event.target.value)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily Metrics</CardTitle>
+              <CardDescription>
+                Showing {data?.clarifications.length ?? 0} of {data?.total ?? 0}
+                .
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading && !data ? (
+                <div className="text-sm text-slate-600">Loading metrics…</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Placeholder</TableHead>
+                      <TableHead>Response</TableHead>
+                      <TableHead>Count</TableHead>
+                      <TableHead>Avg Time (ms)</TableHead>
+                      <TableHead>Examples</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(data?.clarifications ?? []).map((row, index) => (
+                      <TableRow
+                        key={`${row.placeholderSemantic}-${row.day}-${row.responseType}-${index}`}
+                      >
+                        <TableCell>{row.day}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {row.placeholderSemantic}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{row.responseType}</TableCell>
+                        <TableCell>{row.clarificationCount}</TableCell>
+                        <TableCell>{row.avgTimeSpentMs ?? "-"}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              loadExamples(row.placeholderSemantic)
+                            }
+                          >
+                            View
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(data?.clarifications ?? []).map((row, index) => (
-                        <TableRow key={`${row.placeholderSemantic}-${row.day}-${row.responseType}-${index}`}>
-                          <TableCell>{row.day}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{row.placeholderSemantic}</Badge>
-                          </TableCell>
-                          <TableCell>{row.responseType}</TableCell>
-                          <TableCell>{row.clarificationCount}</TableCell>
-                          <TableCell>{row.avgTimeSpentMs ?? "-"}</TableCell>
-                          <TableCell>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => loadExamples(row.placeholderSemantic)}
-                            >
-                              View
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
 
-          {enabled && exampleLabel && (
+          {exampleLabel && (
             <Card>
               <CardHeader>
                 <CardTitle>Examples for {exampleLabel}</CardTitle>
-                <CardDescription>Recent queries triggering this placeholder.</CardDescription>
+                <CardDescription>
+                  Recent queries triggering this placeholder.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {exampleLoading ? (
-                  <div className="text-sm text-slate-600">Loading examples…</div>
+                  <div className="text-sm text-slate-600">
+                    Loading examples…
+                  </div>
                 ) : examples.length > 0 ? (
                   <div className="space-y-3">
                     {examples.map((example) => (
-                      <div key={example.queryHistoryId} className="rounded border border-slate-200 p-3">
-                        <div className="text-sm text-slate-900">{example.question}</div>
+                      <div
+                        key={example.queryHistoryId}
+                        className="rounded border border-slate-200 p-3"
+                      >
+                        <div className="text-sm text-slate-900">
+                          {example.question}
+                        </div>
                         <div className="text-xs text-slate-500">
                           {new Date(example.createdAt).toLocaleString()}
                         </div>
@@ -232,7 +252,9 @@ export default function ClarificationMetricsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-600">No examples available.</div>
+                  <div className="text-sm text-slate-600">
+                    No examples available.
+                  </div>
                 )}
               </CardContent>
             </Card>

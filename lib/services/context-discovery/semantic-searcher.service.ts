@@ -12,9 +12,6 @@ import type { SemanticSearchResult } from "./types";
 import { createHash } from "crypto";
 import { normalizeMeasurementPhraseToConceptKey } from "./measurement-concept-mapping";
 
-const USE_CONCEPT_ID_SEARCH =
-  process.env.USE_CONCEPT_ID_SEARCH === "true";
-
 /**
  * Single search result from database
  */
@@ -50,7 +47,7 @@ class SemanticSearchCache {
     concepts: string[],
     customerId: string,
     includeFormFields: boolean,
-    includeNonForm: boolean
+    includeNonForm: boolean,
   ): string {
     const key = `${customerId}:${concepts
       .sort()
@@ -83,13 +80,13 @@ class SemanticSearchCache {
     concepts: string[],
     customerId: string,
     includeFormFields: boolean,
-    includeNonForm: boolean
+    includeNonForm: boolean,
   ): SemanticSearchResult[] | null {
     const key = this.generateCacheKey(
       concepts,
       customerId,
       includeFormFields,
-      includeNonForm
+      includeNonForm,
     );
     const entry = this.resultsCache.get(key);
 
@@ -107,13 +104,13 @@ class SemanticSearchCache {
     customerId: string,
     includeFormFields: boolean,
     includeNonForm: boolean,
-    results: SemanticSearchResult[]
+    results: SemanticSearchResult[],
   ): void {
     const key = this.generateCacheKey(
       concepts,
       customerId,
       includeFormFields,
-      includeNonForm
+      includeNonForm,
     );
     this.resultsCache.set(key, {
       value: results,
@@ -151,9 +148,12 @@ export class SemanticSearcherService {
 
   constructor() {
     // Periodically clean up expired cache entries
-    setInterval(() => {
-      this.cache.cleanupExpired();
-    }, 10 * 60 * 1000);
+    setInterval(
+      () => {
+        this.cache.cleanupExpired();
+      },
+      10 * 60 * 1000,
+    );
   }
 
   /**
@@ -171,7 +171,7 @@ export class SemanticSearcherService {
       minConfidence?: number;
       includeNonForm?: boolean;
       limit?: number;
-    }
+    },
   ): Promise<SemanticSearchResult[]> {
     const minConfidence = options?.minConfidence ?? this.DEFAULT_MIN_CONFIDENCE;
     const includeNonForm = options?.includeNonForm ?? false;
@@ -181,29 +181,28 @@ export class SemanticSearcherService {
       throw new Error("customerId and at least one concept are required");
     }
 
-    console.log(`[SemanticSearcher DEBUG] searchFormFields called with customerId="${customerId}" (length: ${customerId.length}, type: ${typeof customerId})`);
+    console.log(
+      `[SemanticSearcher DEBUG] searchFormFields called with customerId="${customerId}" (length: ${customerId.length}, type: ${typeof customerId})`,
+    );
 
     // Check cache
     const cachedResults = this.cache.getResults(
       concepts,
       customerId,
       true,
-      includeNonForm
+      includeNonForm,
     );
     if (cachedResults) {
       return cachedResults.slice(0, limit);
     }
 
-    const {
-      fallbackConcepts,
-      conceptIds,
-      useConceptIdSearch,
-    } = await this.resolveConceptSearchInputs(concepts);
+    const { fallbackConcepts, conceptIds, useConceptIdSearch } =
+      await this.resolveConceptSearchInputs(concepts);
 
     try {
       // Generate embeddings for concepts
       const conceptEmbeddings = await Promise.all(
-        concepts.map((concept) => this.getConceptEmbedding(concept))
+        concepts.map((concept) => this.getConceptEmbedding(concept)),
       );
 
       // PERFORMANCE OPTIMIZATION (Task 1.1.4):
@@ -221,7 +220,7 @@ export class SemanticSearcherService {
             fallbackConcepts,
             conceptIds,
             useConceptIdSearch,
-            minConfidence
+            minConfidence,
           ),
           this.searchNonFormColumnsInDB(
             customerId,
@@ -229,7 +228,7 @@ export class SemanticSearcherService {
             fallbackConcepts,
             conceptIds,
             useConceptIdSearch,
-            minConfidence
+            minConfidence,
           ),
         ]);
       } else {
@@ -240,7 +239,7 @@ export class SemanticSearcherService {
           fallbackConcepts,
           conceptIds,
           useConceptIdSearch,
-          minConfidence
+          minConfidence,
         );
       }
 
@@ -255,14 +254,14 @@ export class SemanticSearcherService {
         customerId,
         true,
         includeNonForm,
-        allResults
+        allResults,
       );
 
       return allResults;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       console.error(
-        `[SemanticSearcher] Failed to search form fields for customer ${customerId}: ${errorMsg}`
+        `[SemanticSearcher] Failed to search form fields for customer ${customerId}: ${errorMsg}`,
       );
       throw error;
     }
@@ -277,7 +276,7 @@ export class SemanticSearcherService {
     options?: {
       minConfidence?: number;
       limit?: number;
-    }
+    },
   ): Promise<SemanticSearchResult[]> {
     const minConfidence = options?.minConfidence ?? this.DEFAULT_MIN_CONFIDENCE;
     const limit = Math.min(options?.limit ?? this.DEFAULT_LIMIT, 50);
@@ -286,16 +285,13 @@ export class SemanticSearcherService {
       throw new Error("customerId and at least one concept are required");
     }
 
-    const {
-      fallbackConcepts,
-      conceptIds,
-      useConceptIdSearch,
-    } = await this.resolveConceptSearchInputs(concepts);
+    const { fallbackConcepts, conceptIds, useConceptIdSearch } =
+      await this.resolveConceptSearchInputs(concepts);
 
     try {
       // Generate embeddings
       const conceptEmbeddings = await Promise.all(
-        concepts.map((concept) => this.getConceptEmbedding(concept))
+        concepts.map((concept) => this.getConceptEmbedding(concept)),
       );
 
       // Search non-form columns
@@ -305,7 +301,7 @@ export class SemanticSearcherService {
         fallbackConcepts,
         conceptIds,
         useConceptIdSearch,
-        minConfidence
+        minConfidence,
       );
 
       return results
@@ -314,7 +310,7 @@ export class SemanticSearcherService {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       console.error(
-        `[SemanticSearcher] Failed to search non-form columns for customer ${customerId}: ${errorMsg}`
+        `[SemanticSearcher] Failed to search non-form columns for customer ${customerId}: ${errorMsg}`,
       );
       throw error;
     }
@@ -342,16 +338,14 @@ export class SemanticSearcherService {
       console.warn(
         `[SemanticSearcher] Failed to generate embedding for concept "${concept}": ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
       // Return zero vector as fallback
       return new Array(3072).fill(0);
     }
   }
 
-  private async resolveConceptSearchInputs(
-    concepts: string[]
-  ): Promise<{
+  private async resolveConceptSearchInputs(concepts: string[]): Promise<{
     fallbackConcepts: string[];
     conceptIds: string[];
     useConceptIdSearch: boolean;
@@ -360,14 +354,6 @@ export class SemanticSearcherService {
 
     if (fallbackConcepts.length === 0) {
       throw new Error("At least one valid concept is required for search");
-    }
-
-    if (!USE_CONCEPT_ID_SEARCH) {
-      return {
-        fallbackConcepts,
-        conceptIds: [],
-        useConceptIdSearch: false,
-      };
     }
 
     const normalized = fallbackConcepts
@@ -398,12 +384,10 @@ export class SemanticSearcherService {
               WHERE syn ? 'value' AND lower(syn->>'value') = ANY($1)
             )
         `,
-        [normalized]
+        [normalized],
       );
 
-      const conceptIds = Array.from(
-        new Set(result.rows.map((row) => row.id))
-      );
+      const conceptIds = Array.from(new Set(result.rows.map((row) => row.id)));
 
       return {
         fallbackConcepts,
@@ -414,7 +398,7 @@ export class SemanticSearcherService {
       console.warn(
         `[SemanticSearcher] Failed to resolve concept IDs: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
       return {
         fallbackConcepts,
@@ -464,7 +448,7 @@ export class SemanticSearcherService {
     concepts: string[],
     conceptIds: string[],
     useConceptIdSearch: boolean,
-    minConfidence: number
+    minConfidence: number,
   ): Promise<SemanticSearchResult[]> {
     const pool = await getInsightGenDbPool();
 
@@ -502,16 +486,31 @@ export class SemanticSearcherService {
       `;
 
       console.log(`[SemanticSearcher DEBUG] Executing form fields query with:`);
-      console.log(`  - customerId: "${customerId}" (length: ${customerId.length})`);
-      console.log(`  - customerId bytes: [${Array.from(customerId).map(c => c.charCodeAt(0)).join(', ')}]`);
-      console.log(`  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`);
+      console.log(
+        `  - customerId: "${customerId}" (length: ${customerId.length})`,
+      );
+      console.log(
+        `  - customerId bytes: [${Array.from(customerId)
+          .map((c) => c.charCodeAt(0))
+          .join(", ")}]`,
+      );
+      console.log(
+        `  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`,
+      );
       console.log(`  - minConfidence: ${minConfidence}`);
-      console.log(`  - conceptIdSearch: ${useConceptIdSearch} (resolved IDs: ${conceptIds.length})`);
+      console.log(
+        `  - conceptIdSearch: ${useConceptIdSearch} (resolved IDs: ${conceptIds.length})`,
+      );
 
       // Ensure concepts array is properly formatted for PostgreSQL ANY() operator
       // pg library has issues with certain array serializations, so we validate here
-      if (!Array.isArray(concepts) || concepts.some(c => typeof c !== 'string')) {
-        throw new Error(`Invalid concepts array: must be array of strings, got ${JSON.stringify(concepts)}`);
+      if (
+        !Array.isArray(concepts) ||
+        concepts.some((c) => typeof c !== "string")
+      ) {
+        throw new Error(
+          `Invalid concepts array: must be array of strings, got ${JSON.stringify(concepts)}`,
+        );
       }
 
       const result = await pool.query(query, [
@@ -537,7 +536,7 @@ export class SemanticSearcherService {
       console.warn(
         `[SemanticSearcher] Error searching form fields: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
       return [];
     }
@@ -552,7 +551,7 @@ export class SemanticSearcherService {
     concepts: string[],
     conceptIds: string[],
     useConceptIdSearch: boolean,
-    minConfidence: number
+    minConfidence: number,
   ): Promise<SemanticSearchResult[]> {
     const pool = await getInsightGenDbPool();
 
@@ -594,17 +593,34 @@ export class SemanticSearcherService {
           n.column_name
       `;
 
-      console.log(`[SemanticSearcher DEBUG] Executing non-form columns query with:`);
-      console.log(`  - customerId: "${customerId}" (length: ${customerId.length})`);
-      console.log(`  - customerId bytes: [${Array.from(customerId).map(c => c.charCodeAt(0)).join(', ')}]`);
-      console.log(`  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`);
+      console.log(
+        `[SemanticSearcher DEBUG] Executing non-form columns query with:`,
+      );
+      console.log(
+        `  - customerId: "${customerId}" (length: ${customerId.length})`,
+      );
+      console.log(
+        `  - customerId bytes: [${Array.from(customerId)
+          .map((c) => c.charCodeAt(0))
+          .join(", ")}]`,
+      );
+      console.log(
+        `  - concepts: [${concepts.slice(0, 3).join(", ")}${concepts.length > 3 ? ", ..." : ""}] (total: ${concepts.length})`,
+      );
       console.log(`  - minConfidence: ${minConfidence}`);
-      console.log(`  - conceptIdSearch: ${useConceptIdSearch} (resolved IDs: ${conceptIds.length})`);
+      console.log(
+        `  - conceptIdSearch: ${useConceptIdSearch} (resolved IDs: ${conceptIds.length})`,
+      );
 
       // Ensure concepts array is properly formatted for PostgreSQL ANY() operator
       // pg library has issues with certain array serializations, so we validate here
-      if (!Array.isArray(concepts) || concepts.some(c => typeof c !== 'string')) {
-        throw new Error(`Invalid concepts array: must be array of strings, got ${JSON.stringify(concepts)}`);
+      if (
+        !Array.isArray(concepts) ||
+        concepts.some((c) => typeof c !== "string")
+      ) {
+        throw new Error(
+          `Invalid concepts array: must be array of strings, got ${JSON.stringify(concepts)}`,
+        );
       }
 
       const result = await pool.query(query, [
@@ -629,7 +645,7 @@ export class SemanticSearcherService {
       console.warn(
         `[SemanticSearcher] Error searching non-form columns: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
       return [];
     }

@@ -43,6 +43,11 @@ describe("assertAuditQueryUsesViews", () => {
     expect(() => assertAuditQueryUsesViews(query)).not.toThrow();
   });
 
+  it("allows queries using ConversationQueryHistory", () => {
+    const query = 'SELECT * FROM "ConversationQueryHistory" WHERE "conversationThreadId" IS NOT NULL';
+    expect(() => assertAuditQueryUsesViews(query)).not.toThrow();
+  });
+
   it("allows case-insensitive view names", () => {
     const query = 'SELECT * FROM "queryhistorydaily"';
     expect(() => assertAuditQueryUsesViews(query)).not.toThrow();
@@ -147,7 +152,8 @@ describe("getAllowedAuditViews", () => {
     expect(views).toContain("QueryPerformanceDaily");
     expect(views).toContain("QueryAuditExplorer");
     expect(views).toContain("QueryAuditDetail");
-    expect(views.length).toBe(6);
+    expect(views).toContain("ConversationQueryHistory");
+    expect(views.length).toBe(7);
   });
 
   it("returns readonly array", () => {

@@ -9,7 +9,6 @@ export default function InsightDetailPage({
 }: {
   params: { id: string };
 }) {
-  const enabled = process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true";
   const [insight, setInsight] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [execLoading, setExecLoading] = useState(false);
@@ -36,9 +35,8 @@ export default function InsightDetailPage({
         setLoading(false);
       }
     };
-    if (enabled) load();
-    else setLoading(false);
-  }, [params.id, enabled]);
+    load();
+  }, [params.id]);
 
   const execute = async () => {
     setExecLoading(true);
@@ -133,7 +131,7 @@ export default function InsightDetailPage({
       const data = await res.json();
       if (!res.ok)
         throw new Error(
-          data?.message || "Failed to update chart configuration"
+          data?.message || "Failed to update chart configuration",
         );
 
       // Update the insight with the new chart configuration
@@ -149,10 +147,6 @@ export default function InsightDetailPage({
     }
   };
 
-  if (!enabled)
-    return (
-      <div className="p-6 text-sm text-gray-600">Insights are disabled.</div>
-    );
   if (loading) return <div className="p-6">Loading...</div>;
   if (error) return <div className="p-6 text-sm text-red-600">{error}</div>;
   if (!insight) return <div className="p-6">Not found.</div>;

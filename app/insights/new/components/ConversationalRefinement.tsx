@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, MessageSquare, Sparkles } from "lucide-react";
 import { InsightResult } from "@/lib/hooks/useInsights";
+import { generateRefinements } from "@/lib/services/refinement-generator.service";
 
 interface RefinementMessage {
   role: "user" | "assistant";
@@ -121,13 +122,7 @@ export function ConversationalRefinement({
     }
   };
 
-  const quickActions = [
-    "Include inactive records too",
-    "Change to last 6 months",
-    "Add more columns to the results",
-    "Explain what you found",
-    "Show only top 10 results",
-  ];
+  const quickActions = generateRefinements(result);
 
   if (!isOpen) {
     return (

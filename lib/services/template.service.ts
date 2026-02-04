@@ -1,5 +1,4 @@
 import { getInsightGenDbPool } from "../db";
-import { isTemplateSystemEnabled } from "../config/template-flags";
 import {
   getTemplates,
   matchTemplates,
@@ -9,7 +8,10 @@ import {
   TemplateStatus,
 } from "./query-template.service";
 
-import type { PlaceholdersSpec, TemplateResultShape } from "./template-validator.service";
+import type {
+  PlaceholdersSpec,
+  TemplateResultShape,
+} from "./template-validator.service";
 import {
   validateTemplate,
   ValidationResult,
@@ -110,25 +112,14 @@ interface NormalizedDraftPayload {
 }
 
 export async function listTemplates(
-  filters: TemplateListFilters = {}
+  filters: TemplateListFilters = {},
 ): Promise<TemplateListItem[]> {
-  if (isTemplateSystemEnabled()) {
-    return listTemplatesFromDb(filters);
-  }
-
-  const catalog = await getTemplates();
-  const items = catalog.templates.map((tpl) => ({
-    ...tpl,
-    status: tpl.status ?? "Approved",
-    intent: tpl.intent ?? inferIntentFromTemplate(tpl),
-  }));
-
-  return applyInMemoryFilters(items, filters);
+  return listTemplatesFromDb(filters);
 }
 
 export async function suggestTemplates(
   question: string,
-  limit = 5
+  limit = 5,
 ): Promise<TemplateMatch[]> {
   return matchTemplates(question, limit);
 }
@@ -138,9 +129,8 @@ export function invalidateTemplateCache(): void {
 }
 
 export async function createTemplateDraft(
-  payload: TemplateDraftPayload
+  payload: TemplateDraftPayload,
 ): Promise<TemplateOperationResult> {
-  assertFeatureEnabled();
   const fieldErrors = validateDraftPayloadFields(payload);
   if (fieldErrors.length > 0) {
     throw new TemplateServiceError("Invalid template payload", 400, {
@@ -151,7 +141,7 @@ export async function createTemplateDraft(
   const normalized = normalizeDraftPayload(payload);
   const placeholders = derivePlaceholders(
     normalized.placeholdersSpec,
-    normalized.sqlPattern
+    normalized.sqlPattern,
   );
   const validation = validateTemplate({
     name: normalized.name,
@@ -180,7 +170,7 @@ export async function createTemplateDraft(
         normalized.intent,
         normalized.description ?? null,
         normalized.createdBy,
-      ]
+      ],
     );
 
     const templateId = templateInsert.rows[0].id as number;
@@ -195,32 +185,37 @@ export async function createTemplateDraft(
         templateId,
         versionNumber,
         normalized.sqlPattern,
-        normalized.placeholdersSpec ? JSON.stringify(normalized.placeholdersSpec) : null,
+        normalized.placeholdersSpec
+          ? JSON.stringify(normalized.placeholdersSpec)
+          : null,
         normalized.keywords,
         normalized.tags,
         normalized.examples,
         JSON.stringify({ warnings: validation.warnings }),
         normalized.resultShape ? JSON.stringify(normalized.resultShape) : null,
         normalized.notes ?? null,
-      ]
+      ],
     );
 
     const templateVersionId = versionInsert.rows[0].id as number;
 
     await client.query(
       `UPDATE "Template" SET "activeVersionId" = $1 WHERE id = $2`,
-      [templateVersionId, templateId]
+      [templateVersionId, templateId],
     );
 
     await client.query("COMMIT");
 
     const template = await getTemplateById(templateId);
-    return { template, warnings: validation.warnings.map((issue) => issue.message) };
+    return {
+      template,
+      warnings: validation.warnings.map((issue) => issue.message),
+    };
   } catch (error: any) {
     await client.query("ROLLBACK");
     if (error?.code === "23505") {
       throw new TemplateStateError(
-        "Template with the same name and intent already exists."
+        "Template with the same name and intent already exists.",
       );
     }
     throw error;
@@ -231,9 +226,8 @@ export async function createTemplateDraft(
 
 export async function updateTemplateDraft(
   templateId: number,
-  payload: TemplateDraftUpdatePayload
+  payload: TemplateDraftUpdatePayload,
 ): Promise<TemplateOperationResult> {
-  assertFeatureEnabled();
   const fieldErrors = validateDraftPayloadFields(payload);
   if (fieldErrors.length > 0) {
     throw new TemplateServiceError("Invalid template payload", 400, {
@@ -244,7 +238,7 @@ export async function updateTemplateDraft(
   const normalized = normalizeDraftPayload(payload);
   const placeholders = derivePlaceholders(
     normalized.placeholdersSpec,
-    normalized.sqlPattern
+    normalized.sqlPattern,
   );
   const validation = validateTemplate({
     name: normalized.name,
@@ -270,7 +264,7 @@ export async function updateTemplateDraft(
        JOIN "TemplateVersion" tv ON tv.id = t."activeVersionId"
        WHERE t.id = $1
        FOR UPDATE`,
-      [templateId]
+      [templateId],
     );
 
     if (current.rows.length === 0) {
@@ -290,7 +284,12 @@ export async function updateTemplateDraft(
            intent = $3,
            description = $4
        WHERE id = $1`,
-      [templateId, normalized.name, normalized.intent, normalized.description ?? null]
+      [
+        templateId,
+        normalized.name,
+        normalized.intent,
+        normalized.description ?? null,
+      ],
     );
 
     await client.query(
@@ -307,20 +306,25 @@ export async function updateTemplateDraft(
       [
         templateVersionId,
         normalized.sqlPattern,
-        normalized.placeholdersSpec ? JSON.stringify(normalized.placeholdersSpec) : null,
+        normalized.placeholdersSpec
+          ? JSON.stringify(normalized.placeholdersSpec)
+          : null,
         normalized.keywords,
         normalized.tags,
         normalized.examples,
         JSON.stringify({ warnings: validation.warnings }),
         normalized.resultShape ? JSON.stringify(normalized.resultShape) : null,
         normalized.notes ?? null,
-      ]
+      ],
     );
 
     await client.query("COMMIT");
 
     const template = await getTemplateById(templateId);
-    return { template, warnings: validation.warnings.map((issue) => issue.message) };
+    return {
+      template,
+      warnings: validation.warnings.map((issue) => issue.message),
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -330,9 +334,8 @@ export async function updateTemplateDraft(
 }
 
 export async function publishTemplate(
-  templateId: number
+  templateId: number,
 ): Promise<TemplateOperationResult> {
-  assertFeatureEnabled();
   const pool = await getInsightGenDbPool();
   const client = await pool.connect();
 
@@ -349,7 +352,7 @@ export async function publishTemplate(
        JOIN "TemplateVersion" tv ON tv.id = t."activeVersionId"
        WHERE t.id = $1
        FOR UPDATE`,
-      [templateId]
+      [templateId],
     );
 
     if (current.rows.length === 0) {
@@ -364,13 +367,13 @@ export async function publishTemplate(
 
     const spec = row.placeholdersSpec as PlaceholdersSpec | null;
     const placeholders = derivePlaceholders(spec, row.sqlPattern as string);
-  const validation = validateTemplate({
-    name: row.name,
-    sqlPattern: row.sqlPattern,
-    placeholders,
-    placeholdersSpec: spec ?? undefined,
-    resultShape: row.resultShape ?? undefined,
-  });
+    const validation = validateTemplate({
+      name: row.name,
+      sqlPattern: row.sqlPattern,
+      placeholders,
+      placeholdersSpec: spec ?? undefined,
+      resultShape: row.resultShape ?? undefined,
+    });
 
     if (!validation.valid) {
       throw new TemplateValidationError(validation);
@@ -378,14 +381,17 @@ export async function publishTemplate(
 
     await client.query(
       `UPDATE "Template" SET status = 'Approved' WHERE id = $1`,
-      [templateId]
+      [templateId],
     );
 
     await client.query("COMMIT");
 
     reloadTemplateCatalog();
     const template = await getTemplateById(templateId);
-    return { template, warnings: validation.warnings.map((issue) => issue.message) };
+    return {
+      template,
+      warnings: validation.warnings.map((issue) => issue.message),
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -395,9 +401,8 @@ export async function publishTemplate(
 }
 
 export async function deprecateTemplate(
-  templateId: number
+  templateId: number,
 ): Promise<TemplateListItem> {
-  assertFeatureEnabled();
   const pool = await getInsightGenDbPool();
   const client = await pool.connect();
 
@@ -406,7 +411,7 @@ export async function deprecateTemplate(
 
     const current = await client.query(
       `SELECT status FROM "Template" WHERE id = $1 FOR UPDATE`,
-      [templateId]
+      [templateId],
     );
 
     if (current.rows.length === 0) {
@@ -421,7 +426,7 @@ export async function deprecateTemplate(
 
     await client.query(
       `UPDATE "Template" SET status = 'Deprecated' WHERE id = $1`,
-      [templateId]
+      [templateId],
     );
 
     await client.query("COMMIT");
@@ -436,7 +441,7 @@ export async function deprecateTemplate(
 }
 
 export async function getTemplateById(
-  templateId: number
+  templateId: number,
 ): Promise<TemplateListItem> {
   const pool = await getInsightGenDbPool();
   const result = await pool.query<DbTemplateListRow>(
@@ -471,7 +476,7 @@ export async function getTemplateById(
         WHERE tu."templateVersionId" = tv.id
       ) usage ON TRUE
       WHERE t.id = $1`,
-    [templateId]
+    [templateId],
   );
 
   if (result.rows.length === 0) {
@@ -482,14 +487,13 @@ export async function getTemplateById(
 }
 
 export async function importTemplatesFromJson(): Promise<SeedStats> {
-  assertFeatureEnabled();
   const mod = await import("../../scripts/seed-template-catalog");
   const stats = await mod.seedTemplateCatalog();
   reloadTemplateCatalog();
   return stats;
 }
 async function listTemplatesFromDb(
-  filters: TemplateListFilters
+  filters: TemplateListFilters,
 ): Promise<TemplateListItem[]> {
   const pool = await getInsightGenDbPool();
 
@@ -523,11 +527,13 @@ async function listTemplatesFromDb(
           FROM unnest(COALESCE(tv.keywords, '{}')) AS kw
           WHERE LOWER(kw) LIKE $${params.length}
         )
-      )`
+      )`,
     );
   }
 
-  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const whereClause = conditions.length
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
   const limit = filters.limit ?? DEFAULT_LIMIT;
   const offset = filters.offset ?? 0;
 
@@ -570,7 +576,7 @@ async function listTemplatesFromDb(
       LIMIT $${params.length - 1}
       OFFSET $${params.length}
     `,
-    params
+    params,
   );
 
   return result.rows.map(transformListRow);
@@ -596,7 +602,10 @@ interface DbTemplateListRow {
 function transformListRow(row: DbTemplateListRow): TemplateListItem {
   const successCount = Number(row.successCount ?? 0);
   const usageCount = Number(row.usageCount ?? 0);
-  const successRate = usageCount > 0 ? Math.min(Math.max(successCount / usageCount, 0), 1) : undefined;
+  const successRate =
+    usageCount > 0
+      ? Math.min(Math.max(successCount / usageCount, 0), 1)
+      : undefined;
   const placeholders = derivePlaceholders(row.placeholdersSpec, row.sqlPattern);
 
   return {
@@ -619,42 +628,60 @@ function transformListRow(row: DbTemplateListRow): TemplateListItem {
   };
 }
 
-function normalizeArray(value: string[] | null | undefined): string[] | undefined {
-  return Array.isArray(value) && value.length > 0 ? value.map((v) => String(v)) : undefined;
+function normalizeArray(
+  value: string[] | null | undefined,
+): string[] | undefined {
+  return Array.isArray(value) && value.length > 0
+    ? value.map((v) => String(v))
+    : undefined;
 }
 
 function applyInMemoryFilters(
   templates: TemplateListItem[],
-  filters: TemplateListFilters
+  filters: TemplateListFilters,
 ): TemplateListItem[] {
   return templates
     .filter((tpl) =>
-      filters.status?.length ? filters.status.includes(tpl.status ?? "Approved") : true
+      filters.status?.length
+        ? filters.status.includes(tpl.status ?? "Approved")
+        : true,
     )
     .filter((tpl) =>
-      filters.intent?.length ? filters.intent.includes(tpl.intent ?? inferIntentFromTemplate(tpl)) : true
+      filters.intent?.length
+        ? filters.intent.includes(tpl.intent ?? inferIntentFromTemplate(tpl))
+        : true,
     )
     .filter((tpl) =>
       filters.tags?.length
         ? (tpl.tags ?? []).some((tag) => filters.tags!.includes(tag))
-        : true
+        : true,
     )
     .filter((tpl) => {
       if (!filters.search?.trim()) return true;
       const term = filters.search.trim().toLowerCase();
-      const haystack = [tpl.name, tpl.description ?? "", ...(tpl.keywords ?? [])]
+      const haystack = [
+        tpl.name,
+        tpl.description ?? "",
+        ...(tpl.keywords ?? []),
+      ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(term);
     })
-    .slice(filters.offset ?? 0, (filters.offset ?? 0) + (filters.limit ?? DEFAULT_LIMIT));
+    .slice(
+      filters.offset ?? 0,
+      (filters.offset ?? 0) + (filters.limit ?? DEFAULT_LIMIT),
+    );
 }
 
 function inferIntentFromTemplate(tpl: QueryTemplate): string {
   const tokens = new Set<string>();
   const collect = (values?: string[]) => {
     for (const value of values ?? []) {
-      const parts = value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+      const parts = value
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
       for (const part of parts) tokens.add(part);
     }
   };
@@ -663,10 +690,17 @@ function inferIntentFromTemplate(tpl: QueryTemplate): string {
   collect(tpl.tags);
   collect([tpl.name]);
 
-  if (tokens.has("trend") || tokens.has("time") || tokens.has("series")) return "time_series_trend";
-  if (tokens.has("aggregate") || tokens.has("aggregation") || tokens.has("count")) return "aggregation_by_category";
+  if (tokens.has("trend") || tokens.has("time") || tokens.has("series"))
+    return "time_series_trend";
+  if (
+    tokens.has("aggregate") ||
+    tokens.has("aggregation") ||
+    tokens.has("count")
+  )
+    return "aggregation_by_category";
   if (tokens.has("top") || tokens.has("ranking")) return "top_k";
-  if (tokens.has("latest") || tokens.has("earliest")) return "latest_per_entity";
+  if (tokens.has("latest") || tokens.has("earliest"))
+    return "latest_per_entity";
   if (tokens.has("current") || tokens.has("state")) return "as_of_state";
   if (tokens.has("pivot")) return "pivot";
   if (tokens.has("unpivot")) return "unpivot";
@@ -689,7 +723,7 @@ function normalizeStringArray(values?: string[] | null): string[] {
 }
 
 function normalizeResultShape(
-  shape?: TemplateResultShape | null
+  shape?: TemplateResultShape | null,
 ): TemplateResultShape | null {
   if (!shape) return null;
   const normalized: TemplateResultShape = {};
@@ -723,7 +757,7 @@ function normalizeResultShape(
 
 function derivePlaceholders(
   spec?: PlaceholdersSpec | null,
-  sqlPattern?: string
+  sqlPattern?: string,
 ): string[] {
   const placeholders = new Set<string>();
 
@@ -748,9 +782,7 @@ function normalizePlaceholderName(name: string): string {
   return name.replace(/\[\]$/, "").replace(/\?$/, "");
 }
 
-function validateDraftPayloadFields(
-  payload: TemplateDraftPayload
-): string[] {
+function validateDraftPayloadFields(payload: TemplateDraftPayload): string[] {
   const errors: string[] = [];
   if (!payload.name || payload.name.trim().length === 0) {
     errors.push("'name' is required");
@@ -765,7 +797,7 @@ function validateDraftPayloadFields(
 }
 
 function normalizeDraftPayload(
-  payload: TemplateDraftPayload
+  payload: TemplateDraftPayload,
 ): NormalizedDraftPayload {
   return {
     name: payload.name.trim(),
@@ -780,10 +812,4 @@ function normalizeDraftPayload(
     resultShape: normalizeResultShape(payload.resultShape),
     notes: payload.notes?.trim() || undefined,
   };
-}
-
-function assertFeatureEnabled(): void {
-  if (!isTemplateSystemEnabled()) {
-    throw new TemplateServiceError("Template system is disabled", 404);
-  }
 }

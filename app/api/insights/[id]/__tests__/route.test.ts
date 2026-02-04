@@ -18,8 +18,6 @@ vi.mock("@/lib/services/insight.service", () => ({
   },
 }));
 
-const originalApiEnabled = process.env.CHART_INSIGHTS_API_ENABLED;
-
 async function importRoute() {
   return await import("../route");
 }
@@ -27,17 +25,12 @@ async function importRoute() {
 describe("/api/insights/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.CHART_INSIGHTS_API_ENABLED = "true";
-  });
-
-  afterAll(() => {
-    process.env.CHART_INSIGHTS_API_ENABLED = originalApiEnabled;
   });
 
   it("returns auth response when GET unauthorized", async () => {
     const unauthorized = NextResponse.json(
       { error: "Unauthorized" },
-      { status: 401 }
+      { status: 401 },
     );
     requireAuthMock.mockResolvedValueOnce(unauthorized);
 
@@ -66,7 +59,7 @@ describe("/api/insights/[id]", () => {
   it("prevents update when not authenticated", async () => {
     const unauthorized = NextResponse.json(
       { error: "Unauthorized" },
-      { status: 401 }
+      { status: 401 },
     );
     requireAuthMock.mockResolvedValueOnce(unauthorized);
 

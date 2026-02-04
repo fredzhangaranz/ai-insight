@@ -1,6 +1,11 @@
 import { BaseProvider } from "@/lib/ai/providers/base-provider";
 import { GoogleGenAI } from "@google/genai";
 import { AIConfigLoader } from "@/lib/config/ai-config-loader";
+import type { ConversationCompletionParams } from "@/lib/ai/providers/i-query-funnel-provider";
+import type { ConversationMessage } from "@/lib/types/conversation";
+
+const CACHE_TTL_SECONDS = 3600;
+const cachedContentByKey = new Map<string, { name: string; expiresAt: number }>();
 
 /**
  * An AI provider that uses Google's Vertex AI Gemini models to power the query funnel.
@@ -199,6 +204,309 @@ export class GeminiProvider extends BaseProvider {
         output_tokens: outputTokens,
       },
     };
+  }
+
+  /**
+   * Conversation-aware completion with context caching.
+   * Token usage: First message ~5200 tokens, subsequent ~600 tokens (90% cached)
+   */
+  public async completeWithConversation(
+    params: ConversationCompletionParams
+  ): Promise<string> {
+    const startTime = Date.now();
+    await this.ensureInitialized();
+
+    if (!this.genAI) {
+      throw new Error("Google GenAI failed to initialize");
+    }
+
+    const cacheKey = this.getCacheKey(params.customerId);
+    let cacheName = this.getCachedContentName(cacheKey);
+    let cacheWasCreated = false;
+
+    if (!cacheName) {
+      const cachedContent = await this.createCachedContent(
+        cacheKey,
+        params.customerId
+      );
+      cacheName = cachedContent.name;
+      cacheWasCreated = true;
+    }
+
+    const conversationPrompt = this.buildConversationHistory(
+      params.conversationHistory
+    );
+    const fullPrompt =
+      conversationPrompt + "\n\nCurrent question: " + params.currentQuestion;
+
+    // 🔍 LOGGING LAYER 5: Final prompt to LLM
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log("=".repeat(80));
+      console.log("[Layer 5: Prompt to LLM]");
+      console.log(fullPrompt);
+      console.log("=".repeat(80));
+    }
+
+    // Log prompts if enabled
+    if (process.env.LOG_LLM_PROMPTS === "true") {
+      console.log("=".repeat(80));
+      console.log(`[GeminiProvider.completeWithConversation] Model: ${this.modelId}`);
+      console.log("-".repeat(80));
+      console.log("[CONVERSATION HISTORY + CURRENT QUESTION]:");
+      console.log(fullPrompt);
+      console.log("-".repeat(80));
+      if (params.temperature !== undefined) {
+        console.log(`[TEMPERATURE]: ${params.temperature}`);
+      }
+      if (params.maxTokens) {
+        console.log(`[MAX TOKENS]: ${params.maxTokens}`);
+      }
+      console.log("=".repeat(80));
+    }
+
+    const generate = async (cachedContent?: string): Promise<{ text: string; usage: any }> => {
+      const config: Record<string, unknown> = {
+        cachedContent,
+      };
+
+      if (params.maxTokens) {
+        config.maxOutputTokens = params.maxTokens;
+      }
+
+      if (typeof params.temperature === "number") {
+        config.temperature = params.temperature;
+      } else {
+        config.temperature = 0.1;
+      }
+
+      const result = await this.genAI!.models.generateContent({
+        model: this.modelId,
+        contents: fullPrompt,
+        config,
+      });
+
+      let responseText = "";
+      if (typeof result.text === "string") {
+        responseText = result.text;
+      } else if (result.candidates && result.candidates.length > 0) {
+        const candidate = result.candidates[0];
+        responseText = candidate.content?.parts?.[0]?.text || "";
+      }
+
+      if (!responseText) {
+        throw new Error("Empty response text from Google GenAI API");
+      }
+
+      return {
+        text: stripMarkdownCodeBlocks(responseText),
+        usage: (result as any).usageMetadata || (result as any).usage || {},
+      };
+    };
+
+    let attempt = 0;
+    const MAX_RETRIES = 1;
+
+    while (attempt <= MAX_RETRIES) {
+      try {
+        const result = await generate(cacheName);
+        
+        // Log token usage for cache efficiency monitoring
+        const usage = result.usage;
+        const inputTokens = usage.promptTokenCount || usage.inputTokens || 0;
+        const outputTokens = usage.candidatesTokenCount || usage.outputTokens || 0;
+        const cachedTokens = usage.cachedContentTokenCount || 0;
+        
+        const totalDuration = Date.now() - startTime;
+        console.log(
+          `[GeminiProvider] Conversation completion in ${totalDuration}ms - ` +
+          `Input: ${inputTokens} tokens ` +
+          `(cached: ${cachedTokens}), ` +
+          `Output: ${outputTokens} tokens`
+        );
+
+        // Calculate cache efficiency
+        if (cachedTokens > 0 && inputTokens > 0) {
+          const cachePercentage = ((cachedTokens / (inputTokens + cachedTokens)) * 100).toFixed(1);
+          console.log(`[GeminiProvider] 🎯 Cache hit: ${cachePercentage}% of context served from cache`);
+        } else if (cacheWasCreated) {
+          console.log(`[GeminiProvider] 📝 Cache created: ${inputTokens} tokens cached for future use`);
+        }
+
+        return result.text;
+      } catch (error) {
+        if (attempt >= MAX_RETRIES) {
+          throw error;
+        }
+
+        console.warn(
+          `[GeminiProvider] Retry ${attempt + 1}/${MAX_RETRIES}: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
+        this.clearCachedContent(cacheKey);
+
+        const cachedContent = await this.createCachedContent(
+          cacheKey,
+          params.customerId
+        );
+        cacheName = cachedContent.name;
+        attempt++;
+      }
+    }
+
+    throw new Error("Failed to complete conversation after retries");
+  }
+
+  /**
+   * Build conversation history from messages (SQL + summaries only).
+   * Keeps last 5 messages to balance context vs token usage (~200 tokens per message = 1000 tokens).
+   */
+  public buildConversationHistory(messages: ConversationMessage[]): string {
+    // 🔍 LOGGING LAYER 4: Provider receives messages
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log(
+        `[Layer 4: Provider.buildConversationHistory] Received ${messages.length} messages`
+      );
+      messages.forEach((msg, idx) => {
+        console.log(
+          `  [${idx}] role=${msg.role}, has_sql=${!!msg.metadata?.sql}, ` +
+          `result_summary=${!!msg.metadata?.resultSummary}`
+        );
+        if (msg.role === "user") {
+          console.log(`       Q: ${msg.content.slice(0, 60)}...`);
+        }
+        if (msg.metadata?.sql) {
+          console.log(`       SQL: ${msg.metadata.sql.slice(0, 80)}...`);
+        }
+      });
+    }
+
+    if (messages.length === 0) {
+      if (process.env.DEBUG_COMPOSITION === "true") {
+        console.log(`[Layer 4] EMPTY: Returning first question message`);
+      }
+      return "This is the first question in the conversation.";
+    }
+
+    let history = "Previous conversation:\n\n";
+    const CONVERSATION_HISTORY_LIMIT = 5;
+    const recent = messages.slice(-CONVERSATION_HISTORY_LIMIT);
+
+    let assistantCount = 0;
+    let userCount = 0;
+
+    for (const msg of recent) {
+      if (msg.role === "user") {
+        history += `User asked: "${msg.content}"\n`;
+        userCount++;
+        continue;
+      }
+
+      if (msg.role === "assistant" && msg.metadata?.sql) {
+        const summary = msg.metadata.resultSummary;
+        history += "Assistant generated SQL:\n";
+        history += `\`\`\`sql\n${msg.metadata.sql}\n\`\`\`\n`;
+        history += `Result: ${summary?.rowCount ?? 0} records`;
+
+        if (summary?.columns?.length) {
+          history += `, columns: ${summary.columns.join(", ")}`;
+        }
+
+        history += "\n\n";
+        assistantCount++;
+      } else if (msg.role === "assistant" && !msg.metadata?.sql) {
+        // 🔍 LOGGING LAYER 4B: Assistant message without SQL
+        if (process.env.DEBUG_COMPOSITION === "true") {
+          console.log(
+            `[Layer 4B] SKIPPED assistant message: no SQL in metadata. ` +
+            `metadata_keys=${Object.keys(msg.metadata || {}).join(",")}`
+          );
+        }
+      }
+    }
+
+    // 🔍 LOGGING LAYER 4C: Final history summary
+    if (process.env.DEBUG_COMPOSITION === "true") {
+      console.log(
+        `[Layer 4C] History built: ${userCount} user msgs, ${assistantCount} assistant msgs`
+      );
+      console.log(`[Layer 4C] Final history:\n${history.slice(0, 200)}...`);
+    }
+
+    history += "\nInstructions:\n";
+    history +=
+      "- If the current question references previous results (which ones, those, they), compose using the most recent SQL.\n";
+    history +=
+      "- If the current question is unrelated, generate a fresh query.\n";
+
+    return history;
+  }
+
+  /**
+   * Generate cache key based on customer, model, and version info.
+   * Cache is invalidated when SCHEMA_VERSION or ONTOLOGY_VERSION env vars change.
+   */
+  private getCacheKey(customerId: string): string {
+    const schemaVersion = process.env.SCHEMA_VERSION || "v1";
+    const ontologyVersion = process.env.ONTOLOGY_VERSION || "v1";
+    return `${this.modelId}:${customerId}:${schemaVersion}:${ontologyVersion}`;
+  }
+
+  /**
+   * Get cached content name from in-memory Map.
+   * Note: For multi-instance deployments, use Redis instead of Map.
+   */
+  private getCachedContentName(cacheKey: string): string | null {
+    const cached = cachedContentByKey.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (cached.expiresAt <= Date.now()) {
+      cachedContentByKey.delete(cacheKey);
+      return null;
+    }
+
+    return cached.name;
+  }
+
+  private clearCachedContent(cacheKey: string): void {
+    cachedContentByKey.delete(cacheKey);
+  }
+
+  /**
+   * Create cached content with schema, ontology, and SQL instructions.
+   * Cache is stored in-memory for single-instance deployments.
+   */
+  private async createCachedContent(cacheKey: string, customerId: string) {
+    if (!this.genAI) {
+      throw new Error("Google GenAI failed to initialize");
+    }
+
+    const cachedContent = await this.genAI.caches.create({
+      model: this.modelId,
+      config: {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: await this.buildSchemaContext(customerId) },
+              { text: await this.buildOntologyContext(customerId) },
+              { text: this.buildSQLInstructions() },
+            ],
+          },
+        ],
+        ttl: `${CACHE_TTL_SECONDS}s`,
+        displayName: `conversation-context-${cacheKey}`,
+      },
+    });
+
+    cachedContentByKey.set(cacheKey, {
+      name: cachedContent.name,
+      expiresAt: Date.now() + CACHE_TTL_SECONDS * 1000,
+    });
+
+    return cachedContent;
   }
 }
 

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import { requireAdmin } from "@/lib/middleware/auth-middleware";
 import {
   deprecateTemplate,
@@ -14,18 +13,17 @@ function parseTemplateId(id: string): number | null {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
-  if (!isTemplateSystemEnabled()) {
-    return NextResponse.json({ message: "Not Found" }, { status: 404 });
-  }
-
   const authResult = await requireAdmin(req);
   if (authResult instanceof NextResponse) return authResult;
 
   const templateId = parseTemplateId(params.id);
   if (templateId === null) {
-    return NextResponse.json({ message: "Invalid template id" }, { status: 400 });
+    return NextResponse.json(
+      { message: "Invalid template id" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -35,10 +33,13 @@ export async function POST(
     if (error instanceof TemplateServiceError) {
       return NextResponse.json(
         { message: error.message, details: error.details },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Failed to deprecate template:", error);
-    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }

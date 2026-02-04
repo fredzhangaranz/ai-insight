@@ -1,47 +1,18 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/config/template-flags", () => ({
-  isTemplateSystemEnabled: vi.fn(() => true),
-}));
-
 vi.mock("@/lib/services/template-similarity.service", () => ({
   checkSimilarTemplates: vi.fn(),
 }));
 
 import { POST } from "./route";
-import { isTemplateSystemEnabled } from "@/lib/config/template-flags";
 import { checkSimilarTemplates } from "@/lib/services/template-similarity.service";
 
-const isTemplateSystemEnabledMock =
-  isTemplateSystemEnabled as unknown as Mock;
 const checkSimilarTemplatesMock = checkSimilarTemplates as unknown as Mock;
 
 describe("POST /api/ai/templates/check-duplicates", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    isTemplateSystemEnabledMock.mockReturnValue(true);
-  });
-
-  it("returns 404 when feature flag is disabled", async () => {
-    isTemplateSystemEnabledMock.mockReturnValue(false);
-
-    const req = new NextRequest(
-      "http://localhost/api/ai/templates/check-duplicates",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          name: "Test Template",
-          intent: "aggregation_by_category",
-        }),
-      }
-    );
-
-    const res = await POST(req);
-    expect(res.status).toBe(404);
-    const body = await res.json();
-    expect(body.message).toBe("Not Found");
-    expect(checkSimilarTemplatesMock).not.toHaveBeenCalled();
   });
 
   it("returns 400 when body is invalid JSON", async () => {
@@ -50,7 +21,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
       {
         method: "POST",
         body: "not-json",
-      }
+      },
     );
 
     const res = await POST(req);
@@ -66,7 +37,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
         method: "POST",
         body: JSON.stringify({ intent: "aggregation_by_category" }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -85,7 +56,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           intent: "aggregation_by_category",
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -101,7 +72,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
         method: "POST",
         body: JSON.stringify({ name: "Test Template" }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -117,7 +88,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
         method: "POST",
         body: JSON.stringify({ name: "Test Template", intent: "" }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -140,7 +111,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           keywords: ["unique", "test"],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -193,7 +164,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           keywords: ["similar", "test"],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -216,7 +187,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           // No description, keywords, or tags
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -243,7 +214,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           tags: ["wound", "patient", "analysis"],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -272,7 +243,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           tags: ["  tag1  ", "  tag2  "],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -300,7 +271,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           tags: ["", "tag1", "   "],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -328,7 +299,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           tags: [],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -355,7 +326,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           keywords: ["valid", 123, null, "also-valid", { obj: true }],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -381,7 +352,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           intent: "aggregation_by_category",
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);
@@ -415,7 +386,7 @@ describe("POST /api/ai/templates/check-duplicates", () => {
           tags: ["analysis", "dashboard", "core"],
         }),
         headers: { "content-type": "application/json" },
-      }
+      },
     );
 
     const res = await POST(req);

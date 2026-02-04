@@ -53,12 +53,32 @@ export interface LogSqlValidationInput {
  */
 export class SqlValidationAuditService {
   /**
+   * Truncate string to fit database column limits
+   */
+  private static truncateToLength(value: string | null | undefined, maxLength: number, fieldName?: string): string | null {
+    if (value == null) return null; // Handle null or undefined
+    if (typeof value !== 'string') {
+      // Convert non-string values to string, or return null if not convertible
+      const stringValue = String(value);
+      console.warn(`[SqlValidationAudit] Converting ${fieldName || 'value'} from ${typeof value} to string: ${stringValue}`);
+      value = stringValue;
+    }
+    if (value.length <= maxLength) return value;
+    console.warn(`[SqlValidationAudit] Truncating ${fieldName || 'value'} from ${value.length} to ${maxLength} characters`);
+    return value.substring(0, maxLength);
+  }
+
+  /**
    * Log a SQL validation event
    * Fire-and-forget: errors are logged but don't throw
    */
   static async logValidation(input: LogSqlValidationInput): Promise<number | null> {
     try {
       const pool = await getInsightGenDbPool();
+      
+      // Truncate values to fit database column limits
+      const intentType = this.truncateToLength(input.intentType, 100, 'intentType');
+      const mode = this.truncateToLength(input.mode, 32, 'mode') || input.mode; // mode is required, so fallback to original
       
       const result = await pool.query(
         `
@@ -83,8 +103,8 @@ export class SqlValidationAuditService {
         [
           input.queryHistoryId ?? null,
           input.sqlGenerated,
-          input.intentType ?? null,
-          input.mode,
+          intentType,
+          mode,
           input.isValid,
           input.errorType ?? null,
           input.errorMessage ?? null,
@@ -136,11 +156,15 @@ export class SqlValidationAuditService {
           `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}, $${baseIndex + 10}, $${baseIndex + 11}, $${baseIndex + 12}, $${baseIndex + 13})`
         );
         
+        // Truncate values to fit database column limits
+        const intentType = this.truncateToLength(validation.intentType, 100, 'intentType');
+        const mode = this.truncateToLength(validation.mode, 32, 'mode') || validation.mode; // mode is required, so fallback to original
+        
         values.push(
           validation.queryHistoryId ?? null,
           validation.sqlGenerated,
-          validation.intentType ?? null,
-          validation.mode,
+          intentType,
+          mode,
           validation.isValid,
           validation.errorType ?? null,
           validation.errorMessage ?? null,

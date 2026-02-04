@@ -45,11 +45,15 @@ export function CustomerSelector({ value, onChange }: CustomerSelectorProps) {
   };
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor="customer">Customer</Label>
+    <div className="flex items-center gap-2">
+      <Label htmlFor="customer" className="shrink-0">
+        Customer
+      </Label>
       <Select value={value} onValueChange={onChange} disabled={loading}>
         <SelectTrigger id="customer" className="w-full max-w-md">
-          <SelectValue placeholder={loading ? "Loading..." : "Select a customer..."} />
+          <SelectValue
+            placeholder={loading ? "Loading..." : "Select a customer..."}
+          />
         </SelectTrigger>
         <SelectContent>
           {customers.map((customer) => (

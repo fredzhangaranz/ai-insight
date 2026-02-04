@@ -20,11 +20,17 @@ interface SaveInsightDialogProps {
   onSaved?: (saved: any) => void;
 }
 
-export function SaveInsightDialog({ open, onClose, initial, onSaved }: SaveInsightDialogProps) {
-  const [name, setName] = useState(initial.name || initial.question.slice(0, 100));
+export function SaveInsightDialog({
+  open,
+  onClose,
+  initial,
+  onSaved,
+}: SaveInsightDialogProps) {
+  const [name, setName] = useState(
+    initial.name || initial.question.slice(0, 100),
+  );
   const [tagsInput, setTagsInput] = useState((initial.tags || []).join(", "));
   const [saving, setSaving] = useState(false);
-  const apiEnabled = typeof window !== "undefined" && process.env.NEXT_PUBLIC_CHART_INSIGHTS_ENABLED === "true";
 
   useEffect(() => {
     if (open) {
@@ -39,13 +45,19 @@ export function SaveInsightDialog({ open, onClose, initial, onSaved }: SaveInsig
     setSaving(true);
     try {
       const payload = {
-        name: name && name.trim().length > 0 ? name.trim() : initial.question.slice(0, 100),
+        name:
+          name && name.trim().length > 0
+            ? name.trim()
+            : initial.question.slice(0, 100),
         question: initial.question,
         scope: initial.scope,
         formId: initial.formId || null,
         sql: initial.sql,
         chartType: initial.chartType,
-        chartMapping: initial.chartType === "table" ? (initial.chartMapping || {}) : initial.chartMapping,
+        chartMapping:
+          initial.chartType === "table"
+            ? initial.chartMapping || {}
+            : initial.chartMapping,
         chartOptions: initial.chartOptions || undefined,
         description: null,
         tags: tagsInput
@@ -83,7 +95,9 @@ export function SaveInsightDialog({ open, onClose, initial, onSaved }: SaveInsig
           />
         </div>
         <div className="space-y-2">
-          <label className="text-xs text-gray-600">Tags (comma separated)</label>
+          <label className="text-xs text-gray-600">
+            Tags (comma separated)
+          </label>
           <input
             className="w-full border rounded px-3 py-2 text-sm"
             value={tagsInput}
@@ -91,14 +105,18 @@ export function SaveInsightDialog({ open, onClose, initial, onSaved }: SaveInsig
           />
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button className="px-3 py-2 text-sm border rounded" onClick={onClose} disabled={saving}>
+          <button
+            className="px-3 py-2 text-sm border rounded"
+            onClick={onClose}
+            disabled={saving}
+          >
             Cancel
           </button>
           <button
             className="px-3 py-2 text-sm bg-green-600 text-white rounded disabled:opacity-50"
             onClick={handleSave}
-            disabled={saving || !apiEnabled}
-            title={apiEnabled ? "" : "Insights are disabled"}
+            disabled={saving}
+            title=""
           >
             {saving ? "Saving..." : "Save"}
           </button>
@@ -107,4 +125,3 @@ export function SaveInsightDialog({ open, onClose, initial, onSaved }: SaveInsig
     </div>
   );
 }
-

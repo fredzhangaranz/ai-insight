@@ -1,4 +1,5 @@
 import type { PlaceholdersSpec } from "@/lib/services/template-validator.service";
+import type { ConversationMessage } from "@/lib/types/conversation";
 
 export type QueryFunnelScope = "form" | "schema";
 
@@ -23,6 +24,21 @@ export interface TemplateExtractionResponse {
   modelId: string;
   draft: TemplateExtractionDraft;
   warnings: string[];
+}
+
+export interface CompletionParams {
+  system: string;
+  userMessage: string;
+  maxTokens?: number;
+  temperature?: number;
+}
+
+export interface ConversationCompletionParams {
+  conversationHistory: ConversationMessage[];
+  currentQuestion: string;
+  customerId: string;
+  temperature?: number;
+  maxTokens?: number;
 }
 
 /**
@@ -138,10 +154,17 @@ export interface IQueryFunnelProvider {
    * General-purpose LLM completion method for flexible prompting.
    * Used by intent classifier, ambiguity detection, and other services.
    */
-  complete(options: {
-    system: string;
-    userMessage: string;
-    maxTokens?: number;
-    temperature?: number;
-  }): Promise<string>;
+  complete(options: CompletionParams): Promise<string>;
+
+  /**
+   * Conversation-aware completion with caching and context.
+   */
+  completeWithConversation(
+    request: ConversationCompletionParams
+  ): Promise<string>;
+
+  /**
+   * Build conversation history prompt.
+   */
+  buildConversationHistory(messages: ConversationMessage[]): string;
 }

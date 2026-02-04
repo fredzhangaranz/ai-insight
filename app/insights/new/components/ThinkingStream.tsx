@@ -22,6 +22,7 @@ interface ThinkingStreamProps {
   allowCollapse?: boolean;
   headerActions?: ReactNode;
   subtitle?: ReactNode;
+  footer?: ReactNode;
   className?: string;
 }
 
@@ -32,6 +33,7 @@ export function ThinkingStream({
   allowCollapse = true,
   headerActions,
   subtitle,
+  footer,
   className,
 }: ThinkingStreamProps) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -40,7 +42,7 @@ export function ThinkingStream({
   const hasError = steps.some(s => s.status === "error");
   const isCollapsible = allowCollapse;
 
-  if (steps.length === 0) return null;
+  if (steps.length === 0 && !footer) return null;
 
   const computedSubtitle =
     subtitle !== undefined
@@ -92,12 +94,37 @@ export function ThinkingStream({
         {headerActions}
       </div>
 
-      {isCollapsible && !collapsed && (
-        <ThinkingStepsList steps={steps} className="border-t pt-4" />
-      )}
-
-      {!isCollapsible && showContent && (
-        <ThinkingStepsList steps={steps} className="border-t pt-4" />
+      {isCollapsible ? (
+        <div
+          className={cn(
+            "grid transition-all duration-200",
+            showContent ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          )}
+        >
+          <div className="overflow-hidden">
+            {steps.length > 0 && (
+              <ThinkingStepsList steps={steps} className="border-t pt-4" />
+            )}
+            {footer && (
+              <div className={steps.length > 0 ? "mt-4" : "mt-3"}>
+                {footer}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        showContent && (
+          <>
+            {steps.length > 0 && (
+              <ThinkingStepsList steps={steps} className="border-t pt-4" />
+            )}
+            {footer && (
+              <div className={steps.length > 0 ? "mt-4" : "mt-3"}>
+                {footer}
+              </div>
+            )}
+          </>
+        )
       )}
     </div>
   );
