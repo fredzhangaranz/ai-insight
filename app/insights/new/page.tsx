@@ -6,7 +6,6 @@ import { useState } from "react";
 import React from "react";
 import Link from "next/link";
 import { MessageSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { CustomerSelector } from "./components/CustomerSelector";
 import { ModelSelector } from "./components/ModelSelector";
 import { QuestionInput } from "./components/QuestionInput";
@@ -191,31 +190,19 @@ export default function NewInsightPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-      {/* Fixed header with "New Question" button - always at top */}
+      {/* Floating Action Button - appears in bottom-right when a question is submitted */}
       {(result || isQuestionSubmitted) && (
-        <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-900">
-              Current Question
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNewQuestion}
-              className="text-slate-600 hover:text-slate-900"
-            >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              New Question
-            </Button>
-          </div>
-        </div>
+        <button
+          onClick={handleNewQuestion}
+          className="fixed bottom-8 right-8 z-40 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-3 shadow-lg transition-all duration-200 hover:shadow-xl"
+          title="Start a new question"
+        >
+          <MessageSquare className="h-5 w-5" />
+          <span className="text-sm font-medium">New Question</span>
+        </button>
       )}
 
-      <div
-        className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full overflow-x-hidden ${
-          result || isQuestionSubmitted ? "pt-20" : "py-6"
-        }`}
-      >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full overflow-x-hidden">
         {/* Header */}
         <div className="mb-8">
           <div className="border-b border-slate-200 pb-6">
