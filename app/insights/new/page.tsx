@@ -5,6 +5,8 @@
 import { useState } from "react";
 import React from "react";
 import Link from "next/link";
+import { MessageSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { CustomerSelector } from "./components/CustomerSelector";
 import { ModelSelector } from "./components/ModelSelector";
 import { QuestionInput } from "./components/QuestionInput";
@@ -19,7 +21,10 @@ export default function NewInsightPage() {
   const [customerId, setCustomerId] = useState<string>("");
   const [question, setQuestion] = useState<string>("");
   const [modelId, setModelId] = useState<string>(""); // Will be set by ModelSelector from config
-  const [conversationThreadId, setConversationThreadId] = useState<string | undefined>();
+  const [conversationThreadId, setConversationThreadId] = useState<
+    string | undefined
+  >();
+  const [isQuestionSubmitted, setIsQuestionSubmitted] = useState(false);
 
   const {
     result,
@@ -30,35 +35,52 @@ export default function NewInsightPage() {
     cancelAnalysis,
     analysis,
     loadCachedResult,
+    reset,
   } = useInsights();
 
   const handleAsk = async () => {
     if (!customerId || !question.trim()) return;
+    setIsQuestionSubmitted(true);
     await ask(question, customerId, modelId);
+  };
+
+  const handleNewQuestion = () => {
+    setQuestion("");
+    setIsQuestionSubmitted(false);
+    setConversationThreadId(undefined);
+    reset();
   };
 
   // Auto-create conversation thread when we get a result from the first question
   React.useEffect(() => {
-    if (result && result.sql && result.mode !== "clarification" && !result.error) {
+    if (
+      result &&
+      result.sql &&
+      result.mode !== "clarification" &&
+      !result.error
+    ) {
       const createConversationThread = async () => {
         try {
-          const response = await fetch("/api/insights/conversation/thread/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              customerId,
-              initialQuestion: result.question,
-              initialSql: result.sql,
-              initialResult: result.results,
-            }),
-          });
+          const response = await fetch(
+            "/api/insights/conversation/thread/create",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                customerId,
+                initialQuestion: result.question,
+                initialSql: result.sql,
+                initialResult: result.results,
+              }),
+            },
+          );
 
           if (response.ok) {
             const data = await response.json();
             setConversationThreadId(data.threadId);
             if (process.env.NODE_ENV === "development") {
               console.log(
-                `[NewInsightPage] Created conversation thread for follow-ups: ${data.threadId}`
+                `[NewInsightPage] Created conversation thread for follow-ups: ${data.threadId}`,
               );
             }
           }
@@ -74,7 +96,7 @@ export default function NewInsightPage() {
 
   const handleClarificationSubmit = async (
     clarifications: Record<string, string>,
-    clarificationAuditIds?: number[]
+    clarificationAuditIds?: number[],
   ) => {
     if (!customerId || !result?.question) return;
     await askWithClarifications(
@@ -82,7 +104,7 @@ export default function NewInsightPage() {
       customerId,
       clarifications,
       modelId,
-      clarificationAuditIds
+      clarificationAuditIds,
     );
   };
 
@@ -98,7 +120,8 @@ export default function NewInsightPage() {
     // Load cached result from history instead of re-executing
     if (query.mode === "error") {
       // For failed queries, reconstruct the error result so user can see what went wrong
-      const errorMessage = query.semanticContext?.error || "Query execution failed";
+      const errorMessage =
+        query.semanticContext?.error || "Query execution failed";
 
       // Create a minimal error result with thinking steps
       const errorResult = {
@@ -168,7 +191,31 @@ export default function NewInsightPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full overflow-x-hidden">
+      {/* Fixed header with "New Question" button - always at top */}
+      {(result || isQuestionSubmitted) && (
+        <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
+            <div className="text-sm font-medium text-slate-900">
+              Current Question
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewQuestion}
+              className="text-slate-600 hover:text-slate-900"
+            >
+              <MessageSquare className="h-4 w-4 mr-2" />
+              New Question
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div
+        className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full overflow-x-hidden ${
+          result || isQuestionSubmitted ? "pt-20" : "py-6"
+        }`}
+      >
         {/* Header */}
         <div className="mb-8">
           <div className="border-b border-slate-200 pb-6">
@@ -193,16 +240,10 @@ export default function NewInsightPage() {
         <div className="space-y-6">
           <div className="flex gap-4 items-end">
             <div className="flex-1 max-w-md">
-              <CustomerSelector
-                value={customerId}
-                onChange={setCustomerId}
-              />
+              <CustomerSelector value={customerId} onChange={setCustomerId} />
             </div>
             <div className="flex-1 max-w-md">
-              <ModelSelector
-                value={modelId}
-                onChange={setModelId}
-              />
+              <ModelSelector value={modelId} onChange={setModelId} />
             </div>
           </div>
 
@@ -212,6 +253,8 @@ export default function NewInsightPage() {
             onSubmit={handleAsk}
             disabled={!customerId || isLoading}
             isLoading={isLoading}
+            submitted={isQuestionSubmitted}
+            onClearQuestion={handleNewQuestion}
           />
 
           {analysis.status === "running" && (
@@ -233,7 +276,7 @@ export default function NewInsightPage() {
             />
           )}
 
-          {(analysis.status === "error" && !result) || (result?.error) ? (
+          {(analysis.status === "error" && !result) || result?.error ? (
             <AnalysisProgressCard
               status="error"
               steps={analysis.steps}
@@ -253,8 +296,18 @@ export default function NewInsightPage() {
             <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-6 shadow-sm">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
-                  <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  <svg
+                    className="h-6 w-6 text-red-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
                   </svg>
                 </div>
                 <div className="flex-1">
@@ -262,18 +315,30 @@ export default function NewInsightPage() {
                     Unable to Process Question
                   </h3>
                   <p className="text-sm text-red-700 mb-3">{error.message}</p>
-                  {error.message.includes("AI model") || error.message.includes("configuration") ? (
+                  {error.message.includes("AI model") ||
+                  error.message.includes("configuration") ? (
                     <div className="mt-3 pt-3 border-t border-red-200">
                       <p className="text-sm text-red-600 mb-2">
-                        <strong>Tip:</strong> Make sure you have configured at least one AI provider in the Admin settings.
+                        <strong>Tip:</strong> Make sure you have configured at
+                        least one AI provider in the Admin settings.
                       </p>
                       <Link
                         href="/admin/ai-config"
                         className="inline-flex items-center gap-2 text-sm font-medium text-red-700 hover:text-red-800 underline"
                       >
                         Go to AI Configuration
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 7l5 5m0 0l-5 5m5-5H6"
+                          />
                         </svg>
                       </Link>
                     </div>
@@ -283,14 +348,16 @@ export default function NewInsightPage() {
             </div>
           )}
 
-          {result && result.mode === "clarification" && result.clarifications && (
-            <ClarificationDialog
-              question={result.question || question}
-              clarifications={result.clarifications}
-              onSubmit={handleClarificationSubmit}
-              isSubmitting={isLoading}
-            />
-          )}
+          {result &&
+            result.mode === "clarification" &&
+            result.clarifications && (
+              <ClarificationDialog
+                question={result.question || question}
+                clarifications={result.clarifications}
+                onSubmit={handleClarificationSubmit}
+                isSubmitting={isLoading}
+              />
+            )}
 
           {result && result.mode !== "clarification" && !result.error && (
             <InsightResults
@@ -300,6 +367,7 @@ export default function NewInsightPage() {
               onRefine={setQuestion}
               onRerun={handleRerun}
               threadId={conversationThreadId}
+              onNewQuestion={handleNewQuestion}
             />
           )}
 

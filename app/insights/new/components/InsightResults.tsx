@@ -3,7 +3,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, MessageSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ThinkingStream, ThinkingStep } from "./ThinkingStream";
 import { ActionsPanel } from "./ActionsPanel";
 import { StepPreview } from "./StepPreview";
@@ -19,6 +20,7 @@ interface InsightResultsProps {
   onRefine: (question: string) => void;
   onRerun?: (newSql: string, newQuestion: string) => void;
   threadId?: string; // From first question, for conversation continuity
+  onNewQuestion?: () => void; // Callback to start a new question
 }
 
 export function InsightResults({
@@ -28,11 +30,14 @@ export function InsightResults({
   onRefine,
   onRerun,
   threadId, // Add this prop
+  onNewQuestion,
 }: InsightResultsProps) {
   const [stepPreviewApproved, setStepPreviewApproved] = useState(false);
   const [refinementInput, setRefinementInput] = useState("");
   const validation = result.sqlValidation;
-  const hasErrors = Boolean(validation && !validation.isValid && validation.errors.length > 0);
+  const hasErrors = Boolean(
+    validation && !validation.isValid && validation.errors.length > 0,
+  );
   const hasWarnings = Boolean(validation && validation.warnings.length > 0);
   const validationBadge = useMemo(() => {
     if (!validation) return null;
@@ -79,7 +84,10 @@ export function InsightResults({
     console.log("Step-through mode...");
   };
 
-  const handleChallengeAssumption = (assumption: string, explanation: string) => {
+  const handleChallengeAssumption = (
+    assumption: string,
+    explanation: string,
+  ) => {
     // When user challenges an assumption, pre-fill the refinement input
     // This integrates Task 12 (Inspection Panel) with Task 11 (Conversational Refinement)
     setRefinementInput(`I disagree with using "${assumption}". ${explanation}`);
@@ -101,8 +109,8 @@ export function InsightResults({
             hasErrors
               ? "bg-red-50 border-red-200"
               : hasWarnings
-              ? "bg-amber-50 border-amber-200"
-              : "bg-emerald-50 border-emerald-200"
+                ? "bg-amber-50 border-amber-200"
+                : "bg-emerald-50 border-emerald-200"
           }`}
         >
           <div className="flex items-center justify-between mb-2">
@@ -143,29 +151,48 @@ export function InsightResults({
         <div className="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-4 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="h-5 w-5 text-amber-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
             </div>
             <div className="flex-1">
               <h4 className="text-sm font-semibold text-amber-800 mb-2">
-                I made {result.assumptions.length} assumption{result.assumptions.length > 1 ? "s" : ""}
+                I made {result.assumptions.length} assumption
+                {result.assumptions.length > 1 ? "s" : ""}
               </h4>
               <ul className="space-y-2">
                 {result.assumptions.map((assumption: any, index: number) => (
                   <li key={index} className="text-sm text-amber-700">
-                    <span className="font-medium">{assumption.term || "Unknown"}:</span>{" "}
-                    <span>{assumption.assumedValue || assumption.reasoning || "No details available"}</span>
+                    <span className="font-medium">
+                      {assumption.term || "Unknown"}:
+                    </span>{" "}
+                    <span>
+                      {assumption.assumedValue ||
+                        assumption.reasoning ||
+                        "No details available"}
+                    </span>
                     {assumption.confidence !== undefined && (
                       <span className="ml-2 text-xs text-amber-600">
-                        (confidence: {(assumption.confidence * 100).toFixed(0)}%)
+                        (confidence: {(assumption.confidence * 100).toFixed(0)}
+                        %)
                       </span>
                     )}
                   </li>
                 ))}
               </ul>
               <p className="text-xs text-amber-600 mt-2">
-                You can use the &quot;Inspection Panel&quot; below to challenge these assumptions if needed.
+                You can use the &quot;Inspection Panel&quot; below to challenge
+                these assumptions if needed.
               </p>
             </div>
           </div>
@@ -256,6 +283,16 @@ export function InsightResults({
         customerId={customerId}
         onRefine={onRefine}
       />
+
+      {/* New Question button at bottom */}
+      {onNewQuestion && (
+        <div className="mt-8 pt-6 border-t border-slate-200">
+          <Button onClick={onNewQuestion} variant="outline" className="w-full">
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Start a New Question
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
