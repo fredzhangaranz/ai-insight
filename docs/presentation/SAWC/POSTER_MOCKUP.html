@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAWC Spring 2026 Poster - Clinical Analytics Platform</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Helvetica Neue", Arial, sans-serif;
+        background: #f0f2f5;
+        padding: 40px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
+
+      .poster {
+        width: 1400px;
+        height: 700px;
+        background: white;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        padding: 40px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 25px;
+        position: relative;
+      }
+
+      /* Header */
+      .header {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 20px;
+        border-bottom: 3px solid #00a9a5;
+      }
+
+      .title-section h1 {
+        font-size: 42px;
+        color: #1e3a5f;
+        font-weight: 700;
+        margin-bottom: 8px;
+        line-height: 1.2;
+      }
+
+      .title-section p {
+        font-size: 20px;
+        color: #00a9a5;
+        font-weight: 500;
+        font-style: italic;
+      }
+
+      .logo {
+        background: #1e3a5f;
+        color: white;
+        padding: 20px 30px;
+        font-size: 32px;
+        font-weight: 700;
+        border-radius: 8px;
+        letter-spacing: 1px;
+      }
+
+      /* Challenge Section */
+      .challenge {
+        grid-column: 1;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 25px;
+        border-radius: 12px;
+        border-left: 5px solid #ff6b35;
+      }
+
+      .challenge h2 {
+        font-size: 28px;
+        color: #1e3a5f;
+        margin-bottom: 15px;
+        font-weight: 700;
+      }
+
+      .pain-points {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .pain-point {
+        background: white;
+        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .pain-point-icon {
+        font-size: 24px;
+        margin-bottom: 6px;
+      }
+
+      .pain-point h3 {
+        font-size: 14px;
+        color: #1e3a5f;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .pain-point p {
+        font-size: 11px;
+        color: #495057;
+        line-height: 1.4;
+      }
+
+      /* Solution Section */
+      .solution {
+        grid-column: 2;
+        background: linear-gradient(135deg, #e8f7f7 0%, #d0efef 100%);
+        padding: 25px;
+        border-radius: 12px;
+        border-left: 5px solid #00a9a5;
+      }
+
+      .solution h2 {
+        font-size: 28px;
+        color: #1e3a5f;
+        margin-bottom: 15px;
+        font-weight: 700;
+      }
+
+      .solution-steps {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+
+      .step {
+        flex: 1;
+        text-align: center;
+        padding: 15px;
+        background: white;
+        border-radius: 10px;
+        margin: 0 5px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .step-number {
+        font-size: 32px;
+        color: #00a9a5;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .step h3 {
+        font-size: 16px;
+        color: #1e3a5f;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+
+      .step p {
+        font-size: 11px;
+        color: #495057;
+        line-height: 1.3;
+      }
+
+      .arrow {
+        font-size: 24px;
+        color: #00a9a5;
+        flex: 0;
+      }
+
+      .screenshot-placeholder {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+      }
+
+      .screenshot-placeholder::before {
+        content: "📊";
+        font-size: 36px;
+        margin-bottom: 10px;
+      }
+
+      /* Use Cases Section */
+      .use-cases {
+        grid-column: 1 / -1;
+        background: #f8f9fa;
+        padding: 25px;
+        border-radius: 12px;
+        border-top: 3px solid #1e3a5f;
+      }
+
+      .use-cases h2 {
+        font-size: 28px;
+        color: #1e3a5f;
+        margin-bottom: 15px;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .personas {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+      }
+
+      .persona-card {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        border-top: 4px solid #00a9a5;
+        transition: transform 0.2s;
+      }
+
+      .persona-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
+      }
+
+      .persona-icon {
+        font-size: 28px;
+        text-align: center;
+        margin-bottom: 8px;
+      }
+
+      .persona-card h3 {
+        font-size: 13px;
+        color: #1e3a5f;
+        font-weight: 700;
+        margin-bottom: 6px;
+        text-align: center;
+      }
+
+      .persona-card .scenario {
+        font-size: 10px;
+        color: #00a9a5;
+        font-style: italic;
+        margin-bottom: 6px;
+        line-height: 1.3;
+        min-height: 36px;
+      }
+
+      .persona-card .value {
+        font-size: 9px;
+        color: #495057;
+        line-height: 1.3;
+        margin-bottom: 6px;
+      }
+
+      .persona-card .impact {
+        font-size: 9px;
+        color: #28a745;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      /* Bottom Section */
+      .bottom {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 25px;
+      }
+
+      .differentiators {
+        background: linear-gradient(135deg, #fff5e6 0%, #ffe8cc 100%);
+        padding: 20px;
+        border-radius: 12px;
+        border-left: 5px solid #ff6b35;
+      }
+
+      .differentiators h2 {
+        font-size: 24px;
+        color: #1e3a5f;
+        margin-bottom: 12px;
+        font-weight: 700;
+      }
+
+      .diff-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .diff-item {
+        background: white;
+        padding: 10px;
+        border-radius: 6px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+      }
+
+      .diff-item h3 {
+        font-size: 12px;
+        color: #1e3a5f;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .diff-item p {
+        font-size: 10px;
+        color: #495057;
+        line-height: 1.3;
+      }
+
+      /* CTA Section */
+      .cta {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+        padding: 20px;
+        border-radius: 12px;
+        color: white;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .cta h2 {
+        font-size: 28px;
+        margin-bottom: 15px;
+        font-weight: 700;
+      }
+
+      .qr-placeholder {
+        width: 120px;
+        height: 120px;
+        background: white;
+        border-radius: 8px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 48px;
+        margin-bottom: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .cta p {
+        font-size: 14px;
+        line-height: 1.4;
+        margin-bottom: 8px;
+      }
+
+      .cta .contact {
+        font-size: 12px;
+        margin-top: 10px;
+        opacity: 0.9;
+      }
+
+      .highlight {
+        background: #ffe8cc;
+        padding: 2px 6px;
+        border-radius: 3px;
+        color: #1e3a5f;
+        font-weight: 600;
+      }
+
+      /* Print-specific styles */
+      @media print {
+        body {
+          background: white;
+          padding: 0;
+        }
+        .poster {
+          box-shadow: none;
+          width: 100%;
+          height: auto;
+          page-break-after: avoid;
+        }
+      }
+
+      /* Responsive for viewing */
+      @media (max-width: 1500px) {
+        .poster {
+          width: 100%;
+          height: auto;
+          aspect-ratio: 2 / 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="poster">
+      <!-- Header -->
+      <div class="header">
+        <div class="title-section">
+          <h1>From Questions to Insights: Instant Clinical Analytics</h1>
+          <p>
+            Empowering wound care teams with self-service data insights through
+            conversational AI
+          </p>
+        </div>
+        <div class="logo">ARANZ</div>
+      </div>
+
+      <!-- Challenge Section -->
+      <div class="challenge">
+        <h2>The Hidden Cost of Inaccessible Data</h2>
+        <div class="pain-points">
+          <div class="pain-point">
+            <div class="pain-point-icon">⏱️</div>
+            <h3>SLOW ACCESS</h3>
+            <p>Dashboard requests sit in IT queues for weeks or months</p>
+          </div>
+          <div class="pain-point">
+            <div class="pain-point-icon">💰</div>
+            <h3>HIGH COST</h3>
+            <p>Custom analytics require dedicated development resources</p>
+          </div>
+          <div class="pain-point">
+            <div class="pain-point-icon">❓</div>
+            <h3>UNKNOWN NEEDS</h3>
+            <p>
+              Teams don't know what questions to ask until they see the data
+            </p>
+          </div>
+          <div class="pain-point">
+            <div class="pain-point-icon">📊</div>
+            <h3>LIMITED VIEWS</h3>
+            <p>Fixed dashboards can't answer follow-up questions</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Solution Section -->
+      <div class="solution">
+        <h2>Ask, Analyze, Act: Analytics in Plain English</h2>
+        <div class="solution-steps">
+          <div class="step">
+            <div class="step-number">1</div>
+            <h3>ASK</h3>
+            <p>
+              <em
+                >"What's the average healing time for diabetic foot ulcers?"</em
+              >
+            </p>
+            <p style="margin-top: 6px; font-weight: 600; color: #28a745">
+              No training required
+            </p>
+          </div>
+          <div class="arrow">→</div>
+          <div class="step">
+            <div class="step-number">2</div>
+            <h3>ANALYZE</h3>
+            <p>AI understands clinical context and terminology</p>
+            <p style="margin-top: 6px; font-weight: 600; color: #28a745">
+              Built on wound care expertise
+            </p>
+          </div>
+          <div class="arrow">→</div>
+          <div class="step">
+            <div class="step-number">3</div>
+            <h3>ACT</h3>
+            <p>Get instant visual insights and explore further</p>
+            <p style="margin-top: 6px; font-weight: 600; color: #28a745">
+              Ask follow-ups immediately
+            </p>
+          </div>
+        </div>
+        <div class="screenshot-placeholder">
+          INTERACTIVE INTERFACE SCREENSHOT
+          <br />
+          <span style="font-size: 12px; margin-top: 8px"
+            >(Question → AI Analysis → Visual Chart)</span
+          >
+        </div>
+      </div>
+
+      <!-- Use Cases Section -->
+      <div class="use-cases">
+        <h2>Strategic Insights for Every Role</h2>
+        <div class="personas">
+          <div class="persona-card">
+            <div class="persona-icon">💼</div>
+            <h3>Chief Financial Officer</h3>
+            <div class="scenario">
+              "Which treatments have the best cost-to-outcome ratio?"
+            </div>
+            <div class="value">
+              <strong>Value:</strong> Optimize resource allocation, demonstrate
+              ROI to payers
+            </div>
+            <div class="impact">
+              Enable data-driven decisions without external consultants
+            </div>
+          </div>
+          <div class="persona-card">
+            <div class="persona-icon">🎯</div>
+            <h3>Chief Executive Officer</h3>
+            <div class="scenario">
+              "How do outcomes compare across our facilities?"
+            </div>
+            <div class="value">
+              <strong>Value:</strong> Benchmark performance, identify best
+              practices
+            </div>
+            <div class="impact">
+              Answer board-level questions in real-time, not quarterly
+            </div>
+          </div>
+          <div class="persona-card">
+            <div class="persona-icon">🏥</div>
+            <h3>Hospital Administrator</h3>
+            <div class="scenario">
+              "What's driving readmission rates for surgical wounds?"
+            </div>
+            <div class="value">
+              <strong>Value:</strong> Meet quality metrics, reduce penalties
+            </div>
+            <div class="impact">
+              Shift from reactive to proactive quality improvement
+            </div>
+          </div>
+          <div class="persona-card">
+            <div class="persona-icon">⚕️</div>
+            <h3>Clinical Leader</h3>
+            <div class="scenario">
+              "Are we following best practices for diabetic patients?"
+            </div>
+            <div class="value">
+              <strong>Value:</strong> Validate protocols, improve outcomes
+            </div>
+            <div class="impact">
+              Empower teams with evidence-based insights at point of care
+            </div>
+          </div>
+          <div class="persona-card">
+            <div class="persona-icon">✓</div>
+            <h3>Quality & Compliance</h3>
+            <div class="scenario">
+              "Which populations have higher complication rates?"
+            </div>
+            <div class="value">
+              <strong>Value:</strong> Early risk identification, audit
+              preparation
+            </div>
+            <div class="impact">
+              Prospective risk management with continuous visibility
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Section: Differentiators + CTA -->
+      <div class="bottom">
+        <div class="differentiators">
+          <h2>Why We're Different: Purpose-Built for Healthcare</h2>
+          <div class="diff-grid">
+            <div class="diff-item">
+              <h3>🧠 Clinical Intelligence</h3>
+              <p>
+                Trained on wound care terminology, assessment standards, and
+                clinical workflows—not generic business data
+              </p>
+            </div>
+            <div class="diff-item">
+              <h3>🔄 Adaptive Learning</h3>
+              <p>
+                Understands YOUR specific assessment forms and data structure
+                without custom configuration
+              </p>
+            </div>
+            <div class="diff-item">
+              <h3>💬 Conversational Exploration</h3>
+              <p>
+                Ask follow-up questions naturally—explore data like talking to
+                an expert analyst
+              </p>
+            </div>
+            <div class="diff-item">
+              <h3>🎯 Proactive Suggestions</h3>
+              <p>
+                Platform suggests relevant questions you might not think to ask
+                based on your data
+              </p>
+            </div>
+          </div>
+          <div
+            style="
+              margin-top: 15px;
+              padding: 12px;
+              background: white;
+              border-radius: 6px;
+              text-align: center;
+            "
+          >
+            <p
+              style="
+                font-size: 13px;
+                color: #1e3a5f;
+                font-weight: 700;
+                line-height: 1.4;
+              "
+            >
+              The Transformation:
+              <span class="highlight">Weeks to Seconds</span> |
+              <span class="highlight"
+                >Fixed Dashboards to Unlimited Questions</span
+              >
+              |
+              <span class="highlight">IT-Dependent to Self-Service</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="cta">
+          <h2>See It In Action</h2>
+          <div class="qr-placeholder">📱</div>
+          <p><strong>SCAN FOR LIVE DEMO</strong></p>
+          <p style="font-size: 12px">
+            Try it yourself: Ask your own wound care questions
+          </p>
+          <div class="contact">
+            <p><strong>Booth #___</strong></p>
+            <p>📧 info@aranz.com</p>
+            <p>🌐 www.aranz.com/insights</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
