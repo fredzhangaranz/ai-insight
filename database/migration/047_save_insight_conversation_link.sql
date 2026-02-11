@@ -17,12 +17,21 @@ ALTER TABLE "SavedInsights"
 ADD COLUMN IF NOT EXISTS "executionMode" VARCHAR(50) DEFAULT 'standard';
 
 -- Migrate data from isFromConversation if it exists (backward compatibility)
-UPDATE "SavedInsights"
-SET "executionMode" = 'contextual'
-WHERE "isFromConversation" IS TRUE;
-
--- Drop the old column if it exists (optional, for cleanup)
--- ALTER TABLE "SavedInsights" DROP COLUMN IF EXISTS "isFromConversation";
+-- Check if the column exists before attempting the update
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'SavedInsights' AND column_name = 'isFromConversation'
+  ) THEN
+    UPDATE "SavedInsights"
+    SET "executionMode" = 'contextual'
+    WHERE "isFromConversation" IS TRUE;
+    
+    -- Drop the old column for cleanup
+    ALTER TABLE "SavedInsights" DROP COLUMN "isFromConversation";
+  END IF;
+END $$;
 
 -- Index for conversation lookups
 CREATE INDEX IF NOT EXISTS idx_saved_insights_conversation
