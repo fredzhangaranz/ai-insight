@@ -83,7 +83,12 @@ export const authOptions: NextAuthOptions = {
     async redirect({ url, baseUrl }) {
       // Handle empty, null, or invalid URLs
       if (!url || url === "/" || url.startsWith("/")) {
-        return url || baseUrl;
+        try {
+          // Combine relative path with baseUrl to create absolute URL
+          return new URL(url || "/", baseUrl).toString();
+        } catch {
+          return baseUrl;
+        }
       }
       
       // Try to parse as absolute URL
@@ -96,7 +101,12 @@ export const authOptions: NextAuthOptions = {
           return url;
         }
       } catch {
-        // If URL parsing fails, treat as relative or invalid
+        // If URL parsing fails, treat as relative and construct absolute
+        try {
+          return new URL(url, baseUrl).toString();
+        } catch {
+          return baseUrl;
+        }
       }
       
       // Fall back to baseUrl for safety
