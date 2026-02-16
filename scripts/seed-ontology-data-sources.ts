@@ -37,6 +37,7 @@ type ConceptSeed = {
 const MEASUREMENT_SEEDS: ConceptSeed[] = [
   {
     conceptName: "percent_area_reduction",
+    conceptType: "metric",
     dataSources: [
       {
         table: "rpt.Measurement",
@@ -58,6 +59,7 @@ const MEASUREMENT_SEEDS: ConceptSeed[] = [
   },
   {
     conceptName: "measurement_date",
+    conceptType: "metric",
     dataSources: [
       {
         table: "rpt.Measurement",
@@ -81,6 +83,26 @@ const MEASUREMENT_SEEDS: ConceptSeed[] = [
   },
 ];
 
+/** Placeholder descriptions for concepts we may create when ontology:load was not run */
+const PLACEHOLDER_CONCEPTS: Record<
+  string,
+  { canonical_name: string; description: string }
+> = {
+  percent_area_reduction: {
+    canonical_name: "Percent Area Reduction",
+    description:
+      "Percentage reduction in wound area (placeholder until ontology:load)",
+  },
+  measurement_date: {
+    canonical_name: "Measurement Date",
+    description:
+      "Date when a wound measurement or assessment is recorded (placeholder until ontology:load)",
+  },
+};
+
+/** Zero vector (3072 dims) for placeholder rows; replaced when ontology:load runs */
+const ZERO_EMBEDDING = "[" + Array(3072).fill(0).join(",") + "]";
+
 function getSourcePriority(source?: DataSourceSource): number {
   switch (source) {
     case "ontology_yaml":
@@ -96,7 +118,7 @@ function getSourcePriority(source?: DataSourceSource): number {
 
 function mergeDataSources(
   existing: DataSourceEntry[],
-  additions: DataSourceEntry[]
+  additions: DataSourceEntry[],
 ): DataSourceEntry[] {
   if (!Array.isArray(existing)) {
     existing = [];
@@ -144,10 +166,7 @@ function mergeDataSources(
       typeof existingEntry.confidence === "number" &&
       typeof entry.confidence === "number"
     ) {
-      merged.confidence = Math.max(
-        existingEntry.confidence,
-        entry.confidence
-      );
+      merged.confidence = Math.max(existingEntry.confidence, entry.confidence);
     }
 
     byKey.set(key, merged);
@@ -170,22 +189,47 @@ async function main() {
 
   for (const seed of MEASUREMENT_SEEDS) {
     const { conceptName, conceptType, dataSources } = seed;
+    const typeFilter = conceptType ?? "metric";
 
     const params: any[] = [conceptName];
     let where = `concept_name = $1`;
+    params.push(typeFilter);
+    where += ` AND concept_type = $2`;
 
-    if (conceptType) {
-      params.push(conceptType);
-      where += ` AND concept_type = $2`;
-    }
-
-    const selectQuery = `
+    let selectQuery = `
       SELECT id, data_sources
       FROM "ClinicalOntology"
       WHERE ${where}
     `;
+    let result = await pool.query(selectQuery, params);
 
-    const result = await pool.query(selectQuery, params);
+    if (result.rows.length === 0) {
+      const placeholder = PLACEHOLDER_CONCEPTS[conceptName];
+      if (placeholder) {
+        try {
+          await pool.query(
+            `INSERT INTO "ClinicalOntology" (
+              concept_name, canonical_name, concept_type, description,
+              embedding, preferred_term, category, metadata, aliases
+            ) VALUES ($1, $2, $3, $4, $5::vector, $2, $3, '{}', '{}')`,
+            [
+              conceptName,
+              placeholder.canonical_name,
+              typeFilter,
+              placeholder.description,
+              ZERO_EMBEDDING,
+            ],
+          );
+          console.log(
+            `ℹ️  Created placeholder concept "${conceptName}" (run ontology:load later for embeddings).`,
+          );
+          result = await pool.query(selectQuery, params);
+        } catch (err: any) {
+          if (err?.code !== "23505") throw err;
+          result = await pool.query(selectQuery, params);
+        }
+      }
+    }
 
     if (result.rows.length === 0) {
       const identifier = conceptType
@@ -211,7 +255,7 @@ async function main() {
 
       if (!changed) {
         console.log(
-          `ℹ️  No changes for concept ${conceptName} (id=${id}) - data_sources already up to date`
+          `ℹ️  No changes for concept ${conceptName} (id=${id}) - data_sources already up to date`,
         );
         totalUnchangedConcepts++;
         continue;
@@ -221,24 +265,24 @@ async function main() {
         `UPDATE "ClinicalOntology" 
          SET data_sources = $1::jsonb
          WHERE id = $2`,
-        [JSON.stringify(merged), id]
+        [JSON.stringify(merged), id],
       );
 
       totalUpdatedConcepts++;
 
       console.log(
-        `✅ Updated data_sources for concept ${conceptName} (id=${id}) with ${merged.length} entries`
+        `✅ Updated data_sources for concept ${conceptName} (id=${id}) with ${merged.length} entries`,
       );
     }
   }
 
   if (missingConcepts.length > 0) {
     console.error(
-      "\n❌ Missing ClinicalOntology concepts — aborting seed script:"
+      "\n❌ Missing ClinicalOntology concepts — aborting seed script:",
     );
     missingConcepts.forEach((name) => console.error(`   - ${name}`));
     console.error(
-      "Make sure the ontology loader has populated these concepts before running the seed script."
+      "Make sure the ontology loader has populated these concepts before running the seed script.",
     );
     process.exit(1);
   }
@@ -246,7 +290,7 @@ async function main() {
   console.log("=".repeat(80));
   console.log("Seed complete.");
   console.log(
-    `   Concept rows evaluated: ${totalConceptRowsChecked.toString()}`
+    `   Concept rows evaluated: ${totalConceptRowsChecked.toString()}`,
   );
   console.log(`   Concepts updated : ${totalUpdatedConcepts.toString()}`);
   console.log(`   Concepts unchanged: ${totalUnchangedConcepts.toString()}`);
