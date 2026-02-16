@@ -80,6 +80,26 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // Always use relative URLs to avoid redirect to wrong host
+      // url could be absolute (e.g., http://localhost:3000/login)
+      // or relative (e.g., /login)
+      if (url.startsWith("/")) {
+        return url;
+      }
+      try {
+        const urlObj = new URL(url);
+        const baseUrlObj = new URL(baseUrl);
+        // If same origin, allow redirect; otherwise use baseUrl
+        if (urlObj.origin === baseUrlObj.origin) {
+          return url;
+        }
+      } catch {
+        // If parsing fails, treat as relative
+      }
+      // Fallback to relative path or baseUrl
+      return baseUrl;
+    },
   },
   pages: {
     signIn: "/login",
