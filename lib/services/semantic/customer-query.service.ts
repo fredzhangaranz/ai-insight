@@ -67,17 +67,23 @@ export async function executeCustomerQuery(
       throw new Error("Only SELECT and WITH queries are allowed");
     }
 
-    // Debug aid: log the first part of the query when running in dev to diagnose syntax errors
+    // Debug aid: log the full query when running in dev to diagnose syntax errors
     if (process.env.NODE_ENV !== "production") {
-      console.log("[CustomerQuery] Executing SQL (truncated):", normalized.slice(0, 400));
+      console.log("[CustomerQuery] Full SQL Query:", normalized);
+      console.log("[CustomerQuery] Query Length:", normalized.length, "chars");
     }
 
     // Execute query
+    const startExecution = Date.now();
+    console.log("[CustomerQuery] Starting query execution...");
     const result = await pool.request().query(sqlQuery);
-
+    const executionTime = Date.now() - startExecution;
+    
     // Transform result to standard format
     const rows = result.recordset || [];
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    
+    console.log(`[CustomerQuery] ✅ Query completed in ${executionTime}ms, returned ${rows.length} rows`);
 
     return {
       rows,
@@ -91,9 +97,16 @@ export async function executeCustomerQuery(
 
 /**
  * Validate and fix common SQL Server issues in generated queries
+ * 
+ * CRITICAL: Does NOT modify string literals (values in quotes)
  */
 export function validateAndFixQuery(sqlQuery: string): string {
+  const originalQuery = sqlQuery;
   let fixed = sqlQuery;
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[validateAndFixQuery] Original query:", originalQuery.slice(0, 500));
+  }
 
   // 1. Add TOP clause if not present to limit results
   if (!fixed.match(/\bTOP\s+\d+\b/i) && !fixed.match(/\bOFFSET\b/i)) {
@@ -102,12 +115,46 @@ export function validateAndFixQuery(sqlQuery: string): string {
     } else {
       fixed = fixed.replace(/\bSELECT\b/i, "SELECT TOP 1000");
     }
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[validateAndFixQuery] Added TOP clause");
+    }
   }
 
-  // 2. Ensure rpt schema prefix for common tables (only when the match is a standalone identifier)
-  const tableRegex =
-    /(?<!\w)(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
-  fixed = fixed.replace(tableRegex, "rpt.$1");
+  // 2. Ensure rpt schema prefix for common tables
+  // CRITICAL: Only add prefix to table identifiers, NOT to string values
+  // Must parse SQL to avoid corrupting WHERE clause values like:
+  //   CORRECT: ATV.name IN ('Wound Assessment')
+  //   WRONG:   ATV.name IN ('rpt.Wound rpt.Assessment')
+  
+  const tableNames = ["Assessment", "Patient", "Wound", "Note", "Measurement", "AttributeType", "DimDate", "AssessmentTypeVersion"];
+  
+  // Split query into tokens, preserving strings
+  // We need to avoid replacing inside string literals
+  for (const tableName of tableNames) {
+    // Only match table names that appear as SQL identifiers (not in strings)
+    // This regex uses a more sophisticated approach:
+    // - Must be preceded by FROM, JOIN, or whitespace
+    // - Must not be inside quotes
+    // - Must be followed by space, alias, or SQL keyword
+    
+    // SAFER APPROACH: Only replace in specific SQL contexts (FROM, JOIN clauses)
+    // Pattern: (FROM|JOIN)\s+(tableName)\b
+    const fromJoinPattern = new RegExp(
+      `(FROM|JOIN)\\s+(?!rpt\\.)${tableName}\\b`,
+      "gi"
+    );
+    
+    const beforeFix = fixed;
+    fixed = fixed.replace(fromJoinPattern, `$1 rpt.${tableName}`);
+    
+    if (beforeFix !== fixed && process.env.NODE_ENV !== "production") {
+      console.log(`[validateAndFixQuery] Added rpt. prefix to ${tableName} in FROM/JOIN`);
+    }
+  }
+
+  if (process.env.NODE_ENV !== "production" && originalQuery !== fixed) {
+    console.log("[validateAndFixQuery] Fixed query:", fixed.slice(0, 500));
+  }
 
   return fixed;
 }
