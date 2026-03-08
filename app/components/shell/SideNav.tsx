@@ -228,6 +228,11 @@ export function SideNav() {
                         >
                           Audit Dashboard
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push("/admin/data-gen")}
+                        >
+                          Data Generation
+                        </DropdownMenuItem>
                       </>
                     )}
                     <DropdownMenuSeparator />

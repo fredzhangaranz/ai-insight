@@ -1,14 +1,14 @@
 {
   "suiteVersion": "1.0.0",
-  "executedAt": "2026-02-02T23:31:31.816Z",
+  "executedAt": "2026-03-03T03:31:06.924Z",
   "totalQueries": 12,
   "passed": 7,
   "failed": 5,
   "passRate": 58.333333333333336,
-  "avgLatency": 1143.25,
-  "p50Latency": 782.5,
-  "p95Latency": 2751.9999999999973,
-  "p99Latency": 4485.600000000002,
+  "avgLatency": 943.9166666666666,
+  "p50Latency": 661,
+  "p95Latency": 2233.499999999998,
+  "p99Latency": 3417.1000000000013,
   "templateHitRate": 0,
   "results": [
     {
@@ -18,12 +18,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 4919,
+      "actualLatency": 3713,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:23.014Z"
+      "executedAt": "2026-03-03T03:30:59.310Z"
     },
     {
       "queryId": "tp_002",
@@ -32,12 +32,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 719,
+      "actualLatency": 640,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:23.733Z"
+      "executedAt": "2026-03-03T03:30:59.950Z"
     },
     {
       "queryId": "tp_003",
@@ -46,12 +46,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 938,
+      "actualLatency": 1023,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:24.671Z"
+      "executedAt": "2026-03-03T03:31:00.973Z"
     },
     {
       "queryId": "tp_004",
@@ -60,12 +60,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 647,
+      "actualLatency": 662,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:25.318Z"
+      "executedAt": "2026-03-03T03:31:01.635Z"
     },
     {
       "queryId": "tp_005",
@@ -74,12 +74,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 979,
+      "actualLatency": 991,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:26.298Z"
+      "executedAt": "2026-03-03T03:31:02.626Z"
     },
     {
       "queryId": "sa_001",
@@ -88,10 +88,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 723,
+      "actualLatency": 660,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:27.021Z"
+      "executedAt": "2026-03-03T03:31:03.286Z"
     },
     {
       "queryId": "sa_002",
@@ -100,10 +100,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 897,
+      "actualLatency": 895,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:27.918Z"
+      "executedAt": "2026-03-03T03:31:04.181Z"
     },
     {
       "queryId": "sa_003",
@@ -112,10 +112,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 753,
+      "actualLatency": 607,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:28.671Z"
+      "executedAt": "2026-03-03T03:31:04.788Z"
     },
     {
       "queryId": "sa_004",
@@ -124,10 +124,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 813,
+      "actualLatency": 712,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:29.484Z"
+      "executedAt": "2026-03-03T03:31:05.500Z"
     },
     {
       "queryId": "sa_005",
@@ -136,10 +136,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 777,
+      "actualLatency": 524,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:30.261Z"
+      "executedAt": "2026-03-03T03:31:06.024Z"
     },
     {
       "queryId": "cl_001",
@@ -148,10 +148,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 766,
+      "actualLatency": 454,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:31.027Z"
+      "executedAt": "2026-03-03T03:31:06.478Z"
     },
     {
       "queryId": "cl_002",
@@ -160,10 +160,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 788,
+      "actualLatency": 446,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-02-02T23:31:31.815Z"
+      "executedAt": "2026-03-03T03:31:06.924Z"
     }
   ],
   "byComplexity": {

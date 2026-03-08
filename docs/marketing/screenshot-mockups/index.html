@@ -1,0 +1,1407 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InsightGen SAWC Screenshot Mockups</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                50: "#f8fafc",
+                100: "#f1f5f9",
+                200: "#e2e8f0",
+                300: "#cbd5e1",
+                400: "#94a3b8",
+                500: "#64748b",
+                600: "#475569",
+                700: "#334155",
+                800: "#1e293b",
+                900: "#0f172a",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .screen {
+        min-height: 100vh;
+        padding-bottom: 4rem;
+      }
+      .screenshot-nav {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        z-index: 100;
+      }
+      .screenshot-nav button {
+        margin: 0 2px;
+        padding: 4px 8px;
+        font-size: 11px;
+      }
+      .hide-for-screenshot .screenshot-nav {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div
+      class="screenshot-nav bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-lg p-2 flex flex-wrap gap-1 max-w-xs"
+    >
+      <span class="text-xs text-slate-500 w-full px-2 py-1"
+        >Jump to screen:</span
+      >
+      <a
+        href="#q1-1"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q1-1</a
+      >
+      <a
+        href="#q1-1-clarify"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q1-1C</a
+      >
+      <a
+        href="#q1-2"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q1-2</a
+      >
+      <a
+        href="#q1-3"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q1-3</a
+      >
+      <a
+        href="#q1-4"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q1-4</a
+      >
+      <a
+        href="#q1-5"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q1-5</a
+      >
+      <a
+        href="#q1-6"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q1-6</a
+      >
+      <a
+        href="#q2-1"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q2-1</a
+      >
+      <a
+        href="#q2-1-clarify"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q2-1C</a
+      >
+      <a
+        href="#q2-2"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q2-2</a
+      >
+      <a
+        href="#q2-3"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q2-3</a
+      >
+      <a
+        href="#q2-4"
+        class="bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 text-xs"
+        >Q2-4</a
+      >
+    </div>
+
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <!-- ========== Q1-1: Initial question (mimics real layout) ========== -->
+      <section id="q1-1" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <nav class="flex text-sm text-slate-500 mb-2">
+            <span>Insights</span>
+            <span class="mx-2">/</span>
+            <span class="text-slate-900 font-medium">Ask Question</span>
+          </nav>
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+          <p class="text-slate-600 mt-2">
+            Ask questions about your data in natural language
+          </p>
+        </div>
+
+        <div class="flex gap-4 items-end mb-6">
+          <div class="max-w-sm">
+            <label class="block text-sm font-medium text-slate-700 mb-2"
+              >Customer</label
+            >
+            <div
+              class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900"
+            >
+              Demo Woundcare Database
+            </div>
+          </div>
+          <div class="max-w-sm">
+            <label class="block text-sm font-medium text-slate-700 mb-2"
+              >AI Model</label
+            >
+            <div
+              class="px-4 py-2 bg-white border border-slate-300 rounded-lg flex items-center gap-2"
+            >
+              <span class="text-slate-900 font-medium">ChatGPT-4o</span>
+              <span
+                class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded"
+                >OpenAI</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-3 mb-6">
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <textarea
+              class="w-full border-0 resize-none outline-none text-slate-900"
+              rows="3"
+            >
+Find patients whose wound surface area has not decreased by at least 30% in the last 4 weeks.</textarea
+            >
+            <div class="flex justify-end mt-3">
+              <button
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+              >
+                Ask →
+              </button>
+            </div>
+          </div>
+          <p class="text-sm text-slate-500">Press Ctrl+Enter to submit</p>
+        </div>
+      </section>
+
+      <!-- ========== Q1-1C: Clarification dialog (assumptions) ========== -->
+      <section id="q1-1-clarify" class="screen min-h-screen flex items-center justify-center bg-slate-900/60 py-8 -mx-4 sm:-mx-6 lg:-mx-8 px-4">
+        <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl max-h-[90vh] overflow-y-auto">
+          <div class="bg-gradient-to-r from-amber-50 to-orange-50 border-b p-6">
+            <div class="flex items-start gap-3">
+              <div class="flex-shrink-0 mt-0.5">
+                <svg class="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h2 class="font-semibold text-slate-900 text-lg mb-1">I need some clarification</h2>
+                <p class="text-sm text-slate-600">
+                  Your question: <span class="font-medium italic">"Find patients whose wound surface area has not decreased by at least 30% in the last 4 weeks."</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-6">
+            <div>
+              <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold mb-3">1</div>
+              <h3 class="font-semibold text-slate-900 mb-2">What time window should I use for "last 4 weeks"?</h3>
+              <div class="space-y-2">
+                <div class="p-3 rounded-lg border-2 border-blue-500 bg-blue-50">
+                  <div class="flex items-center gap-3">
+                    <div class="h-5 w-5 rounded-full bg-blue-600"></div>
+                    <span class="font-medium text-slate-900">From 4 weeks ago to today (Feb 2 – Mar 2, 2026)</span>
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg border-2 border-slate-200 hover:border-slate-300 bg-white cursor-pointer">
+                  <div class="flex items-center gap-3">
+                    <div class="h-5 w-5 rounded-full border-2 border-slate-300"></div>
+                    <span class="font-medium text-slate-900">Custom date range</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold mb-3">2</div>
+              <h3 class="font-semibold text-slate-900 mb-2">Which wound types should be included?</h3>
+              <div class="space-y-2">
+                <div class="p-3 rounded-lg border-2 border-blue-500 bg-blue-50">
+                  <div class="flex items-center gap-3">
+                    <div class="h-5 w-5 rounded-full bg-blue-600"></div>
+                    <span class="font-medium text-slate-900">All wound types</span>
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg border-2 border-slate-200 hover:border-slate-300 bg-white cursor-pointer">
+                  <div class="flex items-center gap-3">
+                    <div class="h-5 w-5 rounded-full border-2 border-slate-300"></div>
+                    <span class="font-medium text-slate-900">Pressure injuries only</span>
+                  </div>
+                </div>
+                <div class="p-3 rounded-lg border-2 border-slate-200 hover:border-slate-300 bg-white cursor-pointer">
+                  <div class="flex items-center gap-3">
+                    <div class="h-5 w-5 rounded-full border-2 border-slate-300"></div>
+                    <span class="font-medium text-slate-900">Diabetic foot ulcers only</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="border-t p-6 bg-slate-50 flex justify-end gap-3">
+            <button class="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-100">Change</button>
+            <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">Continue with my answers</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== Q1-2: Results + conversation UI ========== -->
+      <section id="q1-2" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Question display -->
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+            <p class="text-sm text-slate-600 mb-1">Your question:</p>
+            <p class="text-slate-900 font-medium">
+              Find patients whose wound surface area has not decreased by at
+              least 30% in the last 4 weeks.
+            </p>
+          </div>
+
+          <!-- Results table -->
+          <div class="bg-white border border-slate-200 rounded-lg p-6">
+            <h3 class="text-lg font-semibold mb-1">Results (240 records)</h3>
+            <p class="text-sm text-slate-500 mb-4">
+              Showing first 10 of 240 rows
+            </p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                  <tr>
+                    <th class="px-4 py-3 text-left font-medium text-slate-600">
+                      Patient ID
+                    </th>
+                    <th class="px-4 py-3 text-left font-medium text-slate-600">
+                      Name
+                    </th>
+                    <th class="px-4 py-3 text-left font-medium text-slate-600">
+                      Wound Area (cm²)
+                    </th>
+                    <th class="px-4 py-3 text-left font-medium text-slate-600">
+                      % Change
+                    </th>
+                    <th class="px-4 py-3 text-left font-medium text-slate-600">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr>
+                    <td class="px-4 py-3">362FE33F-CF38</td>
+                    <td class="px-4 py-3">Aurora Kirchner</td>
+                    <td class="px-4 py-3">145.2</td>
+                    <td class="px-4 py-3 text-amber-600">-8%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">A1B2C3D4-E5F6</td>
+                    <td class="px-4 py-3">James Chen</td>
+                    <td class="px-4 py-3">98.5</td>
+                    <td class="px-4 py-3 text-amber-600">5%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">B2C3D4E5-F6A7</td>
+                    <td class="px-4 py-3">Linda Patel</td>
+                    <td class="px-4 py-3">234.0</td>
+                    <td class="px-4 py-3 text-amber-600">0%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">C3D4E5F6-A7B8</td>
+                    <td class="px-4 py-3">Robert Kim</td>
+                    <td class="px-4 py-3">67.3</td>
+                    <td class="px-4 py-3 text-amber-600">12%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">D4E5F6A7-B8C9</td>
+                    <td class="px-4 py-3">Susan Wright</td>
+                    <td class="px-4 py-3">156.8</td>
+                    <td class="px-4 py-3 text-amber-600">18%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">E5F6A7B8-C9D0</td>
+                    <td class="px-4 py-3">Michael Brown</td>
+                    <td class="px-4 py-3">289.5</td>
+                    <td class="px-4 py-3 text-amber-600">-15%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">F6A7B8C9-D0E1</td>
+                    <td class="px-4 py-3">Jennifer Lee</td>
+                    <td class="px-4 py-3">112.2</td>
+                    <td class="px-4 py-3 text-amber-600">3%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">A7B8C9D0-E1F2</td>
+                    <td class="px-4 py-3">David Martinez</td>
+                    <td class="px-4 py-3">203.7</td>
+                    <td class="px-4 py-3 text-amber-600">8%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">B8C9D0E1-F2A3</td>
+                    <td class="px-4 py-3">Nancy Garcia</td>
+                    <td class="px-4 py-3">156.4</td>
+                    <td class="px-4 py-3 text-amber-600">-5%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">C9D0E1F2-A3B4</td>
+                    <td class="px-4 py-3">Thomas Anderson</td>
+                    <td class="px-4 py-3">178.9</td>
+                    <td class="px-4 py-3 text-amber-600">22%</td>
+                    <td class="px-4 py-3">High Risk</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div
+            class="flex flex-wrap gap-2 bg-slate-50 rounded-lg border border-slate-200 p-4"
+          >
+            <button
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-100"
+            >
+              How I answered this (0.1s)
+            </button>
+            <button
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-100"
+            >
+              How I got this
+            </button>
+            <button
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-100"
+            >
+              Refine this query
+            </button>
+            <button
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-100"
+            >
+              Create Chart
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== Q1-3: Conversation UI (follow-up question) ========== -->
+      <section id="q1-3" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Previous results -->
+          <div class="bg-white border border-slate-200 rounded-lg p-6">
+            <h3 class="text-lg font-semibold mb-4">Results (240 records)</h3>
+            <p class="text-sm text-slate-500 mb-2">
+              [Previous results table - abbreviated]
+            </p>
+            <div class="py-3 border-t">
+              <p class="text-sm text-slate-600">
+                240 high-risk patients identified
+              </p>
+            </div>
+          </div>
+
+          <!-- Conversation section -->
+          <div
+            class="bg-white border border-slate-200 rounded-lg p-6 space-y-4"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold">💬 Conversation</h3>
+              <button class="text-slate-500 hover:text-slate-700 text-sm">
+                ↻ New
+              </button>
+            </div>
+
+            <div
+              class="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-6 text-center"
+            >
+              <p class="text-slate-600">
+                Ask a follow-up question to start a conversation.
+              </p>
+            </div>
+
+            <div class="space-y-2">
+              <p class="text-xs font-medium text-slate-600">
+                💡 You might want to ask:
+              </p>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  🔎 Show me the individual records
+                </button>
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  ⏱️ Show trends over time
+                </button>
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  📊 Break down by category
+                </button>
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  🧰 Filter by additional criteria
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <textarea
+                placeholder="Ask a follow-up question..."
+                class="w-full border border-slate-200 rounded-lg p-3 text-sm resize-none"
+                rows="2"
+              ></textarea>
+              <div class="mt-2 flex justify-end">
+                <button
+                  class="px-4 py-2 bg-slate-300 text-slate-600 rounded-lg text-sm cursor-not-allowed"
+                  disabled
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== Q1-4: Follow-up question input (actual follow-up) ========== -->
+      <section id="q1-4" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+        </div>
+
+        <div class="space-y-4">
+          <div
+            class="bg-white border border-slate-200 rounded-lg p-6 space-y-4"
+          >
+            <h3 class="text-lg font-semibold">💬 Conversation</h3>
+
+            <div class="space-y-3">
+              <p class="text-xs font-medium text-slate-600">
+                💡 You might want to ask:
+              </p>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  🔎 Show me the individual records
+                </button>
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  ⏱️ Show trends over time
+                </button>
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  📊 Break down by category
+                </button>
+                <button
+                  class="p-3 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 text-left"
+                >
+                  🧰 Filter by additional criteria
+                </button>
+              </div>
+            </div>
+
+            <div class="border-t pt-4">
+              <textarea
+                placeholder="Ask a follow-up question..."
+                class="w-full border border-slate-200 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows="2"
+              >
+Show me the percentage reduction of wound area for each of these patients over the past 8 weeks.</textarea
+              >
+              <div class="mt-2 flex justify-end">
+                <button
+                  class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                >
+                  Send →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== Q1-5: Line chart results ========== -->
+      <section id="q1-5" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-lg p-6">
+          <h3 class="text-lg font-semibold mb-1">
+            Percentage reduction of wound area over 8 weeks
+          </h3>
+          <p class="text-sm text-slate-500 mb-6">
+            High-risk patients (0–30% reduction in last 4 weeks)
+          </p>
+
+          <!-- Line chart SVG -->
+          <div class="w-full h-64 mb-4">
+            <svg
+              viewBox="0 0 700 250"
+              class="w-full h-full"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop
+                    offset="0%"
+                    style="stop-color: #3b82f6; stop-opacity: 0.1"
+                  />
+                  <stop
+                    offset="100%"
+                    style="stop-color: #3b82f6; stop-opacity: 0"
+                  />
+                </linearGradient>
+              </defs>
+              <!-- Grid -->
+              <line
+                x1="70"
+                y1="20"
+                x2="70"
+                y2="200"
+                stroke="#e2e8f0"
+                stroke-width="2"
+              />
+              <line
+                x1="70"
+                y1="200"
+                x2="680"
+                y2="200"
+                stroke="#e2e8f0"
+                stroke-width="2"
+              />
+              <line
+                x1="170"
+                y1="20"
+                x2="170"
+                y2="200"
+                stroke="#f1f5f9"
+                stroke-width="1"
+              />
+              <line
+                x1="270"
+                y1="20"
+                x2="270"
+                y2="200"
+                stroke="#f1f5f9"
+                stroke-width="1"
+              />
+              <line
+                x1="370"
+                y1="20"
+                x2="370"
+                y2="200"
+                stroke="#f1f5f9"
+                stroke-width="1"
+              />
+              <line
+                x1="470"
+                y1="20"
+                x2="470"
+                y2="200"
+                stroke="#f1f5f9"
+                stroke-width="1"
+              />
+              <line
+                x1="570"
+                y1="20"
+                x2="570"
+                y2="200"
+                stroke="#f1f5f9"
+                stroke-width="1"
+              />
+              <!-- Lines -->
+              <polyline
+                points="70,170 170,155 270,140 370,130 470,125 570,120 680,115"
+                fill="none"
+                stroke="#3b82f6"
+                stroke-width="2"
+              />
+              <polyline
+                points="70,160 170,148 270,165 370,155 470,145 570,135 680,125"
+                fill="none"
+                stroke="#10b981"
+                stroke-width="2"
+              />
+              <polyline
+                points="70,155 170,140 270,130 370,140 470,155 570,165 680,170"
+                fill="none"
+                stroke="#f59e0b"
+                stroke-width="2"
+              />
+              <polyline
+                points="70,150 170,135 270,145 370,160 470,170 570,180 680,185"
+                fill="none"
+                stroke="#ef4444"
+                stroke-width="2"
+              />
+              <polyline
+                points="70,145 170,130 270,120 370,110 470,105 570,100 680,95"
+                fill="none"
+                stroke="#8b5cf6"
+                stroke-width="2"
+              />
+              <!-- X labels -->
+              <text
+                x="120"
+                y="220"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Week 1
+              </text>
+              <text
+                x="220"
+                y="220"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Week 2
+              </text>
+              <text
+                x="320"
+                y="220"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Week 3
+              </text>
+              <text
+                x="420"
+                y="220"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Week 4
+              </text>
+              <text
+                x="520"
+                y="220"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Week 5
+              </text>
+              <text
+                x="620"
+                y="220"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Week 8
+              </text>
+              <!-- Y labels -->
+              <text
+                x="55"
+                y="25"
+                text-anchor="end"
+                font-size="11"
+                fill="#64748b"
+              >
+                30%
+              </text>
+              <text
+                x="55"
+                y="110"
+                text-anchor="end"
+                font-size="11"
+                fill="#64748b"
+              >
+                15%
+              </text>
+              <text
+                x="55"
+                y="205"
+                text-anchor="end"
+                font-size="11"
+                fill="#64748b"
+              >
+                0%
+              </text>
+            </svg>
+          </div>
+
+          <div class="flex flex-wrap gap-4 text-xs">
+            <span class="flex items-center gap-1"
+              ><span class="w-3 h-0.5 bg-blue-500"></span> Aurora Kirchner</span
+            >
+            <span class="flex items-center gap-1"
+              ><span class="w-3 h-0.5 bg-emerald-500"></span> James Chen</span
+            >
+            <span class="flex items-center gap-1"
+              ><span class="w-3 h-0.5 bg-amber-500"></span> Linda Patel</span
+            >
+            <span class="flex items-center gap-1"
+              ><span class="w-3 h-0.5 bg-red-500"></span> Robert Kim</span
+            >
+            <span class="flex items-center gap-1"
+              ><span class="w-3 h-0.5 bg-violet-500"></span> Susan Wright</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== Q2-1: Question about monthly assessments (Jul 2024 - Jun 2025) ========== -->
+      <section id="q2-1" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <nav class="flex text-sm text-slate-500 mb-2">
+            <span>Insights</span>
+            <span class="mx-2">/</span>
+            <span class="text-slate-900 font-medium">Ask Question</span>
+          </nav>
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+          <p class="text-slate-600 mt-2">
+            Ask questions about your data in natural language
+          </p>
+        </div>
+
+        <div class="flex gap-4 items-end mb-6">
+          <div class="max-w-sm">
+            <label class="block text-sm font-medium text-slate-700 mb-2"
+              >Customer</label
+            >
+            <div class="px-4 py-2 bg-white border border-slate-300 rounded-lg">
+              Demo Woundcare Database
+            </div>
+          </div>
+          <div class="max-w-sm">
+            <label class="block text-sm font-medium text-slate-700 mb-2"
+              >AI Model</label
+            >
+            <div
+              class="px-4 py-2 bg-white border border-slate-300 rounded-lg flex items-center gap-2"
+            >
+              <span class="text-slate-900 font-medium">ChatGPT-4o</span>
+              <span
+                class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded"
+                >OpenAI</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-3 mb-6">
+          <div class="bg-white border border-slate-200 rounded-lg p-4">
+            <textarea
+              class="w-full border-0 resize-none outline-none text-slate-900"
+              rows="3"
+            >
+Show me the number of wound assessments completed per month between July 2024 and June 2025.</textarea
+            >
+            <div class="flex justify-end mt-3">
+              <button
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+              >
+                Ask →
+              </button>
+            </div>
+          </div>
+          <p class="text-sm text-slate-500">Press Ctrl+Enter to submit</p>
+        </div>
+      </section>
+
+      <!-- ========== Q2-1C: Clarification dialog (date confirmation) ========== -->
+      <section id="q2-1-clarify" class="screen min-h-screen flex items-center justify-center bg-slate-900/60 py-8 -mx-4 sm:-mx-6 lg:-mx-8 px-4">
+        <div class="w-full max-w-2xl bg-white rounded-xl shadow-xl">
+          <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-b p-6">
+            <div class="flex items-start gap-3">
+              <div class="flex-shrink-0 mt-0.5">
+                <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 class="font-semibold text-slate-900 text-lg mb-1">Quick confirmation needed</h2>
+                <p class="text-sm text-slate-600">I detected these values from your question. Approve them to proceed faster.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <div class="border-2 border-green-100 rounded-lg p-4 bg-green-50/50">
+              <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 mt-0.5">
+                  <svg class="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="flex-1">
+                  <span class="font-mono text-sm text-slate-600 bg-white px-2 py-1 rounded border border-slate-200 inline-block mb-2">date_range</span>
+                  <p class="text-sm text-slate-700 font-medium mb-2">Fiscal year: July 1, 2024 – June 30, 2025</p>
+                  <p class="text-xs text-slate-500">From: <span class="italic">"between July 2024 and June 2025"</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="border-t p-6 flex gap-3 justify-end">
+            <button class="px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-100">Change</button>
+            <button class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">Use these values</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== Q2-2: Results table (monthly assessments) ========== -->
+      <section id="q2-2" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+        </div>
+
+        <div class="space-y-4">
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+            <p class="text-sm text-slate-600 mb-1">Your question:</p>
+            <p class="text-slate-900 font-medium">
+              Show me the number of wound assessments completed per month
+              between July 2024 and June 2025.
+            </p>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-lg p-6">
+            <h3 class="text-lg font-semibold mb-1">Results (12 records)</h3>
+            <p class="text-sm text-slate-500 mb-4">Showing all 12 rows</p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                  <tr>
+                    <th class="px-4 py-3 text-left font-medium text-slate-600">
+                      Month
+                    </th>
+                    <th class="px-4 py-3 text-left font-medium text-slate-600">
+                      Assessments Completed
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr>
+                    <td class="px-4 py-3">July 2024</td>
+                    <td class="px-4 py-3 font-medium">342</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">August 2024</td>
+                    <td class="px-4 py-3 font-medium">395</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">September 2024</td>
+                    <td class="px-4 py-3 font-medium">428</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">October 2024</td>
+                    <td class="px-4 py-3 font-medium">461</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">November 2024</td>
+                    <td class="px-4 py-3 font-medium">512</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">December 2024</td>
+                    <td class="px-4 py-3 font-medium">548</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">January 2025</td>
+                    <td class="px-4 py-3 font-medium">495</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">February 2025</td>
+                    <td class="px-4 py-3 font-medium">534</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">March 2025</td>
+                    <td class="px-4 py-3 font-medium">589</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">April 2025</td>
+                    <td class="px-4 py-3 font-medium">621</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">May 2025</td>
+                    <td class="px-4 py-3 font-medium">655</td>
+                  </tr>
+                  <tr>
+                    <td class="px-4 py-3">June 2025</td>
+                    <td class="px-4 py-3 font-medium">689</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div
+            class="flex flex-wrap gap-2 bg-slate-50 rounded-lg border border-slate-200 p-4"
+          >
+            <button
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-100"
+            >
+              How I answered this
+            </button>
+            <button
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-100"
+            >
+              Create Chart
+            </button>
+            <button
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-100"
+            >
+              Export CSV
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== Q2-3: Bar chart of monthly assessments ========== -->
+      <section id="q2-3" class="screen">
+        <div class="border-b border-slate-200 pb-6 mb-6">
+          <h1 class="text-3xl font-bold text-slate-900">Insights</h1>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-lg p-6">
+          <h3 class="text-lg font-semibold mb-1">
+            Wound assessments completed per month
+          </h3>
+          <p class="text-sm text-slate-500 mb-6">
+            July 2024 – June 2025 (fiscal year)
+          </p>
+
+          <!-- Bar chart using SVG for better rendering -->
+          <svg
+            viewBox="0 0 900 350"
+            class="w-full h-80 mb-6"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <!-- Grid lines -->
+            <line
+              x1="60"
+              y1="30"
+              x2="60"
+              y2="280"
+              stroke="#e2e8f0"
+              stroke-width="2"
+            />
+            <line
+              x1="60"
+              y1="280"
+              x2="880"
+              y2="280"
+              stroke="#e2e8f0"
+              stroke-width="2"
+            />
+            <line
+              x1="60"
+              y1="186"
+              x2="880"
+              y2="186"
+              stroke="#f1f5f9"
+              stroke-width="1"
+              stroke-dasharray="2,2"
+            />
+            <!-- Bars (height proportional to values: 342, 395, 428, 461, 512, 548, 495, 534, 589, 621, 655, 689) -->
+            <g>
+              <!-- Jul 342 -->
+              <rect
+                x="75"
+                y="180"
+                width="55"
+                height="100"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="107"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Jul
+              </text>
+              <text
+                x="107"
+                y="165"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                342
+              </text>
+              <!-- Aug 395 -->
+              <rect
+                x="135"
+                y="160"
+                width="55"
+                height="120"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="167"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Aug
+              </text>
+              <text
+                x="167"
+                y="145"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                395
+              </text>
+              <!-- Sep 428 -->
+              <rect
+                x="195"
+                y="145"
+                width="55"
+                height="135"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="227"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Sep
+              </text>
+              <text
+                x="227"
+                y="130"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                428
+              </text>
+              <!-- Oct 461 -->
+              <rect
+                x="255"
+                y="130"
+                width="55"
+                height="150"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="287"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Oct
+              </text>
+              <text
+                x="287"
+                y="115"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                461
+              </text>
+              <!-- Nov 512 -->
+              <rect
+                x="315"
+                y="105"
+                width="55"
+                height="175"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="347"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Nov
+              </text>
+              <text
+                x="347"
+                y="90"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                512
+              </text>
+              <!-- Dec 548 -->
+              <rect
+                x="375"
+                y="90"
+                width="55"
+                height="190"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="407"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Dec
+              </text>
+              <text
+                x="407"
+                y="75"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                548
+              </text>
+              <!-- Jan 495 -->
+              <rect
+                x="435"
+                y="115"
+                width="55"
+                height="165"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="467"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Jan
+              </text>
+              <text
+                x="467"
+                y="100"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                495
+              </text>
+              <!-- Feb 534 -->
+              <rect
+                x="495"
+                y="98"
+                width="55"
+                height="182"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="527"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Feb
+              </text>
+              <text
+                x="527"
+                y="83"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                534
+              </text>
+              <!-- Mar 589 -->
+              <rect
+                x="555"
+                y="70"
+                width="55"
+                height="210"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="587"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Mar
+              </text>
+              <text
+                x="587"
+                y="55"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                589
+              </text>
+              <!-- Apr 621 -->
+              <rect
+                x="615"
+                y="55"
+                width="55"
+                height="225"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="647"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Apr
+              </text>
+              <text
+                x="647"
+                y="40"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                621
+              </text>
+              <!-- May 655 -->
+              <rect
+                x="675"
+                y="40"
+                width="55"
+                height="240"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="707"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                May
+              </text>
+              <text
+                x="707"
+                y="25"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                655
+              </text>
+              <!-- Jun 689 -->
+              <rect
+                x="735"
+                y="25"
+                width="55"
+                height="255"
+                fill="#3b82f6"
+                rx="2"
+              />
+              <text
+                x="767"
+                y="300"
+                text-anchor="middle"
+                font-size="12"
+                fill="#64748b"
+              >
+                Jun
+              </text>
+              <text
+                x="767"
+                y="10"
+                text-anchor="middle"
+                font-size="11"
+                fill="#1e293b"
+                font-weight="bold"
+              >
+                689
+              </text>
+            </g>
+            <!-- Y axis label -->
+            <text x="35" y="35" text-anchor="end" font-size="11" fill="#64748b">
+              700
+            </text>
+            <text
+              x="35"
+              y="160"
+              text-anchor="end"
+              font-size="11"
+              fill="#64748b"
+            >
+              350
+            </text>
+            <text
+              x="35"
+              y="285"
+              text-anchor="end"
+              font-size="11"
+              fill="#64748b"
+            >
+              0
+            </text>
+          </svg>
+
+          <div class="pt-4 border-t space-y-2">
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-600">Total assessments:</span>
+              <span class="font-medium">6,269</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-600">Average per month:</span>
+              <span class="font-medium">522</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-600">Peak month:</span>
+              <span class="font-medium">June 2025 (689)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

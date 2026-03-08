@@ -87,13 +87,11 @@ export function ModelSelector({ value, onChange }: ModelSelectorProps) {
   // Show loading state
   if (isLoading) {
     return (
-      <div className="space-y-2">
-        <Label>AI Model</Label>
+      <div className="flex items-center gap-2">
+        <Label className="shrink-0">AI Model</Label>
         <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg">
           <Loader2 className="h-4 w-4 text-slate-600 animate-spin" />
-          <div className="flex flex-col items-start">
-            <span className="text-sm text-slate-600">Loading...</span>
-          </div>
+          <span className="text-sm text-slate-600">Loading...</span>
         </div>
       </div>
     );
@@ -102,28 +100,26 @@ export function ModelSelector({ value, onChange }: ModelSelectorProps) {
   // Show error state
   if (error || models.length === 0) {
     return (
-      <div className="space-y-2">
-        <Label>AI Model</Label>
+      <div className="flex items-center gap-2">
+        <Label className="shrink-0">AI Model</Label>
         <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-300 rounded-lg">
           <Bot className="h-4 w-4 text-red-600" />
-          <div className="flex flex-col items-start">
-            <span className="text-sm text-red-700">{error || "No models configured"}</span>
-          </div>
+          <span className="text-sm text-red-700">{error || "No models configured"}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <Label>AI Model</Label>
+    <div className="flex items-center gap-2">
+      <Label className="shrink-0">AI Model</Label>
       <div className="relative">
         <button
           onClick={(e) => {
             e.stopPropagation();
             setIsOpen(!isOpen);
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:border-slate-400 transition-colors w-full"
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:border-slate-400 transition-colors min-w-[200px]"
           disabled={models.length === 0}
         >
           <Bot className="h-4 w-4 text-slate-600" />

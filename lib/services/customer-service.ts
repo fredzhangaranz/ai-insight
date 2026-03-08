@@ -633,3 +633,22 @@ export async function getCustomerConnectionString(
     return null;
   }
 }
+
+/**
+ * Get decrypted connection string for a customer by UUID.
+ * Used by data-gen and other multi-tenant flows that need customer-specific DB access.
+ */
+export async function getConnectionStringForCustomer(
+  customerId: string
+): Promise<string> {
+  const customer = await getCustomerById(customerId, false, true);
+  if (!customer) {
+    throw new Error(`Customer not found: ${customerId}`);
+  }
+  if (!customer.dbConnectionEncrypted) {
+    throw new Error(
+      `Customer ${customerId} does not have a database connection configured`
+    );
+  }
+  return decryptConnectionString(customer.dbConnectionEncrypted);
+}
