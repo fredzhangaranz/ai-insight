@@ -80,7 +80,15 @@ function buildSystemPrompt(
 
   let formFieldsJson = "";
   if (formSchemas && Object.keys(formSchemas).length > 0) {
-    formFieldsJson = "\nForm fields:\n" + JSON.stringify(formSchemas, null, 2);
+    const filteredFormSchemas: Record<string, FieldSchema[]> = {};
+    for (const [formId, fields] of Object.entries(formSchemas)) {
+      filteredFormSchemas[formId] = fields.filter(
+        (f) => f.dataType !== "ImageCapture"
+      );
+    }
+    formFieldsJson =
+      "\nForm fields (ImageCapture excluded - handled by scaffolding):\n" +
+      JSON.stringify(filteredFormSchemas, null, 2);
   }
 
   const context =
@@ -111,6 +119,8 @@ Rules:
 6. Only include fields that appear in the schema above. Do not invent or assume fields.
 7. For assessment_bundle: include form with assessmentTypeVersionId and name when form is specified.
 8. When mode is "assessment" and selectedIds are provided, set target: { mode: "custom", patientIds: [...] }.
+9. For assessment_bundle: NEVER include fields for area, perimeter, depth, volume, wound state, isHealed, daysSinceBaseline, or isBaseline in the fields array. These are controlled by trajectoryDistribution, not field specs.
+10. For assessment_bundle: NEVER include fields with dataType "ImageCapture" - they are created automatically per assessment.
 
 ${GENERATION_SPEC_SCHEMA}`;
 }
@@ -195,6 +205,13 @@ export async function interpretToSpec(
       ? formSchemas[input.formId]
       : patientSchema;
   const schemaByColumn = new Map(sourceSchema.map((f) => [f.columnName, f]));
+
+  if (input.entity === "assessment_bundle") {
+    spec.fields = spec.fields.filter((f) => {
+      const src = schemaByColumn.get(f.columnName);
+      return !(src?.dataType === "ImageCapture");
+    });
+  }
   spec.fields = spec.fields.map((f) => {
     const src = schemaByColumn.get(f.columnName);
     if (!src) return f;

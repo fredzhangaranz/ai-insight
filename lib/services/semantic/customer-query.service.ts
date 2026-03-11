@@ -2,10 +2,55 @@
 // Service for executing SQL queries against customer databases
 
 import * as sql from "mssql";
+import type { ConnectionPool } from "mssql";
 import { getCustomerById } from "../customer-service";
 import { decryptConnectionString } from "../security/connection-encryption.service";
 import { parseSqlServerConnectionString } from "@/lib/utils/sqlserver";
 import { normalizeSqlForValidation } from "@/lib/utils/sql-cleaning";
+
+/**
+ * Run a callback with a customer's database pool. Pool is created, used, and closed.
+ */
+export async function withCustomerPool<T>(
+  customerId: string,
+  fn: (pool: ConnectionPool) => Promise<T>
+): Promise<T> {
+  const customer = await getCustomerById(customerId, false, true);
+  if (!customer) {
+    throw new Error(`Customer not found: ${customerId}`);
+  }
+  if (!customer.dbConnectionEncrypted) {
+    throw new Error(
+      `Customer ${customerId} does not have a database connection configured`
+    );
+  }
+
+  const connectionString = decryptConnectionString(customer.dbConnectionEncrypted);
+  const parsedConfig = parseSqlServerConnectionString(connectionString);
+  const config: sql.config = {
+    ...parsedConfig,
+    pool: {
+      max: 5,
+      min: 0,
+      idleTimeoutMillis: 30000,
+    },
+    options: {
+      ...parsedConfig.options,
+      trustServerCertificate: parsedConfig.options?.trustServerCertificate ?? true,
+      requestTimeout: 30000,
+      connectTimeout: 15000,
+      enableArithAbort: true,
+    },
+  };
+
+  const pool = new sql.ConnectionPool(config);
+  try {
+    await pool.connect();
+    return await fn(pool);
+  } finally {
+    await pool.close();
+  }
+}
 
 /**
  * Execute SQL query against a customer's database

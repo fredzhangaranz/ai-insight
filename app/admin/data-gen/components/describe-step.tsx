@@ -11,16 +11,19 @@ import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types"
 import type { BrowseSelection } from "./data-browser-step";
 import type { GenerationSpec } from "@/lib/services/data-gen/generation-spec.types";
 import type { FieldResolution } from "@/lib/services/data-gen/field-resolver.service";
+import type { SelectedForm } from "./form-selector-step";
+import { buildDefaultPatientSpec } from "@/lib/services/data-gen/default-spec-builder";
 
 interface DescribeStepProps {
   customerId: string;
   modelId: string;
   selection: BrowseSelection;
+  selectedForm?: SelectedForm;
   onInterpreted: (spec: GenerationSpec, warnings: { fieldName: string; type: string; message: string; suggestion?: string }[]) => void;
   onBack: () => void;
 }
 
-export function DescribeStep({ customerId, modelId, selection, onInterpreted, onBack }: DescribeStepProps) {
+export function DescribeStep({ customerId, modelId, selection, selectedForm, onInterpreted, onBack }: DescribeStepProps) {
   const [description, setDescription] = useState("");
   const [patientSchema, setPatientSchema] = useState<FieldSchema[]>([]);
   const [formSchema, setFormSchema] = useState<FieldSchema[]>([]);
@@ -43,15 +46,19 @@ export function DescribeStep({ customerId, modelId, selection, onInterpreted, on
         }
         if (formsRes.ok) {
           const forms = await formsRes.json();
-          const firstForm = forms[0];
-          if (firstForm) {
+          const formToLoad =
+            selectedForm
+              ? forms.find((f: { assessmentFormId: string }) => f.assessmentFormId === selectedForm.assessmentFormId) ?? forms[0]
+              : forms[0];
+          if (formToLoad) {
+            const formId = selectedForm?.assessmentFormId ?? formToLoad.assessmentFormId;
             const fieldsRes = await fetch(
-              `/api/admin/data-gen/schema/forms/${firstForm.assessmentFormId}?customerId=${encodeURIComponent(customerId)}`
+              `/api/admin/data-gen/schema/forms/${formId}?customerId=${encodeURIComponent(customerId)}`
             );
             if (fieldsRes.ok) {
               const f = await fieldsRes.json();
               setFormSchema(f);
-              setFormName(firstForm.assessmentFormName ?? "");
+              setFormName(selectedForm?.assessmentFormName ?? formToLoad.assessmentFormName ?? "");
             }
           }
         }
@@ -60,7 +67,7 @@ export function DescribeStep({ customerId, modelId, selection, onInterpreted, on
       }
     }
     load();
-  }, [customerId]);
+  }, [customerId, selectedForm?.assessmentFormId, selectedForm?.assessmentFormName]);
 
   const contextText =
     selection.mode === "insert"
@@ -83,13 +90,18 @@ export function DescribeStep({ customerId, modelId, selection, onInterpreted, on
       let formId: string | undefined;
       let formNameVal: string | undefined;
       if (entity === "assessment_bundle" && formSchema.length > 0) {
-        const formsRes = await fetch(`/api/admin/data-gen/schema/forms?customerId=${encodeURIComponent(customerId)}`);
-        if (formsRes.ok) {
-          const forms = await formsRes.json();
-          const first = forms[0];
-          if (first) {
-            formId = first.assessmentFormId;
-            formNameVal = first.assessmentFormName;
+        if (selectedForm) {
+          formId = selectedForm.assessmentFormId;
+          formNameVal = selectedForm.assessmentFormName;
+        } else {
+          const formsRes = await fetch(`/api/admin/data-gen/schema/forms?customerId=${encodeURIComponent(customerId)}`);
+          if (formsRes.ok) {
+            const forms = await formsRes.json();
+            const first = forms[0];
+            if (first) {
+              formId = first.assessmentFormId;
+              formNameVal = first.assessmentFormName;
+            }
           }
         }
       }
@@ -126,6 +138,25 @@ export function DescribeStep({ customerId, modelId, selection, onInterpreted, on
   };
 
   const handleInterpret = async () => {
+    if (entity === "patient" && selection.mode === "update" && !description.trim()) {
+      setError("Describe what you want to change — e.g. set gender to 50/50, fill missing date of birth.");
+      return;
+    }
+
+    if (
+      entity === "patient" &&
+      selection.mode === "insert" &&
+      !description.trim()
+    ) {
+      const spec = buildDefaultPatientSpec(
+        patientSchema,
+        selection.count ?? 20,
+        "insert"
+      );
+      onInterpreted(spec, []);
+      return;
+    }
+
     if (entity !== "patient") {
       await runInterpret();
       return;
@@ -223,7 +254,15 @@ export function DescribeStep({ customerId, modelId, selection, onInterpreted, on
               <Button variant="outline" onClick={onBack}>
                 ← Back
               </Button>
-              <Button onClick={handleInterpret} disabled={loading}>
+              <Button
+                onClick={handleInterpret}
+                disabled={
+                  loading ||
+                  (entity === "patient" &&
+                    selection?.mode === "update" &&
+                    !description.trim())
+                }
+              >
                 {loading ? "Interpreting..." : "Interpret with AI →"}
               </Button>
             </div>
@@ -234,6 +273,7 @@ export function DescribeStep({ customerId, modelId, selection, onInterpreted, on
               patientFields={patientSchema}
               formFields={formSchema}
               formName={formName}
+              primarySchema={entity === "assessment_bundle" ? "form" : "patient"}
             />
           </div>
         </div>

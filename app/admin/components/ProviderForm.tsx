@@ -98,6 +98,28 @@ const PROVIDER_TEMPLATES: Record<ProviderType, ProviderTemplate> = {
       },
     ],
   },
+  lmstudio: {
+    name: "LM Studio (Local)",
+    description: "Configure high-performance local LLM inference via LM Studio",
+    fields: [
+      {
+        key: "baseUrl",
+        label: "Base URL",
+        type: "url",
+        placeholder: "http://localhost:1234",
+        required: true,
+        defaultValue: "http://localhost:1234",
+      },
+      {
+        key: "timeout",
+        label: "Timeout (ms)",
+        type: "number",
+        placeholder: "60000",
+        required: false,
+        defaultValue: "60000",
+      },
+    ],
+  },
 };
 
 interface ProviderFormProps {
@@ -126,6 +148,9 @@ export function ProviderForm({
   );
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [lmstudioModelIds, setLmstudioModelIds] = useState<string[] | null>(null);
+  const [lmstudioModelsLoading, setLmstudioModelsLoading] = useState(false);
+  const [lmstudioModelsError, setLmstudioModelsError] = useState<string | null>(null);
 
   // Initialize form data when provider type changes
   useEffect(() => {
@@ -155,6 +180,10 @@ export function ProviderForm({
       }
 
       setFormData(initialData);
+      if (selectedProviderType !== "lmstudio") {
+        setLmstudioModelIds(null);
+        setLmstudioModelsError(null);
+      }
 
       // Set provider name if not already set
       if (!providerName && initialConfig?.providerName) {
@@ -179,6 +208,60 @@ export function ProviderForm({
         return newErrors;
       });
     }
+  };
+
+  const fetchLmstudioModels = async () => {
+    const baseUrl = formData.baseUrl?.trim();
+    if (!baseUrl) {
+      setLmstudioModelsError("Enter Base URL first");
+      return;
+    }
+    setLmstudioModelsLoading(true);
+    setLmstudioModelsError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/ai-config/lmstudio-models?baseUrl=${encodeURIComponent(baseUrl)}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch models");
+      }
+      setLmstudioModelIds(data.modelIds || []);
+    } catch (e) {
+      setLmstudioModelIds(null);
+      setLmstudioModelsError(e instanceof Error ? e.message : "Failed to fetch models");
+    } finally {
+      setLmstudioModelsLoading(false);
+    }
+  };
+
+  const getModelOptionsForProvider = (
+    kind: "simple" | "complex"
+  ): { id: string; name: string }[] => {
+    if (!selectedProviderType) return [];
+    if (selectedProviderType !== "lmstudio") {
+      const family = getProviderFamily(selectedProviderType);
+      const list =
+        kind === "simple" ? family.simpleQueryModels : family.complexQueryModels;
+      return list.map((m) => ({ id: m.id, name: m.name }));
+    }
+    const family = getProviderFamily("lmstudio");
+    const staticList =
+      kind === "simple" ? family.simpleQueryModels : family.complexQueryModels;
+    const currentId =
+      kind === "simple" ? formData.simpleQueryModelId : formData.complexQueryModelId;
+    if (lmstudioModelIds && lmstudioModelIds.length > 0) {
+      const options = lmstudioModelIds.map((id) => ({ id, name: id }));
+      if (currentId && !options.some((o) => o.id === currentId)) {
+        options.unshift({ id: currentId, name: currentId });
+      }
+      return options;
+    }
+    const options = staticList.map((m) => ({ id: m.id, name: m.name }));
+    if (currentId && !options.some((o) => o.id === currentId)) {
+      options.unshift({ id: currentId, name: currentId });
+    }
+    return options;
   };
 
   const validateForm = (): boolean => {
@@ -233,9 +316,11 @@ export function ProviderForm({
       case "anthropic":
         return "🤖";
       case "google":
-        return "🌐";
+        return "✨";
       case "openwebui":
         return "🏠";
+      case "lmstudio":
+        return "⚡";
       default:
         return "⚙️";
     }
@@ -321,12 +406,9 @@ export function ProviderForm({
                 <SelectValue placeholder="Select a model for simple queries" />
               </SelectTrigger>
               <SelectContent>
-                {selectedProviderType && getProviderFamily(selectedProviderType).simpleQueryModels.map((model) => (
+                {getModelOptionsForProvider("simple").map((model) => (
                   <SelectItem key={model.id} value={model.id}>
-                    {model.name} {model.recommended && "⭐"}
-                    <span className="text-xs text-slate-500 ml-2">
-                      {model.description}
-                    </span>
+                    {model.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -352,12 +434,9 @@ export function ProviderForm({
                 <SelectValue placeholder="Select a model for complex queries" />
               </SelectTrigger>
               <SelectContent>
-                {selectedProviderType && getProviderFamily(selectedProviderType).complexQueryModels.map((model) => (
+                {getModelOptionsForProvider("complex").map((model) => (
                   <SelectItem key={model.id} value={model.id}>
-                    {model.name} {model.recommended && "⭐"}
-                    <span className="text-xs text-slate-500 ml-2">
-                      {model.description}
-                    </span>
+                    {model.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -387,6 +466,29 @@ export function ProviderForm({
               )}
             </div>
           ))}
+
+          {/* LM Studio: fetch models from server (after Base URL) */}
+          {selectedProviderType === "lmstudio" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={fetchLmstudioModels}
+                disabled={lmstudioModelsLoading || !formData.baseUrl?.trim()}
+              >
+                {lmstudioModelsLoading ? "Loading..." : "Refresh models from LM Studio"}
+              </Button>
+              {lmstudioModelsError && (
+                <span className="text-sm text-red-600">{lmstudioModelsError}</span>
+              )}
+              {lmstudioModelIds && lmstudioModelIds.length > 0 && (
+                <span className="text-sm text-slate-600">
+                  {lmstudioModelIds.length} model{lmstudioModelIds.length !== 1 ? "s" : ""} loaded
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 

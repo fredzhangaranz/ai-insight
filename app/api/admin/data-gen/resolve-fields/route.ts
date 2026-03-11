@@ -10,6 +10,7 @@ import { getConnectionStringForCustomer } from "@/lib/services/customer-service"
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 import { getPatientSchema } from "@/lib/services/data-gen/schema-discovery.service";
 import { resolveFieldsFromText } from "@/lib/services/data-gen/field-resolver.service";
+import { getModelRouterService } from "@/lib/services/semantic/model-router.service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,6 +29,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const rawModelId = typeof modelId === "string" && modelId.trim() ? modelId.trim() : undefined;
+    const resolved = rawModelId
+      ? await getModelRouterService().getModelForDataGeneration(rawModelId)
+      : null;
+    const effectiveModelId = resolved?.modelId ?? rawModelId;
+
     const connectionString = await getConnectionStringForCustomer(customerId);
     const pool = await getSqlServerPool(connectionString);
     const patientSchema = await getPatientSchema(pool);
@@ -35,7 +42,7 @@ export async function POST(request: NextRequest) {
     const resolution = await resolveFieldsFromText(
       description ?? "",
       patientSchema,
-      typeof modelId === "string" && modelId.trim() ? modelId.trim() : undefined
+      effectiveModelId ?? undefined
     );
 
     return NextResponse.json(resolution);

@@ -2,6 +2,8 @@
  * Type definitions for synthetic data generation
  */
 
+import type { FieldProfileSet } from "./trajectory-field-profile.types";
+
 export type FieldClass = "source-of-truth" | "algorithm-output" | "pure-data";
 
 export type StorageType =
@@ -110,9 +112,38 @@ export interface GenerationSpec {
   fields: FieldSpec[];
   woundsPerPatient?: number | [number, number];
   assessmentsPerWound?: number | [number, number];
+  trajectoryDistribution?: TrajectoryDistribution;
+  /** cm², default [5, 50] */
+  woundBaselineAreaRange?: [number, number];
+  /** default 7 */
+  assessmentIntervalDays?: number;
+  /** default ±2 */
+  assessmentTimingWobbleDays?: number;
+  /** default 0.15 */
+  missedAppointmentRate?: number;
+  /** wound assessment only — trajectory-aware field value distributions */
+  fieldProfiles?: FieldProfileSet;
 }
 
 export type ProgressionTrend = "healing" | "stable" | "deteriorating";
+
+export type WoundProgressionStyle =
+  | "JaggedLinear"
+  | "Exponential"
+  | "JaggedFlat"
+  | "NPTraditionalDisposable"
+  | "NPDisposable";
+
+export interface TrajectoryDistribution {
+  /** fraction 0–1: fast-healing (Exponential) */
+  healing: number;
+  /** fraction 0–1: chronic non-healing (JaggedFlat) */
+  stable: number;
+  /** fraction 0–1: slow healing (JaggedLinear) */
+  deteriorating: number;
+  /** fraction 0–1: NPTraditionalDisposable style */
+  treatmentChange: number;
+}
 
 export interface ProgressionProfile {
   trend: ProgressionTrend;

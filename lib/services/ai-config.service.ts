@@ -3,7 +3,7 @@ import { SUPPORTED_AI_MODELS } from "../config/ai-models";
 
 export interface AIConfiguration {
   id: number;
-  providerType: "anthropic" | "google" | "openwebui";
+  providerType: "anthropic" | "google" | "openwebui" | "lmstudio";
   providerName: string;
   isEnabled: boolean;
   isDefault: boolean;
@@ -511,6 +511,9 @@ export class AIConfigService {
         case "openwebui":
           isHealthy = await this.validateOpenWebUIConfig(config);
           break;
+        case "lmstudio":
+          isHealthy = await this.validateLMStudioConfig(config);
+          break;
         default:
           throw new Error(`Unknown provider type: ${providerType}`);
       }
@@ -581,6 +584,9 @@ export class AIConfigService {
           break;
         case "openwebui":
           isHealthy = await this.validateOpenWebUIConfig(config);
+          break;
+        case "lmstudio":
+          isHealthy = await this.validateLMStudioConfig(config);
           break;
         default:
           errorMessage = `Unknown provider type: ${providerType}`;
@@ -731,6 +737,8 @@ export class AIConfigService {
         return 20;
       case "openwebui":
         return 30;
+      case "lmstudio":
+        return 35;
       default:
         return 100;
     }
@@ -993,6 +1001,112 @@ export class AIConfigService {
       }
       throw new Error(
         `Open WebUI validation failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  }
+
+  private async validateLMStudioConfig(
+    config: AIConfiguration
+  ): Promise<boolean> {
+    const baseUrl = config.configData.baseUrl;
+    const simpleModelId = config.configData.simpleQueryModelId;
+    const complexModelId = config.configData.complexQueryModelId;
+
+    if (!baseUrl) {
+      throw new Error("LM Studio base URL not configured");
+    }
+
+    try {
+      new URL(baseUrl);
+    } catch {
+      throw new Error(`Invalid LM Studio base URL: ${baseUrl}`);
+    }
+
+    // Validate model IDs are configured
+    if (!simpleModelId) {
+      throw new Error("Simple query model ID not configured");
+    }
+    if (!complexModelId) {
+      throw new Error("Complex query model ID not configured");
+    }
+
+    try {
+      // First, check if we can connect to LM Studio
+      const modelsResponse = await fetch(`${baseUrl}/v1/models`, {
+        method: "GET",
+        signal: (AbortSignal as any).timeout?.(15000) || undefined, // 15 second timeout (LM Studio can be slow)
+      });
+
+      if (!modelsResponse.ok) {
+        throw new Error(`LM Studio connection failed: ${modelsResponse.status}`);
+      }
+
+      // Get list of available models
+      const modelsData = await modelsResponse.json();
+      const availableModels = modelsData.data?.map((m: any) => m.id) || [];
+
+      // Resolve legacy/display ids to LM Studio API ids (e.g. qwen3.5:9b -> qwen/qwen3.5-9b)
+      const resolveId = (id: string) =>
+        ({ "qwen3.5:9b": "qwen/qwen3.5-9b" } as Record<string, string>)[id] ?? id;
+      const resolvedSimpleId = resolveId(simpleModelId);
+      const resolvedComplexId = resolveId(complexModelId);
+
+      // Check if both model IDs are available
+      if (!availableModels.includes(resolvedSimpleId)) {
+        throw new Error(`Simple model (${simpleModelId}) not found in LM Studio. Available models: ${availableModels.join(", ")}`);
+      }
+      if (!availableModels.includes(resolvedComplexId)) {
+        throw new Error(`Complex model (${complexModelId}) not found in LM Studio. Available models: ${availableModels.join(", ")}`);
+      }
+
+      // Test simple query model with actual API call
+      const simpleResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: resolvedSimpleId,
+          messages: [{ role: "user", content: "test" }],
+          max_tokens: 10,
+        }),
+        signal: (AbortSignal as any).timeout?.(30000) || undefined, // 30 second timeout (local inference can be slow)
+      });
+
+      if (!simpleResponse.ok) {
+        const errorText = await simpleResponse.text();
+        throw new Error(`Simple model (${simpleModelId}) test failed: ${simpleResponse.status} ${errorText}`);
+      }
+
+      // Test complex query model with actual API call
+      const complexResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: resolvedComplexId,
+          messages: [{ role: "user", content: "test" }],
+          max_tokens: 10,
+        }),
+        signal: (AbortSignal as any).timeout?.(30000) || undefined, // 30 second timeout (local inference can be slow)
+      });
+
+      if (!complexResponse.ok) {
+        const errorText = await complexResponse.text();
+        throw new Error(`Complex model (${complexModelId}) test failed: ${complexResponse.status} ${errorText}`);
+      }
+
+      console.log(`✅ LM Studio validation successful: ${simpleModelId} (simple), ${complexModelId} (complex)`);
+      return true;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(
+        `LM Studio validation failed: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );

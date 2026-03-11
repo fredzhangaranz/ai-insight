@@ -49,7 +49,7 @@ export async function generateSubQuestions(
 
     // Load database schema context if not provided
     const schemaContext =
-      request.databaseSchemaContext || loadDatabaseSchemaContext();
+      request.databaseSchemaContext || (await loadDatabaseSchemaContext());
 
     // Construct the prompt with context
     const prompt = constructFunnelSubquestionsPrompt(

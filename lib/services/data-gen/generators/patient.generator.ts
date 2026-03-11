@@ -84,7 +84,14 @@ export async function generatePatients(
       const unit = units.find((u) => u.name === unitName);
       if (unit) unitWeights[unit.id] = weight;
     }
-    unitAssignments = distributeAcrossBuckets(spec.count, unitWeights);
+    if (Object.keys(unitWeights).length > 0) {
+      unitAssignments = distributeAcrossBuckets(spec.count, unitWeights);
+    } else {
+      const unitIds = units.map((u) => u.id);
+      for (let i = 0; i < spec.count; i++) {
+        unitAssignments.push(unitIds[i % unitIds.length]);
+      }
+    }
   } else {
     const unitIds = units.map((u) => u.id);
     for (let i = 0; i < spec.count; i++) {
@@ -351,7 +358,15 @@ export async function updatePatients(
       const u = unitList.find((x: { name: string }) => x.name === unitName);
       if (u) unitWeights[(u as { id: string }).id] = weight;
     }
-    unitAssignments = distributeAcrossBuckets(patientIds.length, unitWeights);
+    if (Object.keys(unitWeights).length > 0) {
+      unitAssignments = distributeAcrossBuckets(patientIds.length, unitWeights);
+    } else {
+      const unitIds = unitList.map((u: { id: string }) => u.id);
+      const defaultUnit = unitIds[0];
+      for (let i = 0; i < patientIds.length; i++) {
+        unitAssignments.push(unitIds[i % unitIds.length] ?? defaultUnit ?? "");
+      }
+    }
   } else {
     const unitIds = unitList.map((u: { id: string }) => u.id);
     const defaultUnit = unitIds[0];
@@ -546,7 +561,15 @@ export async function buildUpdatePatientSqlStatements(
       const u = unitList.find((x: { name: string }) => x.name === unitName);
       if (u) unitWeights[(u as { id: string }).id] = weight;
     }
-    unitAssignments = distributeAcrossBuckets(patientIds.length, unitWeights);
+    if (Object.keys(unitWeights).length > 0) {
+      unitAssignments = distributeAcrossBuckets(patientIds.length, unitWeights);
+    } else {
+      const unitIds = unitList.map((u: { id: string }) => u.id);
+      const defaultUnit = unitIds[0];
+      for (let i = 0; i < patientIds.length; i++) {
+        unitAssignments.push(unitIds[i % unitIds.length] ?? defaultUnit ?? "");
+      }
+    }
   } else {
     const unitIds = unitList.map((u: { id: string }) => u.id);
     const defaultUnit = unitIds[0];

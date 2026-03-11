@@ -47,6 +47,24 @@ export function classifyPhysicalColumn(
   return "pure-data";
 }
 
+const WOUND_MEASUREMENT_VARIABLES = new Set([
+  "area",
+  "perimeter",
+  "depth",
+  "volume",
+  "wound_area",
+  "wound_perimeter",
+  "wound_depth",
+  "wound_volume",
+  "woundstate",
+  "wound_state",
+  "ishealed",
+  "isamputated",
+  "dayssincebaseline",
+  "days_since_baseline",
+  "isbaseline",
+]);
+
 /**
  * Classify a form field (AttributeType) based on calculatedValueExpression
  */
@@ -56,6 +74,10 @@ export function classifyFormField(
 ): FieldClass {
   if (columnName.endsWith("Fk") || columnName.endsWith("_fk")) {
     return "source-of-truth";
+  }
+
+  if (WOUND_MEASUREMENT_VARIABLES.has(columnName.toLowerCase())) {
+    return "algorithm-output";
   }
 
   if (

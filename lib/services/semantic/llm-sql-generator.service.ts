@@ -19,16 +19,12 @@ import type {
 } from "../context-discovery/types";
 import type { MergedFilterState } from "./filter-state-merger.service";
 import type { QueryTemplate } from "../query-template.service";
-import { executeCustomerQuery } from "./customer-query.service";
 import {
   getFilterValidatorService,
   buildFilterMetricsSummary,
   type ValidationResult,
 } from "./filter-validator.service";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
-
-const schemaCache = new Map<string, { schema: string; timestamp: number }>();
-const SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Generate SQL using an LLM with full schema context.
@@ -200,7 +196,7 @@ export async function generateSQLWithLLM(
     latestValidation
   );
 
-  const schemaDocumentation = safeLoadSchemaDocumentation();
+  const schemaDocumentation = await safeLoadSchemaDocumentation(customerId);
 
   // DEBUG: Log filters before building prompt
   console.log(
@@ -276,9 +272,9 @@ export async function generateSQLWithLLM(
   return llmResponse;
 }
 
-function safeLoadSchemaDocumentation(): string {
+async function safeLoadSchemaDocumentation(customerId: string): Promise<string> {
   try {
-    const schemaContext = loadDatabaseSchemaContext();
+    const schemaContext = await loadDatabaseSchemaContext(customerId);
     console.log(
       `[LLM-SQL-Generator] 📋 Loaded schema documentation (${schemaContext.length} chars)`
     );
@@ -331,21 +327,8 @@ async function buildUserPrompt(
 
   prompt += formatJoinPathsSection(context.joinPaths || []);
 
-  prompt += `# Database Schema Context (Documentation)\n\n`;
+  prompt += `# Database Schema\n\n`;
   prompt += `${schemaDocumentation}\n\n`;
-
-  try {
-    const customerSchema = await getCustomerSchema(customerId);
-    prompt += `# Actual Customer Schema (Current)\n\n`;
-    prompt += `${customerSchema}\n\n`;
-  } catch (error) {
-    console.warn(
-      "[LLM-SQL-Generator] ⚠️ Could not load actual customer schema:",
-      error
-    );
-    prompt += `# Actual Customer Schema\n\n`;
-    prompt += `(Schema introspection not available; relying on documentation only)\n\n`;
-  }
 
   // NEW: Add clarifications if provided
   if (clarifications && Object.keys(clarifications).length > 0) {
@@ -586,98 +569,6 @@ function formatJoinPathsSection(joinPaths: JoinPath[]): string {
   return `${lines.join("\n")}\n`;
 }
 
-async function getCustomerSchema(customerId: string): Promise<string> {
-  const cached = schemaCache.get(customerId);
-  if (cached && Date.now() - cached.timestamp < SCHEMA_CACHE_TTL_MS) {
-    return cached.schema;
-  }
-
-  console.log(
-    `[LLM-SQL-Generator] 🔍 Fetching schema metadata for ${customerId}`
-  );
-
-  const schemaQuery = `
-    SELECT
-      TABLE_SCHEMA,
-      TABLE_NAME,
-      COLUMN_NAME,
-      DATA_TYPE,
-      IS_NULLABLE,
-      CHARACTER_MAXIMUM_LENGTH
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = 'rpt'
-    ORDER BY TABLE_NAME, ORDINAL_POSITION
-  `;
-
-  const result = await executeCustomerQuery(customerId, schemaQuery);
-
-  const lines: string[] = ["## Actual Customer Schema", ""];
-  let currentTable: string | null = null;
-
-  for (const row of result.rows) {
-    const tableSchema =
-      row.TABLE_SCHEMA ??
-      row.table_schema ??
-      row.TableSchema ??
-      row.tableSchema ??
-      "rpt";
-    const tableName =
-      row.TABLE_NAME ??
-      row.table_name ??
-      row.TableName ??
-      row.tableName ??
-      "Unknown";
-    const columnName =
-      row.COLUMN_NAME ??
-      row.column_name ??
-      row.ColumnName ??
-      row.columnName ??
-      "Unknown";
-    const dataType =
-      row.DATA_TYPE ??
-      row.data_type ??
-      row.DataType ??
-      row.dataType ??
-      "unknown";
-    const isNullable =
-      row.IS_NULLABLE ??
-      row.is_nullable ??
-      row.IsNullable ??
-      row.isNullable ??
-      "UNKNOWN";
-    const charLen =
-      row.CHARACTER_MAXIMUM_LENGTH ??
-      row.character_maximum_length ??
-      row.CharacterMaximumLength ??
-      row.characterMaximumLength;
-
-    const tableKey = `${tableSchema}.${tableName}`;
-    if (tableKey !== currentTable) {
-      if (currentTable !== null) {
-        lines.push("");
-      }
-      lines.push(`### Table: ${tableKey}`, "");
-      lines.push(`| Column | Type | Nullable |`);
-      lines.push(`|--------|------|----------|`);
-      currentTable = tableKey;
-    }
-
-    const typeText =
-      typeof charLen === "number" && Number.isFinite(charLen) && charLen > 0
-        ? `${dataType}(${charLen})`
-        : dataType;
-    lines.push(`| ${columnName} | ${typeText} | ${isNullable} |`);
-  }
-
-  if (lines.length <= 2) {
-    lines.push("(No schema columns were returned)");
-  }
-
-  const schemaText = lines.join("\n");
-  schemaCache.set(customerId, { schema: schemaText, timestamp: Date.now() });
-  return schemaText;
-}
-
 function parseAndValidateLLMResponse(response: unknown): LLMResponse {
   if (typeof response !== "string") {
     throw new Error("[LLM-SQL-Generator] LLM response was not a string");
@@ -731,6 +622,4 @@ function parseAndValidateLLMResponse(response: unknown): LLMResponse {
   return parsed as LLMResponse;
 }
 
-export function clearSchemaCache(): void {
-  schemaCache.clear();
-}
+export { clearSchemaCache } from "@/lib/ai/schema-context";

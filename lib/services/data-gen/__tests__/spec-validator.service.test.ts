@@ -266,5 +266,47 @@ describe("Spec Validator Service", () => {
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
+
+    it("should fail when trajectoryDistribution does not sum to 1.0", async () => {
+      mockRequest.query
+        .mockResolvedValueOnce({ recordset: [{ count: 1 }] })
+        .mockResolvedValueOnce({ recordset: [{ count: 10 }] });
+
+      const spec: GenerationSpec = {
+        ...baseAssessmentSpec,
+        trajectoryDistribution: {
+          healing: 0.2,
+          stable: 0.3,
+          deteriorating: 0.2,
+          treatmentChange: 0.1,
+        },
+      };
+
+      const result = await validateGenerationSpec(spec, mockDb);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes("trajectoryDistribution"))).toBe(true);
+    });
+
+    it("should pass when trajectoryDistribution sums to 1.0", async () => {
+      mockRequest.query
+        .mockResolvedValueOnce({ recordset: [{ count: 1 }] })
+        .mockResolvedValueOnce({ recordset: [{ count: 10 }] });
+
+      const spec: GenerationSpec = {
+        ...baseAssessmentSpec,
+        trajectoryDistribution: {
+          healing: 0.25,
+          stable: 0.35,
+          deteriorating: 0.3,
+          treatmentChange: 0.1,
+        },
+      };
+
+      const result = await validateGenerationSpec(spec, mockDb);
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
   });
 });

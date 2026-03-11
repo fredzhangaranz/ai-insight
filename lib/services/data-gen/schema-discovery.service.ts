@@ -168,6 +168,7 @@ export async function getPublishedForms(
     INNER JOIN dbo.AttributeType att ON ats.id = att.attributeSetFk
     WHERE atv.isDeleted = 0 
       AND atv.versionType = 2
+      AND at.type = 2
       AND asatv.isDeleted = 0
       AND ats.isDeleted = 0
       AND att.isDeleted = 0

@@ -44,7 +44,7 @@ import {
   StarIcon,
 } from "@heroicons/react/24/outline";
 
-type ProviderType = "anthropic" | "google" | "openwebui";
+type ProviderType = "anthropic" | "google" | "openwebui" | "lmstudio";
 
 interface ProviderTemplate {
   name: string;
@@ -137,6 +137,28 @@ const PROVIDER_TEMPLATES: Record<ProviderType, ProviderTemplate> = {
       },
     ],
   },
+  lmstudio: {
+    name: "LM Studio (Local)",
+    description: "Configure high-performance local LLM inference via LM Studio",
+    fields: [
+      {
+        key: "baseUrl",
+        label: "Base URL",
+        type: "url",
+        placeholder: "http://localhost:1234",
+        required: true,
+        defaultValue: "http://localhost:1234",
+      },
+      {
+        key: "timeout",
+        label: "Timeout (ms)",
+        type: "number",
+        placeholder: "60000",
+        required: false,
+        defaultValue: "60000",
+      },
+    ],
+  },
 };
 
 export default function AIConfigPage() {
@@ -158,12 +180,17 @@ export default function AIConfigPage() {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lmstudioModelIds, setLmstudioModelIds] = useState<string[] | null>(null);
+  const [lmstudioModelsLoading, setLmstudioModelsLoading] = useState(false);
+  const [lmstudioModelsError, setLmstudioModelsError] = useState<string | null>(null);
 
   const resetForm = () => {
     setFormData({});
     setFormErrors({});
     setSelectedProviderType(null);
     setEditingConfig(null);
+    setLmstudioModelIds(null);
+    setLmstudioModelsError(null);
   };
 
   const handleProviderTypeSelect = (providerType: ProviderType) => {
@@ -195,6 +222,31 @@ export default function AIConfigPage() {
         delete newErrors[field];
         return newErrors;
       });
+    }
+  };
+
+  const fetchLmstudioModels = async () => {
+    const baseUrl = formData.baseUrl?.trim();
+    if (!baseUrl) {
+      setLmstudioModelsError("Enter Base URL first");
+      return;
+    }
+    setLmstudioModelsLoading(true);
+    setLmstudioModelsError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/ai-config/lmstudio-models?baseUrl=${encodeURIComponent(baseUrl)}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch models");
+      }
+      setLmstudioModelIds(data.modelIds || []);
+    } catch (e) {
+      setLmstudioModelIds(null);
+      setLmstudioModelsError(e instanceof Error ? e.message : "Failed to fetch models");
+    } finally {
+      setLmstudioModelsLoading(false);
     }
   };
 
@@ -340,12 +392,54 @@ export default function AIConfigPage() {
       case "anthropic":
         return "🤖";
       case "google":
-        return "🌐";
+        return "✨";
       case "openwebui":
         return "🏠";
+      case "lmstudio":
+        return "⚡";
       default:
         return "⚙️";
     }
+  };
+
+  const getModelOptionsForProvider = (
+    kind: "simple" | "complex"
+  ): { id: string; name: string }[] => {
+    if (selectedProviderType !== "lmstudio") {
+      const family = getProviderFamily(selectedProviderType!);
+      const list =
+        kind === "simple"
+          ? family.simpleQueryModels
+          : family.complexQueryModels;
+      return list.map((m) => ({ id: m.id, name: m.name }));
+    }
+    const family = getProviderFamily("lmstudio");
+    const staticList =
+      kind === "simple"
+        ? family.simpleQueryModels
+        : family.complexQueryModels;
+    const currentId =
+      kind === "simple"
+        ? formData.simpleQueryModelId
+        : formData.complexQueryModelId;
+    if (lmstudioModelIds && lmstudioModelIds.length > 0) {
+      const options = lmstudioModelIds.map((id) => ({ id, name: id }));
+      if (
+        currentId &&
+        !options.some((o) => o.id === currentId)
+      ) {
+        options.unshift({ id: currentId, name: currentId });
+      }
+      return options;
+    }
+    const options = staticList.map((m) => ({ id: m.id, name: m.name }));
+    if (
+      currentId &&
+      !options.some((o) => o.id === currentId)
+    ) {
+      options.unshift({ id: currentId, name: currentId });
+    }
+    return options;
   };
 
   if (isLoading) {
@@ -514,16 +608,13 @@ export default function AIConfigPage() {
                           </SelectTrigger>
                           <SelectContent>
                             {selectedProviderType &&
-                              getProviderFamily(
-                                selectedProviderType
-                              ).simpleQueryModels.map((model) => (
-                                <SelectItem key={model.id} value={model.id}>
-                                  {model.name} {model.recommended && "⭐"}
-                                  <span className="text-xs text-slate-500 ml-2">
-                                    {model.description}
-                                  </span>
-                                </SelectItem>
-                              ))}
+                              getModelOptionsForProvider("simple").map(
+                                (model) => (
+                                  <SelectItem key={model.id} value={model.id}>
+                                    {model.name}
+                                  </SelectItem>
+                                )
+                              )}
                           </SelectContent>
                         </Select>
                         {formErrors.simpleQueryModelId && (
@@ -558,16 +649,13 @@ export default function AIConfigPage() {
                           </SelectTrigger>
                           <SelectContent>
                             {selectedProviderType &&
-                              getProviderFamily(
-                                selectedProviderType
-                              ).complexQueryModels.map((model) => (
-                                <SelectItem key={model.id} value={model.id}>
-                                  {model.name} {model.recommended && "⭐"}
-                                  <span className="text-xs text-slate-500 ml-2">
-                                    {model.description}
-                                  </span>
-                                </SelectItem>
-                              ))}
+                              getModelOptionsForProvider("complex").map(
+                                (model) => (
+                                  <SelectItem key={model.id} value={model.id}>
+                                    {model.name}
+                                  </SelectItem>
+                                )
+                              )}
                           </SelectContent>
                         </Select>
                         {formErrors.complexQueryModelId && (
@@ -605,6 +693,38 @@ export default function AIConfigPage() {
                             )}
                           </div>
                         )
+                      )}
+
+                      {/* LM Studio: fetch models from server (after Base URL) */}
+                      {selectedProviderType === "lmstudio" && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={fetchLmstudioModels}
+                            disabled={
+                              lmstudioModelsLoading || !formData.baseUrl?.trim()
+                            }
+                          >
+                            {lmstudioModelsLoading
+                              ? "Loading..."
+                              : "Refresh models from LM Studio"}
+                          </Button>
+                          {lmstudioModelsError && (
+                            <span className="text-sm text-red-600">
+                              {lmstudioModelsError}
+                            </span>
+                          )}
+                          {lmstudioModelIds &&
+                            lmstudioModelIds.length > 0 && (
+                              <span className="text-sm text-slate-600">
+                                {lmstudioModelIds.length} model
+                                {lmstudioModelIds.length !== 1 ? "s" : ""}{" "}
+                                loaded
+                              </span>
+                            )}
+                        </div>
                       )}
                     </div>
                   )}

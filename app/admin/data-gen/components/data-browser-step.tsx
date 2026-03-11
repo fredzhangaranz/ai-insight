@@ -20,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MagnifyingGlassIcon, ArrowPathIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import {
@@ -39,6 +38,8 @@ export interface BrowseSelection {
   mode: "insert" | "update" | "assessment";
   selectedIds: string[];
   count?: number;
+  /** When mode=assessment: selected form for generation (set by FormSelectorStep) */
+  selectedForm?: { assessmentFormId: string; assessmentFormName: string };
 }
 
 interface DataBrowserStepProps {
@@ -52,13 +53,15 @@ const ENTITY_LABELS: Record<BrowseEntity, string> = {
   assessment: "Assessments",
 };
 
+const PATIENT_DISPLAY_COLUMNS = [
+  { key: "name", label: "Name" },
+  { key: "gender", label: "Gender" },
+  { key: "dateOfBirth", label: "DOB" },
+  { key: "accessCode", label: "accessCode" },
+];
+
 const DISPLAY_COLUMNS: Record<BrowseEntity, { key: string; label: string }[]> = {
-  patient: [
-    { key: "name", label: "Name" },
-    { key: "gender", label: "Gender" },
-    { key: "dateOfBirth", label: "DOB" },
-    { key: "accessCode", label: "accessCode" },
-  ],
+  patient: PATIENT_DISPLAY_COLUMNS,
   wound: [
     { key: "location", label: "Location" },
     { key: "baselineDate", label: "Baseline" },
@@ -72,7 +75,7 @@ const DISPLAY_COLUMNS: Record<BrowseEntity, { key: string; label: string }[]> = 
 };
 
 export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps) {
-  const [entity, setEntity] = useState<BrowseEntity>("patient");
+  const [entity] = useState<BrowseEntity>("patient");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<BrowseFilter>("all");
   const [page, setPage] = useState(1);
@@ -132,12 +135,6 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
     }
   }, [columnKeys]);
 
-  const handleEntityChange = (e: BrowseEntity) => {
-    setEntity(e);
-    setPage(1);
-    setSelectedIds(new Set());
-  };
-
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -174,7 +171,6 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
   };
 
   const handleGenerateAssessments = () => {
-    if (entity === "assessment") return;
     onProceed({
       entity,
       mode: "assessment",
@@ -183,9 +179,8 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
   };
 
   const totalPages = Math.ceil(total / pageSize) || 1;
-  const canUpdatePatients = entity === "patient" && selectedIds.size > 0;
-  const canGenerateAssessments =
-    (entity === "patient" || entity === "wound") && selectedIds.size > 0;
+  const canUpdatePatients = selectedIds.size > 0;
+  const canGenerateWoundsAndAssessments = selectedIds.size > 0;
 
   const allDisplayCols =
     entity === "patient" && columns && columns.length > 0
@@ -223,14 +218,8 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
             <AlertDescription>Select a customer above to browse and generate data.</AlertDescription>
           </Alert>
         )}
-        <Tabs value={entity} onValueChange={(v) => handleEntityChange(v as BrowseEntity)}>
-          <TabsList>
-            <TabsTrigger value="patient">Patients</TabsTrigger>
-            <TabsTrigger value="wound">Wounds</TabsTrigger>
-            <TabsTrigger value="assessment">Assessments</TabsTrigger>
-          </TabsList>
-
-          <div className="flex flex-wrap items-center gap-4 mt-4">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="relative flex-1 min-w-[200px]">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -305,7 +294,7 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
             </Button>
           </div>
 
-          {stats && entity === "patient" && (
+          {stats && (
             <div className="text-sm text-muted-foreground">
               Total: {stats.total} • Generated (IG): {stats.generated}
               {stats.missingGender != null && stats.missingGender > 0 && (
@@ -314,7 +303,14 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
             </div>
           )}
 
-          <TabsContent value={entity} className="mt-4">
+          {selectedIds.size > 0 && (
+            <div className="text-sm text-muted-foreground">
+              Selected {selectedIds.size} patient{selectedIds.size !== 1 ? "s" : ""}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4">
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -413,19 +409,16 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
                     Update Patients
                   </Button>
                 )}
-                {entity !== "assessment" && (
-                  <Button
-                    variant="secondary"
-                    onClick={handleGenerateAssessments}
-                    disabled={!canGenerateAssessments}
-                  >
-                    Generate Assessments for Selected
-                  </Button>
-                )}
+                <Button
+                  variant="secondary"
+                  onClick={handleGenerateAssessments}
+                  disabled={!canGenerateWoundsAndAssessments}
+                >
+                  Generate Wounds & Assessments
+                </Button>
               </div>
             </div>
-          </TabsContent>
-        </Tabs>
+        </div>
       </CardContent>
     </Card>
   );

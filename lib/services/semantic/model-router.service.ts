@@ -61,6 +61,48 @@ export interface ModelSelection {
  */
 export class ModelRouterService {
   /**
+   * Get the model to use for data generation.
+   * Data generation (spec interpretation, field resolution, profile generation) uses the
+   * provider's simple/fast model by default for speed and cost; the UI still shows the
+   * provider family (complex model id). Call this with the user's dropdown selection to
+   * resolve to the simple model id.
+   *
+   * @param userSelectedModelId - The model id from the UI (typically complex model id per provider)
+   * @returns The model id to use for data generation (simple model for that provider)
+   */
+  async getModelForDataGeneration(userSelectedModelId: string): Promise<ModelSelection> {
+    const providerType = getProviderTypeFromModelId(userSelectedModelId);
+
+    if (!providerType) {
+      return {
+        modelId: userSelectedModelId,
+        provider: "Unknown",
+        rationale: "Using user-selected model (provider type unknown)",
+      };
+    }
+
+    const config = await aiConfigService.getConfigurationByType(providerType);
+
+    if (
+      !config ||
+      !config.configData.simpleQueryModelId ||
+      !config.configData.complexQueryModelId
+    ) {
+      return {
+        modelId: userSelectedModelId,
+        provider: providerType,
+        rationale: "Using user-selected model (provider configuration incomplete)",
+      };
+    }
+
+    return {
+      modelId: config.configData.simpleQueryModelId,
+      provider: providerType,
+      rationale: "Data generation uses fast model for speed and cost",
+    };
+  }
+
+  /**
    * Select the best model for a given input
    *
    * Algorithm:

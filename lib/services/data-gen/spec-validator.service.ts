@@ -132,6 +132,18 @@ async function validateAssessmentSpec(
   db: ConnectionPool,
   errors: string[]
 ): Promise<void> {
+  if (spec.trajectoryDistribution) {
+    const sum = Object.values(spec.trajectoryDistribution).reduce(
+      (a, b) => a + b,
+      0
+    );
+    if (Math.abs(sum - 1.0) > 0.01) {
+      errors.push(
+        "trajectoryDistribution values must sum to 1.0 (healing + stable + deteriorating + treatmentChange)"
+      );
+    }
+  }
+
   // Check that form exists
   if (!spec.form?.assessmentTypeVersionId) {
     errors.push("Assessment form ID is required for assessment generation");

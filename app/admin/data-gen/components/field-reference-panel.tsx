@@ -11,6 +11,8 @@ interface FieldReferencePanelProps {
   patientFields: FieldSchema[];
   formFields?: FieldSchema[];
   formName?: string;
+  /** When "form", show form fields first and expanded; patient second and collapsed. Default "patient". */
+  primarySchema?: "patient" | "form";
   className?: string;
 }
 
@@ -24,10 +26,13 @@ export function FieldReferencePanel({
   patientFields,
   formFields = [],
   formName,
+  primarySchema = "patient",
   className,
 }: FieldReferencePanelProps) {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [patientSectionOpen, setPatientSectionOpen] = useState(() => primarySchema !== "form");
+  const [formSectionOpen, setFormSectionOpen] = useState(true);
 
   const patientDisplayLabels = useMemo(() => {
     const counts = new Map<string, number>();
@@ -157,31 +162,104 @@ export function FieldReferencePanel({
         />
       </div>
       <div className="space-y-4 max-h-[400px] overflow-y-auto">
-        <div>
-          <h4 className="font-medium text-sm mb-2">Patient Fields</h4>
-          <div className="space-y-0">
-            {filteredPatient.map((f) =>
-              renderField(f, "patient", {
-                displayLabel: patientDisplayLabels.get(f.columnName) ?? f.fieldName,
-                storageBadge:
-                  f.storageType === "direct_patient"
-                    ? "Patient"
-                    : f.storageType === "patient_attribute"
-                      ? "Note"
-                      : undefined,
-              })
+        {primarySchema === "form" ? (
+          <>
+            {formFields.length > 0 && (
+              <Collapsible open={formSectionOpen} onOpenChange={setFormSectionOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1 w-full text-left font-medium text-sm mb-2 hover:bg-muted rounded px-1 -ml-1">
+                    {formSectionOpen ? (
+                      <ChevronDownIcon className="h-3 w-3" />
+                    ) : (
+                      <ChevronRightIcon className="h-3 w-3" />
+                    )}
+                    Form: {formName ?? "Assessment"}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-0">
+                    {filteredForm.map((f) => renderField(f, "form"))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
-          </div>
-        </div>
-        {formFields.length > 0 && (
-          <div>
-            <h4 className="font-medium text-sm mb-2">
-              Form: {formName ?? "Assessment"}
-            </h4>
-            <div className="space-y-0">
-              {filteredForm.map((f) => renderField(f, "form"))}
-            </div>
-          </div>
+            <Collapsible open={patientSectionOpen} onOpenChange={setPatientSectionOpen}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1 w-full text-left font-medium text-sm mb-2 hover:bg-muted rounded px-1 -ml-1">
+                  {patientSectionOpen ? (
+                    <ChevronDownIcon className="h-3 w-3" />
+                  ) : (
+                    <ChevronRightIcon className="h-3 w-3" />
+                  )}
+                  Patient Fields
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-0">
+                  {filteredPatient.map((f) =>
+                    renderField(f, "patient", {
+                      displayLabel: patientDisplayLabels.get(f.columnName) ?? f.fieldName,
+                      storageBadge:
+                        f.storageType === "direct_patient"
+                          ? "Patient"
+                          : f.storageType === "patient_attribute"
+                            ? "Note"
+                            : undefined,
+                    })
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </>
+        ) : (
+          <>
+            <Collapsible open={patientSectionOpen} onOpenChange={setPatientSectionOpen}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1 w-full text-left font-medium text-sm mb-2 hover:bg-muted rounded px-1 -ml-1">
+                  {patientSectionOpen ? (
+                    <ChevronDownIcon className="h-3 w-3" />
+                  ) : (
+                    <ChevronRightIcon className="h-3 w-3" />
+                  )}
+                  Patient Fields
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-0">
+                  {filteredPatient.map((f) =>
+                    renderField(f, "patient", {
+                      displayLabel: patientDisplayLabels.get(f.columnName) ?? f.fieldName,
+                      storageBadge:
+                        f.storageType === "direct_patient"
+                          ? "Patient"
+                          : f.storageType === "patient_attribute"
+                            ? "Note"
+                            : undefined,
+                    })
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            {formFields.length > 0 && (
+              <Collapsible open={formSectionOpen} onOpenChange={setFormSectionOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1 w-full text-left font-medium text-sm mb-2 hover:bg-muted rounded px-1 -ml-1">
+                    {formSectionOpen ? (
+                      <ChevronDownIcon className="h-3 w-3" />
+                    ) : (
+                      <ChevronRightIcon className="h-3 w-3" />
+                    )}
+                    Form: {formName ?? "Assessment"}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-0">
+                    {filteredForm.map((f) => renderField(f, "form"))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </>
         )}
       </div>
       <div className="mt-4 pt-4 border-t text-xs text-muted-foreground">
