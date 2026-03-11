@@ -23,6 +23,8 @@ import { generateWoundsAndAssessments } from "@/lib/services/data-gen/generators
 import {
   validateInsertedData,
   clonePatientDataToRpt,
+  syncChangeTrackingVersion,
+  updateLastExportedVersion,
 } from "@/lib/services/data-gen/execution-helpers";
 import type {
   GenerationSpec,
@@ -156,7 +158,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 4: Clone to rpt schema (always)
+    // Step 4: Sync change tracking version
+    // Before cloning, update the change tracking bookmark to the current version
+    // This ensures sp_clonePatients detects all recent patient, wound, and assessment changes
+    addStep(
+      "sync_tracking_version",
+      "in_progress",
+      "Synchronizing change tracking version..."
+    );
+    let currentVersion: number;
+    try {
+      const versionSync = await syncChangeTrackingVersion(pool);
+      currentVersion = versionSync.currentVersion;
+      addStep(
+        "sync_tracking_version",
+        "complete",
+        `Change tracking version synced (previous: ${versionSync.previousVersion}, current: ${versionSync.currentVersion})`
+      );
+    } catch (versionError) {
+      throw new Error(
+        `Failed to sync change tracking: ${versionError instanceof Error ? versionError.message : String(versionError)}`
+      );
+    }
+
+    // Step 5: Clone to rpt schema (always)
     // Data generation only writes to dbo; run the stored procedure to copy into the reporting schema.
     addStep(
       "clone_to_rpt",
@@ -170,6 +195,17 @@ export async function POST(request: NextRequest) {
         "complete",
         "Data cloned to rpt schema for reporting"
       );
+
+      // After successful clone, update the last exported version marker
+      try {
+        await updateLastExportedVersion(pool, currentVersion);
+      } catch (updateError) {
+        // Non-fatal warning; clone succeeded but version marker not updated
+        console.warn(
+          "Warning: Clone succeeded but failed to update version marker:",
+          updateError
+        );
+      }
     } catch (cloneError) {
       // Clone failure is non-fatal; log and continue
       addStep(

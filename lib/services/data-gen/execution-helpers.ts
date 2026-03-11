@@ -100,13 +100,14 @@ export async function validateInsertedData(
 
     const { wounds, assessments } = countResult.recordset[0];
 
+    const warnings: string[] = [];
+    if (wounds === 0) warnings.push("No wounds inserted");
+    if (assessments === 0) warnings.push("No assessments inserted");
+
     return {
       isValid: true,
       rowsInserted: wounds + assessments,
-      warnings:
-        wounds === 0 || assessments === 0
-          ? ["No wounds inserted" || "No assessments inserted"]
-          : undefined,
+      warnings: warnings.length > 0 ? warnings : undefined,
     };
   } catch (error) {
     return {
@@ -117,11 +118,82 @@ export async function validateInsertedData(
 }
 
 /**
+ * Update change tracking version to current before cloning.
+ * SQL Server's Change Tracking feature uses version numbers to track changes.
+ * This must be called BEFORE clonePatientDataToRpt to ensure all recent changes are detected.
+ */
+export async function syncChangeTrackingVersion(
+  db: ConnectionPool
+): Promise<{ previousVersion: number; currentVersion: number }> {
+  try {
+    // Get current change tracking version from SQL Server
+    const versionResult = await db.request().query(`
+      SELECT CHANGE_TRACKING_CURRENT_VERSION() AS currentVersion
+    `);
+
+    const currentVersion = versionResult.recordset[0]?.currentVersion;
+    if (currentVersion === undefined) {
+      throw new Error("Failed to retrieve CHANGE_TRACKING_CURRENT_VERSION");
+    }
+
+    // Get the last exported version from tracking table
+    // Table has lastExportedVersion, currentExportVersion (no id column)
+    const trackingResult = await db.request().query(`
+      SELECT TOP 1 lastExportedVersion, currentExportVersion
+      FROM ChangeTrackingVersion
+    `);
+
+    const previousVersion =
+      trackingResult.recordset[0]?.currentExportVersion ?? 0;
+
+    // Update the currentExportVersion to the actual current version
+    // This tells sp_clonePatients to sync all changes up to this version
+    // Single-row table: update without WHERE
+    await db.request().input("currentVersion", currentVersion).query(`
+      UPDATE ChangeTrackingVersion
+      SET currentExportVersion = @currentVersion
+    `);
+
+    return {
+      previousVersion,
+      currentVersion,
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to sync change tracking version: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Update last exported version after successful clone.
+ * This marks the version as "processed" so future clones start from this point.
+ */
+export async function updateLastExportedVersion(
+  db: ConnectionPool,
+  version: number
+): Promise<void> {
+  try {
+    await db.request().input("version", version).query(`
+      UPDATE ChangeTrackingVersion
+      SET lastExportedVersion = @version
+    `);
+  } catch (error) {
+    throw new Error(
+      `Failed to update last exported version: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
  * Clone patients to reporting schema
  * Mirrors dbo.Patient, dbo.Wound, dbo.Series data to rpt schema
  *
  * sp_clonePatients signature varies by DB: some expect 3 params, others none.
  * We try with params first; if "too many arguments", retry without.
+ *
+ * NOTE: Call syncChangeTrackingVersion() BEFORE this function to ensure
+ * the stored procedure detects all recent changes.
  */
 export async function clonePatientDataToRpt(
   db: ConnectionPool

@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FieldReferencePanel } from "./field-reference-panel";
@@ -23,6 +25,14 @@ interface DescribeStepProps {
   onBack: () => void;
 }
 
+const MIN_PATIENT_COUNT = 1;
+const MAX_PATIENT_COUNT = 100;
+const DEFAULT_PATIENT_COUNT = 20;
+
+function clampCount(n: number): number {
+  return Math.min(MAX_PATIENT_COUNT, Math.max(MIN_PATIENT_COUNT, n));
+}
+
 export function DescribeStep({ customerId, modelId, selection, selectedForm, onInterpreted, onBack }: DescribeStepProps) {
   const [description, setDescription] = useState("");
   const [patientSchema, setPatientSchema] = useState<FieldSchema[]>([]);
@@ -31,6 +41,21 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<FieldResolution | null>(null);
+  const isInsertPatient = selection.entity === "patient" && selection.mode === "insert";
+  const [insertCountRaw, setInsertCountRaw] = useState(() =>
+    String(selection.count ?? DEFAULT_PATIENT_COUNT)
+  );
+  const insertCount = (() => {
+    const n = parseInt(insertCountRaw, 10);
+    if (Number.isNaN(n)) return DEFAULT_PATIENT_COUNT;
+    return clampCount(n);
+  })();
+  const insertCountInvalid =
+    isInsertPatient &&
+    (insertCountRaw === "" ||
+      Number.isNaN(parseInt(insertCountRaw, 10)) ||
+      parseInt(insertCountRaw, 10) < MIN_PATIENT_COUNT ||
+      parseInt(insertCountRaw, 10) > MAX_PATIENT_COUNT);
 
   useEffect(() => {
     if (!customerId) return;
@@ -69,9 +94,10 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
     load();
   }, [customerId, selectedForm?.assessmentFormId, selectedForm?.assessmentFormName]);
 
+  const effectiveCount = isInsertPatient ? insertCount : (selection.count ?? DEFAULT_PATIENT_COUNT);
   const contextText =
     selection.mode === "insert"
-      ? `Creating ${selection.count ?? 20} new ${selection.entity === "patient" ? "Patients" : "Assessments"}`
+      ? `Creating ${effectiveCount} new ${selection.entity === "patient" ? "Patients" : "Assessments"}`
       : selection.mode === "update" && selection.selectedIds.length
       ? `Updating ${selection.selectedIds.length} selected Patient(s) — describe which fields to change`
       : selection.mode === "assessment" && selection.selectedIds.length
@@ -114,7 +140,7 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
           entity,
           mode: selection.mode,
           selectedIds: selection.selectedIds.length ? selection.selectedIds : undefined,
-          count: selection.count ?? 20,
+          count: effectiveCount,
           formId,
           formName: formNameVal,
           customerId,
@@ -142,6 +168,10 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
       setError("Describe what you want to change — e.g. set gender to 50/50, fill missing date of birth.");
       return;
     }
+    if (isInsertPatient && insertCountInvalid) {
+      setError(`Number of patients must be between ${MIN_PATIENT_COUNT} and ${MAX_PATIENT_COUNT}.`);
+      return;
+    }
 
     if (
       entity === "patient" &&
@@ -150,7 +180,7 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
     ) {
       const spec = buildDefaultPatientSpec(
         patientSchema,
-        selection.count ?? 20,
+        effectiveCount,
         "insert"
       );
       onInterpreted(spec, []);
@@ -224,6 +254,28 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
           </Alert>
         )}
 
+        {isInsertPatient && (
+          <div className="mb-4 space-y-2">
+            <Label htmlFor="patient-count">Number of patients</Label>
+            <Input
+              id="patient-count"
+              type="text"
+              inputMode="numeric"
+              min={MIN_PATIENT_COUNT}
+              max={MAX_PATIENT_COUNT}
+              value={insertCountRaw}
+              onChange={(e) => setInsertCountRaw(e.target.value.replace(/\D/g, "").slice(0, 3))}
+              className="w-24"
+              aria-invalid={insertCountInvalid}
+            />
+            {insertCountInvalid && (
+              <p className="text-sm text-destructive">
+                Enter a number between {MIN_PATIENT_COUNT} and {MAX_PATIENT_COUNT}.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="grid md:grid-cols-[1fr,320px] gap-6">
           <div className="space-y-4">
             <Textarea
@@ -260,7 +312,8 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
                   loading ||
                   (entity === "patient" &&
                     selection?.mode === "update" &&
-                    !description.trim())
+                    !description.trim()) ||
+                  (isInsertPatient && insertCountInvalid)
                 }
               >
                 {loading ? "Interpreting..." : "Interpret with AI →"}
