@@ -21,7 +21,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { MagnifyingGlassIcon, ArrowPathIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
+import {
+  MagnifyingGlassIcon,
+  ArrowPathIcon,
+  Squares2X2Icon,
+  ExclamationTriangleIcon,
+} from "@heroicons/react/24/outline";
 import {
   Popover,
   PopoverContent,
@@ -44,6 +49,8 @@ export interface BrowseSelection {
 
 interface DataBrowserStepProps {
   customerId: string;
+  connectionError: string | null;
+  connectionChecking: boolean;
   onProceed: (selection: BrowseSelection) => void;
 }
 
@@ -74,7 +81,12 @@ const DISPLAY_COLUMNS: Record<BrowseEntity, { key: string; label: string }[]> = 
   ],
 };
 
-export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps) {
+export function DataBrowserStep({
+  customerId,
+  connectionError,
+  connectionChecking,
+  onProceed,
+}: DataBrowserStepProps) {
   const [entity] = useState<BrowseEntity>("patient");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<BrowseFilter>("all");
@@ -216,6 +228,14 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
         {!customerId && (
           <Alert>
             <AlertDescription>Select a customer above to browse and generate data.</AlertDescription>
+          </Alert>
+        )}
+        {customerId && connectionError && (
+          <Alert variant="destructive" className="border-amber-200 bg-amber-50 text-amber-800">
+            <AlertDescription className="flex items-center gap-2">
+              <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+              Database connection failed: {connectionError}
+            </AlertDescription>
           </Alert>
         )}
         <div className="space-y-4">
@@ -398,7 +418,10 @@ export function DataBrowserStep({ customerId, onProceed }: DataBrowserStepProps)
                 {selectedIds.size > 0 ? `${selectedIds.size} row(s) selected` : "No rows selected"}
               </span>
               <div className="flex gap-2">
-                <Button onClick={handleCreateNew}>
+                <Button
+                  onClick={handleCreateNew}
+                  disabled={!customerId || !!connectionError || connectionChecking}
+                >
                   + Create New {ENTITY_LABELS[entity]}
                 </Button>
                 {canUpdatePatients && (

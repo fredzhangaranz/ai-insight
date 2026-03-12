@@ -6,8 +6,9 @@ import { describe, it, expect } from "vitest";
 import {
   buildDefaultPatientSpec,
   buildDefaultAssessmentSpec,
+  applyAgeConfigToSpec,
 } from "../default-spec-builder";
-import type { FieldSchema } from "../generation-spec.types";
+import type { FieldSchema, GenerationSpec } from "../generation-spec.types";
 
 const patientSchema: FieldSchema[] = [
   {
@@ -118,6 +119,69 @@ describe("default-spec-builder", () => {
 
       const dob = spec.fields.find((f) => f.columnName === "dateOfBirth");
       expect(dob?.criteria.type).toBe("range");
+    });
+
+    it("uses ageRange criteria for dateOfBirth when ageConfig provided", () => {
+      const ageConfig = {
+        mode: "normal" as const,
+        minAge: 60,
+        maxAge: 80,
+        mean: 70,
+        sd: 8,
+      };
+      const spec = buildDefaultPatientSpec(patientSchema, 20, "insert", ageConfig);
+      const dob = spec.fields.find((f) => f.columnName === "dateOfBirth");
+      expect(dob?.criteria).toMatchObject({
+        type: "ageRange",
+        mode: "normal",
+        minAge: 60,
+        maxAge: 80,
+        mean: 70,
+        sd: 8,
+      });
+    });
+
+    it("uses ageRange uniform when ageConfig mode is uniform", () => {
+      const ageConfig = {
+        mode: "uniform" as const,
+        minAge: 50,
+        maxAge: 70,
+      };
+      const spec = buildDefaultPatientSpec(patientSchema, 10, "insert", ageConfig);
+      const dob = spec.fields.find((f) => f.columnName === "dateOfBirth");
+      expect(dob?.criteria).toMatchObject({
+        type: "ageRange",
+        mode: "uniform",
+        minAge: 50,
+        maxAge: 70,
+      });
+    });
+
+    it("applyAgeConfigToSpec merges ageConfig into spec dateOfBirth", () => {
+      const spec: GenerationSpec = {
+        entity: "patient",
+        count: 5,
+        fields: [
+          {
+            fieldName: "Date of Birth",
+            columnName: "dateOfBirth",
+            dataType: "Date",
+            enabled: true,
+            criteria: { type: "range", min: "1950-01-01", max: "1980-12-31" },
+          },
+        ],
+      };
+      const ageConfig = { mode: "normal" as const, minAge: 65, maxAge: 85, mean: 75, sd: 6 };
+      const merged = applyAgeConfigToSpec(spec, ageConfig);
+      const dob = merged.fields.find((f) => f.columnName === "dateOfBirth");
+      expect(dob?.criteria).toMatchObject({
+        type: "ageRange",
+        mode: "normal",
+        minAge: 65,
+        maxAge: 85,
+        mean: 75,
+        sd: 6,
+      });
     });
 
     it("includes unitFk with empty distribution when no weights", () => {

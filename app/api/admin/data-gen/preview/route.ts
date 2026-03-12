@@ -9,9 +9,15 @@ import { authOptions } from "@/lib/auth";
 import { getConnectionStringForCustomer } from "@/lib/services/customer-service";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 import { generatePreview } from "@/lib/services/data-gen/preview.service";
-import { buildUpdatePatientSqlStatements } from "@/lib/services/data-gen/generators/patient.generator";
+import {
+  buildUpdatePatientSqlStatements,
+  buildInsertPatientSqlStatements,
+} from "@/lib/services/data-gen/generators/patient.generator";
 import { buildAssessmentSqlStatements } from "@/lib/services/data-gen/generators/assessment.generator";
 import type { GenerationSpec } from "@/lib/services/data-gen/generation-spec.types";
+
+/** Max rows/SQL statements to include in preview; rest of UI uses scrollbar */
+const PREVIEW_DISPLAY_CAP = 200;
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,11 +55,17 @@ export async function POST(request: NextRequest) {
       mockDependencies = { units: unitResult.recordset };
     }
 
-    const preview = generatePreview(spec, 5, mockDependencies);
+    const previewSize =
+      spec.entity === "patient"
+        ? spec.mode === "update"
+          ? Math.min(spec.target?.patientIds?.length ?? 0, PREVIEW_DISPLAY_CAP)
+          : Math.min(spec.count, PREVIEW_DISPLAY_CAP)
+        : 5;
+    const preview = generatePreview(spec, previewSize, mockDependencies);
 
     if (spec.mode === "update" && spec.entity === "patient" && spec.target?.mode === "custom" && spec.target.patientIds?.length) {
       const patientIds = spec.target.patientIds;
-      const sampleSize = Math.min(5, patientIds.length);
+      const sampleSize = Math.min(patientIds.length, PREVIEW_DISPLAY_CAP);
       const sampleIds = patientIds.slice(0, sampleSize);
 
       const idList = sampleIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
@@ -88,6 +100,18 @@ export async function POST(request: NextRequest) {
 
     if (spec.entity === "assessment_bundle" && spec.form?.assessmentTypeVersionId) {
       const previewSql = await buildAssessmentSqlStatements(spec, pool);
+      return NextResponse.json({
+        ...preview,
+        previewSql: previewSql.length > 0 ? previewSql : undefined,
+      });
+    }
+
+    if (spec.entity === "patient" && spec.mode !== "update") {
+      const previewSql = await buildInsertPatientSqlStatements(
+        spec,
+        pool,
+        Math.min(spec.count, PREVIEW_DISPLAY_CAP)
+      );
       return NextResponse.json({
         ...preview,
         previewSql: previewSql.length > 0 ? previewSql : undefined,

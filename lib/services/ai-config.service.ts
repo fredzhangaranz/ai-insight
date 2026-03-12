@@ -838,65 +838,124 @@ export class AIConfigService {
     const simpleModelId = config.configData.simpleQueryModelId;
     const complexModelId = config.configData.complexQueryModelId;
     const location = config.configData.location || "us-central1";
+    const credentialsPath = config.configData.credentialsPath;
 
     if (!projectId) {
       throw new Error("Google Cloud project ID not configured");
     }
 
-    // Validate model IDs are configured
     if (!simpleModelId) {
       throw new Error("Simple query model ID not configured");
     }
+
     if (!complexModelId) {
       throw new Error("Complex query model ID not configured");
     }
 
-    // Test both models with actual API calls using Vertex AI
+    if (!credentialsPath) {
+      throw new Error(
+        "Google Application Credentials path not configured. Set the path to your service account JSON file."
+      );
+    }
+
     try {
-      const { VertexAI } = await import("@google-cloud/vertexai");
+      // Set credentials for this validation call
+      const originalCreds = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = credentialsPath;
 
-      // Initialize Vertex with Application Default Credentials
-      const vertexAI = new VertexAI({
-        project: projectId,
-        location: location,
-      });
-
-      // Test simple query model
       try {
-        const simpleModel = vertexAI.getGenerativeModel({
-          model: simpleModelId,
-        });
-        await simpleModel.generateContent("test");
-      } catch (error) {
-        throw new Error(
-          `Simple model (${simpleModelId}) validation failed: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
-      }
+        // Use @google/genai SDK (same as production code)
+        const { GoogleGenAI } = await import("@google/genai");
 
-      // Test complex query model
-      try {
-        const complexModel = vertexAI.getGenerativeModel({
-          model: complexModelId,
+        const genAI = new GoogleGenAI({
+          vertexai: true,
+          project: projectId,
+          location: location,
         });
-        await complexModel.generateContent("test");
-      } catch (error) {
-        throw new Error(
-          `Complex model (${complexModelId}) validation failed: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
-      }
 
-      console.log(`✅ Google validation successful: ${simpleModelId} (simple), ${complexModelId} (complex)`);
-      return true;
+        // Test simple model
+        await this.testGoogleModel(simpleModelId, genAI);
+
+        // Test complex model
+        await this.testGoogleModel(complexModelId, genAI);
+
+        console.log(
+          `✅ Google validation successful: ${simpleModelId} (simple), ${complexModelId} (complex) in ${location}`
+        );
+        return true;
+      } finally {
+        // Restore original credentials
+        if (originalCreds) {
+          process.env.GOOGLE_APPLICATION_CREDENTIALS = originalCreds;
+        } else {
+          delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        }
+      }
     } catch (error) {
       if (error instanceof Error) {
         throw error;
       }
       throw new Error(`Google Vertex AI validation failed: ${error}`);
     }
+  }
+
+  private async testGoogleModel(modelId: string, genAI: any): Promise<void> {
+    try {
+      const result = await genAI.models.generateContent({
+        model: modelId,
+        contents: "test",
+      });
+
+      if (!result) {
+        throw new Error("Empty response from API");
+      }
+    } catch (error) {
+      const errorMessage = this.extractGoogleErrorMessage(error);
+      throw new Error(`Model (${modelId}) validation failed: ${errorMessage}`);
+    }
+  }
+
+  private extractGoogleErrorMessage(error: unknown): string {
+    if (!(error instanceof Error)) {
+      return "Unknown error";
+    }
+
+    const message = error.message;
+
+    // HTML response indicates auth/API issue
+    if (message.includes("<!DOCTYPE") || message.includes("</html>")) {
+      return "Received HTML error page (likely 403 Forbidden). Root cause: IAM permissions. " +
+        "Fix: Grant the service account roles/aiplatform.user or aiplatform.endpoints.predict permission. " +
+        "Run: gcloud projects add-iam-policy-binding PROJECT_ID " +
+        "--member=serviceAccount:YOUR_SA@PROJECT_ID.iam.gserviceaccount.com " +
+        "--role=roles/aiplatform.user";
+    }
+
+    if (message.includes("401") || message.includes("Unauthorized")) {
+      return "Authentication failed (401). Check: 1) Credentials file exists and is valid JSON, " +
+        "2) Service account has an active key, 3) Project ID in credentials matches config";
+    }
+
+    if (message.includes("403") || message.includes("Permission denied") || message.includes("PERMISSION_DENIED")) {
+      return "Permission denied (403). Service account lacks Vertex AI permissions. " +
+        "Grant roles/aiplatform.user to the service account in your project.";
+    }
+
+    if (message.includes("404") || message.includes("Not Found") || message.includes("NOT_FOUND")) {
+      return "Model not found (404). Verify: 1) Model ID is correct (e.g., gemini-2.5-flash), " +
+        "2) Model exists in the specified location (e.g., us-central1), " +
+        "3) Location matches where the model is available";
+    }
+
+    if (message.includes("ENOENT") || message.includes("no such file")) {
+      return "Credentials file not found. Check the path and ensure the file exists.";
+    }
+
+    if (message.includes("JSON") || message.includes("parse")) {
+      return "Credentials file is not valid JSON. Verify the service account JSON is properly formatted.";
+    }
+
+    return message;
   }
 
   private async validateOpenWebUIConfig(

@@ -674,6 +674,93 @@ WHEN NOT MATCHED THEN
   return statements;
 }
 
+/**
+ * Build sample INSERT SQL statements for new-patient preview (no execution).
+ * Returns one statement per sample row with literal values.
+ */
+export async function buildInsertPatientSqlStatements(
+  spec: GenerationSpec,
+  db: ConnectionPool,
+  sampleSize: number = 5
+): Promise<string[]> {
+  if (spec.entity !== "patient" || spec.mode === "update") {
+    return [];
+  }
+
+  const unitResult = await db
+    .request()
+    .query("SELECT id, name FROM dbo.Unit WHERE isDeleted = 0");
+  const units = unitResult.recordset ?? [];
+  if (units.length === 0) return [];
+
+  const directFields = spec.fields.filter(
+    (f) =>
+      f.enabled &&
+      f.storageType !== "patient_attribute" &&
+      !SKIP_DIRECT_COLUMNS.has(f.columnName)
+  );
+
+  const unitField = spec.fields.find((f) => f.columnName === "unitFk");
+  const size = Math.min(sampleSize, spec.count);
+  let unitAssignments: string[] = [];
+
+  if (unitField?.criteria.type === "distribution") {
+    const unitWeights: Record<string, number> = {};
+    for (const [unitName, weight] of Object.entries(unitField.criteria.weights)) {
+      const u = units.find((x: { name: string }) => x.name === unitName);
+      if (u) unitWeights[(u as { id: string }).id] = weight;
+    }
+    if (Object.keys(unitWeights).length > 0) {
+      unitAssignments = distributeAcrossBuckets(size, unitWeights);
+    } else {
+      const unitIds = units.map((u: { id: string }) => u.id);
+      for (let i = 0; i < size; i++) {
+        unitAssignments.push(unitIds[i % unitIds.length]);
+      }
+    }
+  } else {
+    const unitIds = units.map((u: { id: string }) => u.id);
+    for (let i = 0; i < size; i++) {
+      unitAssignments.push(unitIds[i % unitIds.length]);
+    }
+  }
+
+  const now = new Date();
+  const statements: string[] = [];
+
+  for (let i = 0; i < size; i++) {
+    const row: Record<string, unknown> = {
+      id: newGuid(),
+      accessCode: "IG" + randomAlphaNum(4),
+      unitFk: unitAssignments[i],
+      isDeleted: 0,
+      assignedToUnitDate: now,
+      serverChangeDate: now,
+    };
+
+    for (const fieldSpec of directFields) {
+      if (SKIP_DIRECT_COLUMNS.has(fieldSpec.columnName)) continue;
+      try {
+        const value = generateFieldValue(fieldSpec, faker);
+        if (value !== null && value !== undefined) {
+          row[fieldSpec.columnName] = value;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    const columns = Object.keys(row);
+    const columnList = columns.map((c) => `[${c}]`).join(", ");
+    const valuesList = columns.map((c) => toSqlLiteral(row[c])).join(", ");
+    statements.push(
+      `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`
+    );
+  }
+
+  return statements;
+}
+
 async function verifyPatientUpdate(
   db: ConnectionPool,
   spec: GenerationSpec,

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { FieldReferencePanel } from "./field-reference-panel";
 import { FieldResolutionDialogue } from "./field-resolution-dialogue";
 import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types";
@@ -14,7 +15,11 @@ import type { BrowseSelection } from "./data-browser-step";
 import type { GenerationSpec } from "@/lib/services/data-gen/generation-spec.types";
 import type { FieldResolution } from "@/lib/services/data-gen/field-resolver.service";
 import type { SelectedForm } from "./form-selector-step";
-import { buildDefaultPatientSpec } from "@/lib/services/data-gen/default-spec-builder";
+import {
+  buildDefaultPatientSpec,
+  applyAgeConfigToSpec,
+  type AgeConfigInput,
+} from "@/lib/services/data-gen/default-spec-builder";
 
 interface DescribeStepProps {
   customerId: string;
@@ -28,9 +33,19 @@ interface DescribeStepProps {
 const MIN_PATIENT_COUNT = 1;
 const MAX_PATIENT_COUNT = 100;
 const DEFAULT_PATIENT_COUNT = 20;
+const MIN_AGE = 18;
+const MAX_AGE = 120;
+const DEFAULT_AGE_MIN = 60;
+const DEFAULT_AGE_MAX = 80;
+const DEFAULT_AGE_MEAN = 70;
+const DEFAULT_AGE_SD = 8;
 
 function clampCount(n: number): number {
   return Math.min(MAX_PATIENT_COUNT, Math.max(MIN_PATIENT_COUNT, n));
+}
+
+function clampAge(n: number): number {
+  return Math.min(MAX_AGE, Math.max(MIN_AGE, n));
 }
 
 export function DescribeStep({ customerId, modelId, selection, selectedForm, onInterpreted, onBack }: DescribeStepProps) {
@@ -56,6 +71,29 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
       Number.isNaN(parseInt(insertCountRaw, 10)) ||
       parseInt(insertCountRaw, 10) < MIN_PATIENT_COUNT ||
       parseInt(insertCountRaw, 10) > MAX_PATIENT_COUNT);
+
+  const [ageMode, setAgeMode] = useState<"uniform" | "normal">("normal");
+  const [ageMinRaw, setAgeMinRaw] = useState(String(DEFAULT_AGE_MIN));
+  const [ageMaxRaw, setAgeMaxRaw] = useState(String(DEFAULT_AGE_MAX));
+  const [ageMeanRaw, setAgeMeanRaw] = useState(String(DEFAULT_AGE_MEAN));
+  const [ageSdRaw, setAgeSdRaw] = useState(String(DEFAULT_AGE_SD));
+
+  const ageMin = clampAge(parseInt(ageMinRaw, 10) || DEFAULT_AGE_MIN);
+  const ageMax = clampAge(parseInt(ageMaxRaw, 10) || DEFAULT_AGE_MAX);
+  const ageMean = clampAge(parseInt(ageMeanRaw, 10) || DEFAULT_AGE_MEAN);
+  const ageSd = Math.min(20, Math.max(1, parseInt(ageSdRaw, 10) || DEFAULT_AGE_SD));
+
+  const ageConfigInvalid =
+    isInsertPatient &&
+    (ageMin >= ageMax ||
+      (ageMode === "normal" && (ageMean < ageMin || ageMean > ageMax)));
+
+  const ageConfig: AgeConfigInput = {
+    mode: ageMode,
+    minAge: ageMin,
+    maxAge: ageMax,
+    ...(ageMode === "normal" && { mean: ageMean, sd: ageSd }),
+  };
 
   useEffect(() => {
     if (!customerId) return;
@@ -155,7 +193,41 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
       }
 
       const { spec, warnings } = await res.json();
-      onInterpreted(spec, warnings);
+      
+      let mergedSpec = spec;
+      
+      // For patient insert mode: merge AI spec with defaults to ensure all fields are present
+      if (entity === "patient" && isInsertPatient) {
+        const defaultSpec = buildDefaultPatientSpec(
+          patientSchema,
+          effectiveCount,
+          "insert",
+          ageConfig
+        );
+        
+        // Build a map of AI-specified field column names for quick lookup
+        const aiFieldColumns = new Set(spec.fields.map((f) => f.columnName));
+        
+        // Start with default fields, then overlay AI fields (AI choices override defaults)
+        const mergedFields = defaultSpec.fields.map((defaultField) => {
+          const aiField = spec.fields.find((f) => f.columnName === defaultField.columnName);
+          return aiField || defaultField;
+        });
+        
+        // Add any AI fields that aren't in defaults (e.g., custom user-defined fields)
+        for (const aiField of spec.fields) {
+          if (!defaultSpec.fields.some((f) => f.columnName === aiField.columnName)) {
+            mergedFields.push(aiField);
+          }
+        }
+        
+        mergedSpec = {
+          ...spec,
+          fields: mergedFields,
+        };
+      }
+      
+      onInterpreted(mergedSpec, warnings);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -172,6 +244,10 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
       setError(`Number of patients must be between ${MIN_PATIENT_COUNT} and ${MAX_PATIENT_COUNT}.`);
       return;
     }
+    if (isInsertPatient && ageConfigInvalid) {
+      setError("Age: min must be less than max; for Normal mode, mean must be within range.");
+      return;
+    }
 
     if (
       entity === "patient" &&
@@ -181,7 +257,8 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
       const spec = buildDefaultPatientSpec(
         patientSchema,
         effectiveCount,
-        "insert"
+        "insert",
+        ageConfig
       );
       onInterpreted(spec, []);
       return;
@@ -255,24 +332,107 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
         )}
 
         {isInsertPatient && (
-          <div className="mb-4 space-y-2">
-            <Label htmlFor="patient-count">Number of patients</Label>
-            <Input
-              id="patient-count"
-              type="text"
-              inputMode="numeric"
-              min={MIN_PATIENT_COUNT}
-              max={MAX_PATIENT_COUNT}
-              value={insertCountRaw}
-              onChange={(e) => setInsertCountRaw(e.target.value.replace(/\D/g, "").slice(0, 3))}
-              className="w-24"
-              aria-invalid={insertCountInvalid}
-            />
-            {insertCountInvalid && (
-              <p className="text-sm text-destructive">
-                Enter a number between {MIN_PATIENT_COUNT} and {MAX_PATIENT_COUNT}.
-              </p>
-            )}
+          <div className="mb-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="patient-count">Number of patients</Label>
+              <Input
+                id="patient-count"
+                type="text"
+                inputMode="numeric"
+                min={MIN_PATIENT_COUNT}
+                max={MAX_PATIENT_COUNT}
+                value={insertCountRaw}
+                onChange={(e) => setInsertCountRaw(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                className="w-24"
+                aria-invalid={insertCountInvalid}
+              />
+              {insertCountInvalid && (
+                <p className="text-sm text-destructive">
+                  Enter a number between {MIN_PATIENT_COUNT} and {MAX_PATIENT_COUNT}.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-medium">Age Distribution</h4>
+              <RadioGroup
+                value={ageMode}
+                onValueChange={(v) => setAgeMode(v as "uniform" | "normal")}
+                className="flex gap-4"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="uniform" id="age-uniform" />
+                  <Label htmlFor="age-uniform" className="font-normal">
+                    Uniform
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="normal" id="age-normal" />
+                  <Label htmlFor="age-normal" className="font-normal">
+                    Normal (clustered)
+                  </Label>
+                </div>
+              </RadioGroup>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="age-min">Min age</Label>
+                  <Input
+                    id="age-min"
+                    type="number"
+                    min={MIN_AGE}
+                    max={MAX_AGE}
+                    value={ageMinRaw}
+                    onChange={(e) => setAgeMinRaw(e.target.value)}
+                    className="w-20"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="age-max">Max age</Label>
+                  <Input
+                    id="age-max"
+                    type="number"
+                    min={MIN_AGE}
+                    max={MAX_AGE}
+                    value={ageMaxRaw}
+                    onChange={(e) => setAgeMaxRaw(e.target.value)}
+                    className="w-20"
+                  />
+                </div>
+                {ageMode === "normal" && (
+                  <>
+                    <div>
+                      <Label htmlFor="age-mean">Mean</Label>
+                      <Input
+                        id="age-mean"
+                        type="number"
+                        min={MIN_AGE}
+                        max={MAX_AGE}
+                        value={ageMeanRaw}
+                        onChange={(e) => setAgeMeanRaw(e.target.value)}
+                        className="w-20"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="age-sd">SD</Label>
+                      <Input
+                        id="age-sd"
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={ageSdRaw}
+                        onChange={(e) => setAgeSdRaw(e.target.value)}
+                        className="w-20"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              {ageConfigInvalid && (
+                <p className="text-sm text-destructive">
+                  Min must be less than max. For Normal mode, mean must be within range.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -313,7 +473,8 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
                   (entity === "patient" &&
                     selection?.mode === "update" &&
                     !description.trim()) ||
-                  (isInsertPatient && insertCountInvalid)
+                  (isInsertPatient && insertCountInvalid) ||
+                  (isInsertPatient && ageConfigInvalid)
                 }
               >
                 {loading ? "Interpreting..." : "Interpret with AI →"}

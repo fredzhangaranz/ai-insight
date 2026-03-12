@@ -28,6 +28,15 @@ export interface SelectedFormInput {
   assessmentFormName: string;
 }
 
+/** Age distribution config from Describe step UI */
+export interface AgeConfigInput {
+  mode: "uniform" | "normal";
+  minAge: number;
+  maxAge: number;
+  mean?: number;
+  sd?: number;
+}
+
 const FAKER_BY_COLUMN: Record<string, string> = {
   firstName: "person.firstName",
   lastName: "person.lastName",
@@ -42,14 +51,15 @@ const FAKER_BY_COLUMN: Record<string, string> = {
 export function buildDefaultPatientSpec(
   schema: FieldSchema[],
   count: number,
-  mode: "insert" | "update"
+  mode: "insert" | "update",
+  ageConfig?: AgeConfigInput
 ): GenerationSpec {
   const fields: FieldSpec[] = [];
 
   for (const f of schema) {
     if (f.fieldClass === "source-of-truth") continue;
 
-    const criteria = buildCriteriaForField(f);
+    const criteria = buildCriteriaForField(f, ageConfig);
     if (!criteria) continue;
 
     fields.push({
@@ -87,7 +97,10 @@ export function buildDefaultPatientSpec(
   };
 }
 
-function buildCriteriaForField(f: FieldSchema): FieldSpec["criteria"] | null {
+function buildCriteriaForField(
+  f: FieldSchema,
+  ageConfig?: AgeConfigInput
+): FieldSpec["criteria"] | null {
   switch (f.dataType) {
     case "SingleSelectList":
     case "MultiSelectList":
@@ -106,12 +119,27 @@ function buildCriteriaForField(f: FieldSchema): FieldSpec["criteria"] | null {
       return { type: "faker", fakerMethod };
 
     case "Date":
-    case "DateTime":
+    case "DateTime": {
+      const col = (f.columnName ?? "").toLowerCase();
+      if (col === "dateofbirth" && ageConfig) {
+        const base: { type: "ageRange"; mode: "uniform" | "normal"; minAge: number; maxAge: number; mean?: number; sd?: number } = {
+          type: "ageRange",
+          mode: ageConfig.mode,
+          minAge: ageConfig.minAge,
+          maxAge: ageConfig.maxAge,
+        };
+        if (ageConfig.mode === "normal" && ageConfig.mean != null && ageConfig.sd != null) {
+          base.mean = ageConfig.mean;
+          base.sd = ageConfig.sd;
+        }
+        return base;
+      }
       return {
         type: "range",
-        min: f.min ?? "1940-01-01",
-        max: f.max ?? "2000-12-31",
+        min: f.min ?? "1946-01-01",
+        max: f.max ?? "1966-12-31",
       };
+    }
 
     case "Boolean":
       if (f.options && f.options.length > 0) {
@@ -195,4 +223,37 @@ export function buildDefaultAssessmentSpec(
   }
 
   return spec;
+}
+
+/**
+ * Apply age config to a spec's dateOfBirth field.
+ * Used when user provides description (AI path) but has explicit age config from UI.
+ */
+export function applyAgeConfigToSpec(
+  spec: GenerationSpec,
+  ageConfig: AgeConfigInput
+): GenerationSpec {
+  if (spec.entity !== "patient") return spec;
+
+  const dobField = spec.fields.find(
+    (f) => f.enabled && f.columnName?.toLowerCase() === "dateofbirth"
+  );
+  if (!dobField) return spec;
+
+  const criteria = {
+    type: "ageRange" as const,
+    mode: ageConfig.mode,
+    minAge: ageConfig.minAge,
+    maxAge: ageConfig.maxAge,
+    ...(ageConfig.mode === "normal" &&
+      ageConfig.mean != null &&
+      ageConfig.sd != null && { mean: ageConfig.mean, sd: ageConfig.sd }),
+  };
+
+  return {
+    ...spec,
+    fields: spec.fields.map((f) =>
+      f === dobField ? { ...f, criteria } : f
+    ),
+  };
 }

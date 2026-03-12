@@ -39,9 +39,19 @@ export type FieldCriteriaType =
   | "fixed"
   | "distribution"
   | "range"
+  | "ageRange"
   | "options"
   | "reference"
   | "progression";
+
+export interface AgeRangeCriteria {
+  type: "ageRange";
+  mode: "uniform" | "normal";
+  minAge: number;
+  maxAge: number;
+  mean?: number;
+  sd?: number;
+}
 
 export interface FakerCriteria {
   type: "faker";
@@ -87,6 +97,7 @@ export type FieldCriteria =
   | FixedCriteria
   | DistributionCriteria
   | RangeCriteria
+  | AgeRangeCriteria
   | OptionsCriteria
   | ReferenceCriteria
   | ProgressionCriteria;

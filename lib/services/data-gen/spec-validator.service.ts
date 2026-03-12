@@ -121,6 +121,25 @@ async function validatePatientSpec(
     if (criteria.type === "options" && criteria.pickFrom.length === 0) {
       errors.push(`Field ${field.fieldName}: options list cannot be empty`);
     }
+
+    if (criteria.type === "ageRange") {
+      if (criteria.minAge >= criteria.maxAge) {
+        errors.push(
+          `Field ${field.fieldName}: ageRange minAge must be less than maxAge`
+        );
+      }
+      if (criteria.mode === "normal") {
+        if (criteria.mean == null || criteria.sd == null) {
+          errors.push(
+            `Field ${field.fieldName}: ageRange normal mode requires mean and sd`
+          );
+        } else if (criteria.sd <= 0) {
+          errors.push(
+            `Field ${field.fieldName}: ageRange sd must be greater than 0`
+          );
+        }
+      }
+    }
   }
 }
 

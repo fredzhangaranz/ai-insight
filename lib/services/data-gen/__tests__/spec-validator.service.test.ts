@@ -197,6 +197,89 @@ describe("Spec Validator Service", () => {
         true
       );
     });
+
+    it("should fail when ageRange minAge >= maxAge", async () => {
+      mockRequest.query.mockResolvedValue({ recordset: [{ count: 5 }] });
+
+      const spec: GenerationSpec = {
+        ...basePatientSpec,
+        fields: [
+          {
+            fieldName: "dateOfBirth",
+            columnName: "dateOfBirth",
+            dataType: "Date",
+            enabled: true,
+            criteria: {
+              type: "ageRange",
+              mode: "uniform",
+              minAge: 80,
+              maxAge: 60,
+            },
+          },
+        ],
+      };
+
+      const result = await validateGenerationSpec(spec, mockDb);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes("ageRange minAge"))).toBe(true);
+    });
+
+    it("should fail when ageRange normal mode missing mean or sd", async () => {
+      mockRequest.query.mockResolvedValue({ recordset: [{ count: 5 }] });
+
+      const spec: GenerationSpec = {
+        ...basePatientSpec,
+        fields: [
+          {
+            fieldName: "dateOfBirth",
+            columnName: "dateOfBirth",
+            dataType: "Date",
+            enabled: true,
+            criteria: {
+              type: "ageRange",
+              mode: "normal",
+              minAge: 60,
+              maxAge: 80,
+            },
+          },
+        ],
+      };
+
+      const result = await validateGenerationSpec(spec, mockDb);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes("ageRange normal mode requires"))).toBe(true);
+    });
+
+    it("should pass when ageRange is valid", async () => {
+      mockRequest.query.mockResolvedValue({ recordset: [{ count: 5 }] });
+
+      const spec: GenerationSpec = {
+        ...basePatientSpec,
+        fields: [
+          {
+            fieldName: "dateOfBirth",
+            columnName: "dateOfBirth",
+            dataType: "Date",
+            enabled: true,
+            criteria: {
+              type: "ageRange",
+              mode: "normal",
+              minAge: 60,
+              maxAge: 80,
+              mean: 70,
+              sd: 8,
+            },
+          },
+        ],
+      };
+
+      const result = await validateGenerationSpec(spec, mockDb);
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
   });
 
   describe("validateGenerationSpec - assessment", () => {

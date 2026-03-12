@@ -5,7 +5,7 @@
 
 import { randomUUID } from "crypto";
 import type { ConnectionPool } from "mssql";
-import type { FieldSpec, FieldCriteria } from "./generation-spec.types";
+import type { FieldSpec } from "../generation-spec.types";
 
 /**
  * Generate a new GUID for SQL Server
@@ -67,6 +67,33 @@ export function rangePick(
 }
 
 /**
+ * Sample from normal distribution (Box-Muller polar form)
+ */
+export function sampleNormal(mean: number, sd: number): number {
+  let u1: number, u2: number, s: number;
+  do {
+    u1 = 2 * Math.random() - 1;
+    u2 = 2 * Math.random() - 1;
+    s = u1 * u1 + u2 * u2;
+  } while (s >= 1 || s === 0);
+  const factor = Math.sqrt(-2 * Math.log(s) / s);
+  return mean + sd * u1 * factor;
+}
+
+/**
+ * Generate date of birth from age in years (today minus age, with random day-of-year)
+ */
+function dateFromAge(ageYears: number): Date {
+  const today = new Date();
+  const year = today.getFullYear() - Math.floor(ageYears);
+  const frac = ageYears - Math.floor(ageYears);
+  const dayOfYear = Math.floor(frac * 365.25);
+  const d = new Date(year, 0, 1);
+  d.setDate(d.getDate() + dayOfYear);
+  return d;
+}
+
+/**
  * Pick N random items from an array
  */
 export function pickRandom<T>(items: T[], count: number = 1): T[] {
@@ -94,6 +121,20 @@ export function generateFieldValue(
 
     case "range":
       return rangePick(criteria.min, criteria.max);
+
+    case "ageRange": {
+      const { minAge, maxAge, mode } = criteria;
+      let age: number;
+      if (mode === "uniform") {
+        age = minAge + Math.random() * (maxAge - minAge);
+      } else {
+        const mean = criteria.mean ?? (minAge + maxAge) / 2;
+        const sd = criteria.sd ?? (maxAge - minAge) / 6;
+        age = sampleNormal(mean, sd);
+        age = Math.max(minAge, Math.min(maxAge, age));
+      }
+      return dateFromAge(age);
+    }
 
     case "options":
       const count = criteria.pickCount || 1;

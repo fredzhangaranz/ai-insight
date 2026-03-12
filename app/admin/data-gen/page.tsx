@@ -77,7 +77,45 @@ export default function DataGenPage() {
   const [isCleaning, setIsCleaning] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionChecking, setConnectionChecking] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!customerId) {
+      setConnectionError(null);
+      setConnectionChecking(false);
+      return;
+    }
+    let cancelled = false;
+    setConnectionChecking(true);
+    setConnectionError(null);
+    fetch(
+      `/api/admin/data-gen/connection-check?customerId=${encodeURIComponent(customerId)}`
+    )
+      .then(async (res) => {
+        const data = await res.json();
+        if (cancelled) return;
+        setConnectionChecking(false);
+        if (res.ok && data.ok) {
+          setConnectionError(null);
+        } else {
+          setConnectionError(
+            data.error ?? data.message ?? "Database connection failed"
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setConnectionChecking(false);
+        setConnectionError(
+          err instanceof Error ? err.message : "Database connection failed"
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
 
   const handleCleanup = async () => {
     if (!customerId) {
@@ -505,8 +543,22 @@ export default function DataGenPage() {
                               ? "Preview"
                               : "Execution";
               return (
-                <div className="mb-4 text-sm text-muted-foreground">
-                  Step {displayStep} of {totalSteps}: {stepLabel}
+                <div className="mb-4 flex items-center gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    Step {displayStep} of {totalSteps}: {stepLabel}
+                  </div>
+                  {step === 1 && !customerId && (
+                    <div className="flex-1 flex justify-center items-center gap-2 text-sm text-amber-600">
+                      <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+                      <span>Please select customer database first</span>
+                    </div>
+                  )}
+                  {step === 1 && customerId && connectionError && (
+                    <div className="flex-1 flex justify-center items-center gap-2 text-sm text-amber-600">
+                      <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+                      <span>{connectionError}</span>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -514,6 +566,8 @@ export default function DataGenPage() {
             {step === 1 && (
               <DataBrowserStep
                 customerId={customerId}
+                connectionError={connectionError}
+                connectionChecking={connectionChecking}
                 onProceed={handleProceedFromBrowse}
               />
             )}
@@ -626,12 +680,12 @@ export default function DataGenPage() {
                   <CardTitle>Step 4: Preview</CardTitle>
                   <CardDescription>
                     {spec.mode === "update"
-                      ? `Sample of ${spec.count} rows that will be updated`
-                      : "Sample rows (5) that will be inserted"}
+                      ? `Sample of rows that will be updated (scroll if more than fit)`
+                      : "Sample rows that will be inserted (scroll if more than fit)"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto rounded-md border mb-4">
+                  <div className="overflow-x-auto overflow-y-auto max-h-96 rounded-md border mb-4">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/50">
