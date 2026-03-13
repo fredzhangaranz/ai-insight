@@ -208,6 +208,8 @@ export interface GenerationResult {
   error?: string;
   /** Rollback SQL for update mode; execute to revert field changes */
   rollbackSql?: string[];
+  /** Patient IDs that received data (for assessment_bundle); used by validation */
+  insertedPatientIds?: string[];
 }
 
 export interface DataGenStats {

@@ -4,6 +4,7 @@
  */
 
 import type { ConnectionPool } from "mssql";
+import sql from "mssql";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -15,6 +16,7 @@ export interface ValidationResult {
 /**
  * Validate inserted wounds and assessments
  * Runs after INSERT/UPDATE but before cloning to rpt
+ * @param insertedPatientIds - Patient IDs that received new wounds/assessments (not Series IDs)
  */
 export async function validateInsertedData(
   db: ConnectionPool,
@@ -29,19 +31,23 @@ export async function validateInsertedData(
     const cutoff = new Date(Date.now() - checkWindowMinutes * 60 * 1000);
     const cutoffStr = cutoff.toISOString();
 
-    // Check for wounds without assessments
-    const woundCheckResult = await db
-      .request()
-      .input("cutoff", cutoffStr)
-      .input("patientIds", insertedPatientIds)
-      .query(`
+    // mssql does not support array params; use individual params for IN clause
+    const woundReq = db.request().input("cutoff", cutoffStr);
+    const inPlaceholders = insertedPatientIds
+      .map((_, i) => {
+        woundReq.input(`pid${i}`, sql.UniqueIdentifier, insertedPatientIds[i]);
+        return `@pid${i}`;
+      })
+      .join(", ");
+
+    const woundCheckResult = await woundReq.query(`
         SELECT 
           w.id AS woundId,
           w.patientFk,
           COUNT(s.id) AS assessmentCount
         FROM dbo.Wound w
         LEFT JOIN dbo.Series s ON s.woundFk = w.id AND s.isDeleted = 0
-        WHERE w.patientFk IN (${insertedPatientIds.map(() => "?").join(",")})
+        WHERE w.patientFk IN (${inPlaceholders})
           AND w.serverChangeDate > @cutoff
           AND w.isDeleted = 0
         GROUP BY w.id, w.patientFk

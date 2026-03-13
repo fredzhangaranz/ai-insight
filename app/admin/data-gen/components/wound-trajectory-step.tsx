@@ -84,7 +84,7 @@ export function WoundTrajectoryStep({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Step 2: Wound & Trajectory Config</CardTitle>
+        <CardTitle>Step 3: Wound & Trajectory Config</CardTitle>
         <CardDescription>
           Configure healing trajectory and wound count for {patientCount} selected patient
           {patientCount !== 1 ? "s" : ""}
@@ -269,7 +269,7 @@ export function WoundTrajectoryStep({
             Back
           </Button>
           <Button onClick={handleProceed} disabled={!trajectoryValid}>
-            Continue to Describe Field Values
+            Continue to Review Field Profiles
           </Button>
         </div>
       </CardContent>

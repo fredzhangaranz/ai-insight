@@ -118,10 +118,13 @@ export async function executeCustomerQuery(
       console.log("[CustomerQuery] Query Length:", normalized.length, "chars");
     }
 
+    // Set session context for rpt schema / row-level security (same connection as query)
+    const allAccessBatch = `EXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${sqlQuery}`;
+
     // Execute query
     const startExecution = Date.now();
-    console.log("[CustomerQuery] Starting query execution...");
-    const result = await pool.request().query(sqlQuery);
+    console.log("[CustomerQuery] Starting query execution (with all_access)...");
+    const result = await pool.request().query(allAccessBatch);
     const executionTime = Date.now() - startExecution;
     
     // Transform result to standard format

@@ -29,6 +29,7 @@ export function ActionsPanel({
 }: ActionsPanelProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showChartDialog, setShowChartDialog] = useState(false);
+  const [chartType, setChartType] = useState<ChartType>("bar");
   const [chartConfig, setChartConfig] = useState<{
     chartType: ChartType;
     chartMapping: Record<string, string>;
@@ -143,14 +144,17 @@ export function ActionsPanel({
       {showChartDialog && result.results && (
         <ChartConfigurationDialog
           isOpen={showChartDialog}
-          onClose={() => setShowChartDialog(false)}
+          onClose={() => {
+            setShowChartDialog(false);
+            setChartType("bar");
+          }}
           queryResults={result.results.rows}
-          chartType="bar"
+          chartType={chartType}
           title={result.question || "Query Results"}
           onSave={handleChartSave}
           saveButtonText="Continue to Save"
           allowTypeChange={true}
-          onTypeChange={() => {}}
+          onTypeChange={setChartType}
         />
       )}
     </>

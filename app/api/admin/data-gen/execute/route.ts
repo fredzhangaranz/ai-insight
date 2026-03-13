@@ -141,9 +141,11 @@ export async function POST(request: NextRequest) {
         "in_progress",
         "Validating inserted data integrity..."
       );
+      const patientIdsForValidation =
+        result.insertedPatientIds ?? result.insertedIds ?? [];
       const validationResult = await validateInsertedData(
         pool,
-        result.insertedIds ?? [],
+        patientIdsForValidation,
         5
       );
       if (!validationResult.isValid) {

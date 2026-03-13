@@ -32,6 +32,48 @@ import {
 } from "./wound-scaffolding";
 import type { FieldProfileSet } from "../trajectory-field-profile.types";
 
+/** Midnight UTC for a given date (used for assessment date when hasTimeRecorded=0) */
+function toMidnightUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+}
+
+/**
+ * Get or create DateOfService for (patient, date).
+ * Multiple assessments on same day share this record.
+ */
+async function ensureDateOfService(
+  db: ConnectionPool,
+  patientId: string,
+  dateOnly: Date,
+  _defaultUnitId: string,
+  now: Date
+): Promise<string> {
+  const dateStr = dateOnly.toISOString().slice(0, 10);
+  const existing = await db
+    .request()
+    .input("patientFk", sql.UniqueIdentifier, patientId)
+    .input("date", sql.Date, dateStr)
+    .query(`
+      SELECT id FROM dbo.DateOfService
+      WHERE patientFk = @patientFk AND [date] = @date AND isDeleted = 0
+    `);
+  const row = existing.recordset[0];
+  if (row?.id) return row.id;
+
+  const dosId = newGuid();
+  await db
+    .request()
+    .input("id", sql.UniqueIdentifier, dosId)
+    .input("patientFk", sql.UniqueIdentifier, patientId)
+    .input("date", sql.Date, dateStr)
+    .input("serverChangeDate", sql.DateTime, now)
+    .query(`
+      INSERT INTO dbo.DateOfService (id, patientFk, [date], modSyncState, serverChangeDate, isDeleted)
+      VALUES (@id, @patientFk, @date, 2, @serverChangeDate, 0)
+    `);
+  return dosId;
+}
+
 interface WoundStage {
   area: number;
   depth: number;
@@ -286,7 +328,16 @@ export async function generateWoundsAndAssessments(
       for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
         const point = trajectoryPoints[assessmentIdx];
         const seriesId = newGuid();
-        const dateOffset = `${point.dateTime.toISOString().slice(0, 23)}+00:00`;
+        const dateMidnight = toMidnightUtc(point.dateTime);
+        const dateOffset = `${dateMidnight.toISOString().slice(0, 23)}+00:00`;
+
+        const dateOfServiceFk = await ensureDateOfService(
+          db,
+          patient.id,
+          dateMidnight,
+          defaultUnitId,
+          now
+        );
 
         const seriesRow = {
           id: seriesId,
@@ -295,6 +346,9 @@ export async function generateWoundsAndAssessments(
           assessmentTypeVersionFk: spec.form!.assessmentTypeVersionId,
           date: dateOffset,
           timeZoneId: "UTC",
+          creationDate: now,
+          dateOfServiceFk,
+          hasTimeRecorded: 0,
           lastCentralChangeDate: now,
           createdInUnitFk: defaultUnitId,
           isDeleted: 0,
@@ -385,10 +439,13 @@ export async function generateWoundsAndAssessments(
     },
   ];
 
+  const insertedPatientIds = [...new Set(patients.map((p) => p.id))];
+
   return {
     success: true,
     insertedCount: totalAssessments,
     insertedIds,
+    insertedPatientIds,
     verification,
   };
 }
@@ -492,15 +549,29 @@ VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W1', ${toSqlLit
       f.dataType !== "ImageCapture"
   );
 
+  const dosById = new Map<string, string>();
   for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
     const point = trajectoryPoints[assessmentIdx];
     const seriesId = newGuid();
-    const dateOffset = `${point.dateTime.toISOString().slice(0, 23)}+00:00`;
+    const dateMidnight = toMidnightUtc(point.dateTime);
+    const dateStr = dateMidnight.toISOString().slice(0, 10);
+    const dateOffset = `${dateMidnight.toISOString().slice(0, 23)}+00:00`;
+
+    let dosId = dosById.get(dateStr);
+    if (!dosId) {
+      dosId = newGuid();
+      dosById.set(dateStr, dosId);
+      blocks.push(`-- dbo.DateOfService (${dateStr})`);
+      blocks.push(`
+INSERT INTO dbo.DateOfService (id, patientFk, [date], modSyncState, serverChangeDate, isDeleted)
+VALUES (${pid(dosId)}, ${pid(patientId)}, '${dateStr}', 2, ${toSqlLiteral(now)}, 0);
+`.trim());
+    }
 
     blocks.push(`-- dbo.Series (assessment ${assessmentIdx + 1})`);
     blocks.push(`
-INSERT INTO dbo.Series (id, patientFk, woundFk, assessmentTypeVersionFk, date, timeZoneId, lastCentralChangeDate, createdInUnitFk, modSyncState, serverChangeDate, isDeleted)
-VALUES (${pid(seriesId)}, ${pid(patientId)}, ${pid(woundId)}, ${pid(spec.form.assessmentTypeVersionId)}, ${toSqlLiteral(dateOffset)}, N'UTC', ${toSqlLiteral(now)}, ${pid(defaultUnitId)}, 2, ${toSqlLiteral(now)}, 0);
+INSERT INTO dbo.Series (id, patientFk, woundFk, assessmentTypeVersionFk, date, timeZoneId, creationDate, dateOfServiceFk, hasTimeRecorded, lastCentralChangeDate, createdInUnitFk, modSyncState, serverChangeDate, isDeleted)
+VALUES (${pid(seriesId)}, ${pid(patientId)}, ${pid(woundId)}, ${pid(spec.form.assessmentTypeVersionId)}, ${toSqlLiteral(dateOffset)}, N'UTC', ${toSqlLiteral(now)}, ${pid(dosId)}, 0, ${toSqlLiteral(now)}, ${pid(defaultUnitId)}, 2, ${toSqlLiteral(now)}, 0);
 `.trim());
 
     if (scaffoldingDeps) {

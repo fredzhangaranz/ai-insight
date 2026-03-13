@@ -7,6 +7,15 @@ import {
 import { shapeDataForChart } from "@/lib/data-shaper";
 import { normalizeChartMapping } from "@/lib/chart-mapping-utils";
 import { useErrorHandler } from "@/lib/error-handler";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronDown } from "lucide-react";
+
+const CHART_TYPES: ChartType[] = ["bar", "line", "pie", "kpi", "table"];
 
 interface ChartConfigurationDialogProps {
   isOpen: boolean;
@@ -209,13 +218,28 @@ export const ChartConfigurationDialog: React.FC<
                     {chartType}
                   </span>
                 </div>
-                {allowTypeChange && (
-                  <button
-                    onClick={() => onTypeChange?.(chartType)}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                  >
-                    Change Type
-                  </button>
+                {allowTypeChange && onTypeChange && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1"
+                      >
+                        Change Type
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="z-[100]">
+                      {CHART_TYPES.map((type) => (
+                        <DropdownMenuItem
+                          key={type}
+                          onClick={() => onTypeChange(type)}
+                        >
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
 
@@ -317,13 +341,28 @@ export const ChartConfigurationDialog: React.FC<
                   >
                     Edit Mapping
                   </button>
-                  {allowTypeChange && (
-                    <button
-                      onClick={() => onTypeChange?.(chartType)}
-                      className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                    >
-                      Change Type
-                    </button>
+                  {allowTypeChange && onTypeChange && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1"
+                        >
+                          Change Type
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="z-[100]">
+                        {CHART_TYPES.map((type) => (
+                          <DropdownMenuItem
+                            key={type}
+                            onClick={() => onTypeChange(type)}
+                          >
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </div>

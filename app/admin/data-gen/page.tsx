@@ -475,7 +475,7 @@ export default function DataGenPage() {
               const isWound = selectedForm
                 ? isWoundAssessmentForm(selectedForm.assessmentFormName)
                 : false;
-              const totalSteps = isAssessment ? (isWound ? 7 : 6) : 5;
+              const totalSteps = isAssessment ? 7 : 5;
               const displayStep =
                 step === 1
                   ? 1
@@ -746,9 +746,11 @@ export default function DataGenPage() {
                           Copy
                         </Button>
                       </div>
-                      <pre className="bg-slate-900 text-slate-100 rounded-lg p-4 text-xs overflow-auto max-h-96 border border-slate-700">
-                        <code>{previewSql.join("\n\n")}</code>
-                      </pre>
+                      <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-lg border border-slate-700">
+                        <pre className="bg-slate-900 text-slate-100 p-4 text-xs min-h-0">
+                          <code>{previewSql.join("\n\n")}</code>
+                        </pre>
+                      </div>
                     </div>
                   )}
                   <div className="flex justify-between">

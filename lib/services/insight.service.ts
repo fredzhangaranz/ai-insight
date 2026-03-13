@@ -386,11 +386,13 @@ export class InsightService {
 
     // Get customer-specific DB pool
     const pool = await getSqlServerPool(connectionString);
+    // Set session context for rpt schema / row-level security (same connection as query)
+    const allAccessBatch = `EXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${sqlText}`;
     const req = pool.request();
-    
-    console.log("[InsightService.execute] Executing SQL...");
+
+    console.log("[InsightService.execute] Executing SQL (with all_access)...");
     const startTime = Date.now();
-    const result = await req.query(sqlText);
+    const result = await req.query(allAccessBatch);
     const executionTime = Date.now() - startTime;
     
     const rows = result.recordset || [];
