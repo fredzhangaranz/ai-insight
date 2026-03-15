@@ -132,6 +132,9 @@ export interface GenerationSpec {
   assessmentTimingWobbleDays?: number;
   /** default 0.15 */
   missedAppointmentRate?: number;
+  /** assessment window: only generate assessments in [start, start+days). Default: last 28 days */
+  assessmentPeriodDays?: number;
+  assessmentStartDate?: string;
   /** wound assessment only — trajectory-aware field value distributions */
   fieldProfiles?: FieldProfileSet;
 }

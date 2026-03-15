@@ -124,6 +124,7 @@ type AnalysisStatus = "idle" | "running" | "completed" | "canceled" | "error";
 function buildHistorySemanticContext(result: InsightResult | any) {
   return {
     ...(result?.context || {}),
+    originalQuestion: result?.question || null,
     resolvedEntities:
       result?.resolvedEntities?.map((entity: any) => ({
         kind: entity.kind,

@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     // Transform database rows to match expected interface
     const queries = result.rows.map((row: any) => ({
       id: String(row.id),
-      question: row.question,
+      question: row.semanticContext?.originalQuestion || row.question,
       createdAt: new Date(row.createdAt),
       mode: row.mode,
       recordCount: row.resultCount,

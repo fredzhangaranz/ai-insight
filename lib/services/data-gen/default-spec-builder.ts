@@ -20,6 +20,8 @@ export interface TrajectoryConfigInput {
   assessmentIntervalDays: number;
   assessmentTimingWobbleDays: number;
   missedAppointmentRate: number;
+  assessmentPeriodDays?: number;
+  assessmentStartDate?: string;
 }
 
 /** Shape passed from FormSelectorStep */
@@ -231,6 +233,8 @@ export function buildDefaultAssessmentSpec(
     assessmentIntervalDays: trajectoryConfig.assessmentIntervalDays,
     assessmentTimingWobbleDays: trajectoryConfig.assessmentTimingWobbleDays,
     missedAppointmentRate: trajectoryConfig.missedAppointmentRate,
+    assessmentPeriodDays: trajectoryConfig.assessmentPeriodDays,
+    assessmentStartDate: trajectoryConfig.assessmentStartDate,
   };
 
   if (fieldProfiles) {

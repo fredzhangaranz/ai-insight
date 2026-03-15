@@ -336,41 +336,52 @@ export async function generateWoundsAndAssessments(
   const intervalDays = spec.assessmentIntervalDays ?? 7;
   const wobbleDays = spec.assessmentTimingWobbleDays ?? 2;
   const missedRate = spec.missedAppointmentRate ?? 0.15;
-  const assessmentCount = resolveCount(spec.assessmentsPerWound ?? [8, 16]);
+  const assessmentsRange = spec.assessmentsPerWound ?? [8, 16];
+  const assessmentCount = resolveCount(assessmentsRange);
+  const maxAssessments =
+    typeof assessmentsRange[1] === "number" ? assessmentsRange[1] : 16;
+
+  const window = (() => {
+    const periodDays = spec.assessmentPeriodDays;
+    const startStr = spec.assessmentStartDate;
+    if (!periodDays || !startStr) return null;
+    const windowStart = new Date(startStr + "T00:00:00.000Z");
+    const windowEnd = new Date(windowStart);
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + periodDays);
+    return { start: windowStart, end: windowEnd };
+  })();
 
   for (const patient of patients) {
     const woundsPerPatient = resolveCount(spec.woundsPerPatient ?? 2);
+    let woundIndex = 0;
 
     for (let w = 0; w < woundsPerPatient; w++) {
       const woundId = newGuid();
       const anatomyRow = pickRandom(anatomies, 1)[0] as { id: string; name: string };
       const anatomyFk = anatomyRow.id;
       const anatomyName = anatomyRow.name ?? "";
-      const auxText = `W${w + 1}`;
-      const baselineDate = faker.date.past({ years: 1 });
+      const auxText = `W${woundIndex + 1}`;
+
+      let baselineDate: Date;
+      if (window) {
+        const baselineMin = new Date(window.start);
+        baselineMin.setUTCDate(
+          baselineMin.getUTCDate() - maxAssessments * intervalDays
+        );
+        baselineDate = faker.date.between({
+          from: baselineMin,
+          to: window.end,
+        });
+      } else {
+        baselineDate = faker.date.past({ years: 1 });
+      }
+
       const baselineArea = areaMin + Math.random() * (areaMax - areaMin);
       const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;
 
       const progressionStyle = pickProgressionStyle(trajectoryDist);
 
-      const woundRow = {
-        id: woundId,
-        patientFk: patient.id,
-        anatomyFk,
-        auxText,
-        baselineDate: baselineDateOffset,
-        baselineTimeZoneId: "UTC",
-        woundIndex: w + 1,
-        lastCentralChangeDate: now,
-        modSyncState: 2,
-        serverChangeDate: now,
-        isDeleted: 0,
-      };
-
-      await batchInsert(db, "dbo.Wound", [woundRow]);
-      totalWounds++;
-
-      const trajectoryPoints = generateTrajectory({
+      let trajectoryPoints = generateTrajectory({
         baselineArea,
         progressionStyle,
         assessmentCount,
@@ -380,6 +391,33 @@ export async function generateWoundsAndAssessments(
         baselineDate,
         anatomyName,
       });
+
+      if (window) {
+        trajectoryPoints = trajectoryPoints.filter((p) => {
+          const t = p.dateTime.getTime();
+          return t >= window.start.getTime() && t < window.end.getTime();
+        });
+        if (trajectoryPoints.length === 0) continue;
+        trajectoryPoints[0] = { ...trajectoryPoints[0], isBaseline: true };
+      }
+
+      const woundRow = {
+        id: woundId,
+        patientFk: patient.id,
+        anatomyFk,
+        auxText,
+        baselineDate: baselineDateOffset,
+        baselineTimeZoneId: "UTC",
+        woundIndex: woundIndex + 1,
+        lastCentralChangeDate: now,
+        modSyncState: 2,
+        serverChangeDate: now,
+        isDeleted: 0,
+      };
+
+      await batchInsert(db, "dbo.Wound", [woundRow]);
+      totalWounds++;
+      woundIndex++;
 
       const woundAttrFields = formFields.filter(
         (f) =>

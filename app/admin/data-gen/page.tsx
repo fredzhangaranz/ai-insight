@@ -267,6 +267,8 @@ export default function DataGenPage() {
         assessmentIntervalDays: trajectoryConfig.assessmentIntervalDays,
         assessmentTimingWobbleDays: trajectoryConfig.assessmentTimingWobbleDays,
         missedAppointmentRate: trajectoryConfig.missedAppointmentRate,
+        assessmentPeriodDays: trajectoryConfig.assessmentPeriodDays,
+        assessmentStartDate: trajectoryConfig.assessmentStartDate,
       };
     }
     if (selectedForm) {
