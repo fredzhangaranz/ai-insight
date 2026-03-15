@@ -20,8 +20,10 @@ import {
   batchInsert,
   pickRandom,
   weightedPick,
+  generateFieldValue,
 } from "./base.generator";
 import { getFormFields } from "../schema-discovery.service";
+import { isFixedPerWoundField } from "../field-classifier.service";
 import {
   generateTrajectory,
   pickProgressionStyle,
@@ -29,6 +31,7 @@ import {
 import {
   loadScaffoldingDeps,
   insertScaffolding,
+  insertAssessmentSignature,
 } from "./wound-scaffolding";
 import type { FieldProfileSet } from "../trajectory-field-profile.types";
 
@@ -116,6 +119,59 @@ export function sampleFromProfile(
   if (total <= 0) return null;
 
   return weightedPick(dist.weights as Record<string, number>);
+}
+
+/**
+ * Build values for fixed-per-wound fields (e.g. wound type, etiology).
+ * Sampled once per wound from early phase; reused across all assessments.
+ */
+function buildFixedPerWoundValues(
+  woundAttrFields: Array<{ fieldName: string; columnName?: string; attributeTypeId?: string; dataType?: string; options?: string[]; min?: number; max?: number }>,
+  spec: GenerationSpec,
+  progressionStyle: WoundProgressionStyle,
+  trajectoryPoints: Array<{ area: number; perimeter: number }>,
+  fieldSpecsByColumn: Map<string, FieldSpec>,
+  faker: typeof import("@faker-js/faker").faker
+): Map<string, string | number> {
+  const result = new Map<string, string | number>();
+  const firstPoint = trajectoryPoints[0];
+  const earlyStage: WoundStage = firstPoint
+    ? {
+        area: firstPoint.area,
+        depth: firstPoint.area > 0 ? 0.1 + Math.random() * 1.5 : 0,
+        perimeter: firstPoint.perimeter,
+        volume: firstPoint.area > 0 ? firstPoint.area * 0.5 : 0,
+      }
+    : { area: 0, depth: 0, perimeter: 0, volume: 0 };
+
+  for (const f of woundAttrFields) {
+    const columnName = f.columnName ?? "";
+    if (!isFixedPerWoundField(f.fieldName, columnName)) continue;
+
+    let value: string | number | null = null;
+    if (spec.fieldProfiles) {
+      value = sampleFromProfile(
+        spec.fieldProfiles,
+        progressionStyle,
+        0,
+        trajectoryPoints.length,
+        columnName
+      );
+    }
+    if (value === null) {
+      const fieldSpec = fieldSpecsByColumn.get(columnName);
+      if (fieldSpec) {
+        value = generateFieldValue(fieldSpec, faker);
+      }
+    }
+    if (value === null) {
+      value = generateNoteValue(f as FieldSpec, f, earlyStage);
+    }
+    if (value !== null && value !== undefined) {
+      result.set(columnName, value);
+    }
+  }
+  return result;
 }
 
 /**
@@ -325,6 +381,22 @@ export async function generateWoundsAndAssessments(
         anatomyName,
       });
 
+      const woundAttrFields = formFields.filter(
+        (f) =>
+          f.attributeTypeId &&
+          f.isNullable !== false &&
+          f.dataType !== "ImageCapture"
+      );
+
+      const fixedPerWoundValues = buildFixedPerWoundValues(
+        woundAttrFields,
+        spec,
+        progressionStyle,
+        trajectoryPoints,
+        fieldSpecsByColumn,
+        faker
+      );
+
       for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
         const point = trajectoryPoints[assessmentIdx];
         const seriesId = newGuid();
@@ -369,6 +441,8 @@ export async function generateWoundsAndAssessments(
           now
         );
 
+        await insertAssessmentSignature(db, seriesId, scaffoldingDeps, now);
+
         const stage: WoundStage = {
           area: point.area,
           depth: point.area > 0 ? 0.1 + Math.random() * 1.5 : 0,
@@ -376,28 +450,24 @@ export async function generateWoundsAndAssessments(
           volume: point.area > 0 ? point.area * 0.5 : 0,
         };
 
-        const woundAttrFields = formFields.filter(
-          (f) =>
-            f.attributeTypeId &&
-            f.isNullable !== false &&
-            f.dataType !== "ImageCapture"
-        );
-
         for (const formField of woundAttrFields) {
-          const fieldSpec = fieldSpecsByColumn.get(formField.columnName ?? "");
+          const columnName = formField.columnName ?? "";
+          const fieldSpec = fieldSpecsByColumn.get(columnName);
 
           let value: string | number | null = null;
-          if (spec.fieldProfiles) {
+          if (isFixedPerWoundField(formField.fieldName, columnName)) {
+            value = fixedPerWoundValues.get(columnName) ?? null;
+          }
+          if (value === null && spec.fieldProfiles) {
             value = sampleFromProfile(
               spec.fieldProfiles,
               progressionStyle,
               assessmentIdx,
               trajectoryPoints.length,
-              formField.columnName ?? ""
+              columnName
             );
           }
           if (value === null && fieldSpec) {
-            const { generateFieldValue } = await import("./base.generator");
             value = generateFieldValue(fieldSpec, faker);
           }
           if (value === null || value === undefined) {
@@ -549,6 +619,19 @@ VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W1', ${toSqlLit
       f.dataType !== "ImageCapture"
   );
 
+  const fieldSpecsByColumnPreview = new Map<string, FieldSpec>();
+  for (const f of spec.fields ?? []) {
+    if (f.enabled && f.columnName) fieldSpecsByColumnPreview.set(f.columnName, f);
+  }
+  const fixedPerWoundValuesPreview = buildFixedPerWoundValues(
+    woundAttrFieldsDescriptive,
+    spec,
+    progressionStyle,
+    trajectoryPoints,
+    fieldSpecsByColumnPreview,
+    faker
+  );
+
   const dosById = new Map<string, string>();
   for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
     const point = trajectoryPoints[assessmentIdx];
@@ -593,6 +676,12 @@ VALUES (${pid(imageCaptureId)}, ${toSqlLiteral(point.dateTime)}, ${pid(scaffoldi
 INSERT INTO dbo.Outline (id, points, pointCount, area, perimeter, lengthAxis_length, lengthAxis_location, widthAxis_length, widthAxis_location, island, imageCaptureFk, maxDepth, avgDepth, volume, axisExtentMethod, modSyncState, serverChangeDate, isDeleted)
 VALUES (${pid(outlineId)}, 0xD4069A3ECDAB893E96FC623E933EE93E1111B13E26BF183F41A7ED3ED961EA3E, 4, ${point.area}, ${point.perimeter}, ${point.lengthAxisLength}, 0xD4069A3ECDAB893E1111B13E26BF183F, ${point.widthAxisLength}, 0x96FC623E933EE93E2D34D73E916BD03E, 0, ${pid(imageCaptureId)}, NULL, NULL, NULL, 3, 2, ${toSqlLiteral(now)}, 0);
 `.trim());
+      const signatureId = newGuid();
+      blocks.push(`-- dbo.AssessmentSignature (createdBy for rpt.Assessment)`);
+      blocks.push(`
+INSERT INTO dbo.AssessmentSignature (id, seriesFk, staffUserFk, fullName, medicalCredentials, signedDate, modSyncState, serverChangeDate, isDeleted)
+VALUES (${pid(signatureId)}, ${pid(seriesId)}, ${pid(scaffoldingDeps.capturedByStaffUserFk)}, ${toSqlLiteral(scaffoldingDeps.capturedByStaffUserFullName)}, NULL, ${toSqlLiteral(now)}, 2, ${toSqlLiteral(now)}, 0);
+`.trim());
     }
 
     const stage: WoundStage = {
@@ -604,14 +693,18 @@ VALUES (${pid(outlineId)}, 0xD4069A3ECDAB893E96FC623E933EE93E1111B13E26BF183F41A
     if (woundAttrFieldsDescriptive.length > 0) {
       blocks.push(`-- dbo.WoundAttribute (descriptive fields)`);
       for (const formField of woundAttrFieldsDescriptive) {
+        const columnName = formField.columnName ?? "";
         let value: string | number | null = null;
-        if (spec.fieldProfiles) {
+        if (isFixedPerWoundField(formField.fieldName, columnName)) {
+          value = fixedPerWoundValuesPreview.get(columnName) ?? null;
+        }
+        if (value === null && spec.fieldProfiles) {
           value = sampleFromProfile(
             spec.fieldProfiles,
             progressionStyle,
             assessmentIdx,
             trajectoryPoints.length,
-            formField.columnName ?? ""
+            columnName
           );
         }
         if (value === null) {

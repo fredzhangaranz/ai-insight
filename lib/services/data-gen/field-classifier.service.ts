@@ -89,3 +89,27 @@ export function classifyFormField(
 
   return "pure-data";
 }
+
+/** Column/field name patterns for attributes fixed per wound (e.g. wound type, etiology) */
+const FIXED_PER_WOUND_PATTERNS = [
+  "etiology",
+  "woundtype",
+  "wound_type",
+  "wound type",
+  "woundclassification",
+  "wound_classification",
+  "woundtypeid",
+  "wound_type_id",
+];
+
+/**
+ * Returns true if this field should have the same value across all assessments of a wound.
+ * Wound type / etiology rarely changes during a healing trajectory.
+ */
+export function isFixedPerWoundField(
+  fieldName: string,
+  columnName: string
+): boolean {
+  const combined = `${(fieldName ?? "").toLowerCase()} ${(columnName ?? "").toLowerCase()}`;
+  return FIXED_PER_WOUND_PATTERNS.some((p) => combined.includes(p));
+}

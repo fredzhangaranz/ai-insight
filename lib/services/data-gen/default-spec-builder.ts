@@ -42,6 +42,14 @@ const FAKER_BY_COLUMN: Record<string, string> = {
   lastName: "person.lastName",
   firstname: "person.firstName",
   lastname: "person.lastName",
+  // Wound assessment: comment fields → sentence for readability
+  woundReleaseComment: "lorem.sentence",
+  releaseComment: "lorem.sentence",
+  wound_release_comment: "lorem.sentence",
+  release_comment: "lorem.sentence",
+  comment: "lorem.sentence",
+  notes: "lorem.sentence",
+  woundComment: "lorem.sentence",
 };
 
 /**
@@ -114,9 +122,14 @@ function buildCriteriaForField(
       }
       return null;
 
-    case "Text":
-      const fakerMethod = FAKER_BY_COLUMN[f.columnName] ?? "lorem.word";
+    case "Text": {
+      const col = (f.columnName ?? "").toLowerCase();
+      const match = Object.keys(FAKER_BY_COLUMN).find(
+        (k) => k.toLowerCase() === col
+      );
+      const fakerMethod = match ? FAKER_BY_COLUMN[match] : "lorem.word";
       return { type: "faker", fakerMethod };
+    }
 
     case "Date":
     case "DateTime": {
@@ -180,10 +193,15 @@ export function buildDefaultAssessmentSpec(
 
   const fields: FieldSpec[] = woundFields.map((f) => {
     const options = f.options ?? [];
-    const weights: Record<string, number> = {};
+    let criteria: FieldSpec["criteria"];
     if (options.length > 0) {
+      const weights: Record<string, number> = {};
       const w = 1 / options.length;
       for (const opt of options) weights[opt] = w;
+      criteria = { type: "distribution", weights };
+    } else {
+      const fromBuilder = buildCriteriaForField(f);
+      criteria = fromBuilder ?? { type: "faker", fakerMethod: "lorem.word" };
     }
 
     return {
@@ -191,10 +209,7 @@ export function buildDefaultAssessmentSpec(
       columnName: f.columnName,
       dataType: f.dataType,
       enabled: true,
-      criteria:
-        Object.keys(weights).length > 0
-          ? { type: "distribution", weights }
-          : { type: "faker", fakerMethod: "lorem.word" },
+      criteria,
       storageType: "wound_attribute",
       attributeTypeId: f.attributeTypeId,
     };

@@ -146,14 +146,17 @@ export class GeminiProvider extends BaseProvider {
     );
 
     // Use the new SDK's generateContent API
-    // The new SDK supports the latest model IDs like gemini-2.5-flash directly
-    // Combine system prompt and user message into a single content string
-    // The SDK will handle the formatting appropriately
+    // Thinking is disabled (thinkingBudget: 0) — complete() is only used for structured-output
+    // tasks (profile generation, intent classification, etc.) where thinking adds latency without
+    // meaningful accuracy benefit. completeWithConversation has its own config and is unaffected.
     const combinedContent = `${systemPrompt}\n\n${userMessage}`;
 
     const result = await this.genAI.models.generateContent({
-      model: this.modelId, // Use the modelId passed to constructor (e.g., "gemini-2.5-flash")
+      model: this.modelId,
       contents: combinedContent,
+      config: {
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
 
     const apiDuration = Date.now() - apiStartTime;

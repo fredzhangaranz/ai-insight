@@ -45,7 +45,7 @@ export interface GenerateProfilesInput {
 
 /**
  * Generate trajectory-aware field profiles via AI.
- * Returns 4 profiles (one per WoundProgressionStyle) with early/mid/late phases.
+ * Fires one request per trajectory style in parallel for faster wall-clock time.
  */
 export async function generateFieldProfiles(
   input: GenerateProfilesInput,
@@ -53,6 +53,48 @@ export async function generateFieldProfiles(
   const schema = input.formSchema.filter((f) => f.dataType !== "ImageCapture");
   if (schema.length === 0) return buildFallbackProfiles(input.formSchema);
 
+  const provider = await getAIProvider(input.modelId);
+
+  const results = await Promise.allSettled(
+    TRAJECTORY_STYLES.map((style) =>
+      generateSingleProfile(style, schema, input.woundBaselineAreaRange ?? [5, 50], provider),
+    ),
+  );
+
+  const profiles: FieldProfileSet = TRAJECTORY_STYLES.map((style, i) => {
+    const result = results[i];
+    if (result.status === "fulfilled") return result.value;
+    console.warn(`[generateFieldProfiles] style=${style} failed, using fallback:`, result.reason);
+    return buildSingleFallbackProfile(style, schema);
+  });
+
+  return normalizeProfiles(profiles, schema);
+}
+
+const SYSTEM_PROMPT = `You are a clinical data generation assistant. Given a wound assessment form schema and a single wound healing trajectory, produce ONE TrajectoryFieldProfile as a JSON object.
+
+The object must have:
+- trajectoryStyle: the exact style name provided
+- clinicalSummary: brief description of that trajectory
+- phases: array of 3 objects (early, mid, late) with:
+  - phase: "early" | "mid" | "late"
+  - description: e.g. "Weeks 1-3: active wound, heavy exudate"
+  - fieldDistributions: array of { fieldName, columnName, weights } where weights is { "optionValue": 0.5, ... } summing to 1
+
+Rules:
+1. wound_state / healing_status / wound_status fields MUST align with the trajectory at each phase
+2. ONLY use option values from the schema options array
+3. For SingleSelectList/MultiSelectList, every option must appear in weights (can be 0)
+4. For Text/Decimal/Integer, omit from fieldDistributions
+5. early = first 33% of assessments, mid = 33-66%, late = 66-100%
+6. Output ONLY valid JSON. No markdown, no explanation.`;
+
+async function generateSingleProfile(
+  style: WoundProgressionStyle,
+  schema: FieldSchema[],
+  areaRange: [number, number],
+  provider: Awaited<ReturnType<typeof getAIProvider>>,
+): Promise<TrajectoryFieldProfile> {
   const schemaJson = JSON.stringify(
     schema.map((f) => ({
       fieldName: f.fieldName,
@@ -64,72 +106,35 @@ export async function generateFieldProfiles(
     2,
   );
 
-  const trajectoryContext = TRAJECTORY_STYLES.map(
-    (s) => `- ${s}: ${TRAJECTORY_DESCRIPTIONS[s]}`,
-  ).join("\n");
-
-  const areaRange = input.woundBaselineAreaRange ?? [5, 50];
-
-  const systemPrompt = `You are a clinical data generation assistant. Given a wound assessment form schema and wound healing trajectory types, produce a FieldProfileSet (JSON array) with one profile per trajectory style.
-
-Each profile must have:
-- trajectoryStyle: one of Exponential, JaggedLinear, JaggedFlat, NPTraditionalDisposable
-- clinicalSummary: brief description of that trajectory
-- phases: array of 3 objects (early, mid, late) with:
-  - phase: "early" | "mid" | "late"
-  - description: e.g. "Weeks 1-3: active wound, heavy exudate"
-  - fieldDistributions: array of { fieldName, columnName, weights } where weights is { "optionValue": 0.5, ... } summing to 1
-
-Rules:
-1. wound_state / healing_status / wound_status fields MUST align with trajectory at each phase (e.g. late-phase healing wound → Healing/Healed; late-phase deteriorating → Active/Deteriorating)
-2. ONLY use option values from the schema options array
-3. For SingleSelectList/MultiSelectList, every option in the schema must appear in weights (can be 0)
-4. For Text/Decimal/Integer, omit from fieldDistributions (handled separately)
-5. early = first 33% of assessments, mid = 33-66%, late = 66-100%
-6. Output ONLY valid JSON. No markdown, no explanation.`;
-
   const userMessage = `Form schema:
 ${schemaJson}
 
-Trajectory types:
-${trajectoryContext}
-
+Trajectory style: ${style}
+Description: ${TRAJECTORY_DESCRIPTIONS[style]}
 Baseline area range: ${areaRange[0]}-${areaRange[1]} cm²
 
-Produce a FieldProfileSet JSON array with 4 profiles (Exponential, JaggedLinear, JaggedFlat, NPTraditionalDisposable). Each profile has 3 phases (early, mid, late) with fieldDistributions for each dropdown/select field.`;
+Produce a single TrajectoryFieldProfile JSON object for the "${style}" trajectory. Include 3 phases (early, mid, late) with fieldDistributions for each dropdown/select field.`;
 
-  try {
-    const provider = await getAIProvider(input.modelId);
-    const raw = await provider.complete({
-      system: systemPrompt,
-      userMessage,
-      temperature: 0.2,
-    });
+  const raw = await provider.complete({
+    system: SYSTEM_PROMPT,
+    userMessage,
+    temperature: 0.2,
+  });
 
-    const jsonStr = extractJson(raw);
-    const parsed = JSON.parse(jsonStr) as FieldProfileSet;
-
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return buildFallbackProfiles(input.formSchema);
-    }
-
-    return normalizeProfiles(parsed, schema);
-  } catch {
-    return buildFallbackProfiles(input.formSchema);
+  const jsonStr = extractJson(raw);
+  const parsed = JSON.parse(jsonStr) as TrajectoryFieldProfile;
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error(`Invalid profile response for style=${style}`);
   }
+  return { ...parsed, trajectoryStyle: style };
 }
 
 function extractJson(text: string): string {
   const trimmed = text.trim();
-  const start = trimmed.indexOf("[");
-  const end = trimmed.lastIndexOf("]");
-  if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1);
-  }
   const objStart = trimmed.indexOf("{");
   const objEnd = trimmed.lastIndexOf("}");
   if (objStart >= 0 && objEnd > objStart) {
-    return "[" + trimmed.slice(objStart, objEnd + 1) + "]";
+    return trimmed.slice(objStart, objEnd + 1);
   }
   return trimmed;
 }

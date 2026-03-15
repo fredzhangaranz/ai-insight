@@ -671,6 +671,7 @@ export default function DataGenPage() {
                 onRemoveField={handleRemoveField}
                 onBack={() => setStep(2)}
                 onPreview={handlePreview}
+                title={fieldProfiles ? "Review Spec" : "Review Interpreted Spec"}
               />
             )}
 
@@ -768,7 +769,11 @@ export default function DataGenPage() {
             {step === 5 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Step 5: Execution</CardTitle>
+                  <CardTitle>
+                    Step{" "}
+                    {isAssessment && isWound ? 7 : isAssessment ? 6 : 5}
+                    : Execution
+                  </CardTitle>
                   <CardDescription>
                     {isGenerating ? "Generating..." : "Review results"}
                   </CardDescription>

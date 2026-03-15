@@ -30,6 +30,8 @@ export interface ScaffoldingDeps {
   woundImagesAttributeTypeId: string;
   imageFormatFk: string;
   capturedByStaffUserFk: string;
+  /** Full name for AssessmentSignature (createdByUserName in rpt.Assessment) */
+  capturedByStaffUserFullName: string;
 }
 
 /**
@@ -71,18 +73,24 @@ export async function loadScaffoldingDeps(
   }
 
   const staffUserResult = await db.request().query(`
-    SELECT TOP 1 id FROM dbo.StaffUser
+    SELECT TOP 1 id, firstName, lastName FROM dbo.StaffUser
     WHERE [login] = 'aranz' AND isDeleted = 0
   `);
-  const capturedByStaffUserFk = staffUserResult.recordset[0]?.id;
-  if (!capturedByStaffUserFk) {
+  const staffRow = staffUserResult.recordset[0] as
+    | { id: string; firstName: string; lastName: string }
+    | undefined;
+  if (!staffRow?.id) {
     throw new Error("No StaffUser with login 'aranz' found");
   }
+  const capturedByStaffUserFk = staffRow.id;
+  const capturedByStaffUserFullName =
+    [staffRow.firstName, staffRow.lastName].filter(Boolean).join(" ") || "ARANZ Support";
 
   return {
     woundImagesAttributeTypeId,
     imageFormatFk,
     capturedByStaffUserFk,
+    capturedByStaffUserFullName,
   };
 }
 
@@ -145,5 +153,28 @@ export async function insertScaffolding(
     .query(`
       INSERT INTO dbo.Outline (id, points, pointCount, area, perimeter, lengthAxis_length, lengthAxis_location, widthAxis_length, widthAxis_location, island, imageCaptureFk, maxDepth, avgDepth, volume, axisExtentMethod, modSyncState, serverChangeDate, isDeleted)
       VALUES (@id, @points, @pointCount, @area, @perimeter, @lengthAxis_length, @lengthAxis_location, @widthAxis_length, @widthAxis_location, 0, @imageCaptureFk, NULL, NULL, NULL, @axisExtentMethod, 2, @serverChangeDate, 0)
+    `);
+}
+
+/**
+ * Insert AssessmentSignature for a Series so rpt.Assessment gets createdByUserFk/createdByUserName.
+ */
+export async function insertAssessmentSignature(
+  db: ConnectionPool,
+  seriesId: string,
+  deps: ScaffoldingDeps,
+  now: Date
+): Promise<void> {
+  const signatureId = newGuid();
+  await db
+    .request()
+    .input("id", sql.UniqueIdentifier, signatureId)
+    .input("seriesFk", sql.UniqueIdentifier, seriesId)
+    .input("staffUserFk", sql.UniqueIdentifier, deps.capturedByStaffUserFk)
+    .input("fullName", sql.NVarChar, deps.capturedByStaffUserFullName)
+    .input("signedDate", sql.DateTime, now)
+    .query(`
+      INSERT INTO dbo.AssessmentSignature (id, seriesFk, staffUserFk, fullName, medicalCredentials, signedDate, modSyncState, serverChangeDate, isDeleted)
+      VALUES (@id, @seriesFk, @staffUserFk, @fullName, NULL, @signedDate, 2, @signedDate, 0)
     `);
 }

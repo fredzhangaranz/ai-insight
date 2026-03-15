@@ -14,6 +14,8 @@ interface SpecReviewStepProps {
   onRemoveField: (fieldName: string) => void;
   onBack: () => void;
   onPreview: () => void;
+  /** "Review Spec" for wound/default path, "Review Interpreted Spec" when AI interpreted description */
+  title?: string;
 }
 
 function criteriaSummary(criteria: FieldSpec["criteria"]): string {
@@ -35,6 +37,7 @@ export function SpecReviewStep({
   onRemoveField,
   onBack,
   onPreview,
+  title = "Review Interpreted Spec",
 }: SpecReviewStepProps) {
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [applied, setApplied] = useState<Set<string>>(new Set());
@@ -56,7 +59,7 @@ export function SpecReviewStep({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Step 3: Review Interpreted Spec</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <CardDescription>
           Review and fix any issues before previewing
         </CardDescription>
