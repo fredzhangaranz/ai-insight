@@ -40,6 +40,7 @@ export function validateResultSummary(obj: unknown): ResultSummary {
 export interface MessageMetadata {
   // User message metadata
   originalQuestion?: string;
+  sanitizedQuestion?: string;
   wasEdited?: boolean;
   editedAt?: Date;
 
@@ -55,6 +56,11 @@ export interface MessageMetadata {
   queryHistoryId?: number;
   resultSummary?: ResultSummary;
   executionTimeMs?: number;
+  resolvedEntities?: Array<{
+    kind: "patient";
+    opaqueRef: string;
+    matchType: string;
+  }>;
 }
 
 /**

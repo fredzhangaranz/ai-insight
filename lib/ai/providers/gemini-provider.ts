@@ -224,7 +224,8 @@ export class GeminiProvider extends BaseProvider {
     }
 
     const cacheKey = this.getCacheKey(params.customerId);
-    let cacheName = this.getCachedContentName(cacheKey);
+    let cacheName: string | undefined =
+      this.getCachedContentName(cacheKey) ?? undefined;
     let cacheWasCreated = false;
 
     if (!cacheName) {
@@ -232,6 +233,9 @@ export class GeminiProvider extends BaseProvider {
         cacheKey,
         params.customerId
       );
+      if (!cachedContent.name) {
+        throw new Error("Gemini cached content did not return a cache name");
+      }
       cacheName = cachedContent.name;
       cacheWasCreated = true;
     }
@@ -240,7 +244,12 @@ export class GeminiProvider extends BaseProvider {
       params.conversationHistory
     );
     const fullPrompt =
-      conversationPrompt + "\n\nCurrent question: " + params.currentQuestion;
+      conversationPrompt +
+      "\n\nCurrent question: " +
+      params.currentQuestion +
+      (params.trustedSqlInstructions
+        ? `\n\nTrusted SQL instructions:\n${params.trustedSqlInstructions}`
+        : "");
 
     // 🔍 LOGGING LAYER 5: Final prompt to LLM
     if (process.env.DEBUG_COMPOSITION === "true") {
@@ -352,6 +361,9 @@ export class GeminiProvider extends BaseProvider {
           cacheKey,
           params.customerId
         );
+        if (!cachedContent.name) {
+          throw new Error("Gemini cached content did not return a cache name");
+        }
         cacheName = cachedContent.name;
         attempt++;
       }
@@ -400,7 +412,7 @@ export class GeminiProvider extends BaseProvider {
 
     for (const msg of recent) {
       if (msg.role === "user") {
-        history += `User asked: "${msg.content}"\n`;
+        history += `User asked: "${msg.metadata?.sanitizedQuestion || msg.content}"\n`;
         userCount++;
         continue;
       }
@@ -503,6 +515,10 @@ export class GeminiProvider extends BaseProvider {
         displayName: `conversation-context-${cacheKey}`,
       },
     });
+
+    if (!cachedContent.name) {
+      throw new Error("Gemini cached content did not return a cache name");
+    }
 
     cachedContentByKey.set(cacheKey, {
       name: cachedContent.name,

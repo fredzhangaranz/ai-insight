@@ -167,7 +167,12 @@ export class ClaudeProvider extends BaseProvider {
       params.conversationHistory
     );
     const fullPrompt =
-      conversationPrompt + "\n\nCurrent question: " + params.currentQuestion;
+      conversationPrompt +
+      "\n\nCurrent question: " +
+      params.currentQuestion +
+      (params.trustedSqlInstructions
+        ? `\n\nTrusted SQL instructions:\n${params.trustedSqlInstructions}`
+        : "");
 
     // Log prompts if enabled
     if (process.env.LOG_LLM_PROMPTS === "true") {
@@ -243,7 +248,7 @@ export class ClaudeProvider extends BaseProvider {
 
     for (const msg of recent) {
       if (msg.role === "user") {
-        history += `User asked: "${msg.content}"\n`;
+        history += `User asked: "${msg.metadata?.sanitizedQuestion || msg.content}"\n`;
         continue;
       }
 

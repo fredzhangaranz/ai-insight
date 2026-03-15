@@ -1,6 +1,10 @@
 // lib/hooks/useInsights.ts
 
 import { useEffect, useRef, useState } from "react";
+import type {
+  InsightArtifact,
+  ResolvedEntitySummary,
+} from "@/lib/types/insight-artifacts";
 import type { FieldAssumption } from "@/lib/services/semantic/sql-generator.types";
 import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
@@ -47,7 +51,7 @@ export interface ClarificationRequest {
   placeholder: string;
   prompt: string;
   examples?: string[];
-  options?: string[];
+  options?: Array<string | { label: string; value: string }>;
   templateName?: string;        // Template context
   templateSummary?: string;
   reason?: string;
@@ -83,7 +87,6 @@ export interface InsightResult {
     columns: string[];
   };
   sqlValidation?: SQLValidationResult;
-  sqlValidation?: SQLValidationResult;
 
   // Clarification fields (when mode IS clarification)
   requiresClarification?: boolean;
@@ -111,9 +114,25 @@ export interface InsightResult {
   complexityScore?: number;
   executionStrategy?: "auto" | "preview" | "inspect";
   assumptions?: FieldAssumption[];
+  artifacts?: InsightArtifact[];
+  resolvedEntities?: ResolvedEntitySummary[];
+  boundParameters?: Record<string, string | number | boolean | null>;
 }
 
 type AnalysisStatus = "idle" | "running" | "completed" | "canceled" | "error";
+
+function buildHistorySemanticContext(result: InsightResult | any) {
+  return {
+    ...(result?.context || {}),
+    resolvedEntities:
+      result?.resolvedEntities?.map((entity: any) => ({
+        kind: entity.kind,
+        opaqueRef: entity.opaqueRef,
+        matchType: entity.matchType,
+      })) || null,
+    boundParameterNames: Object.keys(result?.boundParameters || {}),
+  };
+}
 
 const STEP_TEMPLATE: Array<Pick<ThinkingStep, "id" | "message">> = [
   {
@@ -410,7 +429,7 @@ export function useInsights() {
             sql: data.sql,
             mode: data.mode || "direct",
             resultCount: data.results?.rows?.length || 0,
-            semanticContext: data.context || null,
+            semanticContext: buildHistorySemanticContext(data),
             sqlValidation: data.sqlValidation || null,
           }),
         });
@@ -539,7 +558,7 @@ export function useInsights() {
             sql: data.sql,
             mode: data.mode || "direct",
             resultCount: data.results?.rows?.length || 0,
-            semanticContext: data.context || null,
+            semanticContext: buildHistorySemanticContext(data),
             sqlValidation: data.sqlValidation || null,
             clarificationAuditIds,
           }),

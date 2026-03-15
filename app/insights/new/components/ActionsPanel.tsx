@@ -34,6 +34,9 @@ export function ActionsPanel({
     chartType: ChartType;
     chartMapping: Record<string, string>;
   } | null>(null);
+  const existingChartArtifact = result.artifacts?.find(
+    (artifact) => artifact.kind === "chart"
+  );
 
   const handleExportCSV = () => {
     if (!result.results || result.results.rows.length === 0) {
@@ -123,7 +126,7 @@ export function ActionsPanel({
             disabled={!result.results || result.results.rows.length === 0}
           >
             <BarChart3 className="mr-2 h-4 w-4" />
-            Create Chart
+            {existingChartArtifact ? "Edit Chart" : "Create Chart"}
           </Button>
 
           <Button variant="outline" size="sm" disabled title="Coming in Phase 7F">
@@ -149,7 +152,16 @@ export function ActionsPanel({
             setChartType("bar");
           }}
           queryResults={result.results.rows}
-          chartType={chartType}
+          chartType={
+            existingChartArtifact?.kind === "chart"
+              ? existingChartArtifact.chartType
+              : chartType
+          }
+          initialMapping={
+            existingChartArtifact?.kind === "chart"
+              ? existingChartArtifact.mapping
+              : undefined
+          }
           title={result.question || "Query Results"}
           onSave={handleChartSave}
           saveButtonText="Continue to Save"

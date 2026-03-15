@@ -5,7 +5,7 @@ import {
   type ChartDataType,
 } from "@/app/components/charts/chart-component";
 import { shapeDataForChart } from "@/lib/data-shaper";
-import { normalizeChartMapping } from "@/lib/chart-mapping-utils";
+import { inferChartMapping } from "@/lib/chart-mapping-utils";
 import { useErrorHandler } from "@/lib/error-handler";
 import {
   DropdownMenu,
@@ -66,7 +66,11 @@ export const ChartConfigurationDialog: React.FC<
       setStep("mapping");
       setChartData(null);
 
-      const baseMapping = initialMapping ?? {};
+      const baseMapping = inferChartMapping(
+        chartType,
+        queryResults || [],
+        initialMapping ?? {}
+      );
 
       // Extract available fields from query results
       if (queryResults && queryResults.length > 0) {
@@ -137,8 +141,9 @@ export const ChartConfigurationDialog: React.FC<
       if (chartType === "table") {
         setChartData(queryResults);
       } else {
-        const normalizedMapping = normalizeChartMapping(
+        const normalizedMapping = inferChartMapping(
           chartType,
+          queryResults,
           chartMapping
         );
         const shapedData = shapeDataForChart(

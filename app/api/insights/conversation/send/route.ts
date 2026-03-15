@@ -35,10 +35,21 @@ import type { InsightResult } from "@/lib/hooks/useInsights";
 import { normalizeJson } from "@/lib/utils/normalize-json";
 import { addResultToCache, trimContextCache } from "@/lib/services/context-cache.service";
 import {
+  type SendConversationMessageRequest,
   SendConversationMessageSchema,
   validateRequest,
 } from "@/lib/validation/conversation-schemas";
 import { cleanSqlQuery } from "@/lib/utils/sql-cleaning";
+import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
+import {
+  PatientEntityResolver,
+  type PatientResolutionResult,
+  toPatientOpaqueRef,
+} from "@/lib/services/patient-entity-resolver.service";
+import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
+import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
+import type { ResolvedEntitySummary } from "@/lib/types/insight-artifacts";
+import { validateTrustedSql } from "@/lib/services/trusted-sql-guard.service";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -53,7 +64,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Validate request with Zod
-    const validation = validateRequest(SendConversationMessageSchema, body);
+    const validation = validateRequest<SendConversationMessageRequest>(
+      SendConversationMessageSchema,
+      body
+    );
     if (!validation.valid) {
       return NextResponse.json(
         {
@@ -69,6 +83,68 @@ export async function POST(req: NextRequest) {
     const normalizedCustomerId = customerId;
     const normalizedQuestion = question;
     const normalizedUserMessageId = userMessageIdParam || null;
+    const featureFlags = getInsightsFeatureFlags();
+    const patientResolver = new PatientEntityResolver();
+    const promptSanitizer = new PromptSanitizationService();
+    const artifactPlanner = new ArtifactPlannerService();
+    let sanitizedQuestion = normalizedQuestion;
+    let trustedSqlInstructions: string | undefined;
+    let boundParameters: Record<string, string | number | boolean | null> | undefined;
+    let resolvedEntities: ResolvedEntitySummary[] | undefined;
+    let patientResolution: PatientResolutionResult | null = null;
+
+    if (featureFlags.patientEntityResolution) {
+      patientResolution = await patientResolver.resolve(
+        normalizedQuestion,
+        normalizedCustomerId
+      );
+
+      if (
+        patientResolution.selectedMatch &&
+        patientResolution.opaqueRef &&
+        patientResolution.matchType
+      ) {
+        resolvedEntities = [
+          {
+            kind: "patient",
+            opaqueRef: patientResolution.opaqueRef,
+            displayLabel: patientResolution.selectedMatch.patientName,
+            matchType: patientResolution.matchType,
+            requiresConfirmation:
+              patientResolution.status === "confirmation_required",
+            unitName: patientResolution.selectedMatch.unitName,
+          },
+        ];
+      }
+
+      if (
+        patientResolution.status === "resolved" &&
+        patientResolution.selectedMatch &&
+        patientResolution.resolvedId &&
+        patientResolution.opaqueRef &&
+        patientResolution.matchType
+      ) {
+        boundParameters = { patientId1: patientResolution.resolvedId };
+
+        if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+          const sanitization = promptSanitizer.sanitize({
+            question: normalizedQuestion,
+            patientMentions: [
+              {
+                matchedText: patientResolution.matchedText,
+                opaqueRef: patientResolution.opaqueRef,
+              },
+            ],
+          });
+          sanitizedQuestion = sanitization.sanitizedQuestion;
+          trustedSqlInstructions = [
+            "A patient was resolved securely before SQL generation.",
+            ...sanitization.trustedContextLines,
+            "You must use @patientId1 in the SQL and must not embed literal patient identifiers.",
+          ].join("\n");
+        }
+      }
+    }
     const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
 
@@ -122,12 +198,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!currentThreadId) {
+      throw new Error("Conversation thread could not be established");
+    }
+    const ensuredThreadId = currentThreadId;
+
     let userMessageId: string | undefined = normalizedUserMessageId || undefined;
 
     if (userMessageId) {
       const validation = await validateUserMessage(
         userMessageId,
-        currentThreadId,
+        ensuredThreadId,
         normalizedCustomerId,
         normalizedQuestion,
         userId,
@@ -148,14 +229,92 @@ export async function POST(req: NextRequest) {
         VALUES ($1, 'user', $2, $3)
         RETURNING id, "createdAt"
         `,
-        [currentThreadId, question, JSON.stringify({})]
+        [
+          ensuredThreadId,
+          question,
+          JSON.stringify(
+            {
+              ...(sanitizedQuestion !== normalizedQuestion
+                ? { sanitizedQuestion }
+                : {}),
+              ...(resolvedEntities?.length
+                ? {
+                    resolvedEntities: resolvedEntities.map((entity) => ({
+                      kind: entity.kind,
+                      opaqueRef: entity.opaqueRef,
+                      matchType: entity.matchType,
+                    })),
+                  }
+                : {}),
+            }
+          ),
+        ]
       );
 
       userMessageId = userMsgResult.rows[0].id;
     }
 
+    if (
+      patientResolution &&
+      (patientResolution.status === "confirmation_required" ||
+        patientResolution.status === "disambiguation_required" ||
+        patientResolution.status === "not_found")
+    ) {
+      const clarificationResult = buildPatientClarificationResult(
+        normalizedQuestion,
+        patientResolution,
+        resolvedEntities
+      );
+      const assistantMetadata: MessageMetadata = {
+        modelUsed: String(modelId || "").trim() || DEFAULT_AI_MODEL_ID,
+        mode: "clarification",
+        executionTimeMs: Date.now() - startTime,
+        resolvedEntities: (resolvedEntities || []).map((entity) => ({
+          kind: entity.kind,
+          opaqueRef: entity.opaqueRef,
+          matchType: entity.matchType,
+        })),
+      };
+
+      const phiProtection = new PHIProtectionService();
+      phiProtection.validateNoPHI(assistantMetadata);
+
+      const assistantMsgResult = await pool.query(
+        `
+        INSERT INTO "ConversationMessages"
+          ("threadId", "role", "content", "metadata")
+        VALUES ($1, 'assistant', $2, $3)
+        RETURNING id, "createdAt"
+        `,
+        [
+          ensuredThreadId,
+          generateResponseText(clarificationResult),
+          JSON.stringify(assistantMetadata),
+        ]
+      );
+
+      return NextResponse.json({
+        threadId: ensuredThreadId,
+        userMessageId,
+        message: {
+          id: assistantMsgResult.rows[0].id,
+          role: "assistant",
+          content: generateResponseText(clarificationResult),
+          result: clarificationResult,
+          metadata: assistantMetadata,
+          createdAt: assistantMsgResult.rows[0].createdAt,
+        },
+        compositionStrategy: COMPOSITION_STRATEGIES.FRESH,
+        executionTimeMs: Date.now() - startTime,
+      });
+    }
+
+    if (!userMessageId) {
+      throw new Error("User message could not be established");
+    }
+
     const conversationHistory = await loadConversationHistory(
-      currentThreadId,
+      ensuredThreadId,
       userMessageId
     );
 
@@ -203,9 +362,14 @@ export async function POST(req: NextRequest) {
     let compositionStrategy: CompositionStrategy = COMPOSITION_STRATEGIES.FRESH;
     let sqlText = "";
 
-    if (lastAssistant?.metadata?.sql && previousQuestion) {
+    const compositionAllowed =
+      !boundParameters &&
+      !resolvedEntities?.length &&
+      !lastAssistant?.metadata?.resolvedEntities?.length;
+
+    if (compositionAllowed && lastAssistant?.metadata?.sql && previousQuestion) {
       const decision = await sqlComposer.shouldComposeQuery(
-        question,
+        sanitizedQuestion,
         previousQuestion,
         lastAssistant.metadata.sql,
         baseProvider
@@ -221,7 +385,7 @@ export async function POST(req: NextRequest) {
         const composed = await sqlComposer.composeQuery(
           lastAssistant.metadata.sql,
           previousQuestion,
-          question,
+          sanitizedQuestion,
           baseProvider
         );
 
@@ -271,8 +435,9 @@ export async function POST(req: NextRequest) {
 
       const generatedSql = await provider.completeWithConversation({
         conversationHistory,
-        currentQuestion: question,
+        currentQuestion: sanitizedQuestion,
         customerId: customerId,
+        trustedSqlInstructions,
       });
       sqlText = generatedSql.trim();
       compositionStrategy = COMPOSITION_STRATEGIES.FRESH;
@@ -291,7 +456,10 @@ export async function POST(req: NextRequest) {
       cleanedSql.slice(0, 500)
     );
 
-    const execution = await executeSql(cleanedSql, normalizedCustomerId);
+    const execution = await executeSql(cleanedSql, normalizedCustomerId, {
+      boundParameters,
+      resolvedEntities,
+    });
     const executionTimeMs = Date.now() - startTime;
 
     const result: InsightResult = {
@@ -302,7 +470,22 @@ export async function POST(req: NextRequest) {
       results: execution.results,
       sqlValidation: execution.sqlValidation,
       error: execution.error,
+      boundParameters,
+      resolvedEntities,
     };
+
+    if (
+      (featureFlags.chartFirstResults || featureFlags.conversationArtifacts) &&
+      result.results
+    ) {
+      result.artifacts = artifactPlanner.plan({
+        question: normalizedQuestion,
+        rows: result.results.rows,
+        columns: result.results.columns,
+        sql: result.sql,
+        resolvedEntities,
+      });
+    }
 
     const phiProtection = new PHIProtectionService();
     const safeResultSummary = phiProtection.createSafeResultSummary(
@@ -323,6 +506,11 @@ export async function POST(req: NextRequest) {
       contextDependencies,
       resultSummary: safeResultSummary,
       executionTimeMs,
+      resolvedEntities: resolvedEntities?.map((entity) => ({
+        kind: entity.kind,
+        opaqueRef: entity.opaqueRef,
+        matchType: entity.matchType,
+      })),
     };
 
     phiProtection.validateNoPHI(assistantMetadata);
@@ -395,15 +583,24 @@ export async function POST(req: NextRequest) {
         ? parentQueryHistoryId
         : undefined;
     const queryHistoryId = await logQueryHistory({
-      question: question,
+      question: sanitizedQuestion,
       customerId: customerId,
       userId,
       sql: historySql,
       mode: historyMode,
       resultCount: result.results?.rows.length || 0,
       sqlValidation: result.sqlValidation,
-      semanticContext: { compositionStrategy },
-      threadId: currentThreadId,
+      semanticContext: {
+        compositionStrategy,
+        resolvedEntities:
+          resolvedEntities?.map((entity) => ({
+            kind: entity.kind,
+            opaqueRef: entity.opaqueRef,
+            matchType: entity.matchType,
+          })) || null,
+        boundParameterNames: Object.keys(boundParameters || {}),
+      },
+      threadId: ensuredThreadId,
       messageId: assistantMessageId,
       compositionStrategy,
       parentQueryHistoryId: normalizedParentQueryHistoryId,
@@ -426,14 +623,14 @@ export async function POST(req: NextRequest) {
     }
 
     await updateContextCache(
-      currentThreadId,
+      ensuredThreadId,
       normalizedCustomerId,
       assistantMessageId,
       safeResultSummary
     );
 
     return NextResponse.json({
-      threadId: currentThreadId,
+      threadId: ensuredThreadId,
       userMessageId,
       message: {
         id: assistantMessageId,
@@ -528,7 +725,11 @@ function findLastAssistantWithQuestion(
 
     for (let j = i - 1; j >= 0; j -= 1) {
       if (history[j].role === "user") {
-        return { assistantMessage: message, previousQuestion: history[j].content };
+        return {
+          assistantMessage: message,
+          previousQuestion:
+            history[j].metadata?.sanitizedQuestion || history[j].content,
+        };
       }
     }
 
@@ -540,13 +741,50 @@ function findLastAssistantWithQuestion(
 
 async function executeSql(
   sqlText: string,
-  customerId: string
+  customerId: string,
+  options?: {
+    boundParameters?: Record<string, string | number | boolean | null>;
+    resolvedEntities?: ResolvedEntitySummary[];
+  }
 ): Promise<{
   executedSql: string;
   results: { rows: any[]; columns: string[] };
   sqlValidation: SQLValidationResult;
   error?: { message: string; step: string; details?: any };
 }> {
+  const trustedValidation = validateTrustedSql({
+    sql: sqlText,
+    patientParamNames: Object.keys(options?.boundParameters || {}),
+    resolvedPatientIds: Object.values(options?.boundParameters || {})
+      .map((value) => (typeof value === "string" ? value : undefined))
+      .filter((value): value is string => Boolean(value)),
+  });
+
+  if (!trustedValidation.valid) {
+    return {
+      executedSql: sqlText,
+      results: { rows: [], columns: [] },
+      sqlValidation: {
+        isValid: false,
+        warnings: [],
+        analyzedAt: new Date().toISOString(),
+        errors: [
+          {
+            type: "TRUSTED_SQL_VIOLATION",
+            message:
+              trustedValidation.message || "Trusted SQL validation failed",
+            suggestion:
+              "Use the bound patient parameter instead of embedding patient identifiers.",
+          },
+        ],
+      } as unknown as SQLValidationResult,
+      error: {
+        message: trustedValidation.message || "Trusted SQL validation failed",
+        step: "execute_query",
+      },
+    };
+  }
+
   const validator = getSQLValidator();
   const sqlValidation = validator.validate(sqlText);
 
@@ -565,7 +803,11 @@ async function executeSql(
 
   try {
     const fixedSql = validateAndFixQuery(sqlText);
-    const execution = await executeCustomerQuery(customerId, fixedSql);
+    const execution = await executeCustomerQuery(
+      customerId,
+      fixedSql,
+      options?.boundParameters
+    );
     return {
       executedSql: fixedSql,
       results: {
@@ -818,6 +1060,98 @@ async function validateUserMessage(
   }
 
   return { valid: true };
+}
+
+function buildPatientClarificationResult(
+  question: string,
+  resolution: PatientResolutionResult,
+  resolvedEntities?: ResolvedEntitySummary[]
+): InsightResult {
+  if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
+    return {
+      mode: "clarification",
+      question,
+      thinking: [],
+      requiresClarification: true,
+      resolvedEntities,
+      clarifications: [
+        {
+          placeholder: "patient_resolution_confirm",
+          prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
+          options: [
+            {
+              label: `Use ${resolution.selectedMatch.patientName}`,
+              value: resolution.opaqueRef || "",
+            },
+            {
+              label: "Choose a different patient",
+              value: "__CHANGE_PATIENT__",
+            },
+          ],
+          freeformAllowed: {
+            allowed: true,
+            placeholder: "Enter an exact patient name or ID",
+            hint: "Use an exact full name, patient ID, or domain ID",
+            minChars: 3,
+            maxChars: 100,
+          },
+        },
+      ],
+      clarificationReasoning:
+        "I found one exact full-name match and need a quick confirmation before running the query.",
+    };
+  }
+
+  if (
+    resolution.status === "disambiguation_required" &&
+    Array.isArray(resolution.matches) &&
+    resolution.matches.length > 0
+  ) {
+    return {
+      mode: "clarification",
+      question,
+      thinking: [],
+      requiresClarification: true,
+      clarifications: [
+        {
+          placeholder: "patient_resolution_select",
+          prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
+          options: resolution.matches.map((match) => ({
+            label: match.unitName
+              ? `${match.patientName} (${match.unitName})`
+              : match.patientName,
+            value: toPatientOpaqueRef(match.patientId),
+          })),
+        },
+      ],
+      clarificationReasoning:
+        "I found multiple exact full-name matches and need you to choose the correct patient.",
+    };
+  }
+
+  return {
+    mode: "clarification",
+    question,
+    thinking: [],
+    requiresClarification: true,
+    clarifications: [
+      {
+        placeholder: "patient_lookup_input",
+        prompt: resolution.candidateText
+          ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
+          : "Please enter an exact full name or patient ID.",
+        freeformAllowed: {
+          allowed: true,
+          placeholder: "e.g. Fred Smith or 12345",
+          hint: "Use an exact full name, patient ID, or domain ID",
+          minChars: 3,
+          maxChars: 100,
+        },
+      },
+    ],
+    clarificationReasoning:
+      "I couldn't resolve the patient reference securely. Please provide an exact patient name or ID.",
+  };
 }
 
 function generateResponseText(result: InsightResult): string {

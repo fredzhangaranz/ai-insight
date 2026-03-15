@@ -8,6 +8,7 @@ import { MessageActions } from "./MessageActions";
 import { SQLPreview } from "./SQLPreview";
 import type { InsightResult } from "@/lib/hooks/useInsights";
 import type { MessageMetadata } from "@/lib/types/conversation";
+import { ArtifactRenderer } from "./ArtifactRenderer";
 
 const STRATEGY_METADATA: Record<
   NonNullable<MessageMetadata["compositionStrategy"]>,
@@ -208,12 +209,23 @@ export function AssistantMessage({
           )}
 
           {message.result && !isLoading && message.result.results && (
-            <div className="mt-4">
-              <ResultsTable
-                columns={message.result.results.columns}
-                rows={message.result.results.rows}
-                maxRows={10}
-              />
+            <div className="mt-4 space-y-4">
+              {message.result.artifacts && message.result.artifacts.length > 0 ? (
+                message.result.artifacts.map((artifact, index) => (
+                  <ArtifactRenderer
+                    key={`${artifact.kind}-${index}`}
+                    artifact={artifact}
+                    rows={message.result?.results?.rows || []}
+                    columns={message.result?.results?.columns || []}
+                  />
+                ))
+              ) : (
+                <ResultsTable
+                  columns={message.result.results.columns}
+                  rows={message.result.results.rows}
+                  maxRows={10}
+                />
+              )}
             </div>
           )}
 

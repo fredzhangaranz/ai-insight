@@ -12,6 +12,10 @@ import { ConversationalRefinement } from "./ConversationalRefinement";
 import { ConversationPanel } from "./ConversationPanel";
 import { InspectionPanel } from "./InspectionPanel";
 import { InsightResult } from "@/lib/hooks/useInsights";
+import { ArtifactRenderer } from "./ArtifactRenderer";
+import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
+import type { ChartType } from "@/lib/chart-contracts";
+import type { ChartArtifact } from "@/lib/types/insight-artifacts";
 
 interface InsightResultsProps {
   result: InsightResult;
@@ -34,6 +38,11 @@ export function InsightResults({
 }: InsightResultsProps) {
   const [stepPreviewApproved, setStepPreviewApproved] = useState(false);
   const [refinementInput, setRefinementInput] = useState("");
+  const [showChartDialog, setShowChartDialog] = useState(false);
+  const [chartType, setChartType] = useState<ChartType>("bar");
+  const [initialChartMapping, setInitialChartMapping] = useState<
+    Record<string, string> | undefined
+  >(undefined);
   const validation = result.sqlValidation;
   const hasErrors = Boolean(
     validation && !validation.isValid && validation.errors.length > 0,
@@ -91,6 +100,12 @@ export function InsightResults({
     // When user challenges an assumption, pre-fill the refinement input
     // This integrates Task 12 (Inspection Panel) with Task 11 (Conversational Refinement)
     setRefinementInput(`I disagree with using "${assumption}". ${explanation}`);
+  };
+
+  const handleEditChart = (artifact: ChartArtifact) => {
+    setChartType(artifact.chartType);
+    setInitialChartMapping(artifact.mapping);
+    setShowChartDialog(true);
   };
 
   return (
@@ -217,41 +232,54 @@ export function InsightResults({
           </h3>
         </div>
 
-        {/* Simple table display */}
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {result.results?.columns.map((col) => (
-                  <th
-                    key={col}
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {result.results?.rows.slice(0, 10).map((row, i) => (
-                <tr key={i}>
+        {result.artifacts && result.artifacts.length > 0 ? (
+          <div className="space-y-4">
+            {result.artifacts.map((artifact, index) => (
+              <ArtifactRenderer
+                key={`${artifact.kind}-${index}`}
+                artifact={artifact}
+                rows={result.results?.rows || []}
+                columns={result.results?.columns || []}
+                onEditChart={artifact.kind === "chart" ? handleEditChart : undefined}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
                   {result.results?.columns.map((col) => (
-                    <td key={col} className="px-4 py-3 text-sm text-gray-900">
-                      {row[col] !== null && row[col] !== undefined
-                        ? String(row[col])
-                        : "-"}
-                    </td>
+                    <th
+                      key={col}
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      {col}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {result.results && result.results.rows.length > 10 && (
-            <div className="text-sm text-gray-500 mt-4 text-center">
-              Showing first 10 of {result.results.rows.length} rows
-            </div>
-          )}
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {result.results?.rows.slice(0, 10).map((row, i) => (
+                  <tr key={i}>
+                    {result.results?.columns.map((col) => (
+                      <td key={col} className="px-4 py-3 text-sm text-gray-900">
+                        {row[col] !== null && row[col] !== undefined
+                          ? String(row[col])
+                          : "-"}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {result.results && result.results.rows.length > 10 && (
+              <div className="text-sm text-gray-500 mt-4 text-center">
+                Showing first 10 of {result.results.rows.length} rows
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Inspection Panel - Show how the AI arrived at this answer */}
         <InspectionPanel
@@ -283,6 +311,22 @@ export function InsightResults({
         customerId={customerId}
         onRefine={onRefine}
       />
+
+      {showChartDialog && result.results && (
+        <ChartConfigurationDialog
+          isOpen={showChartDialog}
+          onClose={() => {
+            setShowChartDialog(false);
+            setInitialChartMapping(undefined);
+          }}
+          queryResults={result.results.rows}
+          chartType={chartType}
+          initialMapping={initialChartMapping}
+          title={result.question || "Query Results"}
+          allowTypeChange={true}
+          onTypeChange={setChartType}
+        />
+      )}
 
       {/* New Question button at bottom */}
       {onNewQuestion && (

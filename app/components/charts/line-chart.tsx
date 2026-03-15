@@ -54,6 +54,28 @@ export function LineChart({
     return aVal - bVal;
   });
 
+  const seriesLabels = Array.from(
+    new Set(
+      sortedData
+        .map((point) => point.label)
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+
+  const multiSeriesData =
+    seriesLabels.length > 1
+      ? Array.from(
+          sortedData.reduce((acc, point) => {
+            const key = point.x instanceof Date ? point.x.toISOString() : String(point.x);
+            const current = acc.get(key) || { x: point.x };
+            const seriesKey = point.label || "value";
+            current[seriesKey] = point.y;
+            acc.set(key, current);
+            return acc;
+          }, new Map<string, Record<string, any>>()).values()
+        )
+      : sortedData;
+
   // Format date for tooltip and axis if needed
   const formatXValue = (value: string | number | Date): string => {
     if (value instanceof Date) {
@@ -71,7 +93,7 @@ export function LineChart({
       )}
       <ResponsiveContainer width="100%" height="100%">
         <RechartsLineChart
-          data={sortedData}
+          data={multiSeriesData}
           margin={{
             top: 20,
             right: 30,
@@ -107,18 +129,34 @@ export function LineChart({
               borderRadius: "4px",
             }}
           />
-          <Line
-            type="monotone"
-            dataKey="y"
-            stroke={lineColor}
-            strokeWidth={2}
-            dot={showDots ? { r: 4, strokeWidth: 2 } : false}
-            activeDot={{ r: 6, strokeWidth: 2 }}
-            name={yAxisLabel || "Value"}
-            connectNulls
-            fill={showArea ? lineColor : undefined}
-            fillOpacity={showArea ? 0.1 : 0}
-          />
+          {seriesLabels.length > 1
+            ? seriesLabels.map((seriesLabel, index) => (
+                <Line
+                  key={seriesLabel}
+                  type="monotone"
+                  dataKey={seriesLabel}
+                  stroke={["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c"][index % 5]}
+                  strokeWidth={2}
+                  dot={showDots ? { r: 3, strokeWidth: 2 } : false}
+                  activeDot={{ r: 5, strokeWidth: 2 }}
+                  name={seriesLabel}
+                  connectNulls
+                />
+              ))
+            : (
+              <Line
+                type="monotone"
+                dataKey="y"
+                stroke={lineColor}
+                strokeWidth={2}
+                dot={showDots ? { r: 4, strokeWidth: 2 } : false}
+                activeDot={{ r: 6, strokeWidth: 2 }}
+                name={yAxisLabel || "Value"}
+                connectNulls
+                fill={showArea ? lineColor : undefined}
+                fillOpacity={showArea ? 0.1 : 0}
+              />
+            )}
           <Legend />
         </RechartsLineChart>
       </ResponsiveContainer>

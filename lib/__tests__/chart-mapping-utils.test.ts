@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  inferChartMapping,
   normalizeChartMapping,
   normalizeAvailableMappings,
 } from "@/lib/chart-mapping-utils";
@@ -45,3 +46,21 @@ describe("normalizeAvailableMappings", () => {
   });
 });
 
+describe("inferChartMapping", () => {
+  it("prefers a numeric metric over a date field for line-chart y", () => {
+    const inferred = inferChartMapping(
+      "line",
+      [
+        {
+          AssessmentDate: new Date("2026-01-01"),
+          WoundArea: 12.5,
+          WoundLabel: "W1",
+        },
+      ],
+      { x: "AssessmentDate", y: "AssessmentDate" }
+    );
+
+    expect(inferred.x).toBe("AssessmentDate");
+    expect(inferred.y).toBe("WoundArea");
+  });
+});

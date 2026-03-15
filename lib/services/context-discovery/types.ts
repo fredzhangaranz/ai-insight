@@ -38,6 +38,8 @@ export interface IntentClassificationResult {
   metrics: string[];
   filters: IntentFilter[];
   timeRange?: TimeRange;
+  presentationIntent?: "chart" | "table" | "either";
+  preferredVisualization?: "line" | "bar" | "kpi" | "table" | null;
   confidence: number;
   reasoning: string; // LLM explanation of intent
 }

@@ -78,6 +78,8 @@ JSON must include these fields:
 - metrics: Array of metric names
 - filters: Array of filter objects with EXACT structure below
 - timeRange: null or object with unit (days/weeks/months/years) and number value
+- presentationIntent: "chart" | "table" | "either"
+- preferredVisualization: "line" | "bar" | "kpi" | "table" | null
 - confidence: number between 0.0 and 1.0
 - reasoning: string explanation
 
@@ -120,7 +122,16 @@ For "how many patients" respond with:
    - Healing rate, infection rate, closure rate, assessment frequency, etc.
    - Be specific: "average_healing_rate" not just "healing"
 
-4. **Classify Intent**: Choose the BEST matching intent type
+4. **Determine Presentation Intent**:
+   - Use "chart" when user explicitly asks for a chart/graph/plot or the request is clearly a trend over time.
+   - Use "table" when user asks to list/show rows.
+   - Use "either" otherwise.
+   - Use preferredVisualization "line" for time-series/trend language such as "over time", "trend", "change over time", "healing progression".
+   - Use preferredVisualization "bar" for comparisons by category.
+   - Use preferredVisualization "kpi" for single-metric requests.
+   - Use preferredVisualization null when none is clearly preferred.
+
+5. **Classify Intent**: Choose the BEST matching intent type
    - outcome_analysis: measuring results (default for most clinical questions)
    - trend_analysis: tracking changes over time
    - cohort_comparison: comparing groups explicitly mentioned
@@ -128,7 +139,7 @@ For "how many patients" respond with:
    - quality_metrics: system performance measures
    - operational_metrics: efficiency measures
 
-5. **Estimate Confidence**: Score 0-1 based on:
+6. **Estimate Confidence**: Score 0-1 based on:
    - Clarity of the question (higher if clear, lower if ambiguous)
    - Completeness of information (higher if most details present)
    - Unambiguous intent type (higher if only one clear type)
@@ -258,6 +269,34 @@ export function validateIntentClassificationResponse(response: unknown): {
     return { valid: false, error: "Missing or invalid 'filters' array" };
   }
 
+  const validPresentationIntents = ["chart", "table", "either"];
+  if (
+    result.presentationIntent !== undefined &&
+    result.presentationIntent !== null &&
+    (typeof result.presentationIntent !== "string" ||
+      !validPresentationIntents.includes(result.presentationIntent as string))
+  ) {
+    return {
+      valid: false,
+      error: "Invalid presentationIntent value",
+    };
+  }
+
+  const validPreferredVisualizations = ["line", "bar", "kpi", "table"];
+  if (
+    result.preferredVisualization !== undefined &&
+    result.preferredVisualization !== null &&
+    (typeof result.preferredVisualization !== "string" ||
+      !validPreferredVisualizations.includes(
+        result.preferredVisualization as string
+      ))
+  ) {
+    return {
+      valid: false,
+      error: "Invalid preferredVisualization value",
+    };
+  }
+
   if (
     typeof result.confidence !== "number" ||
     result.confidence < 0 ||
@@ -352,6 +391,17 @@ export function validateIntentClassificationResponse(response: unknown): {
           value: (result.timeRange as Record<string, unknown>).value as number,
         }
       : undefined,
+    presentationIntent:
+      (result.presentationIntent as "chart" | "table" | "either" | undefined) ||
+      undefined,
+    preferredVisualization:
+      (result.preferredVisualization as
+        | "line"
+        | "bar"
+        | "kpi"
+        | "table"
+        | null
+        | undefined) ?? undefined,
     confidence: result.confidence as number,
     reasoning: result.reasoning as string,
   };

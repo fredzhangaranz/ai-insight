@@ -25,6 +25,7 @@ import {
   type ValidationResult,
 } from "./filter-validator.service";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
+import type { ResolvedEntitySummary } from "@/lib/types/insight-artifacts";
 
 /**
  * Generate SQL using an LLM with full schema context.
@@ -46,7 +47,12 @@ export async function generateSQLWithLLM(
   modelId?: string,
   clarifications?: Record<string, string>,
   templateReferences?: any[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  trustedContext?: {
+    sanitizedQuestion?: string;
+    promptLines?: string[];
+    resolvedEntities?: ResolvedEntitySummary[];
+  }
 ): Promise<LLMResponse> {
   // Check if already aborted before starting expensive operation
   if (signal?.aborted) {
@@ -209,7 +215,8 @@ export async function generateSQLWithLLM(
     schemaDocumentation,
     customerId,
     clarifications,
-    templateReferences
+    templateReferences,
+    trustedContext
   );
 
   // DEBUG: Log formatted filters section
@@ -293,18 +300,37 @@ async function buildUserPrompt(
   schemaDocumentation: string,
   customerId: string,
   clarifications?: Record<string, string>,
-  templateReferences?: QueryTemplate[]
+  templateReferences?: QueryTemplate[],
+  trustedContext?: {
+    sanitizedQuestion?: string;
+    promptLines?: string[];
+    resolvedEntities?: ResolvedEntitySummary[];
+  }
 ): Promise<string> {
   let prompt = "";
   const { intent } = context;
 
   prompt += `# Question Context\n\n`;
-  prompt += `**User Question:** "${context.question}"\n\n`;
+  prompt += `**User Question:** "${
+    trustedContext?.sanitizedQuestion || context.question
+  }"\n\n`;
   prompt += `**Intent Analysis:**\n`;
   prompt += `- Type: ${intent.type}\n`;
   prompt += `- Scope: ${intent.scope}\n`;
   prompt += `- Metrics: ${intent.metrics?.join(", ") || "None"}\n`;
   prompt += `- Confidence: ${(intent.confidence ?? 0).toFixed(2)}\n\n`;
+
+  if (trustedContext?.resolvedEntities?.length) {
+    prompt += `# Trusted Entity Context\n\n`;
+    for (const entity of trustedContext.resolvedEntities) {
+      prompt += `- Resolved ${entity.kind}: ${entity.opaqueRef} (${entity.matchType})\n`;
+    }
+    for (const line of trustedContext.promptLines || []) {
+      prompt += `- ${line}\n`;
+    }
+    prompt +=
+      "IMPORTANT: These entities were resolved outside the LLM. You MUST use the provided parameter placeholders and MUST NOT omit them.\n\n";
+  }
 
   prompt += formatFiltersSection(intent.filters, (context as ContextBundle & { mergedFilterState?: MergedFilterState[] }).mergedFilterState);
   prompt += formatFormsSection(context.forms || []);

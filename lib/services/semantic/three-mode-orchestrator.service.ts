@@ -52,6 +52,19 @@ import {
   getSQLValidator,
   type SQLValidationResult,
 } from "../sql-validator.service";
+import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
+import {
+  PatientEntityResolver,
+  type PatientResolutionResult,
+  toPatientOpaqueRef,
+} from "../patient-entity-resolver.service";
+import { PromptSanitizationService } from "../prompt-sanitization.service";
+import { ArtifactPlannerService } from "../artifact-planner.service";
+import type {
+  InsightArtifact,
+  ResolvedEntitySummary,
+} from "@/lib/types/insight-artifacts";
+import { validateTrustedSql } from "../trusted-sql-guard.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -131,6 +144,9 @@ export interface OrchestrationResult {
 
   // Phase 7C: Field assumptions for Inspection Panel
   assumptions?: FieldAssumption[] | Assumption[];
+  artifacts?: InsightArtifact[];
+  resolvedEntities?: ResolvedEntitySummary[];
+  boundParameters?: Record<string, string | number | boolean | null>;
 }
 
 const TEMPLATE_ENABLED_INTENTS = [
@@ -150,11 +166,17 @@ export class ThreeModeOrchestrator {
   private contextDiscovery: ContextDiscoveryService;
   private templateInjector: TemplateInjectorService;
   private templateUsageLogger: TemplateUsageLoggerService;
+  private patientResolver: PatientEntityResolver;
+  private promptSanitizer: PromptSanitizationService;
+  private artifactPlanner: ArtifactPlannerService;
 
   constructor(deps?: {
     contextDiscovery?: ContextDiscoveryService;
     templateInjector?: TemplateInjectorService;
     templateUsageLogger?: TemplateUsageLoggerService;
+    patientResolver?: PatientEntityResolver;
+    promptSanitizer?: PromptSanitizationService;
+    artifactPlanner?: ArtifactPlannerService;
   }) {
     this.contextDiscovery =
       deps?.contextDiscovery ?? new ContextDiscoveryService();
@@ -162,6 +184,12 @@ export class ThreeModeOrchestrator {
       deps?.templateInjector ?? new TemplateInjectorService();
     this.templateUsageLogger =
       deps?.templateUsageLogger ?? new TemplateUsageLoggerService();
+    this.patientResolver =
+      deps?.patientResolver ?? new PatientEntityResolver();
+    this.promptSanitizer =
+      deps?.promptSanitizer ?? new PromptSanitizationService();
+    this.artifactPlanner =
+      deps?.artifactPlanner ?? new ArtifactPlannerService();
   }
 
   /**
@@ -219,8 +247,11 @@ export class ThreeModeOrchestrator {
     let matchedTemplate = templateMatch.template;
     let matchedConfidence = templateMatch.confidence;
 
-    if (!templateMatch.matched && templateMatch.explanations?.length > 0) {
-      const bestExplanation = templateMatch.explanations[0];
+    if (!templateMatch.matched && (templateMatch.explanations?.length ?? 0) > 0) {
+      const bestExplanation = templateMatch.explanations?.[0];
+      if (!bestExplanation) {
+        throw new Error("Template explanations missing best explanation");
+      }
       const bestTemplate = bestExplanation.template;
       const isSnippetTemplate =
         bestTemplate.intent?.startsWith("snippet_") ||
@@ -405,7 +436,7 @@ export class ThreeModeOrchestrator {
           question,
           thinking,
           requiresClarification: true,
-          clarifications,
+          clarifications: clarifications as any,
           clarificationReasoning:
             "Template placeholders require additional details",
         };
@@ -429,10 +460,12 @@ export class ThreeModeOrchestrator {
         });
 
         // Step 1: Match snippets
-        const semanticContext = await this.contextDiscovery.discover(
+        const semanticContext = await this.contextDiscovery.discoverContext({
           question,
-          customerId
-        );
+          customerId,
+          userId: 1,
+          modelId,
+        });
         mergedFilterStates = mergeFilterStates(
           this.buildFilterSourcesFromTemplate(
             placeholderResult.values,
@@ -444,7 +477,10 @@ export class ThreeModeOrchestrator {
           question,
           intent,
           {
-            fields: semanticContext.fields?.map((f: any) => f.name) || [],
+            fields:
+              semanticContext.forms?.flatMap((form: any) =>
+                (form.fields || []).map((field: any) => field.name)
+              ) || [],
             assessmentTypes:
               semanticContext.assessmentTypes?.map((at: any) => at.name) || [],
           },
@@ -480,7 +516,9 @@ export class ThreeModeOrchestrator {
             query: question,
             mergedFilterState: mergedFilterStates,
             semanticContext: {
-              fields: semanticContext.fields || [],
+              fields:
+                semanticContext.forms?.flatMap((form: any) => form.fields || []) ||
+                [],
               enums: {}, // TODO: Populate from semantic context
               assessmentTypes:
                 semanticContext.assessmentTypes?.map((at: any) => at.name) ||
@@ -612,7 +650,12 @@ export class ThreeModeOrchestrator {
           thinking,
           complexity,
           modelId,
-          placeholderResult.values, // Pass extracted placeholders as "clarifications"
+          Object.fromEntries(
+            Object.entries(placeholderResult.values).map(([key, value]) => [
+              key,
+              String(value),
+            ])
+          ), // Pass extracted placeholders as "clarifications"
           undefined,
           [template], // Pass snippet template as reference
           "template_extracted" // Flag indicating these clarifications came from template, not user
@@ -748,7 +791,8 @@ export class ThreeModeOrchestrator {
       modelId,
       clarifications,
       abortController.signal,
-      undefined
+      undefined,
+      "user_provided"
     );
   }
 
@@ -937,6 +981,93 @@ export class ThreeModeOrchestrator {
     templateReferences?: QueryTemplate[],
     clarificationType?: "user_provided" | "template_extracted"
   ): Promise<OrchestrationResult> {
+    const startTime = Date.now();
+    const featureFlags = getInsightsFeatureFlags();
+    let resolvedEntities: ResolvedEntitySummary[] = [];
+    let boundParameters: Record<string, string | number | boolean | null> | undefined;
+    let sanitizedQuestion = question;
+    let trustedPromptLines: string[] | undefined;
+
+    if (featureFlags.patientEntityResolution) {
+      const patientStep: ThinkingStep = {
+        id: "resolve_patient",
+        status: "running",
+        message: "Resolving patient references...",
+      };
+      thinking.push(patientStep);
+
+      const patientResolution = await this.patientResolver.resolve(question, customerId, {
+        selectionOpaqueRef: clarifications?.patient_resolution_select,
+        confirmedOpaqueRef:
+          clarifications?.patient_resolution_confirm === "__CHANGE_PATIENT__"
+            ? undefined
+            : clarifications?.patient_resolution_confirm,
+        overrideLookup: clarifications?.patient_lookup_input,
+      });
+
+      patientStep.status = "complete";
+      patientStep.duration = 0;
+      patientStep.details = {
+        status: patientResolution.status,
+      };
+
+      if (
+        patientResolution.status === "confirmation_required" ||
+        patientResolution.status === "disambiguation_required" ||
+        patientResolution.status === "not_found"
+      ) {
+        patientStep.message = "Patient clarification required";
+        return this.buildPatientClarificationResult(
+          question,
+          thinking,
+          patientResolution
+        );
+      }
+
+      if (
+        patientResolution.status === "resolved" &&
+        patientResolution.selectedMatch &&
+        patientResolution.resolvedId &&
+        patientResolution.opaqueRef &&
+        patientResolution.matchType
+      ) {
+        const resolvedEntity: ResolvedEntitySummary = {
+          kind: "patient",
+          opaqueRef: patientResolution.opaqueRef,
+          displayLabel: patientResolution.selectedMatch.patientName,
+          matchType: patientResolution.matchType,
+          requiresConfirmation: false,
+          unitName: patientResolution.selectedMatch.unitName,
+        };
+        resolvedEntities = [resolvedEntity];
+        boundParameters = {
+          patientId1: patientResolution.resolvedId,
+        };
+        patientStep.message = `Resolved patient securely`;
+
+        if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+          const sanitization = this.promptSanitizer.sanitize({
+            question,
+            patientMentions: [
+              {
+                matchedText: patientResolution.matchedText,
+                opaqueRef: patientResolution.opaqueRef,
+              },
+            ],
+          });
+          sanitizedQuestion = sanitization.sanitizedQuestion;
+          trustedPromptLines = sanitization.trustedContextLines;
+          patientStep.details = {
+            ...patientStep.details,
+            sanitized: true,
+            opaqueRef: patientResolution.opaqueRef,
+          };
+        }
+      } else {
+        patientStep.message = "No patient reference detected";
+      }
+    }
+
     // EXECUTION ORDER STEP 5: Context Discovery
     // This is the most expensive step (8-12s) and will be optimized in Task 1.1.4
     // Sub-steps will be parallelized where possible to reduce latency
@@ -986,11 +1117,15 @@ export class ThreeModeOrchestrator {
 
         context = await this.contextDiscovery.discoverContext({
           customerId,
-          question,
+          question: sanitizedQuestion,
           userId: 1, // TODO: Get from session
           modelId, // Pass modelId for intent classification
           signal, // Pass abort signal for early cancellation
         });
+
+        if (resolvedEntities.length > 0) {
+          context.intent.scope = "individual_patient";
+        }
 
         // Populate sub-steps with results
         if (contextDiscoveryStep.subSteps) {
@@ -1064,11 +1199,12 @@ export class ThreeModeOrchestrator {
         // Create minimal fallback context
         context = {
           customerId,
-          question,
+          question: sanitizedQuestion,
           intent: {
             type: "query",
             confidence: 0.5,
-            scope: "general",
+            scope:
+              resolvedEntities.length > 0 ? "individual_patient" : "patient_cohort",
             metrics: [],
             filters: [],
             reasoning: "Fallback context",
@@ -1089,7 +1225,9 @@ export class ThreeModeOrchestrator {
       // Check if intent classification failed (degraded response)
       if (
         context.intent.confidence === 0 ||
-        context.intent.metrics?.includes("unclassified_metric") ||
+        ((context.intent.metrics || []) as string[]).includes(
+          "unclassified_metric"
+        ) ||
         context.intent.reasoning?.includes("Classification failed")
       ) {
         contextDiscoveryStep.status = "error";
@@ -1138,7 +1276,7 @@ export class ThreeModeOrchestrator {
         });
 
         if (handledFilterIndexes.size > 0) {
-          context.intent.filters = mappedFilters
+          (context.intent as any).filters = mappedFilters
             .filter((_, idx) => !handledFilterIndexes.has(idx))
             .map((filter) => ({ ...filter }));
         }
@@ -1172,7 +1310,7 @@ export class ThreeModeOrchestrator {
         clarifications &&
         context.intent.filters?.length
       ) {
-        context.intent.filters = this.applyTemplateClarificationsToFilters(
+        (context.intent as any).filters = this.applyTemplateClarificationsToFilters(
           context.intent.filters as MappedFilter[],
           clarifications,
           context
@@ -1203,7 +1341,7 @@ export class ThreeModeOrchestrator {
           question,
           thinking,
           requiresClarification: true,
-          clarifications,
+          clarifications: clarifications as any,
           clarificationReasoning: this.buildUnresolvedClarificationReasoning(
             unresolvedNeedingClarification
           ),
@@ -1269,7 +1407,9 @@ export class ThreeModeOrchestrator {
       const modelRouter = getModelRouterService();
       const modelSelection = await modelRouter.selectModel({
         userSelectedModelId: modelId || "claude-3-5-sonnet-20241022", // User's choice or default
-        complexity: complexity?.complexity || "medium",
+        complexity:
+          (complexity?.complexity as ModelSelectionInput["complexity"]) ||
+          "medium",
         taskType: "sql",
         semanticConfidence: context.overallConfidence,
         hasAmbiguity: false, // TODO: Add ambiguity detection in future
@@ -1279,8 +1419,6 @@ export class ThreeModeOrchestrator {
         selected_model: modelSelection.modelId,
         user_selected: modelId,
         rationale: modelSelection.rationale,
-        expected_latency: modelSelection.expectedLatency,
-        cost_tier: modelSelection.costTier,
       });
 
       const clarificationsForLLM = this.sanitizeClarificationsInput(
@@ -1310,7 +1448,12 @@ export class ThreeModeOrchestrator {
         modelSelection.modelId, // Use router-selected model instead of user's direct choice
         clarificationsForLLM,
         templateReferences,
-        signal // Pass abort signal for early cancellation (Task 1.1.5)
+        signal, // Pass abort signal for early cancellation (Task 1.1.5)
+        {
+          sanitizedQuestion,
+          promptLines: trustedPromptLines,
+          resolvedEntities,
+        }
       );
 
       // Check if LLM is requesting clarification
@@ -1350,6 +1493,35 @@ export class ThreeModeOrchestrator {
       // LLM generated SQL - continue with execution
       const sql = llmResponse.generatedSql;
       const assumptions = llmResponse.assumptions || [];
+      const trustedSqlValidation = validateTrustedSql({
+        sql,
+        patientParamNames: boundParameters ? Object.keys(boundParameters) : [],
+        resolvedPatientIds: boundParameters
+          ? Object.values(boundParameters)
+              .map((value) => (typeof value === "string" ? value : undefined))
+              .filter((value): value is string => Boolean(value))
+          : [],
+      });
+
+      if (!trustedSqlValidation.valid) {
+        thinking[thinking.length - 1].status = "error";
+        thinking[thinking.length - 1].duration = Date.now() - sqlStart;
+        thinking[thinking.length - 1].message = trustedSqlValidation.message || "Trusted SQL validation failed";
+        return {
+          mode: "direct",
+          question,
+          thinking,
+          error: {
+            message:
+              trustedSqlValidation.message ||
+              "Generated SQL failed trusted patient filtering checks.",
+            step: "sql_generation",
+          },
+          resolvedEntities,
+          boundParameters,
+          filterMetrics: context.metadata?.filterMetrics,
+        };
+      }
 
       thinking[thinking.length - 1].status = "complete";
       thinking[thinking.length - 1].duration = Date.now() - sqlStart;
@@ -1381,6 +1553,7 @@ export class ThreeModeOrchestrator {
         const execution = await this.executeSQL(sql, customerId, {
           source: "direct",
           intent: context.intent?.type,
+          boundParameters,
         });
         results = {
           columns: execution.columns,
@@ -1460,7 +1633,21 @@ export class ThreeModeOrchestrator {
           complexity?.complexity === "medium" &&
           complexity?.strategy === "preview",
         filterMetrics: context.metadata?.filterMetrics,
+        resolvedEntities,
+        boundParameters,
       };
+      orchestrationResult.artifacts = featureFlags.chartFirstResults
+        ? this.artifactPlanner.plan({
+            question,
+            rows: results.rows,
+            columns: results.columns,
+            sql,
+            assumptions,
+            resolvedEntities,
+            presentationIntent: context.intent?.presentationIntent,
+            preferredVisualization: context.intent?.preferredVisualization,
+          })
+        : undefined;
       if (validationError) {
         orchestrationResult.error = {
           message: validationError.message,
@@ -1651,7 +1838,11 @@ export class ThreeModeOrchestrator {
   private async executeSQL(
     sql: string,
     customerId: string,
-    metadata?: { source: QueryMode; intent?: string }
+    metadata?: {
+      source: QueryMode;
+      intent?: string;
+      boundParameters?: Record<string, string | number | boolean | null>;
+    }
   ): Promise<{ rows: any[]; columns: string[]; validation: SQLValidationResult }> {
     const validator = getSQLValidator();
     const validation = validator.validate(sql);
@@ -1662,7 +1853,11 @@ export class ThreeModeOrchestrator {
     }
 
     const fixedSql = validateAndFixQuery(sql);
-    const execution = await executeCustomerQuery(customerId, fixedSql);
+    const execution = await executeCustomerQuery(
+      customerId,
+      fixedSql,
+      metadata?.boundParameters
+    );
     return {
       rows: execution.rows,
       columns: execution.columns,
@@ -1800,6 +1995,97 @@ export class ThreeModeOrchestrator {
     return `I couldn't map the following filters to the database: ${phrases.join(
       ", "
     )}. Please clarify or remove them.`;
+  }
+
+  private buildPatientClarificationResult(
+    question: string,
+    thinking: ThinkingStep[],
+    resolution: PatientResolutionResult
+  ): OrchestrationResult {
+    if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
+      return {
+        mode: "clarification",
+        question,
+        thinking,
+        requiresClarification: true,
+        clarifications: [
+          {
+            placeholder: "patient_resolution_confirm",
+            prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
+            options: [
+              {
+                label: `Use ${resolution.selectedMatch.patientName}`,
+                value: resolution.opaqueRef!,
+              },
+              {
+                label: "Choose a different patient",
+                value: "__CHANGE_PATIENT__",
+              },
+            ],
+            freeformAllowed: {
+              allowed: true,
+              placeholder: "Enter an exact patient name or ID",
+              hint: "Use an exact full name, patient ID, or domain ID",
+              minChars: 3,
+              maxChars: 100,
+            },
+          } as any,
+        ],
+        clarificationReasoning:
+          "I found one exact full-name match and need a quick confirmation before running the query.",
+      };
+    }
+
+    if (
+      resolution.status === "disambiguation_required" &&
+      Array.isArray(resolution.matches) &&
+      resolution.matches.length > 0
+    ) {
+      return {
+        mode: "clarification",
+        question,
+        thinking,
+        requiresClarification: true,
+        clarifications: [
+          {
+            placeholder: "patient_resolution_select",
+            prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
+            options: resolution.matches.map((match) => ({
+              label: match.unitName
+                ? `${match.patientName} (${match.unitName})`
+                : match.patientName,
+              value: toPatientOpaqueRef(match.patientId),
+            })),
+          } as any,
+        ],
+        clarificationReasoning:
+          "I found multiple exact full-name matches and need you to choose the correct patient.",
+      };
+    }
+
+    return {
+      mode: "clarification",
+      question,
+      thinking,
+      requiresClarification: true,
+      clarifications: [
+        {
+          placeholder: "patient_lookup_input",
+          prompt: resolution.candidateText
+            ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
+            : "Please enter an exact full name or patient ID.",
+          freeformAllowed: {
+            allowed: true,
+            placeholder: "e.g. Fred Smith or 12345",
+            hint: "Use an exact full name, patient ID, or domain ID",
+            minChars: 3,
+            maxChars: 100,
+          },
+        } as any,
+      ],
+      clarificationReasoning:
+        "I couldn't resolve the patient reference securely. Please provide an exact patient name or ID.",
+    };
   }
 
   private sanitizeClarificationsInput(

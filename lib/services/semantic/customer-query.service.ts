@@ -57,7 +57,8 @@ export async function withCustomerPool<T>(
  */
 export async function executeCustomerQuery(
   customerId: string,
-  sqlQuery: string
+  sqlQuery: string,
+  boundParameters?: Record<string, string | number | boolean | null>
 ): Promise<{ rows: any[]; columns: string[] }> {
   // 1. Get customer details (including encrypted connection string)
   const customer = await getCustomerById(customerId, false, true);
@@ -121,10 +122,15 @@ export async function executeCustomerQuery(
     // Set session context for rpt schema / row-level security (same connection as query)
     const allAccessBatch = `EXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${sqlQuery}`;
 
+    const request = pool.request();
+    for (const [key, value] of Object.entries(boundParameters || {})) {
+      request.input(key, value as any);
+    }
+
     // Execute query
     const startExecution = Date.now();
     console.log("[CustomerQuery] Starting query execution (with all_access)...");
-    const result = await pool.request().query(allAccessBatch);
+    const result = await request.query(allAccessBatch);
     const executionTime = Date.now() - startExecution;
     
     // Transform result to standard format
@@ -206,4 +212,3 @@ export function validateAndFixQuery(sqlQuery: string): string {
 
   return fixed;
 }
-

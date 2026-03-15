@@ -100,6 +100,7 @@ export function ChartComponent({
   data,
   title,
   className = "",
+  chartProps = {},
 }: ChartComponentProps) {
   console.log("ChartComponent render:", { chartType, data, title, className });
 
@@ -128,7 +129,12 @@ export function ChartComponent({
         }
         return (
           <div className="w-full h-full">
-            <LineChart data={data} title={title} className={className} />
+            <LineChart
+              data={data}
+              title={title}
+              className={className}
+              {...chartProps}
+            />
           </div>
         );
 
