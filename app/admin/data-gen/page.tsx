@@ -261,6 +261,8 @@ export default function DataGenPage() {
       mergedSpec = {
         ...newSpec,
         trajectoryDistribution: trajectoryConfig.trajectoryDistribution,
+        trajectoryAssignments: trajectoryConfig.trajectoryAssignments,
+        trajectoryRandomisePerPatient: trajectoryConfig.trajectoryRandomisePerPatient,
         woundsPerPatient: trajectoryConfig.woundsPerPatient,
         assessmentsPerWound: trajectoryConfig.assessmentsPerWound,
         woundBaselineAreaRange: trajectoryConfig.woundBaselineAreaRange,

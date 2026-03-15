@@ -151,7 +151,16 @@ async function validateAssessmentSpec(
   db: ConnectionPool,
   errors: string[]
 ): Promise<void> {
-  if (spec.trajectoryDistribution) {
+  if (spec.trajectoryAssignments) {
+    const valid: string[] = ["healing", "stable", "deteriorating", "treatmentChange"];
+    for (let i = 0; i < spec.trajectoryAssignments.length; i++) {
+      if (!valid.includes(spec.trajectoryAssignments[i])) {
+        errors.push(
+          `trajectoryAssignments[${i}] must be one of: healing, stable, deteriorating, treatmentChange`
+        );
+      }
+    }
+  } else if (spec.trajectoryDistribution) {
     const sum = Object.values(spec.trajectoryDistribution).reduce(
       (a, b) => a + b,
       0

@@ -124,6 +124,10 @@ export interface GenerationSpec {
   woundsPerPatient?: number | [number, number];
   assessmentsPerWound?: number | [number, number];
   trajectoryDistribution?: TrajectoryDistribution;
+  /** Explicit trajectory per wound slot (Tier 1). Overrides trajectoryDistribution when present. */
+  trajectoryAssignments?: SingleTrajectoryType[];
+  /** When true, each wound independently gets a random trajectory (Tier 2). Uses uniform distribution. */
+  trajectoryRandomisePerPatient?: boolean;
   /** cm², default [5, 50] */
   woundBaselineAreaRange?: [number, number];
   /** default 7 */
@@ -147,6 +151,9 @@ export type WoundProgressionStyle =
   | "JaggedFlat"
   | "NPTraditionalDisposable"
   | "NPDisposable";
+
+/** Trajectory type for explicit per-wound assignment (maps to TrajectoryDistribution keys) */
+export type SingleTrajectoryType = "healing" | "stable" | "deteriorating" | "treatmentChange";
 
 export interface TrajectoryDistribution {
   /** fraction 0–1: fast-healing (Exponential) */

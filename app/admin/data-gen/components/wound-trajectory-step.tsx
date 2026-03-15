@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Popover,
   PopoverContent,
@@ -15,8 +14,24 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { RangeSlider } from "@/components/ui/slider";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import type { TrajectoryDistribution } from "@/lib/services/data-gen/generation-spec.types";
+import type {
+  SingleTrajectoryType,
+  TrajectoryDistribution,
+} from "@/lib/services/data-gen/generation-spec.types";
+
+const SINGLE_TRAJECTORY_OPTIONS: {
+  value: SingleTrajectoryType;
+  label: string;
+  description: string;
+}[] = [
+  { value: "healing", label: "Fast healing", description: "Healed within ~4 weeks" },
+  { value: "stable", label: "Slow healing", description: "Gradual improvement over time" },
+  { value: "deteriorating", label: "Non-healing", description: "Chronic / no improvement" },
+  { value: "treatmentChange", label: "Treatment change", description: "Starts flat, switches treatment" },
+];
 
 const PERIOD_PRESETS = [
   { label: "2 weeks", days: 14 },
@@ -36,6 +51,10 @@ export interface TrajectoryConfig {
   missedAppointmentRate: number;
   assessmentPeriodDays?: number;
   assessmentStartDate?: string;
+  /** Explicit trajectory per wound slot (Tier 1). When present, overrides trajectoryDistribution. */
+  trajectoryAssignments?: SingleTrajectoryType[];
+  /** When true, each wound gets a random trajectory (Tier 2). */
+  trajectoryRandomisePerPatient?: boolean;
 }
 
 function defaultStartDate(periodDays: number): string {
@@ -70,14 +89,10 @@ export function WoundTrajectoryStep({
   onConfigure,
   onBack,
 }: WoundTrajectoryStepProps) {
-  const [healing, setHealing] = useState(DEFAULT_CONFIG.trajectoryDistribution.healing * 100);
-  const [stable, setStable] = useState(DEFAULT_CONFIG.trajectoryDistribution.stable * 100);
-  const [deteriorating, setDeteriorating] = useState(
-    DEFAULT_CONFIG.trajectoryDistribution.deteriorating * 100
-  );
-  const [treatmentChange, setTreatmentChange] = useState(
-    DEFAULT_CONFIG.trajectoryDistribution.treatmentChange * 100
-  );
+  const [singleTrajectoryType, setSingleTrajectoryType] =
+    useState<SingleTrajectoryType>("healing");
+  const [perWoundAssignments, setPerWoundAssignments] = useState<SingleTrajectoryType[]>([]);
+  const [randomisePerPatient, setRandomisePerPatient] = useState(false);
   const [woundsPerPatient, setWoundsPerPatient] = useState(1);
   const [assessmentsMin, setAssessmentsMin] = useState(8);
   const [assessmentsMax, setAssessmentsMax] = useState(16);
@@ -92,17 +107,61 @@ export function WoundTrajectoryStep({
     () => subDays(new Date(), 28)
   );
 
-  const trajectorySum = healing + stable + deteriorating + treatmentChange;
-  const trajectoryValid = Math.abs(trajectorySum - 100) < 0.5;
+  const isSingleWound = woundsPerPatient === 1;
+  const trajectoryValid = true;
+
+  const getPerWoundAssignmentsForCount = (n: number): SingleTrajectoryType[] => {
+    const current = perWoundAssignments;
+    if (current.length === n) return current;
+    if (current.length < n) {
+      return [...current, ...Array(n - current.length).fill("healing")] as SingleTrajectoryType[];
+    }
+    return current.slice(0, n);
+  };
+
+  const assignments = getPerWoundAssignmentsForCount(woundsPerPatient);
+
+  const setAssignmentForWound = (index: number, value: SingleTrajectoryType) => {
+    setPerWoundAssignments((prev) => {
+      const next = [...prev];
+      while (next.length <= index) next.push("healing");
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const buildTrajectoryDistribution = (): TrajectoryDistribution => {
+    if (isSingleWound) {
+      return {
+        healing: singleTrajectoryType === "healing" ? 1 : 0,
+        stable: singleTrajectoryType === "stable" ? 1 : 0,
+        deteriorating: singleTrajectoryType === "deteriorating" ? 1 : 0,
+        treatmentChange: singleTrajectoryType === "treatmentChange" ? 1 : 0,
+      };
+    }
+    return {
+      healing: 0.25,
+      stable: 0.25,
+      deteriorating: 0.25,
+      treatmentChange: 0.25,
+    };
+  };
+
+  const handleWoundsPerPatientChange = (value: number) => {
+    const prev = woundsPerPatient;
+    setWoundsPerPatient(value);
+    if (prev === 1 && value > 1) {
+      setPerWoundAssignments(Array(value).fill("healing") as SingleTrajectoryType[]);
+    } else if (prev > 1 && value === 1) {
+      setSingleTrajectoryType(assignments[0] ?? "healing");
+    } else if (prev > 1 && value > 1) {
+      setPerWoundAssignments(getPerWoundAssignmentsForCount(value));
+    }
+  };
 
   const handleProceed = () => {
-    onConfigure({
-      trajectoryDistribution: {
-        healing: healing / 100,
-        stable: stable / 100,
-        deteriorating: deteriorating / 100,
-        treatmentChange: treatmentChange / 100,
-      },
+    const config: TrajectoryConfig = {
+      trajectoryDistribution: buildTrajectoryDistribution(),
       woundsPerPatient,
       assessmentsPerWound: [assessmentsMin, assessmentsMax],
       woundBaselineAreaRange: [areaMin, areaMax],
@@ -111,7 +170,15 @@ export function WoundTrajectoryStep({
       missedAppointmentRate: missedRate / 100,
       assessmentPeriodDays: periodDays,
       assessmentStartDate: format(startDate, "yyyy-MM-dd"),
-    });
+    };
+    if (!isSingleWound) {
+      if (randomisePerPatient) {
+        config.trajectoryRandomisePerPatient = true;
+      } else {
+        config.trajectoryAssignments = assignments;
+      }
+    }
+    onConfigure(config);
   };
 
   return (
@@ -135,7 +202,9 @@ export function WoundTrajectoryStep({
                 min={1}
                 max={5}
                 value={woundsPerPatient}
-                onChange={(e) => setWoundsPerPatient(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) =>
+                  handleWoundsPerPatientChange(Math.max(1, parseInt(e.target.value, 10) || 1))
+                }
               />
             </div>
             <div className="space-y-2">
@@ -265,63 +334,104 @@ export function WoundTrajectoryStep({
         </div>
 
         <div className="space-y-4">
-          <h4 className="font-medium">Healing Trajectory (must sum to 100%)</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="healing">Fast healing (%)</Label>
-              <Input
-                id="healing"
-                type="number"
-                min={0}
-                max={100}
-                value={healing}
-                onChange={(e) => setHealing(Math.max(0, parseFloat(e.target.value) || 0))}
-              />
-              <p className="text-xs text-muted-foreground mt-1">Healed within ~4 weeks</p>
-            </div>
-            <div>
-              <Label htmlFor="stable">Slow healing (%)</Label>
-              <Input
-                id="stable"
-                type="number"
-                min={0}
-                max={100}
-                value={stable}
-                onChange={(e) => setStable(Math.max(0, parseFloat(e.target.value) || 0))}
-              />
-              <p className="text-xs text-muted-foreground mt-1">Gradual improvement</p>
-            </div>
-            <div>
-              <Label htmlFor="deteriorating">Non-healing (%)</Label>
-              <Input
-                id="deteriorating"
-                type="number"
-                min={0}
-                max={100}
-                value={deteriorating}
-                onChange={(e) => setDeteriorating(Math.max(0, parseFloat(e.target.value) || 0))}
-              />
-              <p className="text-xs text-muted-foreground mt-1">Chronic / no improvement</p>
-            </div>
-            <div>
-              <Label htmlFor="treatmentChange">Treatment change (%)</Label>
-              <Input
-                id="treatmentChange"
-                type="number"
-                min={0}
-                max={100}
-                value={treatmentChange}
-                onChange={(e) => setTreatmentChange(Math.max(0, parseFloat(e.target.value) || 0))}
-              />
-              <p className="text-xs text-muted-foreground mt-1">Starts flat, switches treatment</p>
-            </div>
-          </div>
-          {!trajectoryValid && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Trajectory percentages must sum to 100%. Current sum: {trajectorySum.toFixed(1)}%
-              </AlertDescription>
-            </Alert>
+          <h4 className="font-medium">
+            {isSingleWound ? "Healing Trajectory" : "Healing Trajectory"}
+          </h4>
+          {isSingleWound ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Choose one trajectory type for this wound. The assessments will follow a realistic
+                healing pattern over the selected period.
+              </p>
+              <RadioGroup
+                value={singleTrajectoryType}
+                onValueChange={(v) => setSingleTrajectoryType(v as SingleTrajectoryType)}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+              >
+                {SINGLE_TRAJECTORY_OPTIONS.map((opt) => (
+                  <div
+                    key={opt.value}
+                    className={cn(
+                      "flex items-start space-x-3 rounded-lg border p-4",
+                      singleTrajectoryType === opt.value
+                        ? "border-primary bg-primary/5"
+                        : "border-muted hover:bg-muted/50"
+                    )}
+                  >
+                    <RadioGroupItem value={opt.value} id={`traj-${opt.value}`} />
+                    <Label
+                      htmlFor={`traj-${opt.value}`}
+                      className="flex-1 cursor-pointer font-normal"
+                    >
+                      <span className="font-medium">{opt.label}</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <Label htmlFor="randomise-per-patient" className="font-medium">
+                    Randomise trajectory per patient
+                  </Label>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Each wound will be randomly assigned a trajectory type. Creates variety across{" "}
+                    {patientCount} patient{patientCount !== 1 ? "s" : ""}.
+                  </p>
+                </div>
+                <Switch
+                  id="randomise-per-patient"
+                  checked={randomisePerPatient}
+                  onCheckedChange={setRandomisePerPatient}
+                />
+              </div>
+              {!randomisePerPatient && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Assign a trajectory type to each wound. This pattern applies to all{" "}
+                    {patientCount} patient{patientCount !== 1 ? "s" : ""}.
+                  </p>
+                  <div className="space-y-4">
+                    {Array.from({ length: woundsPerPatient }, (_, i) => (
+                      <div key={i} className="space-y-2">
+                        <Label className="font-medium">Wound {i + 1}</Label>
+                        <RadioGroup
+                          value={assignments[i] ?? "healing"}
+                          onValueChange={(v) => setAssignmentForWound(i, v as SingleTrajectoryType)}
+                          className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+                        >
+                          {SINGLE_TRAJECTORY_OPTIONS.map((opt) => (
+                            <div
+                              key={opt.value}
+                              className={cn(
+                                "flex items-center space-x-2 rounded-md border px-3 py-2",
+                                (assignments[i] ?? "healing") === opt.value
+                                  ? "border-primary bg-primary/5"
+                                  : "border-muted hover:bg-muted/50"
+                              )}
+                            >
+                              <RadioGroupItem
+                                value={opt.value}
+                                id={`wound-${i}-${opt.value}`}
+                              />
+                              <Label
+                                htmlFor={`wound-${i}-${opt.value}`}
+                                className="cursor-pointer font-normal text-sm"
+                              >
+                                {opt.label}
+                              </Label>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
 

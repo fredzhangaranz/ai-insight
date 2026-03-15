@@ -4,8 +4,31 @@
  * Ports logic from docs/design/data_generation/old_generation_code/Assessment.cs
  */
 
-import type { TrajectoryDistribution, WoundProgressionStyle } from "../generation-spec.types";
+import type {
+  SingleTrajectoryType,
+  TrajectoryDistribution,
+  WoundProgressionStyle,
+} from "../generation-spec.types";
 import { weightedPick } from "./base.generator";
+
+/** Uniform distribution for random trajectory assignment (Tier 2) */
+export const UNIFORM_TRAJECTORY_DIST: TrajectoryDistribution = {
+  healing: 0.25,
+  stable: 0.25,
+  deteriorating: 0.25,
+  treatmentChange: 0.25,
+};
+
+/** Map explicit trajectory type to WoundProgressionStyle */
+export function trajectoryTypeToStyle(type: SingleTrajectoryType): WoundProgressionStyle {
+  const map: Record<SingleTrajectoryType, WoundProgressionStyle> = {
+    healing: "Exponential",
+    stable: "JaggedLinear",
+    deteriorating: "JaggedFlat",
+    treatmentChange: "NPTraditionalDisposable",
+  };
+  return map[type];
+}
 
 export const HEALED_THRESHOLD_CM2 = 0.5;
 const AMPUTATION_RATE_EXTREMITY = 0.025;

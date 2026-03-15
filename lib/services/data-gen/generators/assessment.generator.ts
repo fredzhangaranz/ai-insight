@@ -27,6 +27,8 @@ import { isFixedPerWoundField } from "../field-classifier.service";
 import {
   generateTrajectory,
   pickProgressionStyle,
+  trajectoryTypeToStyle,
+  UNIFORM_TRAJECTORY_DIST,
 } from "./trajectory-engine";
 import {
   loadScaffoldingDeps,
@@ -268,6 +270,16 @@ export async function generateWoundsAndAssessments(
     treatmentChange: 0.1,
   };
 
+  const resolveProgressionStyle = (woundIndex: number): WoundProgressionStyle => {
+    if (spec.trajectoryAssignments && woundIndex < spec.trajectoryAssignments.length) {
+      return trajectoryTypeToStyle(spec.trajectoryAssignments[woundIndex]);
+    }
+    if (spec.trajectoryRandomisePerPatient) {
+      return pickProgressionStyle(UNIFORM_TRAJECTORY_DIST);
+    }
+    return pickProgressionStyle(trajectoryDist);
+  };
+
   const [areaMin, areaMax] = spec.woundBaselineAreaRange ?? [5, 50];
 
   let patientQuery = "SELECT id FROM dbo.Patient WHERE isDeleted = 0";
@@ -379,7 +391,7 @@ export async function generateWoundsAndAssessments(
       const baselineArea = areaMin + Math.random() * (areaMax - areaMin);
       const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;
 
-      const progressionStyle = pickProgressionStyle(trajectoryDist);
+      const progressionStyle = resolveProgressionStyle(w);
 
       let trajectoryPoints = generateTrajectory({
         baselineArea,
@@ -624,8 +636,18 @@ export async function buildAssessmentSqlStatements(
     deteriorating: 0.3,
     treatmentChange: 0.1,
   };
+
+  const resolveProgressionStyle = (woundIndex: number): WoundProgressionStyle => {
+    if (spec.trajectoryAssignments && woundIndex < spec.trajectoryAssignments.length) {
+      return trajectoryTypeToStyle(spec.trajectoryAssignments[woundIndex]);
+    }
+    if (spec.trajectoryRandomisePerPatient) {
+      return pickProgressionStyle(UNIFORM_TRAJECTORY_DIST);
+    }
+    return pickProgressionStyle(trajectoryDist);
+  };
   const assessmentCount = resolveCount(spec.assessmentsPerWound ?? [8, 16]);
-  const progressionStyle = pickProgressionStyle(trajectoryDist);
+  const progressionStyle = resolveProgressionStyle(0);
   const trajectoryPoints = generateTrajectory({
     baselineArea,
     progressionStyle,

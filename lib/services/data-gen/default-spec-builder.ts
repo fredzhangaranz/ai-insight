@@ -7,6 +7,7 @@ import type {
   FieldSchema,
   FieldSpec,
   GenerationSpec,
+  SingleTrajectoryType,
   TrajectoryDistribution,
 } from "./generation-spec.types";
 import type { FieldProfileSet } from "./trajectory-field-profile.types";
@@ -22,6 +23,8 @@ export interface TrajectoryConfigInput {
   missedAppointmentRate: number;
   assessmentPeriodDays?: number;
   assessmentStartDate?: string;
+  trajectoryAssignments?: SingleTrajectoryType[];
+  trajectoryRandomisePerPatient?: boolean;
 }
 
 /** Shape passed from FormSelectorStep */
@@ -227,6 +230,8 @@ export function buildDefaultAssessmentSpec(
     },
     fields,
     trajectoryDistribution: trajectoryConfig.trajectoryDistribution,
+    trajectoryAssignments: trajectoryConfig.trajectoryAssignments,
+    trajectoryRandomisePerPatient: trajectoryConfig.trajectoryRandomisePerPatient,
     woundsPerPatient: trajectoryConfig.woundsPerPatient,
     assessmentsPerWound: trajectoryConfig.assessmentsPerWound,
     woundBaselineAreaRange: trajectoryConfig.woundBaselineAreaRange,
