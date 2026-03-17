@@ -185,7 +185,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       "Only SELECT or WITH queries are allowed.",
       "Use the provided schema context; do not invent tables or columns.",
       "Do not include PHI or raw patient identifiers in the response.",
-      "Prefer CTE composition when the question builds on prior results.",
+      "When the current question operates on prior results (references, aggregates, filters), wrap the prior query in a CTE and apply the operation. Use your judgment from the full conversation context.",
     ].join("\n");
   }
 

@@ -145,19 +145,40 @@ export class GeminiProvider extends BaseProvider {
       `[GeminiProvider] 📡 Calling Google GenAI API with model: ${this.modelId}...`
     );
 
-    // Use the new SDK's generateContent API
-    // Thinking is disabled (thinkingBudget: 0) — complete() is only used for structured-output
-    // tasks (profile generation, intent classification, etc.) where thinking adds latency without
-    // meaningful accuracy benefit. completeWithConversation has its own config and is unaffected.
     const combinedContent = `${systemPrompt}\n\n${userMessage}`;
+    const shouldAttemptThinkingBudgetZero = shouldUseThinkingBudgetZero(
+      this.modelId
+    );
+    let result: any;
 
-    const result = await this.genAI.models.generateContent({
-      model: this.modelId,
-      contents: combinedContent,
-      config: {
-        thinkingConfig: { thinkingBudget: 0 },
-      },
-    });
+    try {
+      result = await this.genAI.models.generateContent({
+        model: this.modelId,
+        contents: combinedContent,
+        ...(shouldAttemptThinkingBudgetZero
+          ? { config: { thinkingConfig: { thinkingBudget: 0 } } }
+          : {}),
+      });
+    } catch (error) {
+      if (
+        shouldAttemptThinkingBudgetZero &&
+        isThinkingBudgetUnsupportedError(error)
+      ) {
+        console.warn(
+          `[GeminiProvider] Model rejected thinkingBudget=0. Retrying without thinkingConfig. model=${this.modelId}`
+        );
+        try {
+          result = await this.genAI.models.generateContent({
+            model: this.modelId,
+            contents: combinedContent,
+          });
+        } catch (retryError) {
+          throw classifyGeminiError(retryError, true);
+        }
+      } else {
+        throw classifyGeminiError(error, shouldAttemptThinkingBudgetZero);
+      }
+    }
 
     const apiDuration = Date.now() - apiStartTime;
     console.log(`[GeminiProvider] ✅ API call completed in ${apiDuration}ms`);
@@ -427,6 +448,20 @@ export class GeminiProvider extends BaseProvider {
           history += `, columns: ${summary.columns.join(", ")}`;
         }
 
+        if (msg.metadata.artifactSummary) {
+          const artifactSummary = msg.metadata.artifactSummary;
+          history += `, chart: ${artifactSummary.primaryChartType || "unknown"}`;
+          if (artifactSummary.mappingKeys?.length) {
+            history += `, chart_keys: ${artifactSummary.mappingKeys.join(", ")}`;
+          }
+          if (artifactSummary.seriesKeyColumn) {
+            history += `, series_key: ${artifactSummary.seriesKeyColumn}`;
+          }
+          if (typeof artifactSummary.distinctSeriesCount === "number") {
+            history += `, displayed_series_count: ${artifactSummary.distinctSeriesCount}`;
+          }
+        }
+
         history += "\n\n";
         assistantCount++;
       } else if (msg.role === "assistant" && !msg.metadata?.sql) {
@@ -450,9 +485,13 @@ export class GeminiProvider extends BaseProvider {
 
     history += "\nInstructions:\n";
     history +=
-      "- If the current question references previous results (which ones, those, they), compose using the most recent SQL.\n";
+      "When the conversation has prior turns, determine whether the current question operates on the previous result or is independent.\n";
     history +=
-      "- If the current question is unrelated, generate a fresh query.\n";
+      "Operates on previous result when: (1) it uses pronouns, demonstratives, or implicit references that resolve to the prior subject; (2) it asks for a metric or transformation of what was returned (count, average, filter); (3) the natural answer would be a subset, aggregate, or annotation of the prior result set. In these cases, wrap the prior SQL in a CTE and apply the requested operation.\n";
+    history +=
+      "Independent when: it introduces a new subject, scope, or entity not anchored to the prior result. Generate a fresh query.\n";
+    history +=
+      "Apply this principle from context; do not rely on surface patterns.\n";
 
     return history;
   }
@@ -526,6 +565,58 @@ export class GeminiProvider extends BaseProvider {
     });
 
     return cachedContent;
+  }
+}
+
+function shouldUseThinkingBudgetZero(modelId: string): boolean {
+  const configuredModels =
+    process.env.GEMINI_THINKING_BUDGET_ZERO_MODELS || "";
+  if (!configuredModels.trim()) {
+    return false;
+  }
+
+  return configuredModels
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .includes(modelId);
+}
+
+function isThinkingBudgetUnsupportedError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes("invalid_argument") &&
+    message.includes("thinking_budget")
+  );
+}
+
+function classifyGeminiError(
+  error: unknown,
+  thinkingBudgetAttempted: boolean
+): Error {
+  if (thinkingBudgetAttempted && isThinkingBudgetUnsupportedError(error)) {
+    const classifiedError = new Error(
+      `[GeminiProvider:THINKING_BUDGET_UNSUPPORTED] ${getErrorMessage(error)}`
+    );
+    (classifiedError as Error & { code?: string }).code =
+      "THINKING_BUDGET_UNSUPPORTED";
+    return classifiedError;
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
   }
 }
 

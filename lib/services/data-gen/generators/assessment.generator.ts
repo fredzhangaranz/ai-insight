@@ -628,8 +628,6 @@ export async function buildAssessmentSqlStatements(
   }
 
   const [areaMin, areaMax] = spec.woundBaselineAreaRange ?? [5, 50];
-  const baselineDate = faker.date.past({ years: 1 });
-  const baselineArea = areaMin + Math.random() * (areaMax - areaMin);
   const trajectoryDist = spec.trajectoryDistribution ?? {
     healing: 0.25,
     stable: 0.35,
@@ -646,31 +644,11 @@ export async function buildAssessmentSqlStatements(
     }
     return pickProgressionStyle(trajectoryDist);
   };
-  const assessmentCount = resolveCount(spec.assessmentsPerWound ?? [8, 16]);
-  const progressionStyle = resolveProgressionStyle(0);
-  const trajectoryPoints = generateTrajectory({
-    baselineArea,
-    progressionStyle,
-    assessmentCount,
-    intervalDays: spec.assessmentIntervalDays ?? 7,
-    wobbleDays: spec.assessmentTimingWobbleDays ?? 2,
-    missedAppointmentRate: spec.missedAppointmentRate ?? 0.15,
-    baselineDate,
-    anatomyName,
-  });
 
-  const woundId = newGuid();
-  const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;
+  const woundsCount = resolveCount(spec.woundsPerPatient ?? 2);
+  const assessmentCount = resolveCount(spec.assessmentsPerWound ?? [8, 16]);
   const now = new Date();
   const pid = (id: string) => `'${id.replace(/'/g, "''")}'`;
-
-  const blocks: string[] = [];
-
-  blocks.push(`-- dbo.Wound`);
-  blocks.push(`
-INSERT INTO dbo.Wound (id, patientFk, anatomyFk, auxText, baselineDate, baselineTimeZoneId, woundIndex, lastCentralChangeDate, modSyncState, serverChangeDate, isDeleted)
-VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W1', ${toSqlLiteral(baselineDateOffset)}, N'UTC', 1, ${toSqlLiteral(now)}, 2, ${toSqlLiteral(now)}, 0);
-`.trim());
 
   const woundAttrFieldsDescriptive = formFields.filter(
     (f) =>
@@ -683,17 +661,44 @@ VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W1', ${toSqlLit
   for (const f of spec.fields ?? []) {
     if (f.enabled && f.columnName) fieldSpecsByColumnPreview.set(f.columnName, f);
   }
-  const fixedPerWoundValuesPreview = buildFixedPerWoundValues(
-    woundAttrFieldsDescriptive,
-    spec,
-    progressionStyle,
-    trajectoryPoints,
-    fieldSpecsByColumnPreview,
-    faker
-  );
 
+  const blocks: string[] = [];
   const dosById = new Map<string, string>();
-  for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
+
+  for (let w = 0; w < woundsCount; w++) {
+    const progressionStyle = resolveProgressionStyle(w);
+    const baselineDate = faker.date.past({ years: 1 });
+    const baselineArea = areaMin + Math.random() * (areaMax - areaMin);
+    const trajectoryPoints = generateTrajectory({
+      baselineArea,
+      progressionStyle,
+      assessmentCount,
+      intervalDays: spec.assessmentIntervalDays ?? 7,
+      wobbleDays: spec.assessmentTimingWobbleDays ?? 2,
+      missedAppointmentRate: spec.missedAppointmentRate ?? 0.15,
+      baselineDate,
+      anatomyName,
+    });
+
+    const woundId = newGuid();
+    const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;
+
+    blocks.push(`-- dbo.Wound (Wound ${w + 1})`);
+    blocks.push(`
+INSERT INTO dbo.Wound (id, patientFk, anatomyFk, auxText, baselineDate, baselineTimeZoneId, woundIndex, lastCentralChangeDate, modSyncState, serverChangeDate, isDeleted)
+VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W${w + 1}', ${toSqlLiteral(baselineDateOffset)}, N'UTC', ${w + 1}, ${toSqlLiteral(now)}, 2, ${toSqlLiteral(now)}, 0);
+`.trim());
+
+    const fixedPerWoundValuesPreview = buildFixedPerWoundValues(
+      woundAttrFieldsDescriptive,
+      spec,
+      progressionStyle,
+      trajectoryPoints,
+      fieldSpecsByColumnPreview,
+      faker
+    );
+
+    for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
     const point = trajectoryPoints[assessmentIdx];
     const seriesId = newGuid();
     const dateMidnight = toMidnightUtc(point.dateTime);
@@ -777,6 +782,7 @@ VALUES (NEWID(), ${pid(seriesId)}, ${pid(formField.attributeTypeId!)}, ${toSqlLi
 `.trim());
       }
     }
+  }
   }
 
   return [blocks.join("\n\n")];

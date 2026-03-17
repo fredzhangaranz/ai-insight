@@ -9,6 +9,7 @@ export interface InsightsFeatureFlags {
   promptPhiSanitization: boolean;
   chartFirstResults: boolean;
   conversationArtifacts: boolean;
+  followUpReliability: boolean;
 }
 
 export function getInsightsFeatureFlags(): InsightsFeatureFlags {
@@ -17,5 +18,6 @@ export function getInsightsFeatureFlags(): InsightsFeatureFlags {
     promptPhiSanitization: envFlag("INSIGHTS_PROMPT_PHI_SANITIZATION"),
     chartFirstResults: envFlag("INSIGHTS_CHART_FIRST_RESULTS"),
     conversationArtifacts: envFlag("INSIGHTS_CONVERSATION_ARTIFACTS"),
+    followUpReliability: envFlag("INSIGHTS_FOLLOWUP_RELIABILITY"),
   };
 }

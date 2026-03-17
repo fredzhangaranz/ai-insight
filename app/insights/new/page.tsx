@@ -24,6 +24,7 @@ export default function NewInsightPage() {
     string | undefined
   >();
   const [isQuestionSubmitted, setIsQuestionSubmitted] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const {
     result,
@@ -93,6 +94,11 @@ export default function NewInsightPage() {
     }
   }, [result, customerId]);
 
+  // Refetch query history when a new result arrives (after Ask or load from history).
+  React.useEffect(() => {
+    if (result) setHistoryRefreshKey((k) => k + 1);
+  }, [result]);
+
   const handleClarificationSubmit = async (
     clarifications: Record<string, string>,
     clarificationAuditIds?: number[],
@@ -152,7 +158,7 @@ export default function NewInsightPage() {
       return;
     }
 
-    if (!query.sql || !query.semanticContext) {
+    if (!query.id) {
       // No cached data, just copy the question
       setQuestion(query.question);
       return;
@@ -164,7 +170,9 @@ export default function NewInsightPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          queryId: query.id,
           customerId,
+          // Backward-compat fallback payload fields
           sql: query.sql,
           question: query.question,
           mode: query.mode,
@@ -173,7 +181,35 @@ export default function NewInsightPage() {
       });
 
       if (!response.ok) {
-        // Fallback: just copy the question
+        const errorData = await response.json().catch(() => ({}));
+        const replayErrorResult = {
+          mode: "direct" as const,
+          question: query.question,
+          thinking: [
+            {
+              id: "load_from_history",
+              status: "complete" as const,
+              message: "Attempted to load cached result",
+              duration: 50,
+            },
+            {
+              id: "history_replay_error",
+              status: "error" as const,
+              message:
+                errorData?.error ||
+                "Unable to replay cached query from history",
+              duration: 0,
+            },
+          ],
+          error: {
+            message:
+              errorData?.error ||
+              "Unable to replay cached query from history",
+            step: "history_replay",
+            details: errorData,
+          },
+        };
+        loadCachedResult(replayErrorResult as any);
         setQuestion(query.question);
         return;
       }
@@ -183,7 +219,29 @@ export default function NewInsightPage() {
       setQuestion(query.question);
     } catch (err) {
       console.error("Failed to load cached result:", err);
-      // Fallback: just copy the question
+      const replayErrorResult = {
+        mode: "direct" as const,
+        question: query.question,
+        thinking: [
+          {
+            id: "load_from_history",
+            status: "complete" as const,
+            message: "Attempted to load cached result",
+            duration: 50,
+          },
+          {
+            id: "history_replay_error",
+            status: "error" as const,
+            message: err instanceof Error ? err.message : "History replay failed",
+            duration: 0,
+          },
+        ],
+        error: {
+          message: err instanceof Error ? err.message : "History replay failed",
+          step: "history_replay",
+        },
+      };
+      loadCachedResult(replayErrorResult as any);
       setQuestion(query.question);
     }
   };
@@ -362,6 +420,7 @@ export default function NewInsightPage() {
             <QueryHistory
               customerId={customerId}
               onSelect={handleHistorySelect}
+              refreshTrigger={historyRefreshKey}
             />
           )}
         </div>

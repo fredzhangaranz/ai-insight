@@ -9,6 +9,20 @@ import { SqlValidationAuditService, type LogSqlValidationInput } from "@/lib/ser
 import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import { ClarificationAuditService } from "@/lib/services/audit/clarification-audit.service";
 
+function sanitizeSemanticContextForClient(
+  semanticContext: Record<string, unknown> | null | undefined
+) {
+  if (!semanticContext || typeof semanticContext !== "object") {
+    return semanticContext ?? null;
+  }
+
+  const { boundParameters: _boundParameters, ...safeContext } = semanticContext as Record<
+    string,
+    unknown
+  >;
+  return safeContext;
+}
+
 /**
  * GET /api/insights/history
  * Fetch query history for current user and customer
@@ -60,7 +74,7 @@ export async function GET(req: NextRequest) {
       mode: row.mode,
       recordCount: row.resultCount,
       sql: row.sql,
-      semanticContext: row.semanticContext, // JSONB field
+      semanticContext: sanitizeSemanticContextForClient(row.semanticContext), // JSONB field
     }));
 
     return NextResponse.json(queries);

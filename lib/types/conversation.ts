@@ -16,6 +16,27 @@ export interface ResultSummary {
   executionTimeMs?: number;
 }
 
+export type FollowUpDecisionType =
+  | "compose"
+  | "fresh"
+  | "undetermined"
+  | "visualization_meta"
+  | "aggregate_on_previous";
+
+export type FollowUpDecisionStatus = "determined" | "undetermined";
+
+export type FollowUpFallbackReason =
+  | "provider_error"
+  | "parse_error"
+  | "insufficient_context";
+
+export interface ArtifactSummary {
+  primaryChartType?: string;
+  mappingKeys?: string[];
+  seriesKeyColumn?: string;
+  distinctSeriesCount?: number;
+}
+
 /**
  * Zod schema for ResultSummary runtime validation
  */
@@ -55,6 +76,14 @@ export interface MessageMetadata {
   };
   queryHistoryId?: number;
   resultSummary?: ResultSummary;
+  artifactSummary?: ArtifactSummary;
+  compositionDecision?: {
+    status: FollowUpDecisionStatus;
+    decisionType: FollowUpDecisionType;
+    confidence: number;
+    reasoning: string;
+    fallbackReason?: FollowUpFallbackReason;
+  };
   executionTimeMs?: number;
   resolvedEntities?: Array<{
     kind: "patient";
@@ -115,6 +144,8 @@ export interface ConversationMessage {
 
 /**
  * Conversation context (non-PHI summary).
+ * lastBoundParameters: bound params from most recent successful execution in thread.
+ * Used for follow-up questions when QueryHistory inheritance fails.
  */
 export interface ConversationContext {
   customerId: string;
@@ -124,6 +155,7 @@ export interface ConversationContext {
     columns: string[];
     entityHashes?: string[];
   }>;
+  lastBoundParameters?: Record<string, string | number | boolean | null>;
   activeFilters?: any[];
   timeRange?: {
     start?: Date;

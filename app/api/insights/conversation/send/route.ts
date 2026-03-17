@@ -5,9 +5,7 @@ import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
 import type { Pool } from "pg";
 import { getAIProvider } from "@/lib/ai/get-provider";
-import type { BaseProvider } from "@/lib/ai/providers/base-provider";
 import {
-  SqlComposerService,
   COMPOSITION_STRATEGIES,
   type CompositionStrategy,
 } from "@/lib/services/sql-composer.service";
@@ -48,7 +46,10 @@ import {
 } from "@/lib/services/patient-entity-resolver.service";
 import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
-import type { ResolvedEntitySummary } from "@/lib/types/insight-artifacts";
+import type {
+  InsightArtifact,
+  ResolvedEntitySummary,
+} from "@/lib/types/insight-artifacts";
 import { validateTrustedSql } from "@/lib/services/trusted-sql-guard.service";
 
 export async function POST(req: NextRequest) {
@@ -334,13 +335,42 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const sqlComposer = new SqlComposerService();
     const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
     const provider = await getAIProvider(resolvedModelId);
-    const baseProvider = provider as BaseProvider;
 
-    const { assistantMessage: lastAssistant, previousQuestion } =
+    const {
+      assistantMessage: lastAssistant,
+      previousQuestion,
+      previousRawQuestion,
+    } =
       findLastAssistantWithQuestion(conversationHistory);
+    const shouldAttemptInheritedBoundParameters =
+      !boundParameters &&
+      typeof lastAssistant?.metadata?.sql === "string" &&
+      /@\w+/.test(lastAssistant.metadata.sql);
+    const inheritedBoundParameters =
+      shouldAttemptInheritedBoundParameters
+        ? await loadInheritedBoundParameters({
+            queryHistoryId: lastAssistant?.metadata?.queryHistoryId,
+            messageId: lastAssistant?.id,
+            threadId: ensuredThreadId,
+          }).catch((err) => {
+            console.error(
+              "[loadInheritedBoundParameters] Lookup error; proceeding without inherited params:",
+              err
+            );
+            return undefined;
+          })
+        : undefined;
+    let effectiveBoundParameters = boundParameters || inheritedBoundParameters;
+
+    if (process.env.DEBUG_COMPOSITION === "true" && effectiveBoundParameters) {
+      console.log(
+        `[Layer 2A: Bound Params] Reusing bound params: ${Object.keys(
+          effectiveBoundParameters
+        ).join(",")}`
+      );
+    }
 
     // 🔍 LOGGING LAYER 2: Check composition decision criteria
     if (process.env.DEBUG_COMPOSITION === "true") {
@@ -359,89 +389,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let compositionStrategy: CompositionStrategy = COMPOSITION_STRATEGIES.FRESH;
-    let sqlText = "";
+    const compositionStrategy: CompositionStrategy = COMPOSITION_STRATEGIES.FRESH;
+    const compositionDecision: MessageMetadata["compositionDecision"] = {
+      status: "determined",
+      decisionType: "fresh",
+      reasoning:
+        "Single-pass contextual SQL generation with full conversation history",
+      confidence: 1,
+    };
 
-    const compositionAllowed =
-      !boundParameters &&
-      !resolvedEntities?.length &&
-      !lastAssistant?.metadata?.resolvedEntities?.length;
-
-    if (compositionAllowed && lastAssistant?.metadata?.sql && previousQuestion) {
-      const decision = await sqlComposer.shouldComposeQuery(
-        sanitizedQuestion,
-        previousQuestion,
-        lastAssistant.metadata.sql,
-        baseProvider
-      );
-
+    if (process.env.DEBUG_COMPOSITION === "true") {
       console.log(
-        `[Composition Decision] ${
-          decision.shouldCompose ? "COMPOSE" : "FRESH"
-        } (confidence: ${decision.confidence})`
+        `[Layer 3: Contextual SQL Generation] Passing ${conversationHistory.length} messages to provider`
       );
-
-      if (decision.shouldCompose) {
-        const composed = await sqlComposer.composeQuery(
-          lastAssistant.metadata.sql,
-          previousQuestion,
-          sanitizedQuestion,
-          baseProvider
-        );
-
+      conversationHistory.forEach((msg, idx) => {
         console.log(
-          `[SqlComposerService] Composed SQL (strategy: ${composed.strategy}):`,
-          composed.sql?.slice(0, 500)
+          `  [${idx}] role=${msg.role}, sql=${!!msg.metadata?.sql}, content_len=${msg.content?.length || 0}`
         );
-
-        const validation = sqlComposer.validateComposedSql(composed.sql);
-        if (validation.valid) {
-          const cleanedComposed = composed.sql?.trim() || "";
-          // Additional safety check: ensure SQL starts with SELECT or WITH
-          const upperComposed = cleanedComposed.toUpperCase().trim();
-          if (
-            upperComposed.startsWith("SELECT") ||
-            upperComposed.startsWith("WITH")
-          ) {
-            sqlText = cleanedComposed;
-            compositionStrategy = composed.strategy;
-          } else {
-            console.warn(
-              "[SqlComposerService] Composed SQL does not start with SELECT or WITH; falling back to fresh query.",
-              `First 100 chars: ${cleanedComposed.slice(0, 100)}`
-            );
-          }
-        } else {
-          console.warn(
-            "[SqlComposerService] Composed SQL failed validation; falling back to fresh query.",
-            validation.errors
-          );
-        }
-      }
-    }
-
-    if (!sqlText) {
-      // 🔍 LOGGING LAYER 3: Fresh query generation path
-      if (process.env.DEBUG_COMPOSITION === "true") {
-        console.log(
-          `[Layer 3: Fresh Query Generation] Passing ${conversationHistory.length} messages to provider`
-        );
-        conversationHistory.forEach((msg, idx) => {
-          console.log(
-            `  [${idx}] role=${msg.role}, sql=${!!msg.metadata?.sql}, content_len=${msg.content?.length || 0}`
-          );
-        });
-      }
-
-      const generatedSql = await provider.completeWithConversation({
-        conversationHistory,
-        currentQuestion: sanitizedQuestion,
-        customerId: customerId,
-        trustedSqlInstructions,
       });
-      sqlText = generatedSql.trim();
-      compositionStrategy = COMPOSITION_STRATEGIES.FRESH;
     }
+
+    const generatedSql = await provider.completeWithConversation({
+      conversationHistory,
+      currentQuestion: sanitizedQuestion,
+      customerId: customerId,
+      trustedSqlInstructions,
+    });
+    const sqlText = generatedSql.trim();
 
     if (!sqlText) {
       throw new Error("AI provider did not return SQL");
@@ -450,6 +424,16 @@ export async function POST(req: NextRequest) {
     // Clean SQL: remove markdown code blocks if present
     const cleanedSql = cleanSqlQuery(sqlText);
 
+    effectiveBoundParameters = await recoverMissingBoundParameters({
+      sqlText: cleanedSql,
+      boundParameters: effectiveBoundParameters,
+      patientResolver: featureFlags.patientEntityResolution
+        ? patientResolver
+        : undefined,
+      customerId: normalizedCustomerId,
+      previousQuestion: previousRawQuestion || previousQuestion,
+    });
+
     // Log the SQL that will be executed (first 500 chars for debugging)
     console.log(
       `[Conversation Send] Executing SQL (${compositionStrategy}):`,
@@ -457,7 +441,7 @@ export async function POST(req: NextRequest) {
     );
 
     const execution = await executeSql(cleanedSql, normalizedCustomerId, {
-      boundParameters,
+      boundParameters: effectiveBoundParameters,
       resolvedEntities,
     });
     const executionTimeMs = Date.now() - startTime;
@@ -470,7 +454,7 @@ export async function POST(req: NextRequest) {
       results: execution.results,
       sqlValidation: execution.sqlValidation,
       error: execution.error,
-      boundParameters,
+      boundParameters: effectiveBoundParameters,
       resolvedEntities,
     };
 
@@ -492,6 +476,13 @@ export async function POST(req: NextRequest) {
       result.results?.rows || [],
       result.results?.columns || []
     );
+    const artifactSummary =
+      featureFlags.followUpReliability && result.artifacts
+        ? buildArtifactSummary(
+            result.artifacts,
+            result.results?.rows || []
+          )
+        : undefined;
 
     const contextDependencies =
       lastAssistant?.id && compositionStrategy !== COMPOSITION_STRATEGIES.FRESH
@@ -505,6 +496,8 @@ export async function POST(req: NextRequest) {
       compositionStrategy,
       contextDependencies,
       resultSummary: safeResultSummary,
+      artifactSummary,
+      compositionDecision,
       executionTimeMs,
       resolvedEntities: resolvedEntities?.map((entity) => ({
         kind: entity.kind,
@@ -537,7 +530,9 @@ export async function POST(req: NextRequest) {
       `,
       [
         currentThreadId,
-        generateResponseText(result),
+        generateResponseText(result, {
+          followUpReliability: featureFlags.followUpReliability,
+        }),
         JSON.stringify(assistantMetadata),
       ]
     );
@@ -592,13 +587,17 @@ export async function POST(req: NextRequest) {
       sqlValidation: result.sqlValidation,
       semanticContext: {
         compositionStrategy,
+        compositionDecisionType: compositionDecision?.decisionType || null,
+        compositionDecisionStatus: compositionDecision?.status || null,
+        compositionFallbackReason: compositionDecision?.fallbackReason || null,
         resolvedEntities:
           resolvedEntities?.map((entity) => ({
             kind: entity.kind,
             opaqueRef: entity.opaqueRef,
             matchType: entity.matchType,
           })) || null,
-        boundParameterNames: Object.keys(boundParameters || {}),
+        boundParameters: effectiveBoundParameters || null,
+        boundParameterNames: Object.keys(effectiveBoundParameters || {}),
       },
       threadId: ensuredThreadId,
       messageId: assistantMessageId,
@@ -626,7 +625,8 @@ export async function POST(req: NextRequest) {
       ensuredThreadId,
       normalizedCustomerId,
       assistantMessageId,
-      safeResultSummary
+      safeResultSummary,
+      effectiveBoundParameters
     );
 
     return NextResponse.json({
@@ -635,7 +635,9 @@ export async function POST(req: NextRequest) {
       message: {
         id: assistantMessageId,
         role: "assistant",
-        content: generateResponseText(result),
+        content: generateResponseText(result, {
+          followUpReliability: featureFlags.followUpReliability,
+        }),
         result,
         metadata: assistantMetadata,
         createdAt: assistantMsgResult.rows[0].createdAt,
@@ -714,9 +716,249 @@ async function loadConversationHistory(
     });
 }
 
+function normalizeBoundParameters(
+  rawValue: unknown
+): Record<string, string | number | boolean | null> | undefined {
+  const rawBoundParameters =
+    rawValue && typeof rawValue === "object" ? rawValue : null;
+
+  if (!rawBoundParameters) {
+    return undefined;
+  }
+
+  const normalized: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(rawBoundParameters)) {
+    if (
+      typeof key === "string" &&
+      key.trim() &&
+      (typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        value === null)
+    ) {
+      normalized[key] = value;
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function parseQueryHistoryId(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+async function loadBoundParametersFromQueryHistory(
+  queryHistoryId: number
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!Number.isFinite(queryHistoryId)) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await pool.query(
+    `
+    SELECT "semanticContext"
+    FROM "QueryHistory"
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [queryHistoryId]
+  );
+
+  if (result.rows.length === 0) {
+    return undefined;
+  }
+
+  const semanticContext = normalizeJson(result.rows[0].semanticContext || {});
+  return normalizeBoundParameters(semanticContext?.boundParameters);
+}
+
+async function loadBoundParametersFromMessageId(
+  messageId: string
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!messageId) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await queryHistoryByMessageId(pool, messageId);
+
+  if (result.rows.length === 0) {
+    return undefined;
+  }
+
+  const semanticContext = normalizeJson(result.rows[0].semanticContext || {});
+  return normalizeBoundParameters(semanticContext?.boundParameters);
+}
+
+async function loadLatestBoundParametersFromThread(
+  threadId: string
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!threadId) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await queryHistoryByThreadId(pool, threadId);
+
+  for (const row of result.rows) {
+    const semanticContext = normalizeJson(row.semanticContext || {});
+    const normalized = normalizeBoundParameters(semanticContext?.boundParameters);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+}
+
+function isMissingColumnError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "42703"
+  );
+}
+
+async function queryHistoryByMessageId(pool: Pool, messageId: string) {
+  try {
+    return await pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "conversationMessageId" = $1
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [messageId]
+    );
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    // Backward compatibility for older schemas.
+    return pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "messageId" = $1
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [messageId]
+    );
+  }
+}
+
+async function queryHistoryByThreadId(pool: Pool, threadId: string) {
+  try {
+    return await pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "conversationThreadId" = $1
+      ORDER BY id DESC
+      LIMIT 10
+      `,
+      [threadId]
+    );
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    // Backward compatibility for older schemas.
+    return pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "threadId" = $1
+      ORDER BY id DESC
+      LIMIT 10
+      `,
+      [threadId]
+    );
+  }
+}
+
+async function loadBoundParametersFromThreadCache(
+  threadId: string
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!threadId) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await pool.query(
+    `
+    SELECT "contextCache"
+    FROM "ConversationThreads"
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [threadId]
+  );
+
+  if (result.rows.length === 0) {
+    return undefined;
+  }
+
+  const contextCache = normalizeJson(result.rows[0].contextCache || {});
+  return normalizeBoundParameters(contextCache?.lastBoundParameters);
+}
+
+async function loadInheritedBoundParameters(input: {
+  queryHistoryId?: unknown;
+  messageId?: string;
+  threadId?: string;
+}): Promise<Record<string, string | number | boolean | null> | undefined> {
+  const parsedQueryHistoryId = parseQueryHistoryId(input.queryHistoryId);
+  if (parsedQueryHistoryId !== undefined) {
+    const fromQueryHistory = await loadBoundParametersFromQueryHistory(
+      parsedQueryHistoryId
+    );
+    if (fromQueryHistory) {
+      return fromQueryHistory;
+    }
+  }
+
+  if (input.messageId) {
+    const fromMessage = await loadBoundParametersFromMessageId(input.messageId);
+    if (fromMessage) {
+      return fromMessage;
+    }
+  }
+
+  if (input.threadId) {
+    const fromThread = await loadLatestBoundParametersFromThread(input.threadId);
+    if (fromThread) {
+      return fromThread;
+    }
+
+    return loadBoundParametersFromThreadCache(input.threadId);
+  }
+
+  return undefined;
+}
+
 function findLastAssistantWithQuestion(
   history: ConversationMessage[]
-): { assistantMessage?: ConversationMessage; previousQuestion?: string } {
+): {
+  assistantMessage?: ConversationMessage;
+  previousQuestion?: string;
+  previousRawQuestion?: string;
+} {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
     if (message.role !== "assistant" || !message.metadata?.sql) {
@@ -729,6 +971,7 @@ function findLastAssistantWithQuestion(
           assistantMessage: message,
           previousQuestion:
             history[j].metadata?.sanitizedQuestion || history[j].content,
+          previousRawQuestion: history[j].content,
         };
       }
     }
@@ -737,6 +980,84 @@ function findLastAssistantWithQuestion(
   }
 
   return {};
+}
+
+function extractSqlParameterNames(sqlText: string): string[] {
+  const matches = sqlText.match(/(?<!@)@([A-Za-z_][A-Za-z0-9_]*)/g) || [];
+  const uniqueNames = new Set<string>();
+
+  for (const token of matches) {
+    const parameterName = token.slice(1);
+    if (parameterName) {
+      uniqueNames.add(parameterName);
+    }
+  }
+
+  return Array.from(uniqueNames);
+}
+
+function getMissingBoundParameters(
+  sqlText: string,
+  boundParameters?: Record<string, string | number | boolean | null>
+): string[] {
+  const requiredParameterNames = extractSqlParameterNames(sqlText);
+  if (!requiredParameterNames.length) {
+    return [];
+  }
+
+  return requiredParameterNames.filter(
+    (name) => !Object.prototype.hasOwnProperty.call(boundParameters || {}, name)
+  );
+}
+
+async function recoverMissingBoundParameters(input: {
+  sqlText: string;
+  boundParameters?: Record<string, string | number | boolean | null>;
+  patientResolver?: PatientEntityResolver;
+  customerId: string;
+  previousQuestion?: string;
+}): Promise<Record<string, string | number | boolean | null> | undefined> {
+  const missingParameterNames = getMissingBoundParameters(
+    input.sqlText,
+    input.boundParameters
+  );
+
+  if (!missingParameterNames.length) {
+    return input.boundParameters;
+  }
+
+  if (!input.patientResolver || !input.previousQuestion) {
+    return input.boundParameters;
+  }
+
+  const missingPatientParameters = missingParameterNames.filter((name) =>
+    /^patientId\d+$/i.test(name)
+  );
+
+  // Avoid guessing when non-patient variables are missing or multiple patient refs exist.
+  if (
+    missingPatientParameters.length !== missingParameterNames.length ||
+    missingPatientParameters.length !== 1
+  ) {
+    return input.boundParameters;
+  }
+
+  const patientResolution = await input.patientResolver.resolve(
+    input.previousQuestion,
+    input.customerId
+  );
+
+  if (
+    patientResolution.status !== "resolved" ||
+    !patientResolution.resolvedId
+  ) {
+    return input.boundParameters;
+  }
+
+  return {
+    ...(input.boundParameters || {}),
+    [missingPatientParameters[0]]: patientResolution.resolvedId,
+  };
 }
 
 async function executeSql(
@@ -780,6 +1101,37 @@ async function executeSql(
       } as unknown as SQLValidationResult,
       error: {
         message: trustedValidation.message || "Trusted SQL validation failed",
+        step: "execute_query",
+      },
+    };
+  }
+
+  const missingBoundParameters = getMissingBoundParameters(
+    sqlText,
+    options?.boundParameters
+  );
+  if (missingBoundParameters.length > 0) {
+    const missingList = missingBoundParameters
+      .map((name) => `@${name}`)
+      .join(", ");
+    return {
+      executedSql: sqlText,
+      results: { rows: [], columns: [] },
+      sqlValidation: {
+        isValid: false,
+        warnings: [],
+        analyzedAt: new Date().toISOString(),
+        errors: [
+          {
+            type: "MISSING_BOUND_PARAMETER",
+            message: `Missing secure SQL parameter(s): ${missingList}.`,
+            suggestion:
+              "Re-run from the original patient question so secure parameters are re-bound.",
+          },
+        ],
+      } as unknown as SQLValidationResult,
+      error: {
+        message: `Missing secure SQL parameter(s): ${missingList}.`,
         step: "execute_query",
       },
     };
@@ -876,7 +1228,7 @@ async function logQueryHistory(input: {
 
     return queryHistoryId ?? null;
   } catch (error) {
-    console.warn(
+    console.error(
       "[/api/insights/conversation/send] Failed to log query history:",
       error
     );
@@ -935,7 +1287,8 @@ async function updateContextCache(
   threadId: string,
   customerId: string,
   assistantMessageId: string,
-  resultSummary: ResultSummary
+  resultSummary: ResultSummary,
+  boundParameters?: Record<string, string | number | boolean | null>
 ) {
   const pool = await getInsightGenDbPool();
   const existingCacheResult = await pool.query(
@@ -958,6 +1311,9 @@ async function updateContextCache(
     {
       customerId,
       ...existingCache,
+      ...(boundParameters && Object.keys(boundParameters).length > 0
+        ? { lastBoundParameters: boundParameters }
+        : {}),
     },
     {
       messageId: assistantMessageId,
@@ -1154,8 +1510,12 @@ function buildPatientClarificationResult(
   };
 }
 
-function generateResponseText(result: InsightResult): string {
+function generateResponseText(
+  result: InsightResult,
+  options?: { followUpReliability?: boolean }
+): string {
   const rowCount = result.results?.rows.length || 0;
+  const countFormatted = tryFormatAggregateCountResponse(result, options);
 
   if (result.mode === "clarification") {
     return "I need some clarification before I can answer that question.";
@@ -1169,9 +1529,91 @@ function generateResponseText(result: InsightResult): string {
     return "I didn't find any matching records.";
   }
 
+  if (countFormatted) {
+    return countFormatted;
+  }
+
   if (rowCount === 1) {
     return "Found 1 record matching your criteria.";
   }
 
   return `Found ${rowCount} records matching your criteria.`;
+}
+
+function tryFormatAggregateCountResponse(
+  result: InsightResult,
+  options?: { followUpReliability?: boolean }
+): string | null {
+  if (!options?.followUpReliability) {
+    return null;
+  }
+
+  const question = (result.question || "").toLowerCase();
+  if (!/(how many|count|number of)/i.test(question)) {
+    return null;
+  }
+
+  const rows = result.results?.rows || [];
+  const columns = result.results?.columns || [];
+  if (rows.length !== 1 || columns.length !== 1) {
+    return null;
+  }
+
+  const value = Number(rows[0]?.[columns[0]]);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  if (question.includes("wound")) {
+    const rounded = Math.round(value);
+    return `We are displaying ${rounded} wound${rounded === 1 ? "" : "s"}.`;
+  }
+
+  return `The count is ${value}.`;
+}
+
+function buildArtifactSummary(
+  artifacts: InsightArtifact[],
+  rows: any[]
+): MessageMetadata["artifactSummary"] | undefined {
+  const chartArtifact = artifacts.find(
+    (artifact): artifact is Extract<InsightArtifact, { kind: "chart" }> =>
+      artifact.kind === "chart" && artifact.primary === true
+  ) ||
+    artifacts.find(
+      (artifact): artifact is Extract<InsightArtifact, { kind: "chart" }> =>
+        artifact.kind === "chart"
+    );
+
+  if (!chartArtifact) {
+    return undefined;
+  }
+
+  const seriesKeyColumn =
+    chartArtifact.seriesKey ||
+    (typeof chartArtifact.mapping.label === "string"
+      ? chartArtifact.mapping.label
+      : undefined);
+
+  let distinctSeriesCount: number | undefined;
+  if (seriesKeyColumn) {
+    const seriesValues = new Set(
+      rows
+        .map((row) => row?.[seriesKeyColumn])
+        .filter(
+          (value) => value !== null && value !== undefined && value !== ""
+        )
+        .map((value) => String(value))
+    );
+    if (seriesValues.size > 0) {
+      distinctSeriesCount = seriesValues.size;
+    }
+  }
+
+  return {
+    primaryChartType: chartArtifact.chartType,
+    mappingKeys: Object.keys(chartArtifact.mapping || {}),
+    seriesKeyColumn,
+    distinctSeriesCount,
+  };
 }

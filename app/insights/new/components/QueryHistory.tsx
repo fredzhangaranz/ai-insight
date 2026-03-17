@@ -19,11 +19,14 @@ interface Query {
 interface QueryHistoryProps {
   customerId: string;
   onSelect: (query: Query) => void;
+  /** When this value changes, query history is refetched (e.g. after a new question is asked). */
+  refreshTrigger?: number;
 }
 
 export function QueryHistory({
   customerId,
-  onSelect
+  onSelect,
+  refreshTrigger = 0,
 }: QueryHistoryProps) {
   const [queries, setQueries] = useState<Query[]>([]);
 
@@ -31,7 +34,7 @@ export function QueryHistory({
     if (customerId) {
       fetchQueryHistory();
     }
-  }, [customerId]);
+  }, [customerId, refreshTrigger]);
 
   const fetchQueryHistory = async () => {
     try {

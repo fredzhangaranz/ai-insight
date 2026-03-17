@@ -1,14 +1,14 @@
 {
   "suiteVersion": "1.0.0",
-  "executedAt": "2026-03-11T22:51:26.771Z",
+  "executedAt": "2026-03-17T19:11:54.800Z",
   "totalQueries": 12,
-  "passed": 7,
-  "failed": 5,
-  "passRate": 58.333333333333336,
-  "avgLatency": 841.1666666666666,
-  "p50Latency": 680.5,
-  "p95Latency": 1595.099999999999,
-  "p99Latency": 2289.420000000001,
+  "passed": 6,
+  "failed": 6,
+  "passRate": 50,
+  "avgLatency": 672.25,
+  "p50Latency": 645,
+  "p95Latency": 1357.5499999999988,
+  "p99Latency": 2025.910000000001,
   "templateHitRate": 0,
   "results": [
     {
@@ -18,26 +18,26 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 2463,
+      "actualLatency": 2193,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:19.139Z"
+      "executedAt": "2026-03-17T19:11:48.924Z"
     },
     {
       "queryId": "tp_002",
       "passed": false,
-      "actualMode": "direct",
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 735,
+      "actualLatency": 18,
       "errors": [
-        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
+        "Execution error: invalid input syntax for type uuid: \"test_customer\""
       ],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:19.875Z"
+      "executedAt": "2026-03-17T19:11:48.943Z"
     },
     {
       "queryId": "tp_003",
@@ -46,12 +46,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 885,
+      "actualLatency": 644,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:20.760Z"
+      "executedAt": "2026-03-17T19:11:49.587Z"
     },
     {
       "queryId": "tp_004",
@@ -60,12 +60,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 696,
+      "actualLatency": 646,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:21.456Z"
+      "executedAt": "2026-03-17T19:11:50.233Z"
     },
     {
       "queryId": "tp_005",
@@ -74,12 +74,12 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 701,
+      "actualLatency": 665,
       "errors": [
         "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:22.157Z"
+      "executedAt": "2026-03-17T19:11:50.898Z"
     },
     {
       "queryId": "sa_001",
@@ -88,10 +88,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 661,
+      "actualLatency": 674,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:22.818Z"
+      "executedAt": "2026-03-17T19:11:51.572Z"
     },
     {
       "queryId": "sa_002",
@@ -100,10 +100,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 645,
+      "actualLatency": 640,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:23.463Z"
+      "executedAt": "2026-03-17T19:11:52.212Z"
     },
     {
       "queryId": "sa_003",
@@ -112,10 +112,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 643,
+      "actualLatency": 647,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:24.106Z"
+      "executedAt": "2026-03-17T19:11:52.859Z"
     },
     {
       "queryId": "sa_004",
@@ -124,22 +124,24 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 665,
+      "actualLatency": 647,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:24.771Z"
+      "executedAt": "2026-03-17T19:11:53.506Z"
     },
     {
       "queryId": "sa_005",
-      "passed": true,
-      "actualMode": "direct",
+      "passed": false,
+      "actualMode": "error",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 706,
-      "errors": [],
+      "actualLatency": 24,
+      "errors": [
+        "Execution error: invalid input syntax for type uuid: \"test_customer\""
+      ],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:25.477Z"
+      "executedAt": "2026-03-17T19:11:53.530Z"
     },
     {
       "queryId": "cl_001",
@@ -148,10 +150,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 650,
+      "actualLatency": 636,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:26.127Z"
+      "executedAt": "2026-03-17T19:11:54.166Z"
     },
     {
       "queryId": "cl_002",
@@ -160,10 +162,10 @@
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 644,
+      "actualLatency": 633,
       "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-11T22:51:26.771Z"
+      "executedAt": "2026-03-17T19:11:54.800Z"
     }
   ],
   "byComplexity": {
@@ -175,9 +177,9 @@
     },
     "medium": {
       "total": 2,
-      "passed": 2,
-      "failed": 0,
-      "passRate": 100
+      "passed": 1,
+      "failed": 1,
+      "passRate": 50
     },
     "complex": {
       "total": 5,
@@ -225,9 +227,9 @@
     },
     "simple_aggregation": {
       "total": 5,
-      "passed": 5,
-      "failed": 0,
-      "passRate": 100
+      "passed": 4,
+      "failed": 1,
+      "passRate": 80
     },
     "patient_count": {
       "total": 1,
@@ -255,9 +257,9 @@
     },
     "window_function": {
       "total": 1,
-      "passed": 1,
-      "failed": 0,
-      "passRate": 100
+      "passed": 0,
+      "failed": 1,
+      "passRate": 0
     },
     "clarification": {
       "total": 2,

@@ -131,6 +131,7 @@ function buildHistorySemanticContext(result: InsightResult | any) {
         opaqueRef: entity.opaqueRef,
         matchType: entity.matchType,
       })) || null,
+    boundParameters: result?.boundParameters || null,
     boundParameterNames: Object.keys(result?.boundParameters || {}),
   };
 }

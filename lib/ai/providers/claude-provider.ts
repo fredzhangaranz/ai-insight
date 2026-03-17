@@ -268,9 +268,13 @@ export class ClaudeProvider extends BaseProvider {
 
     history += "\nInstructions:\n";
     history +=
-      "- If the current question references previous results (which ones, those, they), compose using the most recent SQL.\n";
+      "When the conversation has prior turns, determine whether the current question operates on the previous result or is independent.\n";
     history +=
-      "- If the current question is unrelated, generate a fresh query.\n";
+      "Operates on previous result when: (1) it uses pronouns, demonstratives, or implicit references that resolve to the prior subject; (2) it asks for a metric or transformation of what was returned (count, average, filter); (3) the natural answer would be a subset, aggregate, or annotation of the prior result set. In these cases, wrap the prior SQL in a CTE and apply the requested operation.\n";
+    history +=
+      "Independent when: it introduces a new subject, scope, or entity not anchored to the prior result. Generate a fresh query.\n";
+    history +=
+      "Apply this principle from context; do not rely on surface patterns.\n";
 
     return history;
   }
