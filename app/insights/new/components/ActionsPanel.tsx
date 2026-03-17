@@ -163,6 +163,7 @@ export function ActionsPanel({
               : undefined
           }
           title={result.question || "Query Results"}
+          mode="create"
           onSave={handleChartSave}
           saveButtonText="Continue to Save"
           allowTypeChange={true}

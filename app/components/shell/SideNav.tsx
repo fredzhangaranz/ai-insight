@@ -53,12 +53,6 @@ const items = [
     icon: Squares2x2Icon,
     match: ["/dashboard"],
   },
-  {
-    href: "/templates",
-    label: "Templates",
-    icon: DocumentDuplicateIcon,
-    match: ["/templates"],
-  },
 ];
 
 export function SideNav() {
@@ -197,6 +191,10 @@ export function SideNav() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => router.push("/profile")}>
                       Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push("/templates")}>
+                      <DocumentDuplicateIcon className="mr-2 h-4 w-4" />
+                      Templates
                     </DropdownMenuItem>
                     {isAdmin && (
                       <>

@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { threadId, customerId, question, modelId, userMessageId: userMessageIdParam } =
+    const { threadId, customerId, question, modelId, userMessageId: userMessageIdParam, clarificationResponses } =
       validation.data;
     const normalizedCustomerId = customerId;
     const normalizedQuestion = question;
@@ -95,9 +95,11 @@ export async function POST(req: NextRequest) {
     let patientResolution: PatientResolutionResult | null = null;
 
     if (featureFlags.patientEntityResolution) {
+      const patientResolverOptions = buildPatientResolverOptions(clarificationResponses);
       patientResolution = await patientResolver.resolve(
         normalizedQuestion,
-        normalizedCustomerId
+        normalizedCustomerId,
+        patientResolverOptions
       );
 
       if (
@@ -409,11 +411,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const effectiveTrustedInstructions =
+      trustedSqlInstructions ||
+      buildInheritedParameterInstructions(effectiveBoundParameters);
+
     const generatedSql = await provider.completeWithConversation({
       conversationHistory,
       currentQuestion: sanitizedQuestion,
       customerId: customerId,
-      trustedSqlInstructions,
+      trustedSqlInstructions: effectiveTrustedInstructions,
     });
     const sqlText = generatedSql.trim();
 
@@ -1416,6 +1422,43 @@ async function validateUserMessage(
   }
 
   return { valid: true };
+}
+
+function buildInheritedParameterInstructions(
+  boundParameters?: Record<string, string | number | boolean | null>
+): string | undefined {
+  if (!boundParameters || Object.keys(boundParameters).length === 0) {
+    return undefined;
+  }
+
+  const placeholders = Object.keys(boundParameters)
+    .map((name) => `@${name}`)
+    .join(", ");
+  return (
+    `The previous query used these parameter placeholders: ${placeholders}. ` +
+    "If your generated SQL logically operates on or filters the previous result, you must include these parameters in your SQL; the system will substitute the resolved values at execution."
+  );
+}
+
+function buildPatientResolverOptions(
+  clarificationResponses?: Record<string, string>
+): { selectionOpaqueRef?: string; confirmedOpaqueRef?: string; overrideLookup?: string } | undefined {
+  if (!clarificationResponses) return undefined;
+
+  const select = clarificationResponses["patient_resolution_select"];
+  if (select) return { selectionOpaqueRef: select };
+
+  const confirm = clarificationResponses["patient_resolution_confirm"];
+  if (confirm) {
+    if (confirm === "__CHANGE_PATIENT__") return undefined;
+    if (confirm.startsWith("patient:")) return { confirmedOpaqueRef: confirm };
+    return { overrideLookup: confirm };
+  }
+
+  const lookup = clarificationResponses["patient_lookup_input"];
+  if (lookup) return { overrideLookup: lookup };
+
+  return undefined;
 }
 
 function buildPatientClarificationResult(

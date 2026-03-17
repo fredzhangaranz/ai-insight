@@ -32,6 +32,7 @@ export function ConversationPanel({
     isLoading,
     error,
     sendMessage,
+    sendMessageWithClarifications,
     editMessage,
     startNewConversation,
   } = useConversation();
@@ -91,6 +92,15 @@ export function ConversationPanel({
       ),
     [sortedMessages]
   );
+  const lastClarificationMessage = useMemo(
+    () =>
+      lastAssistantMessage?.result?.mode === "clarification" &&
+      !lastAssistantMessage.isLoading
+        ? lastAssistantMessage
+        : null,
+    [lastAssistantMessage]
+  );
+
   const suggestionResult = lastAssistantWithResult?.result ?? initialResult;
   const showRefinements = Boolean(lastAssistantWithResult);
   const statusText = hasPriorAssistant
@@ -199,6 +209,19 @@ export function ConversationPanel({
                     isFollowUp={Boolean(
                       firstAssistantId && message.id !== firstAssistantId
                     )}
+                    onClarify={
+                      lastClarificationMessage?.id === message.id && !isLoading
+                        ? (responses) => {
+                            const question = message.result?.question ?? "";
+                            sendMessageWithClarifications(
+                              question,
+                              customerId,
+                              responses,
+                              modelId
+                            );
+                          }
+                        : undefined
+                    }
                   />
                 )}
               </div>

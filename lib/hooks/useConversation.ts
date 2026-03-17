@@ -15,6 +15,12 @@ interface UseConversationReturn {
     customerId: string,
     modelId?: string
   ) => Promise<void>;
+  sendMessageWithClarifications: (
+    question: string,
+    customerId: string,
+    clarificationResponses: Record<string, string>,
+    modelId?: string
+  ) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   startNewConversation: () => void;
   loadConversation: (threadId: string) => Promise<void>;
@@ -23,6 +29,7 @@ interface UseConversationReturn {
 interface SendMessageOptions {
   userMessageId?: string;
   skipOptimistic?: boolean;
+  clarificationResponses?: Record<string, string>;
 }
 
 export function useConversation(): UseConversationReturn {
@@ -111,6 +118,7 @@ export function useConversation(): UseConversationReturn {
           question: trimmedQuestion,
           ...(modelId && { modelId }),
           ...(options?.userMessageId && { userMessageId: options.userMessageId }),
+          ...(options?.clarificationResponses && { clarificationResponses: options.clarificationResponses }),
         };
 
         const response = await fetch("/api/insights/conversation/send", {
@@ -200,6 +208,20 @@ export function useConversation(): UseConversationReturn {
   const sendMessage = useCallback(
     async (question: string, targetCustomerId: string, modelId?: string) => {
       await sendMessageInternal(question, targetCustomerId, modelId);
+    },
+    [sendMessageInternal]
+  );
+
+  const sendMessageWithClarifications = useCallback(
+    async (
+      question: string,
+      targetCustomerId: string,
+      clarificationResponses: Record<string, string>,
+      modelId?: string
+    ) => {
+      await sendMessageInternal(question, targetCustomerId, modelId, {
+        clarificationResponses,
+      });
     },
     [sendMessageInternal]
   );
@@ -300,6 +322,7 @@ export function useConversation(): UseConversationReturn {
     isLoading,
     error,
     sendMessage,
+    sendMessageWithClarifications,
     editMessage,
     startNewConversation,
     loadConversation,

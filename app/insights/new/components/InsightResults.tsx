@@ -39,6 +39,10 @@ export function InsightResults({
   const [stepPreviewApproved, setStepPreviewApproved] = useState(false);
   const [refinementInput, setRefinementInput] = useState("");
   const [showChartDialog, setShowChartDialog] = useState(false);
+  const [editingChartIndex, setEditingChartIndex] = useState<number | null>(null);
+  const [chartOverrides, setChartOverrides] = useState<
+    Record<number, { chartType: ChartType; chartMapping: Record<string, string> }>
+  >({});
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [initialChartMapping, setInitialChartMapping] = useState<
     Record<string, string> | undefined
@@ -102,10 +106,23 @@ export function InsightResults({
     setRefinementInput(`I disagree with using "${assumption}". ${explanation}`);
   };
 
-  const handleEditChart = (artifact: ChartArtifact) => {
-    setChartType(artifact.chartType);
-    setInitialChartMapping(artifact.mapping);
+  const handleEditChart = (artifact: ChartArtifact, index: number) => {
+    setEditingChartIndex(index);
+    setChartType(chartOverrides[index]?.chartType ?? artifact.chartType);
+    setInitialChartMapping(chartOverrides[index]?.chartMapping ?? artifact.mapping);
     setShowChartDialog(true);
+  };
+
+  const handleApplyChart = (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => {
+    if (editingChartIndex !== null) {
+      setChartOverrides((prev) => ({ ...prev, [editingChartIndex]: config }));
+    }
+    setShowChartDialog(false);
+    setEditingChartIndex(null);
+    setInitialChartMapping(undefined);
   };
 
   return (
@@ -240,7 +257,14 @@ export function InsightResults({
                 artifact={artifact}
                 rows={result.results?.rows || []}
                 columns={result.results?.columns || []}
-                onEditChart={artifact.kind === "chart" ? handleEditChart : undefined}
+                onEditChart={
+                  artifact.kind === "chart"
+                    ? (a) => handleEditChart(a, index)
+                    : undefined
+                }
+                chartOverride={
+                  artifact.kind === "chart" ? chartOverrides[index] : undefined
+                }
               />
             ))}
           </div>
@@ -317,12 +341,15 @@ export function InsightResults({
           isOpen={showChartDialog}
           onClose={() => {
             setShowChartDialog(false);
+            setEditingChartIndex(null);
             setInitialChartMapping(undefined);
           }}
           queryResults={result.results.rows}
           chartType={chartType}
           initialMapping={initialChartMapping}
           title={result.question || "Query Results"}
+          mode="preview"
+          onApply={handleApplyChart}
           allowTypeChange={true}
           onTypeChange={setChartType}
         />

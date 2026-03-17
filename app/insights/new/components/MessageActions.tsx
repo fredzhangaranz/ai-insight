@@ -32,6 +32,13 @@ export function MessageActions({
     (artifact) => artifact.kind === "chart"
   );
 
+  const handleApplyChart = (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => {
+    console.log("Chart configuration applied to inline chart:", config);
+  };
+
   const handleExportCSV = () => {
     if (!result.results) {
       return;
@@ -145,6 +152,8 @@ export function MessageActions({
               : undefined
           }
           title={result.question || "Query Results"}
+          mode="preview"
+          onApply={handleApplyChart}
           allowTypeChange={true}
           onTypeChange={setChartType}
         />

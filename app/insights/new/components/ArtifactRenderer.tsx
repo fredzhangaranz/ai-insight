@@ -2,6 +2,7 @@
 
 import { shapeDataForChart } from "@/lib/data-shaper";
 import type { InsightArtifact } from "@/lib/types/insight-artifacts";
+import type { ChartType } from "@/lib/chart-contracts";
 import { ChartComponent } from "@/app/components/charts/chart-component";
 import { ResultsTable } from "./ResultsTable";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ interface ArtifactRendererProps {
   rows: any[];
   columns: string[];
   onEditChart?: (artifact: Extract<InsightArtifact, { kind: "chart" }>) => void;
+  chartOverride?: { chartType: ChartType; chartMapping: Record<string, string> };
 }
 
 export function ArtifactRenderer({
@@ -19,6 +21,7 @@ export function ArtifactRenderer({
   rows,
   columns,
   onEditChart,
+  chartOverride,
 }: ArtifactRendererProps) {
   if (artifact.kind === "entity_resolution") {
     return (
@@ -29,22 +32,25 @@ export function ArtifactRenderer({
   }
 
   if (artifact.kind === "chart") {
+    const effectiveType = chartOverride?.chartType ?? artifact.chartType;
+    const effectiveMapping = chartOverride?.chartMapping ?? artifact.mapping;
     const mapping = Object.fromEntries(
-      Object.entries(artifact.mapping).filter(([, value]) => Boolean(value))
+      Object.entries(effectiveMapping).filter(([, value]) => Boolean(value))
     );
-    if (artifact.chartType === "table") {
+    if (effectiveType === "table") {
       return <ResultsTable columns={columns} rows={rows} maxRows={10} />;
     }
 
     const chartData = shapeDataForChart(
       rows,
       {
-        chartType: artifact.chartType,
+        chartType: effectiveType,
         mapping: mapping as any,
       },
-      artifact.chartType
+      effectiveType
     );
 
+    const mappingForDateFormat = chartOverride?.chartMapping ?? artifact.mapping;
     return (
       <div className="rounded-lg border bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -69,16 +75,16 @@ export function ArtifactRenderer({
           )}
         </div>
         <ChartComponent
-          chartType={artifact.chartType}
+          chartType={effectiveType}
           data={chartData}
           title={undefined}
           className="w-full"
           chartProps={{
             dateFormat:
-              artifact.chartType === "line" &&
-              Boolean(artifact.mapping.x) &&
+              effectiveType === "line" &&
+              Boolean(mappingForDateFormat.x) &&
               /date|time|day|month|year|created|measured|assessment/i.test(
-                artifact.mapping.x
+                mappingForDateFormat.x
               ),
             xAxisLabel: artifact.xAxisLabel,
             yAxisLabel: artifact.yAxisLabel,
