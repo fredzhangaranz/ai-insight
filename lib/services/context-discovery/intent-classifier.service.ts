@@ -15,6 +15,7 @@ import {
   constructIntentClassificationPrompt,
   validateIntentClassificationResponse,
 } from "@/lib/prompts/intent-classification.prompt";
+import { normalizeSemanticQueryFrame } from "./semantic-query-frame.service";
 import type {
   IntentClassificationOptions,
   IntentClassificationResult,
@@ -220,6 +221,14 @@ export class IntentClassifierService {
       }
 
       let classifiedResult = validation.result!;
+      classifiedResult.semanticFrame = normalizeSemanticQueryFrame(
+        question,
+        classifiedResult,
+        (result as any)?.semanticFrame
+      );
+      if (classifiedResult.semanticFrame?.filters) {
+        classifiedResult.filters = classifiedResult.semanticFrame.filters;
+      }
 
       // Step 4.5: Detect and recover from all-null responses
       // This can happen if the LLM misunderstands the prompt

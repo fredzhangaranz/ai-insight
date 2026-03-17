@@ -37,11 +37,104 @@ export interface IntentClassificationResult {
   scope: "patient_cohort" | "individual_patient" | "aggregate";
   metrics: string[];
   filters: IntentFilter[];
+  semanticFrame?: SemanticQueryFrame;
   timeRange?: TimeRange;
   presentationIntent?: "chart" | "table" | "either";
   preferredVisualization?: "line" | "bar" | "kpi" | "table" | null;
   confidence: number;
   reasoning: string; // LLM explanation of intent
+}
+
+export type SemanticScope =
+  | "individual_patient"
+  | "patient_cohort"
+  | "aggregate";
+
+export type SemanticSubject =
+  | "patient"
+  | "wound"
+  | "assessment"
+  | "unit"
+  | "clinic"
+  | "measurement"
+  | "unknown";
+
+export type SemanticMeasure =
+  | "patient_count"
+  | "wound_count"
+  | "assessment_count"
+  | "healing_rate"
+  | "average_healing_rate"
+  | "unknown"
+  | string;
+
+export type SemanticGrain =
+  | "total"
+  | "per_patient"
+  | "per_wound"
+  | "per_assessment"
+  | "per_unit"
+  | "per_clinic"
+  | "per_month"
+  | "per_week"
+  | "per_day"
+  | "unknown";
+
+export type ClarificationSlot =
+  | "scope"
+  | "subject"
+  | "measure"
+  | "grain"
+  | "groupBy"
+  | "aggregatePredicate"
+  | "entityRef"
+  | "valueFilter";
+
+export interface FrameSlot<T = string | string[] | null> {
+  value: T;
+  confidence: number;
+  source?: "llm" | "heuristic" | "clarification" | "fallback";
+}
+
+export interface AggregatePredicate {
+  measure: string;
+  operator: ">" | ">=" | "<" | "<=" | "=";
+  value: number;
+  rawText: string;
+  confidence: number;
+}
+
+export interface EntityReference {
+  type: "patient" | "unit" | "clinic" | "assessment_type";
+  text: string;
+  confidence: number;
+  explicit: boolean;
+}
+
+export interface ClarificationNeed {
+  slot: ClarificationSlot;
+  reason: string;
+  question: string;
+  confidence: number;
+  target?: string;
+}
+
+export interface SemanticQueryFrame {
+  scope: FrameSlot<SemanticScope | null>;
+  subject: FrameSlot<SemanticSubject | null>;
+  measure: FrameSlot<SemanticMeasure | null>;
+  grain: FrameSlot<SemanticGrain | null>;
+  groupBy: FrameSlot<string[]>;
+  filters: IntentFilter[];
+  aggregatePredicates: AggregatePredicate[];
+  timeRange?: TimeRange;
+  presentation: FrameSlot<"chart" | "table" | "either" | null>;
+  preferredVisualization: FrameSlot<
+    "line" | "bar" | "kpi" | "table" | null
+  >;
+  entityRefs: EntityReference[];
+  clarificationNeeds: ClarificationNeed[];
+  confidence: number;
 }
 
 /**

@@ -10,6 +10,8 @@ export interface InsightsFeatureFlags {
   chartFirstResults: boolean;
   conversationArtifacts: boolean;
   followUpReliability: boolean;
+  clarificationPipelineV2: boolean;
+  clarificationPipelineV2Shadow: boolean;
 }
 
 export function getInsightsFeatureFlags(): InsightsFeatureFlags {
@@ -19,5 +21,9 @@ export function getInsightsFeatureFlags(): InsightsFeatureFlags {
     chartFirstResults: envFlag("INSIGHTS_CHART_FIRST_RESULTS"),
     conversationArtifacts: envFlag("INSIGHTS_CONVERSATION_ARTIFACTS"),
     followUpReliability: envFlag("INSIGHTS_FOLLOWUP_RELIABILITY"),
+    clarificationPipelineV2: envFlag("INSIGHTS_CLARIFICATION_PIPELINE_V2"),
+    clarificationPipelineV2Shadow: envFlag(
+      "INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW"
+    ),
   };
 }

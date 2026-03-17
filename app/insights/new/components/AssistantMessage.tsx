@@ -9,7 +9,11 @@ import { ThinkingStream } from "./ThinkingStream";
 import { ResultsTable } from "./ResultsTable";
 import { MessageActions } from "./MessageActions";
 import { SQLPreview } from "./SQLPreview";
-import type { InsightResult } from "@/lib/hooks/useInsights";
+import type {
+  InsightResult,
+  ClarificationRequest as TemplateClarificationRequest,
+  OldClarificationRequest,
+} from "@/lib/hooks/useInsights";
 import type { MessageMetadata } from "@/lib/types/conversation";
 import { ArtifactRenderer } from "./ArtifactRenderer";
 import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
@@ -76,6 +80,60 @@ interface InlineClarificationProps {
   clarifications: InlineClarificationItem[];
   isSubmitting?: boolean;
   onSubmit: (responses: Record<string, string>) => void;
+}
+
+function isTemplateClarification(
+  clarification: TemplateClarificationRequest | OldClarificationRequest
+): clarification is TemplateClarificationRequest {
+  return "placeholder" in clarification && "prompt" in clarification;
+}
+
+function toInlineClarificationItems(
+  clarifications: Array<TemplateClarificationRequest | OldClarificationRequest>
+): InlineClarificationItem[] {
+  const items: InlineClarificationItem[] = [];
+
+  clarifications.forEach((clarification) => {
+    if (isTemplateClarification(clarification)) {
+      const freeformAllowed = clarification.freeformAllowed
+        ? {
+            allowed: clarification.freeformAllowed.allowed,
+            placeholder: clarification.freeformAllowed.placeholder,
+            hint: clarification.freeformAllowed.hint,
+            maxChars: clarification.freeformAllowed.maxChars,
+          }
+        : undefined;
+
+      items.push({
+        placeholder: clarification.placeholder,
+        prompt: clarification.prompt,
+        options: clarification.options?.map((option) =>
+          typeof option === "string"
+            ? { label: option, value: option }
+            : option
+        ),
+        freeformAllowed,
+      });
+      return;
+    }
+
+    items.push({
+      placeholder: clarification.id,
+      prompt: clarification.question,
+      options: clarification.options.map((option) => ({
+        label: option.label,
+        value: option.submissionValue ?? option.sqlConstraint,
+      })),
+      freeformAllowed: clarification.allowCustom
+        ? {
+            allowed: true,
+            placeholder: "Enter a custom constraint",
+          }
+        : undefined,
+    });
+  });
+
+  return items;
 }
 
 function normalizeOptions(options?: string[] | ClarificationOption[]): ClarificationOption[] {
@@ -375,7 +433,9 @@ export function AssistantMessage({
             !isLoading &&
             onClarify && (
               <InlineClarification
-                clarifications={message.result.clarifications}
+                clarifications={toInlineClarificationItems(
+                  message.result.clarifications
+                )}
                 onSubmit={onClarify}
               />
             )}

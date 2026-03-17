@@ -26,7 +26,12 @@ export type QueryComplexity = 'simple' | 'medium' | 'complex';
 /**
  * Task type for model selection
  */
-export type TaskType = 'intent' | 'sql' | 'clarification';
+export type TaskType =
+  | 'intent'
+  | 'frame'
+  | 'sql'
+  | 'clarification'
+  | 'ambiguity_judge';
 
 /**
  * Input for model selection
@@ -163,9 +168,18 @@ export class ModelRouterService {
       return true;
     }
 
+    // Frame extraction can use the fast tier unless structural reasoning is required.
+    if (input.taskType === 'frame') {
+      return input.complexity !== 'complex';
+    }
+
     // Clarification generation → use simple model
     if (input.taskType === 'clarification') {
       return true;
+    }
+
+    if (input.taskType === 'ambiguity_judge') {
+      return false;
     }
 
     // SQL generation with simple complexity → use simple model
@@ -198,8 +212,16 @@ export class ModelRouterService {
 
     if (input.taskType === 'intent') {
       reasons.push('intent classification task');
+    } else if (input.taskType === 'frame') {
+      reasons.push(
+        input.complexity === 'complex'
+          ? 'structural frame extraction'
+          : 'frame extraction task'
+      );
     } else if (input.taskType === 'clarification') {
       reasons.push('clarification generation');
+    } else if (input.taskType === 'ambiguity_judge') {
+      reasons.push('ambiguity judgment');
     } else if (input.complexity === 'simple') {
       reasons.push('simple query');
     } else if (input.complexity === 'complex') {

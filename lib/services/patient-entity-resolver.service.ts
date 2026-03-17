@@ -177,9 +177,18 @@ export class PatientEntityResolver {
       selectionOpaqueRef?: string;
       overrideLookup?: string;
       confirmedOpaqueRef?: string;
+      candidateText?: string;
+      allowQuestionInference?: boolean;
     }
   ): Promise<PatientResolutionResult> {
-    const lookupText = options?.overrideLookup || question;
+    const lookupText =
+      options?.overrideLookup ||
+      options?.candidateText ||
+      (options?.allowQuestionInference === false ? "" : question);
+
+    if (!lookupText.trim()) {
+      return { status: "no_candidate" };
+    }
 
     const guid = extractGuid(lookupText);
     if (guid) {

@@ -35,6 +35,8 @@ export interface ClarificationOption {
   label: string;
   description?: string;
   sqlConstraint: string;
+  submissionValue?: string;
+  kind?: "sql" | "semantic";
   isDefault?: boolean;
 }
 
@@ -44,6 +46,9 @@ export interface OldClarificationRequest {
   question: string;
   options: ClarificationOption[];
   allowCustom: boolean;
+  slot?: string;
+  target?: string;
+  reason?: string;
 }
 
 // New clarification format (Task 4.5E onwards, user-friendly UI)
@@ -90,7 +95,7 @@ export interface InsightResult {
 
   // Clarification fields (when mode IS clarification)
   requiresClarification?: boolean;
-  clarifications?: ClarificationRequest[];
+  clarifications?: Array<ClarificationRequest | OldClarificationRequest>;
   confirmations?: ConfirmationPrompt[];    // Task 4.5D: Pre-detected values
   clarificationReasoning?: string;
   partialContext?: {

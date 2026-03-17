@@ -5,6 +5,7 @@ import type {
   LLMSQLResponse,
 } from "@/lib/prompts/generate-query.prompt";
 import { ContextDiscoveryService } from "../../context-discovery/context-discovery.service";
+import { PatientEntityResolver } from "../../patient-entity-resolver.service";
 import { buildUnresolvedFilterClarificationId } from "../filter-validator.service";
 
 // Mock dependencies
@@ -107,38 +108,38 @@ vi.mock("../model-router.service", () => ({
   }),
 }));
 
-const getLatestContextInstance = () =>
-  (ContextDiscoveryService as unknown as vi.Mock).mock.results.at(-1)?.value;
-
 describe("ThreeModeOrchestrator - Clarification Flow", () => {
   let orchestrator: ThreeModeOrchestrator;
+  const originalEnv = { ...process.env };
 
-beforeEach(() => {
-  vi.clearAllMocks();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...originalEnv };
 
-  mockGenerateAIClarification.mockReset();
-  mockGenerateAIClarification.mockImplementation(() => Promise.resolve(null));
+    mockGenerateAIClarification.mockReset();
+    mockGenerateAIClarification.mockImplementation(() => Promise.resolve(null));
 
-  mockSelectModel.mockReset();
-  mockSelectModel.mockResolvedValue({
-    modelId: "test-model-id",
-    rationale: "mocked",
-    expectedLatency: 1000,
-    costTier: "standard",
+    mockSelectModel.mockReset();
+    mockSelectModel.mockResolvedValue({
+      modelId: "test-model-id",
+      rationale: "mocked",
+      expectedLatency: 1000,
+      costTier: "standard",
+    });
+
+    mockSqlValidatorValidate.mockReset();
+    mockSqlValidatorValidate.mockImplementation(() => ({
+      isValid: true,
+      errors: [],
+      warnings: [],
+      analyzedAt: new Date().toISOString(),
+    }));
+
+    orchestrator = new ThreeModeOrchestrator();
   });
 
-  mockSqlValidatorValidate.mockReset();
-  mockSqlValidatorValidate.mockImplementation(() => ({
-    isValid: true,
-    errors: [],
-    warnings: [],
-    analyzedAt: new Date().toISOString(),
-  }));
-
-  orchestrator = new ThreeModeOrchestrator();
-});
-
   afterEach(() => {
+    process.env = { ...originalEnv };
     vi.resetAllMocks();
   });
 
@@ -359,7 +360,8 @@ beforeEach(() => {
         "test-model-id",
         clarifications,
         undefined, // templateReferences
-        expect.anything() // signal (AbortSignal)
+        expect.anything(), // signal (AbortSignal)
+        expect.anything() // trusted context
       );
     });
 
@@ -666,6 +668,217 @@ beforeEach(() => {
       if (result.filterMetrics) {
         expect(result.filterMetrics.unresolvedWarnings).toBe(0);
       }
+    });
+  });
+
+  describe("Clarification Pipeline V2", () => {
+    it("should not run patient resolution for aggregate per-patient queries", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+      process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+
+      const patientResolveSpy = vi
+        .spyOn(PatientEntityResolver.prototype, "resolve")
+        .mockResolvedValue({
+          status: "no_candidate",
+        } as any);
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "show me a chart with number of wounds per patient in the system",
+        intent: {
+          type: "operational_metrics",
+          confidence: 0.94,
+          scope: "aggregate",
+          metrics: ["wound_count"],
+          filters: [],
+          presentationIntent: "chart",
+          preferredVisualization: "bar",
+          reasoning: "Counts wounds grouped by patient",
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql:
+          "SELECT patient_id, COUNT(*) AS wound_count FROM rpt.Wound GROUP BY patient_id",
+        explanation: "System-wide wound counts per patient",
+        confidence: 0.94,
+      };
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.ask(
+        "show me a chart with number of wounds per patient in the system",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.requiresClarification).toBeUndefined();
+      expect(patientResolveSpy).not.toHaveBeenCalled();
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+
+      const contextPassed = mockGenerateSQLWithLLM.mock.calls[0][0];
+      expect(contextPassed.intent.semanticFrame).toMatchObject({
+        scope: expect.objectContaining({ value: "aggregate" }),
+        measure: expect.objectContaining({ value: "wound_count" }),
+        grain: expect.objectContaining({ value: "per_patient" }),
+        groupBy: expect.objectContaining({ value: ["patient"] }),
+      });
+    });
+
+    it("should convert structural count predicates into aggregate predicates without clarification", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "list patients with >5 assessments in the last 6 months",
+        intent: {
+          type: "operational_metrics",
+          confidence: 0.93,
+          scope: "patient_cohort",
+          metrics: ["assessment_count"],
+          filters: [
+            {
+              operator: "greater_than",
+              userPhrase: ">5 assessments",
+              value: null,
+            },
+          ],
+          timeRange: { unit: "months", value: 6 },
+          presentationIntent: "table",
+          preferredVisualization: "table",
+          reasoning: "Patients filtered by total assessment count",
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql:
+          "SELECT patient_id FROM rpt.Assessment GROUP BY patient_id HAVING COUNT(*) > 5",
+        explanation: "Patients with more than five assessments",
+        confidence: 0.95,
+      };
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.ask(
+        "list patients with >5 assessments in the last 6 months",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.requiresClarification).toBeUndefined();
+
+      const contextPassed = mockGenerateSQLWithLLM.mock.calls[0][0];
+      expect(contextPassed.intent.semanticFrame.aggregatePredicates).toEqual([
+        expect.objectContaining({
+          measure: "assessment_count",
+          operator: ">",
+          value: 5,
+        }),
+      ]);
+      expect(contextPassed.intent.semanticFrame.filters).toEqual([]);
+    });
+
+    it("should still resolve an explicit individual patient reference in V2", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+      process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+
+      const patientResolveSpy = vi
+        .spyOn(PatientEntityResolver.prototype, "resolve")
+        .mockResolvedValue({
+          status: "resolved",
+          selectedMatch: {
+            patientName: "John Smith",
+            unitName: "Unit A",
+          },
+          resolvedId: "patient-123",
+          opaqueRef: "patient-ref",
+          matchType: "name",
+          matchedText: "John Smith",
+        } as any);
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "show wounds for patient John Smith",
+        intent: {
+          type: "outcome_analysis",
+          confidence: 0.94,
+          scope: "individual_patient",
+          metrics: ["wound_count"],
+          filters: [],
+          reasoning: "Wounds for one patient",
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql: "SELECT * FROM rpt.Wound WHERE patient_id = @patientId1",
+        explanation: "Wounds for John Smith",
+        confidence: 0.95,
+      };
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.ask(
+        "show wounds for patient John Smith",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(patientResolveSpy).toHaveBeenCalledTimes(1);
+      expect(result.boundParameters).toEqual({ patientId1: "patient-123" });
     });
   });
 });

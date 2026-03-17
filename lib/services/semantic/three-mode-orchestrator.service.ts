@@ -5,7 +5,11 @@
 import { matchTemplate } from "./template-matcher.service";
 import { analyzeComplexity } from "./complexity-detector.service";
 import { ContextDiscoveryService } from "../context-discovery/context-discovery.service";
-import type { ContextBundle, ContextBundleMetadata } from "../context-discovery/types";
+import type {
+  ContextBundle,
+  ContextBundleMetadata,
+  SemanticQueryFrame,
+} from "../context-discovery/types";
 import type { QueryTemplate } from "../query-template.service";
 import {
   executeCustomerQuery,
@@ -65,6 +69,7 @@ import type {
   ResolvedEntitySummary,
 } from "@/lib/types/insight-artifacts";
 import { validateTrustedSql } from "../trusted-sql-guard.service";
+import { normalizeSemanticQueryFrame } from "../context-discovery/semantic-query-frame.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -983,12 +988,15 @@ export class ThreeModeOrchestrator {
   ): Promise<OrchestrationResult> {
     const startTime = Date.now();
     const featureFlags = getInsightsFeatureFlags();
+    const useClarificationV2 =
+      featureFlags.clarificationPipelineV2 ||
+      featureFlags.clarificationPipelineV2Shadow;
     let resolvedEntities: ResolvedEntitySummary[] = [];
     let boundParameters: Record<string, string | number | boolean | null> | undefined;
     let sanitizedQuestion = question;
     let trustedPromptLines: string[] | undefined;
 
-    if (featureFlags.patientEntityResolution) {
+    if (featureFlags.patientEntityResolution && !useClarificationV2) {
       const patientStep: ThinkingStep = {
         id: "resolve_patient",
         status: "running",
@@ -1108,7 +1116,7 @@ export class ThreeModeOrchestrator {
     const discoveryStart = Date.now();
 
     try {
-      let context;
+      let context: ContextBundle;
       try {
         // Mark intent classification as running
         if (contextDiscoveryStep.subSteps) {
@@ -1201,7 +1209,7 @@ export class ThreeModeOrchestrator {
           customerId,
           question: sanitizedQuestion,
           intent: {
-            type: "query",
+            type: "outcome_analysis",
             confidence: 0.5,
             scope:
               resolvedEntities.length > 0 ? "individual_patient" : "patient_cohort",
@@ -1252,6 +1260,153 @@ export class ThreeModeOrchestrator {
             },
           },
           filterMetrics: context.metadata?.filterMetrics,
+        };
+      }
+
+      let semanticFrame =
+        useClarificationV2 || featureFlags.clarificationPipelineV2Shadow
+          ? this.resolveSemanticFrame(context, question)
+          : undefined;
+
+      if (semanticFrame && clarifications && Object.keys(clarifications).length > 0) {
+        semanticFrame = this.applyFrameClarifications(semanticFrame, clarifications);
+      }
+
+      if (semanticFrame) {
+        context.intent.semanticFrame = semanticFrame;
+        (context.intent as any).filters = semanticFrame.filters;
+
+        if (featureFlags.clarificationPipelineV2Shadow) {
+          console.log("[Orchestrator] 🧭 V2 semantic frame", {
+            scope: semanticFrame.scope.value,
+            subject: semanticFrame.subject.value,
+            measure: semanticFrame.measure.value,
+            grain: semanticFrame.grain.value,
+            groupBy: semanticFrame.groupBy.value,
+            aggregatePredicates: semanticFrame.aggregatePredicates,
+            clarificationNeeds: semanticFrame.clarificationNeeds.map(
+              (need) => need.slot
+            ),
+          });
+        }
+      }
+
+      if (
+        semanticFrame &&
+        featureFlags.patientEntityResolution &&
+        this.shouldUsePatientResolutionForFrame(semanticFrame)
+      ) {
+        const patientStep: ThinkingStep = {
+          id: "resolve_patient",
+          status: "running",
+          message: "Resolving patient references...",
+        };
+        thinking.push(patientStep);
+
+        const patientRef = semanticFrame.entityRefs.find(
+          (ref) => ref.type === "patient"
+        );
+        const patientResolution = await this.patientResolver.resolve(question, customerId, {
+          selectionOpaqueRef: clarifications?.patient_resolution_select,
+          confirmedOpaqueRef:
+            clarifications?.patient_resolution_confirm === "__CHANGE_PATIENT__"
+              ? undefined
+              : clarifications?.patient_resolution_confirm,
+          overrideLookup: clarifications?.patient_lookup_input,
+          candidateText: patientRef?.text,
+          allowQuestionInference: false,
+        });
+
+        patientStep.status = "complete";
+        patientStep.details = {
+          status: patientResolution.status,
+        };
+
+        if (
+          patientResolution.status === "confirmation_required" ||
+          patientResolution.status === "disambiguation_required" ||
+          patientResolution.status === "not_found"
+        ) {
+          patientStep.message = "Patient clarification required";
+          return this.buildPatientClarificationResult(
+            question,
+            thinking,
+            patientResolution,
+            semanticFrame
+          );
+        }
+
+        if (
+          patientResolution.status === "resolved" &&
+          patientResolution.selectedMatch &&
+          patientResolution.resolvedId &&
+          patientResolution.opaqueRef &&
+          patientResolution.matchType
+        ) {
+          const resolvedEntity: ResolvedEntitySummary = {
+            kind: "patient",
+            opaqueRef: patientResolution.opaqueRef,
+            displayLabel: patientResolution.selectedMatch.patientName,
+            matchType: patientResolution.matchType,
+            requiresConfirmation: false,
+            unitName: patientResolution.selectedMatch.unitName,
+          };
+          resolvedEntities = [resolvedEntity];
+          boundParameters = {
+            patientId1: patientResolution.resolvedId,
+          };
+          patientStep.message = "Resolved patient securely";
+
+          if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+            const sanitization = this.promptSanitizer.sanitize({
+              question,
+              patientMentions: [
+                {
+                  matchedText: patientResolution.matchedText,
+                  opaqueRef: patientResolution.opaqueRef,
+                },
+              ],
+            });
+            sanitizedQuestion = sanitization.sanitizedQuestion;
+            trustedPromptLines = sanitization.trustedContextLines;
+            patientStep.details = {
+              ...patientStep.details,
+              sanitized: true,
+              opaqueRef: patientResolution.opaqueRef,
+            };
+          }
+        } else {
+          patientStep.message = "No patient reference required";
+        }
+      }
+
+      if (
+        featureFlags.clarificationPipelineV2 &&
+        semanticFrame &&
+        semanticFrame.clarificationNeeds.length > 0 &&
+        (!clarifications || Object.keys(clarifications).length === 0)
+      ) {
+        contextDiscoveryStep.message =
+          "Discovering semantic context... (frame clarification needed)";
+        return {
+          mode: "clarification",
+          question,
+          thinking,
+          requiresClarification: true,
+          clarifications: this.buildFrameClarificationRequests(
+            semanticFrame,
+            context
+          ),
+          clarificationReasoning:
+            "I need one or two details about how to structure this query before I run it.",
+          partialContext: {
+            intent: context.intent.type || "query",
+            formsIdentified: context.forms?.map((f) => f.formName) || [],
+            termsUnderstood: [
+              semanticFrame.measure.value || "",
+              semanticFrame.grain.value || "",
+            ].filter(Boolean),
+          },
         };
       }
 
@@ -1894,6 +2049,239 @@ export class ThreeModeOrchestrator {
     }
   }
 
+  private resolveSemanticFrame(
+    context: ContextBundle,
+    question: string
+  ): SemanticQueryFrame {
+    return normalizeSemanticQueryFrame(
+      question,
+      context.intent,
+      context.intent.semanticFrame
+    );
+  }
+
+  private shouldUsePatientResolutionForFrame(frame: SemanticQueryFrame): boolean {
+    return (
+      frame.scope.value === "individual_patient" &&
+      frame.entityRefs.some(
+        (ref) => ref.type === "patient" && ref.confidence >= 0.7
+      )
+    );
+  }
+
+  private applyFrameClarifications(
+    frame: SemanticQueryFrame,
+    clarifications: Record<string, string>
+  ): SemanticQueryFrame {
+    const nextFrame: SemanticQueryFrame = {
+      ...frame,
+      scope: { ...frame.scope },
+      subject: { ...frame.subject },
+      measure: { ...frame.measure },
+      grain: { ...frame.grain },
+      groupBy: { ...frame.groupBy, value: [...frame.groupBy.value] },
+      filters: [...frame.filters],
+      aggregatePredicates: [...frame.aggregatePredicates],
+      entityRefs: [...frame.entityRefs],
+      clarificationNeeds: [...frame.clarificationNeeds],
+    };
+
+    Object.entries(clarifications).forEach(([id, value]) => {
+      if (!value) return;
+      if (id === "frame_slot_measure") {
+        nextFrame.measure = {
+          value,
+          confidence: 0.98,
+          source: "clarification",
+        };
+      } else if (id === "frame_slot_grain") {
+        nextFrame.grain = {
+          value: value as SemanticQueryFrame["grain"]["value"],
+          confidence: 0.98,
+          source: "clarification",
+        };
+        nextFrame.groupBy = {
+          value: this.groupByFromGrain(value),
+          confidence: 0.98,
+          source: "clarification",
+        };
+      } else if (id === "frame_slot_scope") {
+        nextFrame.scope = {
+          value: value as SemanticQueryFrame["scope"]["value"],
+          confidence: 0.98,
+          source: "clarification",
+        };
+      }
+    });
+
+    nextFrame.clarificationNeeds = nextFrame.clarificationNeeds.filter(
+      (need) => !clarifications[`frame_slot_${need.slot}`]
+    );
+    return nextFrame;
+  }
+
+  private groupByFromGrain(grain: string): string[] {
+    switch (grain) {
+      case "per_patient":
+        return ["patient"];
+      case "per_wound":
+        return ["wound"];
+      case "per_unit":
+        return ["unit"];
+      case "per_clinic":
+        return ["clinic"];
+      case "per_month":
+        return ["month"];
+      case "per_week":
+        return ["week"];
+      case "per_day":
+        return ["day"];
+      default:
+        return [];
+    }
+  }
+
+  private buildFrameClarificationRequests(
+    frame: SemanticQueryFrame,
+    _context: ContextBundle
+  ): ClarificationRequest[] {
+    return frame.clarificationNeeds.map((need) => {
+      if (need.slot === "measure") {
+        return {
+          id: "frame_slot_measure",
+          ambiguousTerm: frame.measure.value || "measure",
+          question: need.question,
+          slot: need.slot,
+          reason: need.reason,
+          options: [
+            {
+              id: "measure_patient_count",
+              label: "Patient count",
+              description: "Return how many patients match the criteria",
+              submissionValue: "patient_count",
+              sqlConstraint: "",
+              kind: "semantic",
+              isDefault: true,
+            },
+            {
+              id: "measure_wound_count",
+              label: "Wound count",
+              description: "Return how many wounds match the criteria",
+              submissionValue: "wound_count",
+              sqlConstraint: "",
+              kind: "semantic",
+            },
+            {
+              id: "measure_assessment_count",
+              label: "Assessment count",
+              description: "Return how many assessments match the criteria",
+              submissionValue: "assessment_count",
+              sqlConstraint: "",
+              kind: "semantic",
+            },
+          ],
+          allowCustom: false,
+        };
+      }
+
+      if (need.slot === "grain" || need.slot === "groupBy") {
+        return {
+          id: "frame_slot_grain",
+          ambiguousTerm: frame.grain.value || "grouping",
+          question: need.question,
+          slot: "grain",
+          reason: need.reason,
+          options: [
+            {
+              id: "grain_patient",
+              label: "Group by patient",
+              description: "One row or bar per patient",
+              submissionValue: "per_patient",
+              sqlConstraint: "",
+              kind: "semantic",
+              isDefault: true,
+            },
+            {
+              id: "grain_wound",
+              label: "Group by wound",
+              description: "One row or bar per wound",
+              submissionValue: "per_wound",
+              sqlConstraint: "",
+              kind: "semantic",
+            },
+            {
+              id: "grain_unit",
+              label: "Group by unit",
+              description: "One row or bar per unit/clinic",
+              submissionValue: "per_unit",
+              sqlConstraint: "",
+              kind: "semantic",
+            },
+          ],
+          allowCustom: false,
+        };
+      }
+
+      if (need.slot === "scope") {
+        return {
+          id: "frame_slot_scope",
+          ambiguousTerm: frame.scope.value || "scope",
+          question: need.question,
+          slot: need.slot,
+          reason: need.reason,
+          options: [
+            {
+              id: "scope_aggregate",
+              label: "All matching records",
+              description: "Run the query across the whole system",
+              submissionValue: "aggregate",
+              sqlConstraint: "",
+              kind: "semantic",
+              isDefault: true,
+            },
+            {
+              id: "scope_cohort",
+              label: "A cohort of patients",
+              description: "Return a patient cohort, not one patient",
+              submissionValue: "patient_cohort",
+              sqlConstraint: "",
+              kind: "semantic",
+            },
+            {
+              id: "scope_individual",
+              label: "One specific patient",
+              description: "Resolve and filter to one patient",
+              submissionValue: "individual_patient",
+              sqlConstraint: "",
+              kind: "semantic",
+            },
+          ],
+          allowCustom: false,
+        };
+      }
+
+      return {
+        id: `frame_slot_${need.slot}`,
+        ambiguousTerm: need.target || need.slot,
+        question: need.question,
+        slot: need.slot,
+        reason: need.reason,
+        options: [
+          {
+            id: "continue",
+            label: "Continue",
+            description: "Proceed using the default interpretation",
+            submissionValue: "__CONTINUE__",
+            sqlConstraint: "",
+            kind: "semantic",
+            isDefault: true,
+          },
+        ],
+        allowCustom: false,
+      };
+    });
+  }
+
   /**
    * Builds clarification requests for unresolved filters
    *
@@ -1962,13 +2350,18 @@ export class ThreeModeOrchestrator {
       clarifications.push({
         id: clarId,
         ambiguousTerm: phrase,
-        question: `I couldn't map "${phrase}" to a specific database field. What should I do?`,
+        question: `What did you mean by "${phrase}" in this query?`,
+        slot: "valueFilter",
+        reason:
+          "I understood the overall question, but this value did not match a known filter value.",
         options: [
           {
             id: `${clarId}_remove`,
             label: "Remove this filter",
             description: "Proceed without applying this constraint",
+            submissionValue: "__REMOVE_FILTER__",
             sqlConstraint: "__REMOVE_FILTER__",
+            kind: "semantic",
             isDefault: false,
           },
         ],
@@ -2000,7 +2393,8 @@ export class ThreeModeOrchestrator {
   private buildPatientClarificationResult(
     question: string,
     thinking: ThinkingStep[],
-    resolution: PatientResolutionResult
+    resolution: PatientResolutionResult,
+    frame?: SemanticQueryFrame
   ): OrchestrationResult {
     if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
       return {
@@ -2010,15 +2404,30 @@ export class ThreeModeOrchestrator {
         requiresClarification: true,
         clarifications: [
           {
+            id: "patient_resolution_confirm",
             placeholder: "patient_resolution_confirm",
             prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
+            slot: "entityRef",
+            target: "patient",
+            reason:
+              frame?.clarificationNeeds.find((need) => need.slot === "entityRef")
+                ?.reason ||
+              "A specific patient must be confirmed before running this query.",
             options: [
               {
+                id: "patient_resolution_confirm_use",
                 label: `Use ${resolution.selectedMatch.patientName}`,
+                submissionValue: resolution.opaqueRef!,
+                sqlConstraint: "",
+                kind: "semantic",
                 value: resolution.opaqueRef!,
               },
               {
+                id: "patient_resolution_confirm_change",
                 label: "Choose a different patient",
+                submissionValue: "__CHANGE_PATIENT__",
+                sqlConstraint: "",
+                kind: "semantic",
                 value: "__CHANGE_PATIENT__",
               },
             ],
@@ -2048,12 +2457,20 @@ export class ThreeModeOrchestrator {
         requiresClarification: true,
         clarifications: [
           {
+            id: "patient_resolution_select",
             placeholder: "patient_resolution_select",
             prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
+            slot: "entityRef",
+            target: "patient",
+            reason: "This query needs a specific patient before it can run.",
             options: resolution.matches.map((match) => ({
+              id: toPatientOpaqueRef(match.patientId),
               label: match.unitName
                 ? `${match.patientName} (${match.unitName})`
                 : match.patientName,
+              submissionValue: toPatientOpaqueRef(match.patientId),
+              sqlConstraint: "",
+              kind: "semantic" as const,
               value: toPatientOpaqueRef(match.patientId),
             })),
           } as any,
@@ -2070,10 +2487,14 @@ export class ThreeModeOrchestrator {
       requiresClarification: true,
       clarifications: [
         {
+          id: "patient_lookup_input",
           placeholder: "patient_lookup_input",
           prompt: resolution.candidateText
             ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
             : "Please enter an exact full name or patient ID.",
+          slot: "entityRef",
+          target: "patient",
+          reason: "This query targets one patient and needs an exact patient reference.",
           freeformAllowed: {
             allowed: true,
             placeholder: "e.g. Fred Smith or 12345",

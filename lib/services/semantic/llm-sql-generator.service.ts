@@ -14,6 +14,7 @@ import type {
   ContextBundle,
   FormInContext,
   JoinPath,
+  SemanticQueryFrame,
   TerminologyMapping,
   AssessmentTypeInContext,
 } from "../context-discovery/types";
@@ -332,6 +333,7 @@ async function buildUserPrompt(
       "IMPORTANT: These entities were resolved outside the LLM. You MUST use the provided parameter placeholders and MUST NOT omit them.\n\n";
   }
 
+  prompt += formatSemanticFrameSection(intent.semanticFrame);
   prompt += formatFiltersSection(intent.filters, (context as ContextBundle & { mergedFilterState?: MergedFilterState[] }).mergedFilterState);
   prompt += formatFormsSection(context.forms || []);
   prompt += formatAssessmentTypesSection(context.assessmentTypes || []); // Phase 5A
@@ -436,6 +438,40 @@ function formatFiltersSection(
   }
 
   return section;
+}
+
+function formatSemanticFrameSection(frame?: SemanticQueryFrame): string {
+  if (!frame) {
+    return "";
+  }
+
+  const lines: string[] = ["# Semantic Query Frame", ""];
+  lines.push(`- Scope: ${frame.scope.value || "unknown"} (confidence: ${frame.scope.confidence.toFixed(2)})`);
+  lines.push(`- Subject: ${frame.subject.value || "unknown"} (confidence: ${frame.subject.confidence.toFixed(2)})`);
+  lines.push(`- Measure: ${frame.measure.value || "unknown"} (confidence: ${frame.measure.confidence.toFixed(2)})`);
+  lines.push(`- Grain: ${frame.grain.value || "unknown"} (confidence: ${frame.grain.confidence.toFixed(2)})`);
+  if (frame.groupBy.value.length > 0) {
+    lines.push(`- Group By: ${frame.groupBy.value.join(", ")}`);
+  }
+  if (frame.aggregatePredicates.length > 0) {
+    lines.push(`- Aggregate Predicates:`);
+    frame.aggregatePredicates.forEach((predicate) => {
+      lines.push(
+        `  - ${predicate.measure} ${predicate.operator} ${predicate.value} (from "${predicate.rawText}")`
+      );
+    });
+  }
+  if (frame.entityRefs.length > 0) {
+    lines.push(`- Entity References:`);
+    frame.entityRefs.forEach((ref) => {
+      lines.push(`  - ${ref.type}: "${ref.text}" (confidence: ${ref.confidence.toFixed(2)})`);
+    });
+  }
+  if (frame.clarificationNeeds.length > 0) {
+    lines.push(`- Clarification Needs: ${frame.clarificationNeeds.map((need) => need.slot).join(", ")}`);
+  }
+  lines.push("");
+  return `${lines.join("\n")}\n`;
 }
 
 function mapFiltersToMerged(
