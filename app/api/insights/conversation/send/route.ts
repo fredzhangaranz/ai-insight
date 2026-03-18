@@ -44,6 +44,7 @@ import {
   type PatientResolutionResult,
   toPatientOpaqueRef,
 } from "@/lib/services/patient-entity-resolver.service";
+import { shouldResolvePatientLiterally } from "@/lib/services/patient-resolution-gate.service";
 import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
 import type {
@@ -95,12 +96,33 @@ export async function POST(req: NextRequest) {
     let patientResolution: PatientResolutionResult | null = null;
 
     if (featureFlags.patientEntityResolution) {
-      const patientResolverOptions = buildPatientResolverOptions(clarificationResponses);
-      patientResolution = await patientResolver.resolve(
-        normalizedQuestion,
-        normalizedCustomerId,
-        patientResolverOptions
-      );
+      const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
+      const provider = await getAIProvider(resolvedModelId);
+
+      if (threadId) {
+        try {
+          const gate = await shouldResolvePatientLiterally(normalizedQuestion, provider, {
+            threadId,
+          });
+          if (!gate.requiresLiteralResolution) {
+            patientResolution = { status: "no_candidate" };
+          }
+        } catch (err) {
+          console.warn(
+            "[Conversation Send] Patient resolution gate failed; proceeding with resolver:",
+            err
+          );
+        }
+      }
+
+      if (!patientResolution) {
+        const patientResolverOptions = buildPatientResolverOptions(clarificationResponses);
+        patientResolution = await patientResolver.resolve(
+          normalizedQuestion,
+          normalizedCustomerId,
+          patientResolverOptions
+        );
+      }
 
       if (
         patientResolution.selectedMatch &&

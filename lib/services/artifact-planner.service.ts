@@ -99,8 +99,6 @@ export class ArtifactPlannerService {
       question,
       rows,
       columns,
-      sql,
-      assumptions,
       resolvedEntities,
       presentationIntent,
       preferredVisualization,
@@ -187,21 +185,7 @@ export class ArtifactPlannerService {
       primary: !artifacts.some((artifact) => artifact.kind === "chart"),
     });
 
-    if (sql) {
-      artifacts.push({
-        kind: "sql",
-        title: "Generated SQL",
-        sql,
-      });
-    }
-
-    if (assumptions && assumptions.length > 0) {
-      artifacts.push({
-        kind: "assumption",
-        title: "Assumptions",
-        assumptions,
-      });
-    }
+    // SQL and assumptions are shown in InspectionPanel only, not as artifacts
 
     return artifacts;
   }

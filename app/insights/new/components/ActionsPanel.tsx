@@ -4,39 +4,21 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  BarChart3,
-  Save,
-  FileText,
-  Download,
-  MessageSquare,
-} from "lucide-react";
+import { Save, Download } from "lucide-react";
 import { SaveInsightDialog } from "./SaveInsightDialog";
-import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
 import { InsightResult } from "@/lib/hooks/useInsights";
-import type { ChartType } from "@/lib/chart-contracts";
 
 interface ActionsPanelProps {
   result: InsightResult;
   customerId: string;
-  onRefine: (question: string) => void;
+  onRefine?: (question: string) => void;
 }
 
 export function ActionsPanel({
   result,
   customerId,
-  onRefine,
 }: ActionsPanelProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showChartDialog, setShowChartDialog] = useState(false);
-  const [chartType, setChartType] = useState<ChartType>("bar");
-  const [chartConfig, setChartConfig] = useState<{
-    chartType: ChartType;
-    chartMapping: Record<string, string>;
-  } | null>(null);
-  const existingChartArtifact = result.artifacts?.find(
-    (artifact) => artifact.kind === "chart"
-  );
 
   const handleExportCSV = () => {
     if (!result.results || result.results.rows.length === 0) {
@@ -70,22 +52,6 @@ export function ActionsPanel({
     URL.revokeObjectURL(url);
   };
 
-  const handleChartSave = (config: {
-    chartType: ChartType;
-    chartMapping: Record<string, string>;
-  }) => {
-    // Save the chart config and open the save insight dialog
-    setChartConfig(config);
-    setShowChartDialog(false);
-    setShowSaveDialog(true);
-  };
-
-  const handleSaveDialogClose = () => {
-    setShowSaveDialog(false);
-    // Reset chart config when save dialog closes
-    setChartConfig(null);
-  };
-
   return (
     <>
       <div className="bg-gray-50 rounded-lg border p-4">
@@ -112,64 +78,15 @@ export function ActionsPanel({
             <Download className="mr-2 h-4 w-4" />
             Export CSV
           </Button>
-
-          <Button variant="outline" size="sm" onClick={() => onRefine("")}>
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Ask Follow-up
-          </Button>
-
-          {/* Chart and Template buttons - Phase 7D */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowChartDialog(true)}
-            disabled={!result.results || result.results.rows.length === 0}
-          >
-            <BarChart3 className="mr-2 h-4 w-4" />
-            {existingChartArtifact ? "Edit Chart" : "Create Chart"}
-          </Button>
-
-          <Button variant="outline" size="sm" disabled title="Coming in Phase 7F">
-            <FileText className="mr-2 h-4 w-4" />
-            Save as Template
-          </Button>
         </div>
       </div>
 
       <SaveInsightDialog
         isOpen={showSaveDialog}
-        onClose={handleSaveDialogClose}
+        onClose={() => setShowSaveDialog(false)}
         result={result}
         customerId={customerId}
-        chartConfig={chartConfig}
       />
-
-      {showChartDialog && result.results && (
-        <ChartConfigurationDialog
-          isOpen={showChartDialog}
-          onClose={() => {
-            setShowChartDialog(false);
-            setChartType("bar");
-          }}
-          queryResults={result.results.rows}
-          chartType={
-            existingChartArtifact?.kind === "chart"
-              ? existingChartArtifact.chartType
-              : chartType
-          }
-          initialMapping={
-            existingChartArtifact?.kind === "chart"
-              ? existingChartArtifact.mapping
-              : undefined
-          }
-          title={result.question || "Query Results"}
-          mode="create"
-          onSave={handleChartSave}
-          saveButtonText="Continue to Save"
-          allowTypeChange={true}
-          onTypeChange={setChartType}
-        />
-      )}
     </>
   );
 }

@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     const pool = await getInsightGenDbPool();
 
-    // Fetch recent queries from QueryHistory table
+    // Fetch main questions only (exclude follow-ups; parentQueryId IS NULL = root of chain)
     const query = `
       SELECT
         id,
@@ -57,9 +57,11 @@ export async function GET(req: NextRequest) {
         mode,
         "resultCount",
         sql,
-        "semanticContext"
+        "semanticContext",
+        "conversationThreadId"
       FROM "QueryHistory"
       WHERE "userId" = $1 AND "customerId" = $2::uuid
+        AND "parentQueryId" IS NULL
       ORDER BY "createdAt" DESC
       LIMIT 10
     `;
@@ -75,6 +77,7 @@ export async function GET(req: NextRequest) {
       recordCount: row.resultCount,
       sql: row.sql,
       semanticContext: sanitizeSemanticContextForClient(row.semanticContext), // JSONB field
+      conversationThreadId: row.conversationThreadId ?? undefined,
     }));
 
     return NextResponse.json(queries);

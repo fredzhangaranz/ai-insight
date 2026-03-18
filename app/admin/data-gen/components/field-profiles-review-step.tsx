@@ -17,17 +17,22 @@ import type {
   TrajectoryPhaseProfile,
   PhaseFieldDistribution,
 } from "@/lib/services/data-gen/trajectory-field-profile.types";
+import type { TrajectorySelectionResult } from "@/lib/services/data-gen/trajectory-selector";
+import { AlertCircle, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface FieldProfilesReviewStepProps {
   profiles: FieldProfileSet;
   onProceed: (profiles: FieldProfileSet) => void;
   onBack: () => void;
+  trajectorySelection?: TrajectorySelectionResult;
 }
 
 export function FieldProfilesReviewStep({
   profiles: initialProfiles,
   onProceed,
   onBack,
+  trajectorySelection,
 }: FieldProfilesReviewStepProps) {
   const [profiles, setProfiles] = useState<FieldProfileSet>(initialProfiles);
   const [openProfile, setOpenProfile] = useState<string | null>(
@@ -59,6 +64,40 @@ export function FieldProfilesReviewStep({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {trajectorySelection && (
+          <Alert
+            variant={trajectorySelection.isRandomised ? "default" : "default"}
+            className={
+              trajectorySelection.isRandomised ? "border-blue-200 bg-blue-50" : ""
+            }
+          >
+            <div className="flex gap-3">
+              {trajectorySelection.isRandomised ? (
+                <AlertCircle className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+              ) : (
+                <Info className="h-4 w-4 text-slate-600 shrink-0 mt-0.5" />
+              )}
+              <AlertDescription
+                className={
+                  trajectorySelection.isRandomised ? "text-blue-900" : "text-slate-700"
+                }
+              >
+                <strong>
+                  {trajectorySelection.selectedStyles.length} profile
+                  {trajectorySelection.selectedStyles.length !== 1 ? "s" : ""} selected
+                </strong>
+                : {trajectorySelection.description}
+                {trajectorySelection.isRandomised && (
+                  <p className="text-xs mt-1 opacity-90">
+                    Since trajectories are randomised per wound at generation time, all trajectory
+                    types are needed to ensure every possible trajectory can be assigned.
+                  </p>
+                )}
+              </AlertDescription>
+            </div>
+          </Alert>
+        )}
+
         <p className="text-sm text-muted-foreground">
           Each trajectory style has early, mid, and late phases. Field values are sampled from these
           distributions during generation.

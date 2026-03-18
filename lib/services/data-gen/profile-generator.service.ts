@@ -41,11 +41,19 @@ export interface GenerateProfilesInput {
   formSchema: FieldSchema[];
   woundBaselineAreaRange?: [number, number];
   modelId?: string;
+  /**
+   * Specific trajectory styles to generate.
+   * If omitted, all 4 styles are generated (backward compat).
+   * If provided, only these styles are generated.
+   */
+  selectedStyles?: WoundProgressionStyle[];
 }
 
 /**
  * Generate trajectory-aware field profiles via AI.
- * Fires one request per trajectory style in parallel for faster wall-clock time.
+ * Fires one request per selected trajectory style in parallel for faster wall-clock time.
+ * When selectedStyles is provided, only generates those profiles (Tier 2 optimization).
+ * When selectedStyles is omitted, generates all 4 styles for backward compatibility.
  */
 export async function generateFieldProfiles(
   input: GenerateProfilesInput,
@@ -54,21 +62,22 @@ export async function generateFieldProfiles(
   if (schema.length === 0) return buildFallbackProfiles(input.formSchema);
 
   const provider = await getAIProvider(input.modelId);
+  const stylesToGenerate = input.selectedStyles ?? TRAJECTORY_STYLES;
 
   const results = await Promise.allSettled(
-    TRAJECTORY_STYLES.map((style) =>
+    stylesToGenerate.map((style) =>
       generateSingleProfile(style, schema, input.woundBaselineAreaRange ?? [5, 50], provider),
     ),
   );
 
-  const profiles: FieldProfileSet = TRAJECTORY_STYLES.map((style, i) => {
+  const profiles: FieldProfileSet = stylesToGenerate.map((style, i) => {
     const result = results[i];
     if (result.status === "fulfilled") return result.value;
     console.warn(`[generateFieldProfiles] style=${style} failed, using fallback:`, result.reason);
     return buildSingleFallbackProfile(style, schema);
   });
 
-  return normalizeProfiles(profiles, schema);
+  return normalizeProfiles(profiles, schema, stylesToGenerate);
 }
 
 const SYSTEM_PROMPT = `You are a clinical data generation assistant. Given a wound assessment form schema and a single wound healing trajectory, produce ONE TrajectoryFieldProfile as a JSON object.
@@ -142,11 +151,11 @@ function extractJson(text: string): string {
 function normalizeProfiles(
   raw: FieldProfileSet,
   schema: FieldSchema[],
+  styles: WoundProgressionStyle[] = TRAJECTORY_STYLES,
 ): FieldProfileSet {
-  const schemaByColumn = new Map(schema.map((f) => [f.columnName, f]));
   const result: FieldProfileSet = [];
 
-  for (const style of TRAJECTORY_STYLES) {
+  for (const style of styles) {
     const existing = raw.find((p) => p.trajectoryStyle === style);
     const profile: TrajectoryFieldProfile = existing
       ? { ...existing, trajectoryStyle: style }

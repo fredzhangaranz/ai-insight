@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Insights — Chat Interface Redesign Mockup</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-bg: #111827;
+            --sidebar-active: #1e40af;
+            --header-bg: #ffffff;
+            --page-bg: #f1f5f9;
+            --card-bg: #ffffff;
+            --user-bubble: #2563eb;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --text-1: #111827;
+            --text-2: #6b7280;
+            --text-3: #9ca3af;
+            --border: #e5e7eb;
+            --shadow: 0 1px 3px rgba(0,0,0,.1), 0 4px 12px rgba(0,0,0,.06);
+            --shadow-lg: 0 4px 16px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.06);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--page-bg);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* ── LAYOUT ── */
+        .shell { display: flex; height: 100vh; }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width: 232px;
+            background: var(--sidebar-bg);
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            flex-shrink: 0;
+        }
+        .sidebar-logo {
+            padding: 20px 20px 16px;
+            color: #f9fafb;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -.3px;
+            border-bottom: 1px solid #1f2937;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .sidebar-logo .logo-dot {
+            width: 8px; height: 8px;
+            background: #60a5fa;
+            border-radius: 50%;
+        }
+        .sidebar-section {
+            padding: 16px 12px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #4b5563;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+        }
+        .sidebar-item {
+            margin: 2px 8px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 13.5px;
+            font-weight: 500;
+            color: #9ca3af;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            transition: background .15s, color .15s;
+        }
+        .sidebar-item:hover { background: #1f2937; color: #e5e7eb; }
+        .sidebar-item.active { background: var(--sidebar-active); color: #fff; }
+        .sidebar-item .icon { font-size: 15px; flex-shrink: 0; }
+        .sidebar-spacer { flex: 1; }
+        .sidebar-footer {
+            padding: 12px 16px 20px;
+            font-size: 12px;
+            color: #4b5563;
+            border-top: 1px solid #1f2937;
+        }
+
+        /* ── MAIN ── */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        /* ── HEADER (fixed) ── */
+        .top-bar {
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 0 28px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13.5px;
+            color: var(--text-2);
+        }
+        .breadcrumb span.sep { color: var(--text-3); }
+        .breadcrumb span.cur { color: var(--text-1); font-weight: 600; }
+        .top-controls { display: flex; gap: 10px; align-items: center; }
+        .select-pill {
+            height: 34px;
+            padding: 0 12px;
+            background: #f9fafb;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--text-1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .select-pill .caret { color: var(--text-3); font-size: 10px; }
+
+        /* ── CHAT THREAD (scrollable) ── */
+        .thread {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px 0;
+            scroll-behavior: smooth;
+        }
+        .thread::-webkit-scrollbar { width: 6px; }
+        .thread::-webkit-scrollbar-track { background: transparent; }
+        .thread::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .thread-inner {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* messages */
+        .msg { display: flex; animation: msgIn .25s ease; }
+        @keyframes msgIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
+        .msg.user { justify-content: flex-end; }
+        .msg.ai   { justify-content: flex-start; }
+
+        .user-bubble {
+            background: var(--user-bubble);
+            color: #fff;
+            padding: 11px 18px;
+            border-radius: 20px 20px 4px 20px;
+            font-size: 14.5px;
+            line-height: 1.55;
+            max-width: 60%;
+        }
+
+        /* AI card */
+        .ai-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+            padding: 0;
+            max-width: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+        .ai-card-body { padding: 20px 24px; }
+
+        .result-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .badge {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+        .badge.blue { background: #dbeafe; color: #1e40af; }
+        .badge.green { background: #dcfce7; color: #166534; }
+
+        /* chart */
+        .chart-wrap {
+            background: #f8fafc;
+            border: 1px solid #f1f5f9;
+            border-radius: 10px;
+            padding: 16px 20px 12px;
+            margin-bottom: 16px;
+        }
+        .chart-label {
+            font-size: 11.5px;
+            font-weight: 600;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 12px;
+        }
+        .bars {
+            display: flex;
+            gap: 18px;
+            align-items: flex-end;
+            height: 160px;
+            padding: 0 8px;
+        }
+        .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .bar-fill {
+            width: 100%;
+            background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+            border-radius: 5px 5px 0 0;
+            position: relative;
+        }
+        .bar-fill.low { background: linear-gradient(180deg, #fca5a5 0%, #ef4444 100%); }
+        .bar-fill.med { background: linear-gradient(180deg, #fde68a 0%, #f59e0b 100%); }
+        .bar-val {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-1);
+            white-space: nowrap;
+        }
+        .bar-lbl { font-size: 11px; color: var(--text-2); text-align: center; line-height: 1.3; }
+
+        /* actions row */
+        .ai-card-actions {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            background: #fafafa;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .act-btn {
+            height: 32px;
+            padding: 0 12px;
+            border-radius: 8px;
+            font-size: 12.5px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text-1);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background .15s, border-color .15s;
+        }
+        .act-btn:hover { background: #f3f4f6; border-color: #d1d5db; }
+        .act-btn.ghost-link {
+            border: none;
+            background: none;
+            color: var(--text-2);
+            text-decoration: underline;
+            text-decoration-color: transparent;
+        }
+        .act-btn.ghost-link:hover { color: var(--accent); text-decoration-color: var(--accent); }
+
+        /* thinking (loading only) */
+        .thinking-bar {
+            background: #faf5ff;
+            border-left: 3px solid #8b5cf6;
+            padding: 12px 16px;
+            margin-bottom: 0;
+            font-size: 12.5px;
+            color: #6d28d9;
+            font-family: 'JetBrains Mono', monospace;
+            line-height: 1.8;
+        }
+        .thinking-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+        .thinking-step .dot {
+            width: 6px; height: 6px;
+            background: #8b5cf6;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: 7px;
+        }
+
+        /* loading bubble */
+        .loading-pulse {
+            display: flex;
+            gap: 5px;
+            padding: 18px 24px;
+            align-items: center;
+        }
+        .loading-pulse span {
+            width: 8px; height: 8px;
+            background: #93c5fd;
+            border-radius: 50%;
+            animation: pulse 1.4s ease infinite;
+        }
+        .loading-pulse span:nth-child(2) { animation-delay: .2s; }
+        .loading-pulse span:nth-child(3) { animation-delay: .4s; }
+        @keyframes pulse {
+            0%, 80%, 100% { transform: scale(.6); opacity: .4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        .loading-label { font-size: 13px; color: var(--text-2); margin-left: 4px; }
+
+        /* empty state */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            text-align: center;
+        }
+        .empty-icon { font-size: 48px; opacity: .25; }
+        .empty-title { font-size: 20px; font-weight: 700; color: var(--text-1); }
+        .empty-sub { font-size: 14px; color: var(--text-2); max-width: 380px; line-height: 1.6; }
+
+        /* ── BOTTOM INPUT DOCK (fixed) ── */
+        .input-dock {
+            background: var(--header-bg);
+            border-top: 1px solid var(--border);
+            padding: 12px 0 18px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+        .input-dock-inner {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* suggestion pills */
+        .pill-row {
+            display: flex;
+            gap: 7px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            transition: opacity .25s;
+        }
+        .pill-row.gone { opacity: 0; pointer-events: none; height: 0; margin: 0; overflow: hidden; }
+        .pill {
+            height: 30px;
+            padding: 0 12px;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+            background: #fff;
+            font-size: 12.5px;
+            color: var(--text-2);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: border-color .15s, color .15s, background .15s;
+            white-space: nowrap;
+        }
+        .pill:hover { border-color: var(--accent); color: var(--accent); background: #eff6ff; }
+
+        /* input row */
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        .input-textarea {
+            flex: 1;
+            padding: 11px 16px;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            font-size: 14px;
+            font-family: inherit;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            max-height: 120px;
+            transition: border-color .2s;
+            color: var(--text-1);
+            background: #fff;
+        }
+        .input-textarea:focus { border-color: var(--accent); }
+        .input-textarea:disabled { background: #f9fafb; color: var(--text-3); cursor: not-allowed; }
+        .send-btn {
+            height: 42px;
+            padding: 0 20px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background .15s;
+            flex-shrink: 0;
+        }
+        .send-btn:hover { background: var(--accent-hover); }
+        .send-btn:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+        .input-hint {
+            font-size: 11px;
+            color: var(--text-3);
+            text-align: right;
+            margin-top: 6px;
+        }
+
+        /* ── STATE SWITCHER ── */
+        .state-switcher {
+            position: fixed;
+            top: 12px;
+            right: 16px;
+            display: flex;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 4px;
+            gap: 2px;
+            z-index: 999;
+            box-shadow: var(--shadow-lg);
+        }
+        .sw-btn {
+            padding: 6px 14px;
+            border-radius: 7px;
+            border: none;
+            background: none;
+            font-size: 12.5px;
+            font-weight: 500;
+            font-family: inherit;
+            color: var(--text-2);
+            cursor: pointer;
+            transition: background .15s, color .15s;
+        }
+        .sw-btn:hover { background: #f3f4f6; }
+        .sw-btn.on { background: var(--accent); color: #fff; }
+    </style>
+</head>
+<body>
+
+<!-- State Switcher -->
+<div class="state-switcher">
+    <button class="sw-btn on" onclick="show('empty',this)">① Empty</button>
+    <button class="sw-btn" onclick="show('chat',this)">② Conversation</button>
+    <button class="sw-btn" onclick="show('loading',this)">③ Loading</button>
+</div>
+
+<div class="shell">
+
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-dot"></div>
+            InsightGen
+        </div>
+        <div class="sidebar-section">Menu</div>
+        <div class="sidebar-item"><span class="icon">📊</span> Dashboard</div>
+        <div class="sidebar-item active"><span class="icon">💬</span> Ask Question</div>
+        <div class="sidebar-item"><span class="icon">🕓</span> History</div>
+        <div class="sidebar-item"><span class="icon">💾</span> Saved Insights</div>
+        <div class="sidebar-item"><span class="icon">⚙️</span> Settings</div>
+        <div class="sidebar-spacer"></div>
+        <div class="sidebar-footer">Local_Silhouette_423</div>
+    </nav>
+
+    <!-- Main -->
+    <div class="main">
+
+        <!-- Header -->
+        <div class="top-bar">
+            <div class="breadcrumb">
+                <span>Insights</span>
+                <span class="sep">/</span>
+                <span class="cur">Ask Question</span>
+            </div>
+            <div class="top-controls">
+                <div class="select-pill">👤 Local_Silhouette_423 <span class="caret">▾</span></div>
+                <div class="select-pill">🤖 Google Gemini <span class="caret">▾</span></div>
+            </div>
+        </div>
+
+        <!-- ─── STATE: EMPTY ─── -->
+        <div id="s-empty" class="state-view" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+            <div class="empty-state">
+                <div class="empty-icon">💬</div>
+                <div class="empty-title">Ask anything about your patients</div>
+                <div class="empty-sub">Get charts, counts, trends, and comparisons—just type in natural language below.</div>
+            </div>
+            <div class="input-dock">
+                <div class="input-dock-inner">
+                    <div class="pill-row">
+                        <div class="pill" onclick="fillInput(this,'empty')">📊 Show healing rates by wound type</div>
+                        <div class="pill" onclick="fillInput(this,'empty')">📈 Compare this month vs last month</div>
+                        <div class="pill" onclick="fillInput(this,'empty')">🔍 Find patients with slow healing</div>
+                        <div class="pill" onclick="fillInput(this,'empty')">📅 How many assessments in November 2025?</div>
+                    </div>
+                    <div class="input-row">
+                        <textarea id="ta-empty" class="input-textarea" rows="2" placeholder="Ask a question about your wound care data…"></textarea>
+                        <button class="send-btn">Send →</button>
+                    </div>
+                    <div class="input-hint">Ctrl+Enter to send</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── STATE: CONVERSATION ─── -->
+        <div id="s-chat" class="state-view" style="flex:1; overflow:hidden; display:none; flex-direction:column;">
+            <div class="thread">
+                <div class="thread-inner">
+
+                    <!-- Q1: user -->
+                    <div class="msg user">
+                        <div class="user-bubble">Show me healing rates by wound type for the last 3 months</div>
+                    </div>
+
+                    <!-- A1: ai -->
+                    <div class="msg ai">
+                        <div class="ai-card">
+                            <div class="ai-card-body">
+                                <div class="result-meta">
+                                    <span class="badge blue">2,847 assessments</span>
+                                    <span class="badge green">9 wound types</span>
+                                </div>
+                                <div class="chart-wrap">
+                                    <div class="chart-label">Healing Rate by Wound Type — Aug–Oct 2025</div>
+                                    <div class="bars">
+                                        <div class="bar-col">
+                                            <div class="bar-fill" style="height:85%"><div class="bar-val">85%</div></div>
+                                            <div class="bar-lbl">Pressure<br>Injury</div>
+                                        </div>
+                                        <div class="bar-col">
+                                            <div class="bar-fill" style="height:72%"><div class="bar-val">72%</div></div>
+                                            <div class="bar-lbl">Venous<br>Ulcer</div>
+                                        </div>
+                                        <div class="bar-col">
+                                            <div class="bar-fill" style="height:91%"><div class="bar-val">91%</div></div>
+                                            <div class="bar-lbl">Surgical<br>Wound</div>
+                                        </div>
+                                        <div class="bar-col">
+                                            <div class="bar-fill low" style="height:58%"><div class="bar-val">58%</div></div>
+                                            <div class="bar-lbl">Diabetic<br>Ulcer</div>
+                                        </div>
+                                        <div class="bar-col">
+                                            <div class="bar-fill med" style="height:66%"><div class="bar-val">66%</div></div>
+                                            <div class="bar-lbl">Arterial<br>Ulcer</div>
+                                        </div>
+                                        <div class="bar-col">
+                                            <div class="bar-fill" style="height:79%"><div class="bar-val">79%</div></div>
+                                            <div class="bar-lbl">Traumatic<br>Wound</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ai-card-actions">
+                                <button class="act-btn" onclick="toggleHowI(this)">💡 How I got this</button>
+                                <button class="act-btn">💾 Save</button>
+                                <button class="act-btn">📤 Export CSV</button>
+                                <button class="act-btn">✏️ Edit chart</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Q2: user -->
+                    <div class="msg user">
+                        <div class="user-bubble">Why is the diabetic ulcer rate so much lower?</div>
+                    </div>
+
+                    <!-- A2: ai (table result) -->
+                    <div class="msg ai">
+                        <div class="ai-card">
+                            <div class="ai-card-body">
+                                <div class="result-meta">
+                                    <span class="badge blue">342 patients</span>
+                                </div>
+                                <p style="font-size:14px;line-height:1.65;color:var(--text-1);margin-bottom:14px;">
+                                    Diabetic ulcer patients show an average healing rate of <strong>58%</strong> vs. <strong>79%</strong> for other chronic wounds. Key contributing factors from the data:
+                                </p>
+                                <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;font-size:13.5px;line-height:1.8;border:1px solid #f1f5f9;">
+                                    <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:8px;font-weight:600;font-size:12px;color:var(--text-2);">
+                                        <span>Factor</span><span>Avg. impact on healing rate</span>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;"><span>High HbA1c (≥8.5)</span><span style="color:#ef4444;font-weight:600;">−18%</span></div>
+                                    <div style="display:flex;justify-content:space-between;"><span>Peripheral neuropathy</span><span style="color:#ef4444;font-weight:600;">−12%</span></div>
+                                    <div style="display:flex;justify-content:space-between;"><span>Infection at baseline</span><span style="color:#ef4444;font-weight:600;">−9%</span></div>
+                                    <div style="display:flex;justify-content:space-between;"><span>PAD comorbidity</span><span style="color:#f59e0b;font-weight:600;">−6%</span></div>
+                                </div>
+                            </div>
+                            <div class="ai-card-actions">
+                                <button class="act-btn" onclick="toggleHowI(this)">💡 How I got this</button>
+                                <button class="act-btn">💾 Save</button>
+                                <button class="act-btn">📤 Export CSV</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="input-dock">
+                <div class="input-dock-inner">
+                    <div class="pill-row gone"><!-- pills gone after first message --></div>
+                    <div class="input-row">
+                        <textarea id="ta-chat" class="input-textarea" rows="2" placeholder="Ask a follow-up question…"></textarea>
+                        <button class="send-btn">Send →</button>
+                    </div>
+                    <div class="input-hint">Ctrl+Enter to send</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── STATE: LOADING ─── -->
+        <div id="s-loading" class="state-view" style="flex:1; overflow:hidden; display:none; flex-direction:column;">
+            <div class="thread">
+                <div class="thread-inner">
+
+                    <div class="msg user">
+                        <div class="user-bubble">Show me healing rates by wound type for the last 3 months</div>
+                    </div>
+
+                    <div class="msg ai">
+                        <div class="ai-card">
+                            <div class="ai-card-body">
+                                <div class="result-meta">
+                                    <span class="badge blue">2,847 assessments</span>
+                                    <span class="badge green">9 wound types</span>
+                                </div>
+                                <div class="chart-wrap">
+                                    <div class="chart-label">Healing Rate by Wound Type — Aug–Oct 2025</div>
+                                    <div class="bars">
+                                        <div class="bar-col"><div class="bar-fill" style="height:85%"><div class="bar-val">85%</div></div><div class="bar-lbl">Pressure<br>Injury</div></div>
+                                        <div class="bar-col"><div class="bar-fill" style="height:72%"><div class="bar-val">72%</div></div><div class="bar-lbl">Venous<br>Ulcer</div></div>
+                                        <div class="bar-col"><div class="bar-fill" style="height:91%"><div class="bar-val">91%</div></div><div class="bar-lbl">Surgical<br>Wound</div></div>
+                                        <div class="bar-col"><div class="bar-fill low" style="height:58%"><div class="bar-val">58%</div></div><div class="bar-lbl">Diabetic<br>Ulcer</div></div>
+                                        <div class="bar-col"><div class="bar-fill med" style="height:66%"><div class="bar-val">66%</div></div><div class="bar-lbl">Arterial<br>Ulcer</div></div>
+                                        <div class="bar-col"><div class="bar-fill" style="height:79%"><div class="bar-val">79%</div></div><div class="bar-lbl">Traumatic<br>Wound</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ai-card-actions">
+                                <button class="act-btn">💡 How I got this</button>
+                                <button class="act-btn">💾 Save</button>
+                                <button class="act-btn">📤 Export CSV</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Q2 user -->
+                    <div class="msg user">
+                        <div class="user-bubble">Why is the diabetic ulcer rate so much lower?</div>
+                    </div>
+
+                    <!-- AI Loading response -->
+                    <div class="msg ai">
+                        <div class="ai-card">
+                            <!-- thinking stream (expanded only while loading) -->
+                            <div class="thinking-bar">
+                                <div class="thinking-step"><div class="dot"></div>Filtering assessments: wound_type = 'diabetic_ulcer'…</div>
+                                <div class="thinking-step"><div class="dot"></div>Comparing healing trajectories with other wound types…</div>
+                                <div class="thinking-step"><div class="dot"></div>Analyzing comorbidity patterns (HbA1c, neuropathy, PAD)…</div>
+                                <div class="thinking-step" style="opacity:.5"><div class="dot"></div>Computing time-to-heal distributions…</div>
+                            </div>
+                            <div class="loading-pulse">
+                                <span></span><span></span><span></span>
+                                <span class="loading-label">Analyzing diabetic ulcer data…</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="input-dock">
+                <div class="input-dock-inner">
+                    <div class="pill-row gone"></div>
+                    <div class="input-row">
+                        <textarea class="input-textarea" rows="2" placeholder="Ask a follow-up question…" disabled></textarea>
+                        <button class="send-btn" disabled>Send →</button>
+                    </div>
+                    <div class="input-hint">Waiting for response…</div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /.main -->
+</div><!-- /.shell -->
+
+<script>
+function show(name, btn) {
+    document.querySelectorAll('.state-view').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.sw-btn').forEach(b => b.classList.remove('on'));
+    const el = document.getElementById('s-' + name);
+    el.style.display = 'flex';
+    el.style.flexDirection = 'column';
+    btn.classList.add('on');
+}
+
+function fillInput(pill, state) {
+    const text = pill.textContent.replace(/^[^\s]+\s/, '').trim();
+    const ta = document.getElementById('ta-' + state);
+    if (ta) { ta.value = text; ta.focus(); }
+}
+
+function toggleHowI(btn) {
+    const card = btn.closest('.ai-card');
+    let panel = card.querySelector('.how-i-panel');
+    if (panel) {
+        panel.remove();
+        btn.textContent = '💡 How I got this';
+        return;
+    }
+    panel = document.createElement('div');
+    panel.className = 'how-i-panel';
+    panel.style.cssText = 'padding:16px 24px;background:#f8fafc;border-top:1px solid var(--border);font-size:13px;line-height:1.75;color:#374151;';
+    panel.innerHTML = `
+        <div style="font-weight:600;margin-bottom:8px;color:var(--text-1);">How this was answered</div>
+        <div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;color:#1e40af;overflow-x:auto;">
+            SELECT wound_type, COUNT(*) AS total,<br>
+            &nbsp;&nbsp;SUM(CASE WHEN healing_status='healed' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS healing_rate<br>
+            FROM rpt.Assessment<br>
+            WHERE dimDateFk BETWEEN @start AND @end<br>
+            GROUP BY wound_type
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text-2);">✔ 2,847 rows processed &nbsp;·&nbsp; ✔ SQL validated &nbsp;·&nbsp; 1.3s</div>
+    `;
+    const body = card.querySelector('.ai-card-body');
+    card.insertBefore(panel, btn.closest('.ai-card-actions'));
+    btn.textContent = '💡 Hide';
+}
+</script>
+</body>
+</html>

@@ -173,7 +173,7 @@ export function ConversationPanel({
         </div>
       )}
 
-      {sortedMessages.length > 0 ? (
+      {sortedMessages.length > 0 && (
         <div
           ref={scrollContainerRef}
           className="space-y-3 max-h-96 overflow-y-auto"
@@ -227,10 +227,6 @@ export function ConversationPanel({
               </div>
             );
           })}
-        </div>
-      ) : (
-        <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
-          Ask a follow-up question to start a conversation.
         </div>
       )}
 

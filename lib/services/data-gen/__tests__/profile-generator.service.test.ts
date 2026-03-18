@@ -122,5 +122,42 @@ describe("profile-generator.service", () => {
       });
       expect(profiles).toHaveLength(4);
     });
+
+    it("returns only selected styles when selectedStyles provided (single trajectory)", async () => {
+      const profiles = await generateFieldProfiles({
+        formSchema,
+        modelId: "test",
+        selectedStyles: ["Exponential"],
+      });
+      expect(profiles).toHaveLength(1);
+      expect(profiles[0].trajectoryStyle).toBe("Exponential");
+    });
+
+    it("returns only selected styles when selectedStyles provided (2 profiles)", async () => {
+      const profiles = await generateFieldProfiles({
+        formSchema,
+        modelId: "test",
+        selectedStyles: ["Exponential", "JaggedFlat"],
+      });
+      expect(profiles).toHaveLength(2);
+      expect(profiles.map((p) => p.trajectoryStyle)).toEqual([
+        "Exponential",
+        "JaggedFlat",
+      ]);
+    });
+
+    it("returns all 4 profiles when selectedStyles omitted (backward compat)", async () => {
+      const profiles = await generateFieldProfiles({
+        formSchema,
+        modelId: "test",
+      });
+      expect(profiles).toHaveLength(4);
+      expect(profiles.map((p) => p.trajectoryStyle)).toEqual([
+        "Exponential",
+        "JaggedLinear",
+        "JaggedFlat",
+        "NPTraditionalDisposable",
+      ]);
+    });
   });
 });

@@ -171,12 +171,12 @@ export function WoundTrajectoryStep({
       assessmentPeriodDays: periodDays,
       assessmentStartDate: format(startDate, "yyyy-MM-dd"),
     };
-    if (!isSingleWound) {
-      if (randomisePerPatient) {
-        config.trajectoryRandomisePerPatient = true;
-      } else {
-        config.trajectoryAssignments = assignments;
-      }
+    if (isSingleWound) {
+      config.trajectoryAssignments = [singleTrajectoryType];
+    } else if (randomisePerPatient) {
+      config.trajectoryRandomisePerPatient = true;
+    } else {
+      config.trajectoryAssignments = assignments;
     }
     onConfigure(config);
   };

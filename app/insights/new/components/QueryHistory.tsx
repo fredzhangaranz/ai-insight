@@ -14,6 +14,7 @@ interface Query {
   recordCount?: number;
   sql?: string;
   semanticContext?: any;
+  conversationThreadId?: string;
 }
 
 interface QueryHistoryProps {

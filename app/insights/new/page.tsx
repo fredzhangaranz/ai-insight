@@ -11,7 +11,7 @@ import { ModelSelector } from "./components/ModelSelector";
 import { QuestionInput } from "./components/QuestionInput";
 import { SuggestedQuestions } from "./components/SuggestedQuestions";
 import { QueryHistory } from "./components/QueryHistory";
-import { InsightResults } from "./components/InsightResults";
+import { ConversationThread } from "./components/ConversationThread";
 import { ClarificationDialog } from "./components/ClarificationDialog";
 import { useInsights } from "@/lib/hooks/useInsights";
 import { AnalysisProgressCard } from "./components/AnalysisProgressCard";
@@ -155,6 +155,7 @@ export default function NewInsightPage() {
 
       loadCachedResult(errorResult);
       setQuestion(query.question);
+      setConversationThreadId(query.conversationThreadId);
       return;
     }
 
@@ -211,12 +212,14 @@ export default function NewInsightPage() {
         };
         loadCachedResult(replayErrorResult as any);
         setQuestion(query.question);
+        setConversationThreadId(query.conversationThreadId);
         return;
       }
 
       const cachedResult = await response.json();
       loadCachedResult(cachedResult);
       setQuestion(query.question);
+      setConversationThreadId(query.conversationThreadId);
     } catch (err) {
       console.error("Failed to load cached result:", err);
       const replayErrorResult = {
@@ -260,7 +263,7 @@ export default function NewInsightPage() {
         </button>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full overflow-x-hidden">
+      <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-6 overflow-x-hidden">
         {/* Header */}
         <div className="mb-8">
           <div className="border-b border-slate-200 pb-6">
@@ -405,12 +408,11 @@ export default function NewInsightPage() {
             )}
 
           {result && result.mode !== "clarification" && !result.error && (
-            <InsightResults
-              result={result}
+            <ConversationThread
+              initialQuestion={result.question || question}
+              initialResult={result}
               customerId={customerId}
               modelId={modelId}
-              onRefine={setQuestion}
-              onRerun={handleRerun}
               threadId={conversationThreadId}
               onNewQuestion={handleNewQuestion}
             />

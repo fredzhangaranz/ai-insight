@@ -50,6 +50,7 @@ import { buildDefaultAssessmentSpec } from "@/lib/services/data-gen/default-spec
 import { buildFallbackProfiles } from "@/lib/services/data-gen/profile-fallback";
 import type { FieldProfileSet } from "@/lib/services/data-gen/trajectory-field-profile.types";
 import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types";
+import type { TrajectorySelectionResult } from "@/lib/services/data-gen/trajectory-selector";
 
 export default function DataGenPage() {
   const [customerId, setCustomerId] = useState<string>("");
@@ -63,6 +64,9 @@ export default function DataGenPage() {
   const [trajectoryConfig, setTrajectoryConfig] =
     useState<TrajectoryConfig | null>(null);
   const [fieldProfiles, setFieldProfiles] = useState<FieldProfileSet | null>(
+    null,
+  );
+  const [trajectorySelection, setTrajectorySelection] = useState<TrajectorySelectionResult | null>(
     null,
   );
   const [woundFormSchema, setWoundFormSchema] = useState<FieldSchema[]>([]);
@@ -188,6 +192,8 @@ export default function DataGenPage() {
         formId: selectedForm.assessmentFormId,
         woundBaselineAreaRange: trajectoryConfig.woundBaselineAreaRange,
         modelId: modelId || undefined,
+        trajectoryAssignments: trajectoryConfig.trajectoryAssignments,
+        trajectoryRandomisePerPatient: trajectoryConfig.trajectoryRandomisePerPatient,
       }),
     })
       .then((res) => res.json())
@@ -195,6 +201,7 @@ export default function DataGenPage() {
         if (cancelled) return;
         setFieldProfiles(data.profiles ?? []);
         setWoundFormSchema(data.formSchema ?? []);
+        setTrajectorySelection(data.trajectorySelection ?? null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -635,11 +642,13 @@ export default function DataGenPage() {
               !isGeneratingProfiles && (
                 <FieldProfilesReviewStep
                   profiles={fieldProfiles}
+                  trajectorySelection={trajectorySelection ?? undefined}
                   onProceed={handleProfilesProceed}
                   onBack={() => {
                     setTrajectoryConfig(null);
                     setFieldProfiles(null);
                     setWoundFormSchema([]);
+                    setTrajectorySelection(null);
                   }}
                 />
               )}
