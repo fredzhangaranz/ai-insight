@@ -70,7 +70,7 @@ export function buildDefaultPatientSpec(
   const fields: FieldSpec[] = [];
 
   for (const f of schema) {
-    if (f.fieldClass === "source-of-truth") continue;
+    if (f.fieldClass === "source-of-truth" || f.systemManaged) continue;
 
     const criteria = buildCriteriaForField(f, ageConfig);
     if (!criteria) continue;
@@ -84,6 +84,7 @@ export function buildDefaultPatientSpec(
       storageType: f.storageType,
       attributeTypeId: f.attributeTypeId,
       assessmentTypeVersionId: f.assessmentTypeVersionId,
+      systemManaged: f.systemManaged,
     });
   }
 
@@ -98,6 +99,7 @@ export function buildDefaultPatientSpec(
         criteria: { type: "distribution", weights: {} },
         storageType: unitField.storageType,
         attributeTypeId: unitField.attributeTypeId,
+        systemManaged: unitField.systemManaged,
       });
     }
   }
@@ -217,6 +219,7 @@ export function buildDefaultAssessmentSpec(
       criteria,
       storageType: "wound_attribute",
       attributeTypeId: f.attributeTypeId,
+      systemManaged: f.systemManaged,
     };
   });
 

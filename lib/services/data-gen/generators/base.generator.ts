@@ -4,8 +4,10 @@
  */
 
 import { randomUUID } from "crypto";
-import type { ConnectionPool } from "mssql";
+import type { ConnectionPool, Transaction } from "mssql";
 import type { FieldSpec } from "../generation-spec.types";
+
+type RequestSource = ConnectionPool | Transaction;
 
 /**
  * Generate a new GUID for SQL Server
@@ -162,7 +164,7 @@ export function generateFieldValue(
  * Batch insert rows into a table
  */
 export async function batchInsert(
-  db: ConnectionPool,
+  db: RequestSource,
   tableName: string,
   rows: any[],
   batchSize: number = 100
@@ -215,7 +217,7 @@ export async function batchInsert(
  * Distribute items across buckets with given weights
  * Returns array of bucket assignments
  */
-export function distributeAcrossBuckets<T>(
+export function distributeAcrossBuckets<T extends string>(
   count: number,
   buckets: Record<T, number>
 ): T[] {

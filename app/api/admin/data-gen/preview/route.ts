@@ -8,13 +8,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getConnectionStringForCustomer } from "@/lib/services/customer-service";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
+import { getPatientSchema } from "@/lib/services/data-gen/schema-discovery.service";
 import { generatePreview } from "@/lib/services/data-gen/preview.service";
 import {
+  buildInsertPatientPreviewData,
   buildUpdatePatientSqlStatements,
-  buildInsertPatientSqlStatements,
 } from "@/lib/services/data-gen/generators/patient.generator";
 import { buildAssessmentSqlStatements } from "@/lib/services/data-gen/generators/assessment.generator";
 import type { GenerationSpec } from "@/lib/services/data-gen/generation-spec.types";
+import {
+  getPatientPresetById,
+  resolvePatientSpecWithPreset,
+} from "@/lib/services/data-gen/patient-preset.service";
 
 /** Max rows/SQL statements to include in preview; rest of UI uses scrollbar */
 const PREVIEW_DISPLAY_CAP = 200;
@@ -55,16 +60,38 @@ export async function POST(request: NextRequest) {
       mockDependencies = { units: unitResult.recordset };
     }
 
+    let effectiveSpec = spec;
+    let patientInsertOptions: Parameters<typeof buildInsertPatientSqlStatements>[3] | undefined;
+    if (spec.entity === "patient" && spec.mode !== "update") {
+      const patientSchema = await getPatientSchema(pool);
+      const preset = getPatientPresetById(spec.presetId);
+      const resolved = resolvePatientSpecWithPreset(spec, patientSchema, preset);
+      effectiveSpec = resolved.spec;
+      patientInsertOptions = {
+        explicitFieldKeys: resolved.explicitFieldKeys,
+        patientIdFieldName: resolved.patientIdFieldName,
+        preset: resolved.preset,
+      };
+    }
+
     const previewSize =
-      spec.entity === "patient"
-        ? spec.mode === "update"
+      effectiveSpec.entity === "patient"
+        ? effectiveSpec.mode === "update"
           ? Math.min(spec.target?.patientIds?.length ?? 0, PREVIEW_DISPLAY_CAP)
           : Math.min(spec.count, PREVIEW_DISPLAY_CAP)
         : 5;
-    const preview = generatePreview(spec, previewSize, mockDependencies);
+    const preview =
+      effectiveSpec.entity === "patient" && effectiveSpec.mode !== "update"
+        ? await buildInsertPatientPreviewData(
+            effectiveSpec,
+            pool,
+            previewSize,
+            patientInsertOptions,
+          )
+        : generatePreview(effectiveSpec, previewSize, mockDependencies);
 
-    if (spec.mode === "update" && spec.entity === "patient" && spec.target?.mode === "custom" && spec.target.patientIds?.length) {
-      const patientIds = spec.target.patientIds;
+    if (effectiveSpec.mode === "update" && effectiveSpec.entity === "patient" && effectiveSpec.target?.mode === "custom" && effectiveSpec.target.patientIds?.length) {
+      const patientIds = effectiveSpec.target.patientIds;
       const sampleSize = Math.min(patientIds.length, PREVIEW_DISPLAY_CAP);
       const sampleIds = patientIds.slice(0, sampleSize);
 
@@ -89,7 +116,7 @@ export async function POST(request: NextRequest) {
         };
       });
 
-      const previewSql = await buildUpdatePatientSqlStatements(spec, pool);
+      const previewSql = await buildUpdatePatientSqlStatements(effectiveSpec, pool);
 
       return NextResponse.json({
         ...preview,
@@ -98,23 +125,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (spec.entity === "assessment_bundle" && spec.form?.assessmentTypeVersionId) {
-      const previewSql = await buildAssessmentSqlStatements(spec, pool);
+    if (effectiveSpec.entity === "assessment_bundle" && effectiveSpec.form?.assessmentTypeVersionId) {
+      const previewSql = await buildAssessmentSqlStatements(effectiveSpec, pool);
       return NextResponse.json({
         ...preview,
         previewSql: previewSql.length > 0 ? previewSql : undefined,
       });
     }
 
-    if (spec.entity === "patient" && spec.mode !== "update") {
-      const previewSql = await buildInsertPatientSqlStatements(
-        spec,
-        pool,
-        Math.min(spec.count, PREVIEW_DISPLAY_CAP)
-      );
+    if (effectiveSpec.entity === "patient" && effectiveSpec.mode !== "update") {
       return NextResponse.json({
         ...preview,
-        previewSql: previewSql.length > 0 ? previewSql : undefined,
+        previewSql:
+          Array.isArray((preview as { previewSql?: string[] }).previewSql) &&
+          (preview as { previewSql?: string[] }).previewSql!.length > 0
+            ? (preview as { previewSql?: string[] }).previewSql
+            : undefined,
       });
     }
 

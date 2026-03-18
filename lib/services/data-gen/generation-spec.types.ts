@@ -111,6 +111,7 @@ export interface FieldSpec {
   storageType?: StorageType;
   attributeTypeId?: string;
   assessmentTypeVersionId?: string;
+  systemManaged?: boolean;
 }
 
 export interface GenerationSpec {
@@ -120,6 +121,7 @@ export interface GenerationSpec {
   mode?: "insert" | "update";
   target?: TargetSelector;
   form?: FormSelector;
+  presetId?: string;
   fields: FieldSpec[];
   woundsPerPatient?: number | [number, number];
   assessmentsPerWound?: number | [number, number];
@@ -188,6 +190,7 @@ export interface FieldSchema {
   assessmentTypeVersionId?: string;
   /** PatientNote name (e.g. Details, Medical History) for disambiguating duplicate fieldNames */
   patientNoteName?: string;
+  systemManaged?: boolean;
   coverage?: CoverageStats;
   options?: string[];
   min?: number;

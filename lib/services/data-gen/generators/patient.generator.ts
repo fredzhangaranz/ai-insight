@@ -3,22 +3,33 @@
  * Generates realistic patient records
  */
 
-import type { ConnectionPool } from "mssql";
+import type { ConnectionPool, Transaction } from "mssql";
 import sql from "mssql";
 import { faker } from "@faker-js/faker";
 import type {
+  FieldSpec,
   GenerationSpec,
   GenerationResult,
   VerificationResult,
 } from "../generation-spec.types";
 import {
   newGuid,
-  randomAlphaNum,
   batchInsert,
   generateFieldValue,
   distributeAcrossBuckets,
 } from "./base.generator";
 import { DependencyMissingError } from "../generation-spec.types";
+import {
+  buildGeneratedPatientIdentifiers,
+  peekNextPatientSequenceStart,
+  reserveNextPatientSequenceRange,
+} from "../patient-id.service";
+import {
+  applyPresetProfileValues,
+  getPatientPresetFieldKey,
+  pickWeightedPresetProfile,
+  type PatientPresetDefinition,
+} from "../patient-preset.service";
 
 /** Escape a value for use in SQL literal (strings: single-quote doubled; dates: ISO string) */
 function toSqlLiteral(value: unknown): string {
@@ -39,164 +50,282 @@ const SKIP_DIRECT_COLUMNS = new Set([
   "serverChangeDate",
 ]);
 
+type RequestSource = ConnectionPool | Transaction;
+
+interface PatientInsertGenerationOptions {
+  explicitFieldKeys?: Set<string>;
+  patientIdFieldName?: string;
+  preset?: PatientPresetDefinition;
+}
+
+interface BuiltPatientInsertRow {
+  patientRow: Record<string, unknown>;
+  displayRow: Record<string, unknown>;
+  eavRowsByAtv: Map<string, Array<{ attributeTypeId: string; value: string }>>;
+}
+
+interface PatientInsertPreviewData {
+  sampleRows: Record<string, unknown>[];
+  previewSql: string[];
+  summary: {
+    totalRows: number;
+    distributions: Record<string, Record<string, number>>;
+    ranges: Record<string, { min: number | string; max: number | string; mean?: number }>;
+  };
+}
+
+function getPatientFieldKey(fieldSpec: FieldSpec): string | null {
+  if (fieldSpec.storageType === "patient_attribute" && fieldSpec.attributeTypeId) {
+    return getPatientPresetFieldKey({ attributeTypeId: fieldSpec.attributeTypeId });
+  }
+
+  return getPatientPresetFieldKey({ columnName: fieldSpec.columnName });
+}
+
+function getPatientInsertFields(spec: GenerationSpec): {
+  directFields: FieldSpec[];
+  eavFields: FieldSpec[];
+} {
+  const directFields = spec.fields.filter(
+    (field) =>
+      field.enabled &&
+      !field.systemManaged &&
+      field.storageType !== "patient_attribute" &&
+      !SKIP_DIRECT_COLUMNS.has(field.columnName) &&
+      field.columnName !== "domainId",
+  );
+  const eavFields = spec.fields.filter(
+    (field) =>
+      field.enabled &&
+      !field.systemManaged &&
+      field.storageType === "patient_attribute" &&
+      field.columnName !== "domainId",
+  );
+
+  return { directFields, eavFields };
+}
+
+function buildUnitAssignments(
+  spec: GenerationSpec,
+  count: number,
+  units: Array<{ id: string; name: string }>,
+): string[] {
+  const unitField = spec.fields.find((field) => field.columnName === "unitFk");
+  const unitIds = units.map((unit) => unit.id);
+  const assignments: string[] = [];
+
+  if (unitField?.criteria.type === "distribution") {
+    const unitWeights: Record<string, number> = {};
+    for (const [unitName, weight] of Object.entries(unitField.criteria.weights)) {
+      const unit = units.find((candidate) => candidate.name === unitName);
+      if (unit) unitWeights[unit.id] = weight;
+    }
+
+    if (Object.keys(unitWeights).length > 0) {
+      return distributeAcrossBuckets(count, unitWeights);
+    }
+  }
+
+  for (let idx = 0; idx < count; idx++) {
+    assignments.push(unitIds[idx % unitIds.length]);
+  }
+
+  return assignments;
+}
+
+function buildPatientInsertRows(
+  spec: GenerationSpec,
+  units: Array<{ id: string; name: string }>,
+  startSequenceNumber: number,
+  count: number,
+  now: Date,
+  options: PatientInsertGenerationOptions = {},
+): BuiltPatientInsertRow[] {
+  const { directFields, eavFields } = getPatientInsertFields(spec);
+  const identifiers = buildGeneratedPatientIdentifiers(startSequenceNumber, count);
+  const unitAssignments = buildUnitAssignments(spec, count, units);
+  const explicitFieldKeys = options.explicitFieldKeys ?? new Set<string>();
+  const patientIdFieldName = options.patientIdFieldName ?? "Patient ID";
+  const rows: BuiltPatientInsertRow[] = [];
+
+  for (let idx = 0; idx < count; idx++) {
+    const identifiersForRow = identifiers[idx];
+    const patientRow: Record<string, unknown> = {
+      id: newGuid(),
+      accessCode: identifiersForRow.accessCode,
+      domainId: identifiersForRow.domainId,
+      unitFk: unitAssignments[idx],
+      isDeleted: 0,
+      assignedToUnitDate: now,
+      serverChangeDate: now,
+    };
+    const unit = units.find((candidate) => candidate.id === unitAssignments[idx]);
+    const displayRow: Record<string, unknown> = {
+      id: patientRow.id,
+      [patientIdFieldName]: identifiersForRow.domainId,
+      accessCode: identifiersForRow.accessCode,
+      unit: unit?.name ?? "Unknown",
+    };
+    const rowValues = new Map<string, unknown>();
+    const profile = pickWeightedPresetProfile(options.preset);
+
+    for (const field of [...directFields, ...eavFields]) {
+      const key = getPatientFieldKey(field);
+      if (!key) continue;
+
+      try {
+        const value = generateFieldValue(field, faker);
+        if (value !== null && value !== undefined) {
+          rowValues.set(key, value);
+        }
+      } catch (error) {
+        console.warn(`Failed to generate ${field.columnName}:`, error);
+      }
+    }
+
+    applyPresetProfileValues(rowValues, profile, explicitFieldKeys);
+
+    for (const field of directFields) {
+      const key = getPatientFieldKey(field);
+      if (!key || !rowValues.has(key)) continue;
+      const value = rowValues.get(key);
+      patientRow[field.columnName] = value;
+      displayRow[field.fieldName] = value;
+    }
+
+    const eavRowsByAtv = new Map<string, Array<{ attributeTypeId: string; value: string }>>();
+    for (const field of eavFields) {
+      const key = getPatientFieldKey(field);
+      if (!key || !rowValues.has(key) || !field.attributeTypeId || !field.assessmentTypeVersionId) {
+        continue;
+      }
+
+      const value = rowValues.get(key);
+      if (value === null || value === undefined) continue;
+
+      if (!eavRowsByAtv.has(field.assessmentTypeVersionId)) {
+        eavRowsByAtv.set(field.assessmentTypeVersionId, []);
+      }
+      eavRowsByAtv.get(field.assessmentTypeVersionId)!.push({
+        attributeTypeId: field.attributeTypeId,
+        value: String(value),
+      });
+      displayRow[field.fieldName] = value;
+    }
+
+    rows.push({ patientRow, displayRow, eavRowsByAtv });
+  }
+
+  return rows;
+}
+
+async function insertPatientAttributes(
+  db: RequestSource,
+  rows: BuiltPatientInsertRow[],
+  now: Date,
+): Promise<void> {
+  for (const row of rows) {
+    const patientId = row.patientRow.id as string;
+    for (const [assessmentTypeVersionId, values] of row.eavRowsByAtv) {
+      if (values.length === 0) continue;
+
+      const patientNoteId = newGuid();
+      await db.request()
+        .input("id", sql.UniqueIdentifier, patientNoteId)
+        .input("patientFk", sql.UniqueIdentifier, patientId)
+        .input("assessmentTypeVersionFk", sql.UniqueIdentifier, assessmentTypeVersionId)
+        .input("serverChangeDate", sql.DateTime, now)
+        .query(`
+          INSERT INTO dbo.PatientNote (id, patientFk, assessmentTypeVersionFk, serverChangeDate, modSyncState, isDeleted)
+          VALUES (@id, @patientFk, @assessmentTypeVersionFk, @serverChangeDate, 2, 0)
+        `);
+
+      for (const value of values) {
+        await db.request()
+          .input("id", sql.UniqueIdentifier, newGuid())
+          .input("attributeTypeFk", sql.UniqueIdentifier, value.attributeTypeId)
+          .input("value", sql.NVarChar, value.value)
+          .input("patientNoteFk", sql.UniqueIdentifier, patientNoteId)
+          .input("serverChangeDate", sql.DateTime, now)
+          .query(`
+            INSERT INTO dbo.PatientAttribute (id, attributeTypeFk, value, patientNoteFk, serverChangeDate, modSyncState, isDeleted)
+            VALUES (@id, @attributeTypeFk, @value, @patientNoteFk, @serverChangeDate, 2, 0)
+          `);
+      }
+    }
+  }
+}
+
 /**
  * Generate patient records
  */
 export async function generatePatients(
   spec: GenerationSpec,
   db: ConnectionPool,
+  options: PatientInsertGenerationOptions = {},
 ): Promise<GenerationResult> {
-  // Set session context for data generation operations
-  // This allows the generation to bypass audit/trigger constraints
-  await db.request().query(`
-    EXEC sp_set_session_context @key = 'all_access', @value = 1;
-  `);
-
-  // Get available units
-  const unitResult = await db
-    .request()
-    .query("SELECT id, name FROM dbo.Unit WHERE isDeleted = 0");
-
-  if (unitResult.recordset.length === 0) {
-    throw new DependencyMissingError(
-      "Unit",
-      "No units found in dbo.Unit. Please create at least one unit before generating patients.",
-    );
-  }
-
-  const units = unitResult.recordset;
-
-  const directFields = spec.fields.filter(
-    (f) =>
-      f.enabled &&
-      f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName) &&
-      f.columnName !== "domainId", // Exclude domainId - it will be set to sequential pattern
-  );
-  const eavFields = spec.fields.filter(
-    (f) => f.enabled && f.storageType === "patient_attribute" && f.columnName !== "domainId", // Also exclude from EAV
-  );
-
-  const rows: Record<string, unknown>[] = [];
   const now = new Date();
-
-  const unitField = spec.fields.find((f) => f.columnName === "unitFk");
-  let unitAssignments: string[] = [];
-
-  if (unitField?.criteria.type === "distribution") {
-    const unitWeights: Record<string, number> = {};
-    for (const [unitName, weight] of Object.entries(
-      unitField.criteria.weights,
-    )) {
-      const unit = units.find((u) => u.name === unitName);
-      if (unit) unitWeights[unit.id] = weight;
-    }
-    if (Object.keys(unitWeights).length > 0) {
-      unitAssignments = distributeAcrossBuckets(spec.count, unitWeights);
-    } else {
-      const unitIds = units.map((u) => u.id);
-      for (let i = 0; i < spec.count; i++) {
-        unitAssignments.push(unitIds[i % unitIds.length]);
-      }
-    }
-  } else {
-    const unitIds = units.map((u) => u.id);
-    for (let i = 0; i < spec.count; i++) {
-      unitAssignments.push(unitIds[i % unitIds.length]);
-    }
-  }
-
-  for (let i = 0; i < spec.count; i++) {
-    const sequentialId = `IG-${String(i + 1).padStart(5, '0')}`;
-    const row: Record<string, unknown> = {
-      id: newGuid(),
-      accessCode: sequentialId,
-      domainId: sequentialId,
-      unitFk: unitAssignments[i],
-      isDeleted: 0,
-      assignedToUnitDate: now,
-      serverChangeDate: now,
-    };
-
-    for (const fieldSpec of directFields) {
-      if (SKIP_DIRECT_COLUMNS.has(fieldSpec.columnName)) continue;
-      try {
-        const value = generateFieldValue(fieldSpec, faker);
-        if (value !== null && value !== undefined) {
-          row[fieldSpec.columnName] = value;
-        }
-      } catch (err) {
-        console.warn(`Failed to generate ${fieldSpec.columnName}:`, err);
-      }
-    }
-    console.log(`[Patient Generator] Patient ${i + 1} row domainId before push: ${row.domainId}`);
-    rows.push(row);
-  }
-
-  console.log(`[Patient Generator] About to insert ${rows.length} patients. First row sample:`, {
-    id: rows[0]?.id,
-    accessCode: rows[0]?.accessCode,
-    domainId: rows[0]?.domainId,
-    unitFk: rows[0]?.unitFk,
-  });
-
-  let insertedCount = await batchInsert(db, "dbo.Patient", rows);
-
-  if (eavFields.length > 0) {
-    const byAtv = new Map<string, typeof eavFields>();
-    for (const f of eavFields) {
-      const atv = f.assessmentTypeVersionId ?? "";
-      if (!atv) continue;
-      if (!byAtv.has(atv)) byAtv.set(atv, []);
-      byAtv.get(atv)!.push(f);
-    }
-
-    for (const row of rows) {
-      const patientId = row.id as string;
-      for (const [atvId, fields] of byAtv) {
-        const pnId = newGuid();
-        await db
-          .request()
-          .input("id", sql.UniqueIdentifier, pnId)
-          .input("patientFk", sql.UniqueIdentifier, patientId)
-          .input("assessmentTypeVersionFk", sql.UniqueIdentifier, atvId)
-          .input("serverChangeDate", sql.DateTime, now).query(`
-            INSERT INTO dbo.PatientNote (id, patientFk, assessmentTypeVersionFk, serverChangeDate, modSyncState, isDeleted)
-            VALUES (@id, @patientFk, @assessmentTypeVersionFk, @serverChangeDate, 2, 0)
-          `);
-
-        for (const f of fields) {
-          if (!f.attributeTypeId) continue;
-          const value = generateFieldValue(f, faker);
-          if (value === null || value === undefined) continue;
-          await db
-            .request()
-            .input("id", sql.UniqueIdentifier, newGuid())
-            .input("attributeTypeFk", sql.UniqueIdentifier, f.attributeTypeId)
-            .input("value", sql.NVarChar, String(value))
-            .input("patientNoteFk", sql.UniqueIdentifier, pnId)
-            .input("serverChangeDate", sql.DateTime, now).query(`
-              INSERT INTO dbo.PatientAttribute (id, attributeTypeFk, value, patientNoteFk, serverChangeDate, modSyncState, isDeleted)
-              VALUES (@id, @attributeTypeFk, @value, @patientNoteFk, @serverChangeDate, 2, 0)
-            `);
-        }
-      }
-    }
-  }
-
-  // Verify
-  const verification = await verifyPatientGeneration(
+  const { transaction, startSequenceNumber } = await reserveNextPatientSequenceRange(
     db,
-    spec,
-    rows.map((r) => r.id),
+    spec.count,
   );
+  let committed = false;
 
-  return {
-    success: true,
-    insertedCount,
-    insertedIds: rows.map((r) => r.id),
-    verification,
-  };
+  try {
+    await transaction.request().query(`
+      EXEC sp_set_session_context @key = 'all_access', @value = 1;
+    `);
+
+    const unitResult = await transaction.request().query(
+      "SELECT id, name FROM dbo.Unit WHERE isDeleted = 0",
+    );
+
+    if (unitResult.recordset.length === 0) {
+      throw new DependencyMissingError(
+        "Unit",
+        "No units found in dbo.Unit. Please create at least one unit before generating patients.",
+      );
+    }
+
+    const rows = buildPatientInsertRows(
+      spec,
+      unitResult.recordset,
+      startSequenceNumber,
+      spec.count,
+      now,
+      options,
+    );
+
+    const insertedCount = await batchInsert(
+      transaction,
+      "dbo.Patient",
+      rows.map((row) => row.patientRow),
+    );
+    await insertPatientAttributes(transaction, rows, now);
+    await transaction.commit();
+    committed = true;
+
+    const insertedIds = rows.map((row) => String(row.patientRow.id));
+    const verification = await verifyPatientGeneration(
+      db,
+      spec,
+      insertedIds,
+      rows.map((row) => String(row.patientRow.domainId)),
+      startSequenceNumber,
+    );
+
+    return {
+      success: true,
+      insertedCount,
+      insertedIds,
+      verification,
+    };
+  } catch (error) {
+    if (!committed) {
+      await transaction.rollback().catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 interface BeforeState {
@@ -209,7 +338,7 @@ async function fetchBeforeState(
   db: ConnectionPool,
   patientId: string,
   directCols: string[],
-  byAtv: Map<string, { attributeTypeId: string }[]>,
+  byAtv: Map<string, { attributeTypeId?: string }[]>,
 ): Promise<BeforeState> {
   const direct: Record<string, unknown> = {};
   const uniqueDirectCols = [...new Set(directCols)];
@@ -281,7 +410,7 @@ function buildRollbackSql(
   directFields: { columnName: string }[],
   byAtv: Map<
     string,
-    { attributeTypeId: string; assessmentTypeVersionId?: string }[]
+    { attributeTypeId?: string; assessmentTypeVersionId?: string }[]
   >,
   unitField: { enabled: boolean } | undefined,
   unitAssignments: string[],
@@ -416,11 +545,17 @@ export async function updatePatients(
   const directFields = spec.fields.filter(
     (f) =>
       f.enabled &&
+      !f.systemManaged &&
       f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName),
+      !SKIP_DIRECT_COLUMNS.has(f.columnName) &&
+      f.columnName !== "domainId",
   );
   const eavFields = spec.fields.filter(
-    (f) => f.enabled && f.storageType === "patient_attribute",
+    (f) =>
+      f.enabled &&
+      !f.systemManaged &&
+      f.storageType === "patient_attribute" &&
+      f.columnName !== "domainId",
   );
 
   const byAtv = new Map<string, typeof eavFields>();
@@ -630,11 +765,17 @@ export async function buildUpdatePatientSqlStatements(
   const directFields = spec.fields.filter(
     (f) =>
       f.enabled &&
+      !f.systemManaged &&
       f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName),
+      !SKIP_DIRECT_COLUMNS.has(f.columnName) &&
+      f.columnName !== "domainId",
   );
   const eavFields = spec.fields.filter(
-    (f) => f.enabled && f.storageType === "patient_attribute",
+    (f) =>
+      f.enabled &&
+      !f.systemManaged &&
+      f.storageType === "patient_attribute" &&
+      f.columnName !== "domainId",
   );
 
   const byAtv = new Map<string, typeof eavFields>();
@@ -739,6 +880,71 @@ WHEN NOT MATCHED THEN
 }
 
 /**
+ * Build sample preview rows for new-patient insert.
+ */
+export async function buildInsertPatientPreviewData(
+  spec: GenerationSpec,
+  db: ConnectionPool,
+  sampleSize: number = 5,
+  options: PatientInsertGenerationOptions = {},
+): Promise<PatientInsertPreviewData> {
+  if (spec.entity !== "patient" || spec.mode === "update") {
+    return {
+      sampleRows: [],
+      previewSql: [],
+      summary: {
+        totalRows: 0,
+        distributions: {},
+        ranges: {},
+      },
+    };
+  }
+
+  const unitResult = await db.request().query(
+    "SELECT id, name FROM dbo.Unit WHERE isDeleted = 0",
+  );
+  const units = unitResult.recordset ?? [];
+  if (units.length === 0) {
+    return {
+      sampleRows: [],
+      previewSql: [],
+      summary: {
+        totalRows: 0,
+        distributions: {},
+        ranges: {},
+      },
+    };
+  }
+
+  const startSequenceNumber = await peekNextPatientSequenceStart(db);
+  const rows = buildPatientInsertRows(
+    spec,
+    units,
+    startSequenceNumber,
+    Math.min(sampleSize, spec.count),
+    new Date(),
+    options,
+  );
+
+  return {
+    sampleRows: rows.map((row) => row.displayRow),
+    previewSql: rows.map(({ patientRow }) => {
+      const columns = Object.keys(patientRow);
+      const columnList = columns.map((column) => `[${column}]`).join(", ");
+      const valuesList = columns
+        .map((column) => toSqlLiteral(patientRow[column]))
+        .join(", ");
+      return `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`;
+    }),
+    summary: {
+      totalRows: spec.count,
+      distributions: {},
+      ranges: {},
+    },
+  };
+}
+
+/**
  * Build sample INSERT SQL statements for new-patient preview (no execution).
  * Returns one statement per sample row with literal values.
  */
@@ -746,85 +952,35 @@ export async function buildInsertPatientSqlStatements(
   spec: GenerationSpec,
   db: ConnectionPool,
   sampleSize: number = 5,
+  options: PatientInsertGenerationOptions = {},
 ): Promise<string[]> {
   if (spec.entity !== "patient" || spec.mode === "update") {
     return [];
   }
 
-  const unitResult = await db
-    .request()
-    .query("SELECT id, name FROM dbo.Unit WHERE isDeleted = 0");
+  const unitResult = await db.request().query(
+    "SELECT id, name FROM dbo.Unit WHERE isDeleted = 0",
+  );
   const units = unitResult.recordset ?? [];
   if (units.length === 0) return [];
 
-  const directFields = spec.fields.filter(
-    (f) =>
-      f.enabled &&
-      f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName),
+  const size = Math.min(sampleSize, spec.count);
+  const startSequenceNumber = await peekNextPatientSequenceStart(db);
+  const rows = buildPatientInsertRows(
+    spec,
+    units,
+    startSequenceNumber,
+    size,
+    new Date(),
+    options,
   );
 
-  const unitField = spec.fields.find((f) => f.columnName === "unitFk");
-  const size = Math.min(sampleSize, spec.count);
-  let unitAssignments: string[] = [];
-
-  if (unitField?.criteria.type === "distribution") {
-    const unitWeights: Record<string, number> = {};
-    for (const [unitName, weight] of Object.entries(
-      unitField.criteria.weights,
-    )) {
-      const u = units.find((x: { name: string }) => x.name === unitName);
-      if (u) unitWeights[(u as { id: string }).id] = weight;
-    }
-    if (Object.keys(unitWeights).length > 0) {
-      unitAssignments = distributeAcrossBuckets(size, unitWeights);
-    } else {
-      const unitIds = units.map((u: { id: string }) => u.id);
-      for (let i = 0; i < size; i++) {
-        unitAssignments.push(unitIds[i % unitIds.length]);
-      }
-    }
-  } else {
-    const unitIds = units.map((u: { id: string }) => u.id);
-    for (let i = 0; i < size; i++) {
-      unitAssignments.push(unitIds[i % unitIds.length]);
-    }
-  }
-
-  const now = new Date();
-  const statements: string[] = [];
-
-  for (let i = 0; i < size; i++) {
-    const row: Record<string, unknown> = {
-      id: newGuid(),
-      accessCode: "IG" + randomAlphaNum(4),
-      unitFk: unitAssignments[i],
-      isDeleted: 0,
-      assignedToUnitDate: now,
-      serverChangeDate: now,
-    };
-
-    for (const fieldSpec of directFields) {
-      if (SKIP_DIRECT_COLUMNS.has(fieldSpec.columnName)) continue;
-      try {
-        const value = generateFieldValue(fieldSpec, faker);
-        if (value !== null && value !== undefined) {
-          row[fieldSpec.columnName] = value;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    const columns = Object.keys(row);
+  return rows.map(({ patientRow }) => {
+    const columns = Object.keys(patientRow);
     const columnList = columns.map((c) => `[${c}]`).join(", ");
-    const valuesList = columns.map((c) => toSqlLiteral(row[c])).join(", ");
-    statements.push(
-      `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`,
-    );
-  }
-
-  return statements;
+    const valuesList = columns.map((c) => toSqlLiteral(patientRow[c])).join(", ");
+    return `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`;
+  });
 }
 
 async function verifyPatientUpdate(
@@ -856,6 +1012,8 @@ async function verifyPatientGeneration(
   db: ConnectionPool,
   spec: GenerationSpec,
   insertedIds: string[],
+  insertedDomainIds: string[],
+  startSequenceNumber: number,
 ): Promise<VerificationResult[]> {
   const results: VerificationResult[] = [];
 
@@ -886,6 +1044,36 @@ async function verifyPatientGeneration(
     check: "Access code tagged (IG prefix)",
     result: igCount,
     status: igCount === spec.count ? "PASS" : "FAIL",
+  });
+
+  const domainIdResult = await db.request().query(`
+    SELECT domainId
+    FROM dbo.Patient
+    WHERE id IN ('${insertedIds.join("','")}')
+      AND domainId IS NOT NULL
+  `);
+  const actualDomainIds = (domainIdResult.recordset ?? []).map((row) => String(row.domainId));
+  const expectedDomainIds = insertedDomainIds;
+  const actualUnique = new Set(actualDomainIds);
+  const expectedUnique = new Set(expectedDomainIds);
+  const contiguous = expectedDomainIds.every((expected) => actualUnique.has(expected));
+  const validPattern = actualDomainIds.every((domainId) => /^IG-\d+$/.test(domainId));
+  results.push({
+    check: "Patient ID populated (domainId)",
+    result: actualDomainIds.length,
+    status: actualDomainIds.length === spec.count ? "PASS" : "FAIL",
+  });
+  results.push({
+    check: "Patient IDs unique and sequential",
+    result: `${startSequenceNumber} → ${startSequenceNumber + spec.count - 1}`,
+    status:
+      actualUnique.size === spec.count &&
+      expectedUnique.size === spec.count &&
+      contiguous &&
+      validPattern &&
+      actualDomainIds.length === spec.count
+        ? "PASS"
+        : "FAIL",
   });
 
   // Check FK constraints

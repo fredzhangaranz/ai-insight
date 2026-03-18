@@ -14,6 +14,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getConnectionStringForCustomer } from "@/lib/services/customer-service";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
+import { getPatientSchema } from "@/lib/services/data-gen/schema-discovery.service";
 import { validateOrThrow } from "@/lib/services/data-gen/spec-validator.service";
 import {
   generatePatients,
@@ -31,6 +32,10 @@ import type {
   GenerationResult,
 } from "@/lib/services/data-gen/generation-spec.types";
 import { DependencyMissingError, ValidationError } from "@/lib/services/data-gen/generation-spec.types";
+import {
+  getPatientPresetById,
+  resolvePatientSpecWithPreset,
+} from "@/lib/services/data-gen/patient-preset.service";
 
 interface ExecutionStepResult {
   step: string;
@@ -99,6 +104,20 @@ export async function POST(request: NextRequest) {
 
     const connectionString = await getConnectionStringForCustomer(customerId);
     const pool = await getSqlServerPool(connectionString);
+    let effectiveSpec = spec;
+    let patientInsertOptions: Parameters<typeof generatePatients>[2] | undefined;
+
+    if (spec.entity === "patient" && spec.mode !== "update") {
+      const patientSchema = await getPatientSchema(pool);
+      const preset = getPatientPresetById(spec.presetId);
+      const resolved = resolvePatientSpecWithPreset(spec, patientSchema, preset);
+      effectiveSpec = resolved.spec;
+      patientInsertOptions = {
+        explicitFieldKeys: resolved.explicitFieldKeys,
+        patientIdFieldName: resolved.patientIdFieldName,
+        preset: resolved.preset,
+      };
+    }
 
     // Step 1: Validate spec
     addStep(
@@ -106,26 +125,26 @@ export async function POST(request: NextRequest) {
       "in_progress",
       "Validating generation specification..."
     );
-    await validateOrThrow(spec, pool);
+    await validateOrThrow(effectiveSpec, pool);
     addStep("validate_spec", "complete", "Specification validated");
 
     // Step 2: Execute generation
     addStep(
       "generate_data",
       "in_progress",
-      `Generating ${spec.entity}...`
+      `Generating ${effectiveSpec.entity}...`
     );
     let result: GenerationResult;
 
-    if (spec.entity === "patient") {
+    if (effectiveSpec.entity === "patient") {
       result =
-        spec.mode === "update"
-          ? await updatePatients(spec, pool)
-          : await generatePatients(spec, pool);
-    } else if (spec.entity === "assessment_bundle") {
-      result = await generateWoundsAndAssessments(spec, pool);
+        effectiveSpec.mode === "update"
+          ? await updatePatients(effectiveSpec, pool)
+          : await generatePatients(effectiveSpec, pool, patientInsertOptions);
+    } else if (effectiveSpec.entity === "assessment_bundle") {
+      result = await generateWoundsAndAssessments(effectiveSpec, pool);
     } else {
-      throw new Error(`Unknown entity type: ${spec.entity}`);
+      throw new Error(`Unknown entity type: ${effectiveSpec.entity}`);
     }
 
     addStep(
@@ -135,7 +154,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Step 3: Validate inserted data
-    if (spec.entity === "assessment_bundle") {
+    if (effectiveSpec.entity === "assessment_bundle") {
       addStep(
         "validate_data",
         "in_progress",

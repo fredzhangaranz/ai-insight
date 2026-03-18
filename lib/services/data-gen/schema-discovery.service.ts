@@ -94,6 +94,7 @@ async function getPatientAttributeFields(
       attributeTypeId: row.attributeTypeId,
       assessmentTypeVersionId: row.assessmentTypeVersionId,
       patientNoteName: row.patientNoteName ?? undefined,
+      systemManaged: patientColumn === "domainId",
       fieldClass,
       calculatedValueExpression: row.calculatedValueExpression ?? null,
     };
@@ -263,6 +264,7 @@ export async function getFormFields(
       isNullable: !field.isRequired,
       storageType: "wound_attribute",
       attributeTypeId: field.attributeTypeId,
+      systemManaged: false,
       fieldClass,
       calculatedValueExpression: field.calculatedValueExpression ?? null,
     };

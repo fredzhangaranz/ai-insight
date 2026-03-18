@@ -91,6 +91,13 @@ async function validatePatientSpec(
   for (const field of spec.fields) {
     if (!field.enabled) continue;
 
+    if (field.systemManaged || field.columnName === "domainId") {
+      errors.push(
+        `Field ${field.fieldName}: ${field.columnName} is system-managed and cannot be set directly`
+      );
+      continue;
+    }
+
     const criteria = field.criteria;
 
     if (criteria.type === "distribution") {

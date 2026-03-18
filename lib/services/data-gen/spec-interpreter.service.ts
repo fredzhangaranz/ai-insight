@@ -71,6 +71,7 @@ function buildSystemPrompt(
       dataType: f.dataType,
       storageType: f.storageType,
       fieldClass: f.fieldClass ?? "pure-data",
+      systemManaged: f.systemManaged ?? false,
       options: f.options,
       coverage: f.coverage?.coveragePct,
     })),
@@ -111,7 +112,7 @@ ${fieldsJson}
 ${formFieldsJson}
 
 Rules:
-1. NEVER include fields with fieldClass "source-of-truth" - they cannot be set.
+1. NEVER include fields with fieldClass "source-of-truth" or systemManaged=true - they cannot be set.
 2. For fields with fieldClass "algorithm-output", you may include them but they will show a warning.
 3. For dropdown/select fields, ONLY use values from the options array. If user says something similar, pick the closest valid option.
 4. Output ONLY valid JSON matching the schema. No markdown, no explanation.
@@ -141,12 +142,13 @@ export async function interpretToSpec(
   formSchemas?: Record<string, FieldSchema[]>,
   resolvedColumns?: string[]
 ): Promise<InterpretResult> {
+  const candidatePatientSchema = patientSchema.filter((field) => !field.systemManaged);
   const filteredPatientSchema =
     resolvedColumns && resolvedColumns.length > 0
-      ? patientSchema.filter((f) => resolvedColumns.includes(f.columnName))
+      ? candidatePatientSchema.filter((f) => resolvedColumns.includes(f.columnName))
       : input.entity === "assessment_bundle"
-        ? patientSchema
-        : patientSchema;
+        ? candidatePatientSchema
+        : candidatePatientSchema;
   const provider = await getAIProvider(input.modelId);
   const systemPrompt = buildSystemPrompt(
     input,
@@ -220,6 +222,7 @@ export async function interpretToSpec(
       storageType: src.storageType,
       attributeTypeId: src.attributeTypeId,
       assessmentTypeVersionId: src.assessmentTypeVersionId,
+      systemManaged: src.systemManaged,
     };
   });
 

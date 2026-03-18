@@ -8,6 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FieldReferencePanel } from "./field-reference-panel";
 import { FieldResolutionDialogue } from "./field-resolution-dialogue";
 import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types";
@@ -28,6 +35,12 @@ interface DescribeStepProps {
   selectedForm?: SelectedForm;
   onInterpreted: (spec: GenerationSpec, warnings: { fieldName: string; type: string; message: string; suggestion?: string }[]) => void;
   onBack: () => void;
+}
+
+interface PatientPresetSummary {
+  id: string;
+  name: string;
+  description: string;
 }
 
 const MIN_PATIENT_COUNT = 1;
@@ -56,6 +69,8 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<FieldResolution | null>(null);
+  const [patientPresets, setPatientPresets] = useState<PatientPresetSummary[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("none");
   const isInsertPatient = selection.entity === "patient" && selection.mode === "insert";
   const [insertCountRaw, setInsertCountRaw] = useState(() =>
     String(selection.count ?? DEFAULT_PATIENT_COUNT)
@@ -94,6 +109,25 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
     maxAge: ageMax,
     ...(ageMode === "normal" && { mean: ageMean, sd: ageSd }),
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/data-gen/patient-presets")
+      .then(async (res) => {
+        if (!res.ok) return [];
+        return (await res.json()) as PatientPresetSummary[];
+      })
+      .then((presets) => {
+        if (!cancelled) setPatientPresets(presets);
+      })
+      .catch((error) => {
+        console.error("Failed to load patient presets:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!customerId) return;
@@ -192,7 +226,16 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
         throw new Error(err.message ?? "Interpretation failed");
       }
 
-      const { spec, warnings } = await res.json();
+      const interpreted = (await res.json()) as {
+        spec: GenerationSpec;
+        warnings: {
+          fieldName: string;
+          type: string;
+          message: string;
+          suggestion?: string;
+        }[];
+      };
+      const { spec, warnings } = interpreted;
       
       let mergedSpec = spec;
       
@@ -206,8 +249,6 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
         );
         
         // Build a map of AI-specified field column names for quick lookup
-        const aiFieldColumns = new Set(spec.fields.map((f) => f.columnName));
-        
         // Start with default fields, then overlay AI fields (AI choices override defaults)
         const mergedFields = defaultSpec.fields.map((defaultField) => {
           const aiField = spec.fields.find((f) => f.columnName === defaultField.columnName);
@@ -223,7 +264,13 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
         
         mergedSpec = {
           ...spec,
+          presetId: selectedPresetId !== "none" ? selectedPresetId : undefined,
           fields: mergedFields,
+        };
+      } else {
+        mergedSpec = {
+          ...spec,
+          presetId: selectedPresetId !== "none" ? selectedPresetId : undefined,
         };
       }
       
@@ -260,7 +307,13 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
         "insert",
         ageConfig
       );
-      onInterpreted(spec, []);
+      onInterpreted(
+        {
+          ...spec,
+          presetId: selectedPresetId !== "none" ? selectedPresetId : undefined,
+        },
+        [],
+      );
       return;
     }
 
@@ -430,6 +483,28 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
               {ageConfigInvalid && (
                 <p className="text-sm text-destructive">
                   Min must be less than max. For Normal mode, mean must be within range.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="patient-preset">Default patient preset</Label>
+              <Select value={selectedPresetId} onValueChange={setSelectedPresetId}>
+                <SelectTrigger id="patient-preset" className="max-w-sm">
+                  <SelectValue placeholder="Choose a preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No preset</SelectItem>
+                  {patientPresets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedPresetId !== "none" && (
+                <p className="text-sm text-muted-foreground">
+                  {patientPresets.find((preset) => preset.id === selectedPresetId)?.description}
                 </p>
               )}
             </div>

@@ -37,7 +37,9 @@ export async function POST(request: NextRequest) {
 
     const connectionString = await getConnectionStringForCustomer(customerId);
     const pool = await getSqlServerPool(connectionString);
-    const patientSchema = await getPatientSchema(pool);
+    const patientSchema = (await getPatientSchema(pool)).filter(
+      (field) => !field.systemManaged,
+    );
 
     const resolution = await resolveFieldsFromText(
       description ?? "",

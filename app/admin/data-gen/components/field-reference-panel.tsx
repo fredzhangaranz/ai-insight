@@ -103,6 +103,11 @@ export function FieldReferencePanel({
             {opts.storageBadge}
           </Badge>
         )}
+        {f.systemManaged && (
+          <Badge variant="outline" className="text-xs font-normal">
+            auto
+          </Badge>
+        )}
         <Badge variant={variant} className="text-xs">
           {label}
         </Badge>

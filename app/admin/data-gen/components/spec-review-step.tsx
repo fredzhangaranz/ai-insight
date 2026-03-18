@@ -73,20 +73,45 @@ export function SpecReviewStep({
               : spec.entity === "patient"
               ? `Creating ${spec.count} new Patients`
               : `Generating assessments for ${spec.count} target(s)`}
+            {spec.entity === "patient" && spec.mode !== "update" && (
+              <>
+                <br />
+                Patient ID is generated automatically from `dbo.Patient.domainId` using the next available `IG-xxxxx` value.
+              </>
+            )}
+            {spec.presetId && (
+              <>
+                <br />
+                Selected preset: {spec.presetId}
+              </>
+            )}
           </AlertDescription>
         </Alert>
 
         <div className="space-y-3">
+          {spec.entity === "patient" && spec.mode !== "update" && (
+            <div className="border rounded-lg p-4 border-blue-500/40 bg-blue-50/40">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">auto-generated</Badge>
+                <span className="font-medium">Patient ID</span>
+                <Badge variant="secondary">system</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Generated as the next available <code>IG-xxxxx</code> value from <code>dbo.Patient.domainId</code>.
+              </p>
+            </div>
+          )}
           {visibleFields.map((field) => {
             const w = warningByField.get(field.fieldName);
             const isInvalid = w?.type === "invalid_dropdown";
             const isAlgo = w?.type === "algorithm_output";
+            const isSystemManaged = Boolean(field.systemManaged);
 
             return (
               <div
                 key={field.fieldName}
                 className={`border rounded-lg p-4 ${
-                  isInvalid ? "border-destructive bg-destructive/5" : isAlgo ? "border-amber-500/50 bg-amber-50/50" : ""
+                  isInvalid ? "border-destructive bg-destructive/5" : isAlgo ? "border-amber-500/50 bg-amber-50/50" : isSystemManaged ? "border-blue-500/40 bg-blue-50/40" : ""
                 }`}
               >
                 <div className="flex justify-between items-start">
@@ -94,6 +119,7 @@ export function SpecReviewStep({
                     <div className="flex items-center gap-2">
                       {isInvalid && <Badge variant="destructive">Invalid</Badge>}
                       {isAlgo && <Badge variant="outline">⚠ algorithm-output</Badge>}
+                      {isSystemManaged && <Badge variant="outline">auto-generated</Badge>}
                       <span className="font-medium">{field.fieldName}</span>
                       <Badge variant="secondary">{field.criteria.type}</Badge>
                     </div>
@@ -114,13 +140,15 @@ export function SpecReviewStep({
                       </Button>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemove(field.fieldName)}
-                  >
-                    Remove
-                  </Button>
+                  {!isSystemManaged && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemove(field.fieldName)}
+                    >
+                      Remove
+                    </Button>
+                  )}
                 </div>
               </div>
             );

@@ -1,240 +1,160 @@
-/**
- * Unit tests for patient.generator.ts
- */
-
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionPool } from "mssql";
 import { generatePatients } from "../patient.generator";
-import { DependencyMissingError } from "../../generation-spec.types";
 import type { GenerationSpec } from "../../generation-spec.types";
+import { DependencyMissingError } from "../../generation-spec.types";
 
-// Mock faker
-vi.mock("@faker-js/faker/locale/en_NZ", () => ({
-  faker: {
-    person: {
-      firstName: () => "John",
-      lastName: () => "Doe",
-    },
-    date: {
-      birthdate: () => new Date("1960-01-01"),
-    },
-    location: {
-      streetAddress: () => "123 Main St",
-      city: () => "Auckland",
-    },
-  },
+const { reserveNextPatientSequenceRange } = vi.hoisted(() => ({
+  reserveNextPatientSequenceRange: vi.fn(),
 }));
 
+vi.mock("../../patient-id.service", async () => {
+  const actual = await vi.importActual<typeof import("../../patient-id.service")>(
+    "../../patient-id.service",
+  );
+  return {
+    ...actual,
+    reserveNextPatientSequenceRange,
+  };
+});
+
 describe("Patient Generator", () => {
-  let mockDb: any;
-  let mockRequest: any;
+  let mockDb: ConnectionPool;
+  let mockRequest: {
+    input: ReturnType<typeof vi.fn>;
+    query: ReturnType<typeof vi.fn>;
+    bulk: ReturnType<typeof vi.fn>;
+  };
+  let mockTransaction: {
+    request: ReturnType<typeof vi.fn>;
+    commit: ReturnType<typeof vi.fn>;
+    rollback: ReturnType<typeof vi.fn>;
+  };
+  let expectedCount: number;
+  let currentUnits: Array<{ id: string; name: string }>;
+  let startSequenceNumber: number;
+
+  const baseSpec: GenerationSpec = {
+    entity: "patient",
+    count: 3,
+    fields: [
+      {
+        fieldName: "First Name",
+        columnName: "firstName",
+        dataType: "nvarchar",
+        enabled: true,
+        criteria: { type: "fixed", value: "John" },
+        storageType: "direct_patient",
+      },
+      {
+        fieldName: "Gender",
+        columnName: "gender",
+        dataType: "nvarchar",
+        enabled: true,
+        criteria: {
+          type: "distribution",
+          weights: { Male: 0.5, Female: 0.5 },
+        },
+        storageType: "direct_patient",
+      },
+    ],
+  };
 
   beforeEach(() => {
+    expectedCount = baseSpec.count;
+    currentUnits = [
+      { id: "unit-1", name: "Ward A" },
+      { id: "unit-2", name: "Ward B" },
+    ];
+    startSequenceNumber = 126;
+
     mockRequest = {
       input: vi.fn().mockReturnThis(),
-      query: vi.fn(),
+      query: vi.fn().mockImplementation((query: string) => {
+        if (query.includes("SELECT id, name FROM dbo.Unit")) {
+          return Promise.resolve({ recordset: currentUnits });
+        }
+        if (query.includes("SELECT COUNT(*) as count") && query.includes("FROM dbo.Patient")) {
+          return Promise.resolve({ recordset: [{ count: expectedCount }] });
+        }
+        if (query.includes("AND accessCode LIKE 'IG%'")) {
+          return Promise.resolve({ recordset: [{ count: expectedCount }] });
+        }
+        if (query.includes("SELECT domainId")) {
+          return Promise.resolve({
+            recordset: Array.from({ length: expectedCount }, (_, idx) => ({
+              domainId: `IG-${String(startSequenceNumber + idx).padStart(5, "0")}`,
+            })),
+          });
+        }
+        if (query.includes("INNER JOIN dbo.Unit u")) {
+          return Promise.resolve({ recordset: [{ count: expectedCount }] });
+        }
+        return Promise.resolve({ recordset: [], rowsAffected: [expectedCount] });
+      }),
       bulk: vi.fn().mockResolvedValue({ rowsAffected: [0] }),
+    };
+
+    mockTransaction = {
+      request: vi.fn().mockReturnValue(mockRequest),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
     };
 
     mockDb = {
       request: vi.fn().mockReturnValue(mockRequest),
-    } as any as ConnectionPool;
+    } as unknown as ConnectionPool;
+
+    reserveNextPatientSequenceRange.mockResolvedValue({
+      transaction: mockTransaction,
+      startSequenceNumber,
+    });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  describe("generatePatients", () => {
-    const baseSpec: GenerationSpec = {
-      entity: "patient",
-      count: 20,
-      fields: [
-        {
-          fieldName: "First Name",
-          columnName: "firstName",
-          dataType: "nvarchar",
-          enabled: true,
-          criteria: { type: "faker", fakerMethod: "person.firstName" },
-        },
-        {
-          fieldName: "Gender",
-          columnName: "gender",
-          dataType: "nvarchar",
-          enabled: true,
-          criteria: {
-            type: "distribution",
-            weights: { Male: 0.5, Female: 0.5 },
-          },
-        },
-      ],
-    };
+  it("generates patients with sequential domain IDs and short access codes", async () => {
+    const result = await generatePatients(baseSpec, mockDb);
 
-    it("should generate correct number of patients", async () => {
-      mockRequest.query
-        .mockResolvedValueOnce({
-          recordset: [
-            { id: "unit-1", name: "Ward A" },
-            { id: "unit-2", name: "Ward B" },
-          ],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 20 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [
-            { gender: "Male", count: 10 },
-            { gender: "Female", count: 10 },
-          ],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 20 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 20 }],
-        });
+    expect(result.success).toBe(true);
+    expect(result.insertedCount).toBe(3);
+    expect(result.insertedIds).toHaveLength(3);
+    expect(mockTransaction.commit).toHaveBeenCalled();
 
-      const result = await generatePatients(baseSpec, mockDb);
+    const boundValues = mockRequest.input.mock.calls.map((call) => call[1]);
+    expect(boundValues).toContain("IG-00126");
+    expect(boundValues).toContain("IG-00127");
+    expect(boundValues).toContain("IG-00128");
+    expect(boundValues).toContain("IG003I");
 
-      expect(result.success).toBe(true);
-      expect(result.insertedCount).toBe(20);
-      expect(result.insertedIds).toHaveLength(20);
-      
-      // Verify batch insert was called
-      expect(mockRequest.query).toHaveBeenCalled();
+    const domainIdCheck = result.verification.find((check) =>
+      check.check.includes("Patient IDs unique and sequential"),
+    );
+    expect(domainIdCheck?.status).toBe("PASS");
+  });
+
+  it("throws when no units exist", async () => {
+    currentUnits = [];
+
+    await expect(generatePatients(baseSpec, mockDb)).rejects.toThrow(
+      DependencyMissingError,
+    );
+    expect(mockTransaction.rollback).toHaveBeenCalled();
+  });
+
+  it("uses the reserved sequence start for later runs", async () => {
+    startSequenceNumber = 1005;
+    reserveNextPatientSequenceRange.mockResolvedValue({
+      transaction: mockTransaction,
+      startSequenceNumber,
     });
 
-    it("should tag all patients with IG accessCode prefix", async () => {
-      mockRequest.query
-        .mockResolvedValueOnce({
-          recordset: [{ id: "unit-1", name: "Ward A" }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 5 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ gender: "Male", count: 5 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 5 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 5 }],
-        });
+    await generatePatients({ ...baseSpec, count: 2 }, mockDb);
 
-      const spec = { ...baseSpec, count: 5 };
-      const result = await generatePatients(spec, mockDb);
-
-      // Check verification includes IG tag check
-      const igCheck = result.verification.find((v) =>
-        v.check.includes("Access code tagged")
-      );
-      expect(igCheck).toBeDefined();
-      expect(igCheck?.status).toBe("PASS");
-    });
-
-    it("should throw DependencyMissingError when no units exist", async () => {
-      mockRequest.query.mockResolvedValueOnce({
-        recordset: [],
-      });
-
-      await expect(generatePatients(baseSpec, mockDb)).rejects.toThrow(
-        DependencyMissingError
-      );
-    });
-
-    it("should verify FK constraints are valid", async () => {
-      mockRequest.query
-        .mockResolvedValueOnce({
-          recordset: [
-            { id: "unit-1", name: "Ward A" },
-            { id: "unit-2", name: "Ward B" },
-          ],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 10 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 10 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 10 }],
-        });
-
-      const spec = { ...baseSpec, count: 10 };
-      const result = await generatePatients(spec, mockDb);
-
-      const fkCheck = result.verification.find((v) => v.check.includes("FK constraint"));
-      expect(fkCheck).toBeDefined();
-      // FK check might be WARN or FAIL in tests due to mock limitations
-      expect(["PASS", "WARN", "FAIL"]).toContain(fkCheck?.status);
-    });
-
-    it("should handle date range criteria", async () => {
-      mockRequest.query
-        .mockResolvedValueOnce({
-          recordset: [{ id: "unit-1", name: "Ward A" }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 5 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 5 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 5 }],
-        });
-
-      const spec: GenerationSpec = {
-        entity: "patient",
-        count: 5,
-        fields: [
-          {
-            fieldName: "Date of Birth",
-            columnName: "dateOfBirth",
-            dataType: "datetime",
-            enabled: true,
-            criteria: {
-              type: "range",
-              min: "1950-01-01",
-              max: "1990-12-31",
-            },
-          },
-        ],
-      };
-
-      const result = await generatePatients(spec, mockDb);
-
-      expect(result.success).toBe(true);
-      expect(result.insertedCount).toBe(5);
-    });
-
-    it("should set isDeleted to 0 for all patients", async () => {
-      mockRequest.query
-        .mockResolvedValueOnce({
-          recordset: [{ id: "unit-1", name: "Ward A" }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 3 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 3 }],
-        })
-        .mockResolvedValueOnce({
-          recordset: [{ count: 3 }],
-        });
-
-      const spec = { ...baseSpec, count: 3 };
-      await generatePatients(spec, mockDb);
-
-      // Check that query calls were made
-      expect(mockRequest.query).toHaveBeenCalled();
-    });
+    const boundValues = mockRequest.input.mock.calls.map((call) => call[1]);
+    expect(boundValues).toContain("IG-01005");
+    expect(boundValues).toContain("IG-01006");
   });
 });
