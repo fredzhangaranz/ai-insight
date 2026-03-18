@@ -5,6 +5,7 @@ import { SessionProvider, useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { AIModelProvider } from "@/lib/context/AIModelContext";
 import { CustomerProvider } from "@/lib/context/CustomerContext";
+import { QueryHistorySidebarProvider } from "@/lib/context/QueryHistorySidebarContext";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SideNav } from "@/app/components/shell/SideNav";
 import { MustChangePasswordBanner } from "@/app/components/profile/MustChangePasswordBanner";
@@ -20,18 +21,29 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   // Show sidebar when authenticated and not on login page
   const shouldShowSidebar = status === "authenticated" && pathname !== "/login";
+  const isInsightsNew = pathname === "/insights/new";
 
   if (shouldShowSidebar) {
     return (
-      <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-        <main className="w-full px-6 py-8 overflow-x-hidden">
-          <SidebarProvider>
-            <SideNav />
+      <div
+        className={`${
+          isInsightsNew ? "h-[100svh] overflow-hidden" : "min-h-screen"
+        } bg-slate-50 overflow-x-hidden`}
+      >
+        <main
+          className={`w-full px-6 py-8 overflow-x-hidden ${
+            isInsightsNew ? "h-full overflow-hidden" : ""
+          }`}
+        >
+          <QueryHistorySidebarProvider>
+            <SidebarProvider>
+              <SideNav />
             <SidebarInset className="overflow-x-hidden">
               <MustChangePasswordBanner />
               {children}
             </SidebarInset>
           </SidebarProvider>
+          </QueryHistorySidebarProvider>
         </main>
       </div>
     );

@@ -4,6 +4,8 @@
 **Design principle:** Conversational, space-efficient, progressive disclosure, AI-first (Anthropic-style)  
 **Status:** Design proposal only — no code changes
 
+> **Chat thread redesign:** See [CHAT_THREAD_REDESIGN.md](./CHAT_THREAD_REDESIGN.md) for the approved state model (single thread, message-level types, inline clarification, feature flag).
+
 ---
 
 ## 1. Current Pain Points (Summary)

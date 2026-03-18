@@ -14,6 +14,16 @@ export function ResultsTable({
   const displayRows = rows.slice(0, maxRows);
   const hasMore = rows.length > maxRows;
 
+  if (columns.length === 0) {
+    return (
+      <div className="overflow-x-auto">
+        <div className="text-sm text-slate-500 py-4">
+          No results returned.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -43,6 +53,11 @@ export function ResultsTable({
           ))}
         </tbody>
       </table>
+      {rows.length === 0 && (
+        <div className="text-sm text-slate-500 mt-4 text-center py-2 bg-gray-50 rounded">
+          0 rows returned.
+        </div>
+      )}
       {hasMore && (
         <div className="text-sm text-gray-500 mt-4 text-center py-2 bg-gray-50 rounded">
           Showing first {maxRows} of {rows.length} rows

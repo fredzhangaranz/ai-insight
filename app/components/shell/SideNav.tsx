@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -33,6 +34,7 @@ import { UserIcon } from "@/components/heroicons";
 import { DocumentDuplicateIcon } from "@/components/heroicons";
 import { ArrowRightOnRectangleIcon } from "@/components/heroicons";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { QueryHistorySidebar } from "@/app/insights/new/components/QueryHistorySidebar";
 
 const items = [
   {
@@ -130,11 +132,12 @@ export function SideNav() {
       </SidebarHeader>
       <SidebarContent
         onClick={handleSidebarClick}
+        className="overflow-hidden"
         style={{
           cursor: state === "collapsed" ? "e-resize" : "default",
         }}
       >
-        <SidebarGroup>
+        <SidebarGroup className="shrink-0">
           {/* Group label hidden to reduce visual noise */}
           <SidebarGroupLabel className="sr-only">Main</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -159,6 +162,14 @@ export function SideNav() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {pathname === "/insights/new" && (
+          <>
+            <SidebarSeparator />
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              <QueryHistorySidebar />
+            </div>
+          </>
+        )}
       </SidebarContent>
       <SidebarFooter>
         <SidebarGroup>

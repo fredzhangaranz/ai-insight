@@ -327,9 +327,9 @@
         }
         .loading-label { font-size: 13px; color: var(--text-2); margin-left: 4px; }
 
-        /* empty state */
+        /* empty state (inside thread, not a separate view) */
         .empty-state {
-            flex: 1;
+            min-height: 60vh;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -427,7 +427,7 @@
             margin-top: 6px;
         }
 
-        /* ── STATE SWITCHER ── */
+        /* ── STATE SWITCHER (thread content, not page swap) ── */
         .state-switcher {
             position: fixed;
             top: 12px;
@@ -455,15 +455,69 @@
         }
         .sw-btn:hover { background: #f3f4f6; }
         .sw-btn.on { background: var(--accent); color: #fff; }
+
+        /* inline clarification (assistant_clarification) */
+        .clarification-card {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-top: 12px;
+        }
+        .clarification-title { font-size: 13px; font-weight: 600; color: #92400e; margin-bottom: 10px; }
+        .clarification-options { display: flex; flex-wrap: wrap; gap: 8px; }
+        .clarification-opt {
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid #fcd34d;
+            background: #fff;
+            font-size: 13px;
+            color: #78350f;
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+        }
+        .clarification-opt:hover { background: #fef3c7; border-color: #f59e0b; }
+
+        /* How I got this — collapsed disclosure (always available) */
+        .how-i-panel {
+            padding: 16px 24px;
+            background: #f8fafc;
+            border-top: 1px solid var(--border);
+            font-size: 13px;
+            line-height: 1.75;
+            color: #374151;
+        }
+        .how-i-panel .title { font-weight: 600; margin-bottom: 8px; color: var(--text-1); }
+        .how-i-panel .sql-block {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            color: #1e40af;
+            overflow-x: auto;
+            margin-bottom: 10px;
+        }
+        .how-i-panel .meta { font-size: 12px; color: var(--text-2); }
+
+        /* contextual suggestions under latest answer */
+        .contextual-suggestions {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--border);
+        }
+        .contextual-suggestions .label { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
     </style>
 </head>
 <body>
 
-<!-- State Switcher -->
+<!-- State Switcher: message-level states in one thread (no page swap) -->
 <div class="state-switcher">
-    <button class="sw-btn on" onclick="show('empty',this)">① Empty</button>
-    <button class="sw-btn" onclick="show('chat',this)">② Conversation</button>
-    <button class="sw-btn" onclick="show('loading',this)">③ Loading</button>
+    <button class="sw-btn on" onclick="showThread('empty',this)">Empty</button>
+    <button class="sw-btn" onclick="showThread('messages',this)">Messages</button>
+    <button class="sw-btn" onclick="showThread('loading',this)">Loading</button>
+    <button class="sw-btn" onclick="showThread('clarification',this)">Clarification</button>
 </div>
 
 <div class="shell">
@@ -495,207 +549,32 @@
                 <span class="cur">Ask Question</span>
             </div>
             <div class="top-controls">
+                <button class="act-btn" style="height:34px;">+ New Question</button>
                 <div class="select-pill">👤 Local_Silhouette_423 <span class="caret">▾</span></div>
                 <div class="select-pill">🤖 Google Gemini <span class="caret">▾</span></div>
             </div>
         </div>
 
-        <!-- ─── STATE: EMPTY ─── -->
-        <div id="s-empty" class="state-view" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
-            <div class="empty-state">
-                <div class="empty-icon">💬</div>
-                <div class="empty-title">Ask anything about your patients</div>
-                <div class="empty-sub">Get charts, counts, trends, and comparisons—just type in natural language below.</div>
-            </div>
-            <div class="input-dock">
-                <div class="input-dock-inner">
-                    <div class="pill-row">
-                        <div class="pill" onclick="fillInput(this,'empty')">📊 Show healing rates by wound type</div>
-                        <div class="pill" onclick="fillInput(this,'empty')">📈 Compare this month vs last month</div>
-                        <div class="pill" onclick="fillInput(this,'empty')">🔍 Find patients with slow healing</div>
-                        <div class="pill" onclick="fillInput(this,'empty')">📅 How many assessments in November 2025?</div>
-                    </div>
-                    <div class="input-row">
-                        <textarea id="ta-empty" class="input-textarea" rows="2" placeholder="Ask a question about your wound care data…"></textarea>
-                        <button class="send-btn">Send →</button>
-                    </div>
-                    <div class="input-hint">Ctrl+Enter to send</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── STATE: CONVERSATION ─── -->
-        <div id="s-chat" class="state-view" style="flex:1; overflow:hidden; display:none; flex-direction:column;">
+        <!-- ─── SINGLE THREAD + SINGLE COMPOSER (message-level states) ─── -->
+        <div class="state-view" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
             <div class="thread">
-                <div class="thread-inner">
-
-                    <!-- Q1: user -->
-                    <div class="msg user">
-                        <div class="user-bubble">Show me healing rates by wound type for the last 3 months</div>
-                    </div>
-
-                    <!-- A1: ai -->
-                    <div class="msg ai">
-                        <div class="ai-card">
-                            <div class="ai-card-body">
-                                <div class="result-meta">
-                                    <span class="badge blue">2,847 assessments</span>
-                                    <span class="badge green">9 wound types</span>
-                                </div>
-                                <div class="chart-wrap">
-                                    <div class="chart-label">Healing Rate by Wound Type — Aug–Oct 2025</div>
-                                    <div class="bars">
-                                        <div class="bar-col">
-                                            <div class="bar-fill" style="height:85%"><div class="bar-val">85%</div></div>
-                                            <div class="bar-lbl">Pressure<br>Injury</div>
-                                        </div>
-                                        <div class="bar-col">
-                                            <div class="bar-fill" style="height:72%"><div class="bar-val">72%</div></div>
-                                            <div class="bar-lbl">Venous<br>Ulcer</div>
-                                        </div>
-                                        <div class="bar-col">
-                                            <div class="bar-fill" style="height:91%"><div class="bar-val">91%</div></div>
-                                            <div class="bar-lbl">Surgical<br>Wound</div>
-                                        </div>
-                                        <div class="bar-col">
-                                            <div class="bar-fill low" style="height:58%"><div class="bar-val">58%</div></div>
-                                            <div class="bar-lbl">Diabetic<br>Ulcer</div>
-                                        </div>
-                                        <div class="bar-col">
-                                            <div class="bar-fill med" style="height:66%"><div class="bar-val">66%</div></div>
-                                            <div class="bar-lbl">Arterial<br>Ulcer</div>
-                                        </div>
-                                        <div class="bar-col">
-                                            <div class="bar-fill" style="height:79%"><div class="bar-val">79%</div></div>
-                                            <div class="bar-lbl">Traumatic<br>Wound</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="ai-card-actions">
-                                <button class="act-btn" onclick="toggleHowI(this)">💡 How I got this</button>
-                                <button class="act-btn">💾 Save</button>
-                                <button class="act-btn">📤 Export CSV</button>
-                                <button class="act-btn">✏️ Edit chart</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Q2: user -->
-                    <div class="msg user">
-                        <div class="user-bubble">Why is the diabetic ulcer rate so much lower?</div>
-                    </div>
-
-                    <!-- A2: ai (table result) -->
-                    <div class="msg ai">
-                        <div class="ai-card">
-                            <div class="ai-card-body">
-                                <div class="result-meta">
-                                    <span class="badge blue">342 patients</span>
-                                </div>
-                                <p style="font-size:14px;line-height:1.65;color:var(--text-1);margin-bottom:14px;">
-                                    Diabetic ulcer patients show an average healing rate of <strong>58%</strong> vs. <strong>79%</strong> for other chronic wounds. Key contributing factors from the data:
-                                </p>
-                                <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;font-size:13.5px;line-height:1.8;border:1px solid #f1f5f9;">
-                                    <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:8px;font-weight:600;font-size:12px;color:var(--text-2);">
-                                        <span>Factor</span><span>Avg. impact on healing rate</span>
-                                    </div>
-                                    <div style="display:flex;justify-content:space-between;"><span>High HbA1c (≥8.5)</span><span style="color:#ef4444;font-weight:600;">−18%</span></div>
-                                    <div style="display:flex;justify-content:space-between;"><span>Peripheral neuropathy</span><span style="color:#ef4444;font-weight:600;">−12%</span></div>
-                                    <div style="display:flex;justify-content:space-between;"><span>Infection at baseline</span><span style="color:#ef4444;font-weight:600;">−9%</span></div>
-                                    <div style="display:flex;justify-content:space-between;"><span>PAD comorbidity</span><span style="color:#f59e0b;font-weight:600;">−6%</span></div>
-                                </div>
-                            </div>
-                            <div class="ai-card-actions">
-                                <button class="act-btn" onclick="toggleHowI(this)">💡 How I got this</button>
-                                <button class="act-btn">💾 Save</button>
-                                <button class="act-btn">📤 Export CSV</button>
-                            </div>
-                        </div>
-                    </div>
-
+                <div class="thread-inner" id="thread-content">
+                    <!-- Content injected by showThread() -->
                 </div>
             </div>
             <div class="input-dock">
                 <div class="input-dock-inner">
-                    <div class="pill-row gone"><!-- pills gone after first message --></div>
+                    <div class="pill-row" id="pill-row">
+                        <div class="pill" onclick="fillInput(this)">📊 Show healing rates by wound type</div>
+                        <div class="pill" onclick="fillInput(this)">📈 Compare this month vs last month</div>
+                        <div class="pill" onclick="fillInput(this)">🔍 Find patients with slow healing</div>
+                        <div class="pill" onclick="fillInput(this)">📅 How many assessments in November 2025?</div>
+                    </div>
                     <div class="input-row">
-                        <textarea id="ta-chat" class="input-textarea" rows="2" placeholder="Ask a follow-up question…"></textarea>
-                        <button class="send-btn">Send →</button>
+                        <textarea id="ta-main" class="input-textarea" rows="2" placeholder="Ask a question about your wound care data…"></textarea>
+                        <button class="send-btn" id="send-btn">Send →</button>
                     </div>
-                    <div class="input-hint">Ctrl+Enter to send</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── STATE: LOADING ─── -->
-        <div id="s-loading" class="state-view" style="flex:1; overflow:hidden; display:none; flex-direction:column;">
-            <div class="thread">
-                <div class="thread-inner">
-
-                    <div class="msg user">
-                        <div class="user-bubble">Show me healing rates by wound type for the last 3 months</div>
-                    </div>
-
-                    <div class="msg ai">
-                        <div class="ai-card">
-                            <div class="ai-card-body">
-                                <div class="result-meta">
-                                    <span class="badge blue">2,847 assessments</span>
-                                    <span class="badge green">9 wound types</span>
-                                </div>
-                                <div class="chart-wrap">
-                                    <div class="chart-label">Healing Rate by Wound Type — Aug–Oct 2025</div>
-                                    <div class="bars">
-                                        <div class="bar-col"><div class="bar-fill" style="height:85%"><div class="bar-val">85%</div></div><div class="bar-lbl">Pressure<br>Injury</div></div>
-                                        <div class="bar-col"><div class="bar-fill" style="height:72%"><div class="bar-val">72%</div></div><div class="bar-lbl">Venous<br>Ulcer</div></div>
-                                        <div class="bar-col"><div class="bar-fill" style="height:91%"><div class="bar-val">91%</div></div><div class="bar-lbl">Surgical<br>Wound</div></div>
-                                        <div class="bar-col"><div class="bar-fill low" style="height:58%"><div class="bar-val">58%</div></div><div class="bar-lbl">Diabetic<br>Ulcer</div></div>
-                                        <div class="bar-col"><div class="bar-fill med" style="height:66%"><div class="bar-val">66%</div></div><div class="bar-lbl">Arterial<br>Ulcer</div></div>
-                                        <div class="bar-col"><div class="bar-fill" style="height:79%"><div class="bar-val">79%</div></div><div class="bar-lbl">Traumatic<br>Wound</div></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="ai-card-actions">
-                                <button class="act-btn">💡 How I got this</button>
-                                <button class="act-btn">💾 Save</button>
-                                <button class="act-btn">📤 Export CSV</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Q2 user -->
-                    <div class="msg user">
-                        <div class="user-bubble">Why is the diabetic ulcer rate so much lower?</div>
-                    </div>
-
-                    <!-- AI Loading response -->
-                    <div class="msg ai">
-                        <div class="ai-card">
-                            <!-- thinking stream (expanded only while loading) -->
-                            <div class="thinking-bar">
-                                <div class="thinking-step"><div class="dot"></div>Filtering assessments: wound_type = 'diabetic_ulcer'…</div>
-                                <div class="thinking-step"><div class="dot"></div>Comparing healing trajectories with other wound types…</div>
-                                <div class="thinking-step"><div class="dot"></div>Analyzing comorbidity patterns (HbA1c, neuropathy, PAD)…</div>
-                                <div class="thinking-step" style="opacity:.5"><div class="dot"></div>Computing time-to-heal distributions…</div>
-                            </div>
-                            <div class="loading-pulse">
-                                <span></span><span></span><span></span>
-                                <span class="loading-label">Analyzing diabetic ulcer data…</span>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-            <div class="input-dock">
-                <div class="input-dock-inner">
-                    <div class="pill-row gone"></div>
-                    <div class="input-row">
-                        <textarea class="input-textarea" rows="2" placeholder="Ask a follow-up question…" disabled></textarea>
-                        <button class="send-btn" disabled>Send →</button>
-                    </div>
-                    <div class="input-hint">Waiting for response…</div>
+                    <div class="input-hint" id="input-hint">Ctrl+Enter to send</div>
                 </div>
             </div>
         </div>
@@ -704,47 +583,196 @@
 </div><!-- /.shell -->
 
 <script>
-function show(name, btn) {
-    document.querySelectorAll('.state-view').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.sw-btn').forEach(b => b.classList.remove('on'));
-    const el = document.getElementById('s-' + name);
-    el.style.display = 'flex';
-    el.style.flexDirection = 'column';
-    btn.classList.add('on');
+const THREADS = {
+  empty: `
+    <div class="empty-state">
+      <div class="empty-icon">💬</div>
+      <div class="empty-title">Ask anything about your patients</div>
+      <div class="empty-sub">Get charts, counts, trends, and comparisons—just type in natural language below.</div>
+    </div>
+  `,
+  messages: `
+    <div class="msg user"><div class="user-bubble">Show me healing rates by wound type for the last 3 months</div></div>
+    <div class="msg ai">
+      <div class="ai-card">
+        <div class="ai-card-body">
+          <div class="result-meta"><span class="badge blue">2,847 assessments</span><span class="badge green">9 wound types</span></div>
+          <div class="chart-wrap">
+            <div class="chart-label">Healing Rate by Wound Type — Aug–Oct 2025</div>
+            <div class="bars">
+              <div class="bar-col"><div class="bar-fill" style="height:85%"><div class="bar-val">85%</div></div><div class="bar-lbl">Pressure<br>Injury</div></div>
+              <div class="bar-col"><div class="bar-fill" style="height:72%"><div class="bar-val">72%</div></div><div class="bar-lbl">Venous<br>Ulcer</div></div>
+              <div class="bar-col"><div class="bar-fill" style="height:91%"><div class="bar-val">91%</div></div><div class="bar-lbl">Surgical<br>Wound</div></div>
+              <div class="bar-col"><div class="bar-fill low" style="height:58%"><div class="bar-val">58%</div></div><div class="bar-lbl">Diabetic<br>Ulcer</div></div>
+              <div class="bar-col"><div class="bar-fill med" style="height:66%"><div class="bar-val">66%</div></div><div class="bar-lbl">Arterial<br>Ulcer</div></div>
+              <div class="bar-col"><div class="bar-fill" style="height:79%"><div class="bar-val">79%</div></div><div class="bar-lbl">Traumatic<br>Wound</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ai-card-actions">
+          <button class="act-btn" onclick="toggleHowI(this)">💡 How I got this</button>
+          <button class="act-btn">💾 Save</button>
+          <button class="act-btn">📤 Export CSV</button>
+          <button class="act-btn">✏️ Edit chart</button>
+        </div>
+      </div>
+    </div>
+    <div class="msg user"><div class="user-bubble">Why is the diabetic ulcer rate so much lower?</div></div>
+    <div class="msg ai">
+      <div class="ai-card">
+        <div class="ai-card-body">
+          <div class="result-meta"><span class="badge blue">342 patients</span></div>
+          <p style="font-size:14px;line-height:1.65;color:var(--text-1);margin-bottom:14px;">
+            Diabetic ulcer patients show an average healing rate of <strong>58%</strong> vs. <strong>79%</strong> for other chronic wounds. Key contributing factors from the data:
+          </p>
+          <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;font-size:13.5px;line-height:1.8;border:1px solid #f1f5f9;">
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:8px;font-weight:600;font-size:12px;color:var(--text-2);"><span>Factor</span><span>Avg. impact on healing rate</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>High HbA1c (≥8.5)</span><span style="color:#ef4444;font-weight:600;">−18%</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Peripheral neuropathy</span><span style="color:#ef4444;font-weight:600;">−12%</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>Infection at baseline</span><span style="color:#ef4444;font-weight:600;">−9%</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>PAD comorbidity</span><span style="color:#f59e0b;font-weight:600;">−6%</span></div>
+          </div>
+          <div class="contextual-suggestions">
+            <div class="label">Follow-up suggestions</div>
+            <div class="pill-row" style="margin:0;">
+              <div class="pill" onclick="fillInput(this)">Break down by age group</div>
+              <div class="pill" onclick="fillInput(this)">Compare with venous ulcer</div>
+              <div class="pill" onclick="fillInput(this)">Show top 5 risk factors</div>
+            </div>
+          </div>
+        </div>
+        <div class="ai-card-actions">
+          <button class="act-btn" onclick="toggleHowI(this)">💡 How I got this</button>
+          <button class="act-btn">💾 Save</button>
+          <button class="act-btn">📤 Export CSV</button>
+        </div>
+      </div>
+    </div>
+  `,
+  loading: `
+    <div class="msg user"><div class="user-bubble">Show me healing rates by wound type for the last 3 months</div></div>
+    <div class="msg ai">
+      <div class="ai-card">
+        <div class="ai-card-body">
+          <div class="result-meta"><span class="badge blue">2,847 assessments</span><span class="badge green">9 wound types</span></div>
+          <div class="chart-wrap">
+            <div class="chart-label">Healing Rate by Wound Type — Aug–Oct 2025</div>
+            <div class="bars">
+              <div class="bar-col"><div class="bar-fill" style="height:85%"><div class="bar-val">85%</div></div><div class="bar-lbl">Pressure<br>Injury</div></div>
+              <div class="bar-col"><div class="bar-fill" style="height:72%"><div class="bar-val">72%</div></div><div class="bar-lbl">Venous<br>Ulcer</div></div>
+              <div class="bar-col"><div class="bar-fill" style="height:91%"><div class="bar-val">91%</div></div><div class="bar-lbl">Surgical<br>Wound</div></div>
+              <div class="bar-col"><div class="bar-fill low" style="height:58%"><div class="bar-val">58%</div></div><div class="bar-lbl">Diabetic<br>Ulcer</div></div>
+              <div class="bar-col"><div class="bar-fill med" style="height:66%"><div class="bar-val">66%</div></div><div class="bar-lbl">Arterial<br>Ulcer</div></div>
+              <div class="bar-col"><div class="bar-fill" style="height:79%"><div class="bar-val">79%</div></div><div class="bar-lbl">Traumatic<br>Wound</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="ai-card-actions"><button class="act-btn">💡 How I got this</button><button class="act-btn">💾 Save</button><button class="act-btn">📤 Export CSV</button></div>
+      </div>
+    </div>
+    <div class="msg user"><div class="user-bubble">Why is the diabetic ulcer rate so much lower?</div></div>
+    <div class="msg ai">
+      <div class="ai-card">
+        <div class="thinking-bar">
+          <div class="thinking-step"><div class="dot"></div>Filtering assessments: wound_type = 'diabetic_ulcer'…</div>
+          <div class="thinking-step"><div class="dot"></div>Comparing healing trajectories with other wound types…</div>
+          <div class="thinking-step"><div class="dot"></div>Analyzing comorbidity patterns (HbA1c, neuropathy, PAD)…</div>
+          <div class="thinking-step" style="opacity:.5"><div class="dot"></div>Computing time-to-heal distributions…</div>
+        </div>
+        <div class="loading-pulse"><span></span><span></span><span></span><span class="loading-label">Analyzing diabetic ulcer data…</span></div>
+      </div>
+    </div>
+  `,
+  clarification: `
+    <div class="msg user"><div class="user-bubble">Show me healing rates for these patients</div></div>
+    <div class="msg ai">
+      <div class="ai-card">
+        <div class="ai-card-body">
+          <p style="font-size:14px;line-height:1.6;color:var(--text-1);margin-bottom:12px;">I need some clarification before I can answer that question.</p>
+          <div class="clarification-card">
+            <div class="clarification-title">Which patients do you mean?</div>
+            <div class="clarification-options">
+              <div class="clarification-opt">Patients from the previous chart</div>
+              <div class="clarification-opt">All diabetic ulcer patients</div>
+              <div class="clarification-opt">Patients I selected in the table</div>
+              <div class="clarification-opt">Let me specify a different group</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+};
+
+function showThread(name, btn) {
+  document.querySelectorAll('.sw-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const content = document.getElementById('thread-content');
+  content.innerHTML = THREADS[name] || THREADS.empty;
+
+  const pillRow = document.getElementById('pill-row');
+  const ta = document.getElementById('ta-main');
+  const sendBtn = document.getElementById('send-btn');
+  const hint = document.getElementById('input-hint');
+
+  if (name === 'empty') {
+    pillRow.classList.remove('gone');
+    ta.disabled = false;
+    sendBtn.disabled = false;
+    ta.placeholder = 'Ask a question about your wound care data…';
+    hint.textContent = 'Ctrl+Enter to send';
+  } else if (name === 'loading') {
+    pillRow.classList.add('gone');
+    ta.disabled = true;
+    sendBtn.disabled = true;
+    ta.placeholder = 'Waiting for response… (draft preserved)';
+    hint.textContent = 'Waiting for response…';
+  } else if (name === 'clarification') {
+    pillRow.classList.add('gone');
+    ta.disabled = false;
+    sendBtn.disabled = false;
+    ta.placeholder = 'Or type your own clarification…';
+    hint.textContent = 'Answer the clarification above, or type your own';
+  } else {
+    pillRow.classList.add('gone');
+    ta.disabled = false;
+    sendBtn.disabled = false;
+    ta.placeholder = 'Ask a follow-up question…';
+    hint.textContent = 'Ctrl+Enter to send';
+  }
 }
 
-function fillInput(pill, state) {
-    const text = pill.textContent.replace(/^[^\s]+\s/, '').trim();
-    const ta = document.getElementById('ta-' + state);
-    if (ta) { ta.value = text; ta.focus(); }
+function fillInput(pill) {
+  const text = pill.textContent.replace(/^[^\s]+\s/, '').trim();
+  const ta = document.getElementById('ta-main');
+  if (ta) { ta.value = text; ta.focus(); }
 }
 
 function toggleHowI(btn) {
-    const card = btn.closest('.ai-card');
-    let panel = card.querySelector('.how-i-panel');
-    if (panel) {
-        panel.remove();
-        btn.textContent = '💡 How I got this';
-        return;
-    }
-    panel = document.createElement('div');
-    panel.className = 'how-i-panel';
-    panel.style.cssText = 'padding:16px 24px;background:#f8fafc;border-top:1px solid var(--border);font-size:13px;line-height:1.75;color:#374151;';
-    panel.innerHTML = `
-        <div style="font-weight:600;margin-bottom:8px;color:var(--text-1);">How this was answered</div>
-        <div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;color:#1e40af;overflow-x:auto;">
-            SELECT wound_type, COUNT(*) AS total,<br>
-            &nbsp;&nbsp;SUM(CASE WHEN healing_status='healed' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS healing_rate<br>
-            FROM rpt.Assessment<br>
-            WHERE dimDateFk BETWEEN @start AND @end<br>
-            GROUP BY wound_type
-        </div>
-        <div style="margin-top:10px;font-size:12px;color:var(--text-2);">✔ 2,847 rows processed &nbsp;·&nbsp; ✔ SQL validated &nbsp;·&nbsp; 1.3s</div>
-    `;
-    const body = card.querySelector('.ai-card-body');
-    card.insertBefore(panel, btn.closest('.ai-card-actions'));
-    btn.textContent = '💡 Hide';
+  const card = btn.closest('.ai-card');
+  let panel = card.querySelector('.how-i-panel');
+  if (panel) {
+    panel.remove();
+    btn.textContent = '💡 How I got this';
+    return;
+  }
+  panel = document.createElement('div');
+  panel.className = 'how-i-panel';
+  panel.innerHTML = `
+    <div class="title">How this was answered</div>
+    <div class="sql-block">SELECT wound_type, COUNT(*) AS total,<br>
+      SUM(CASE WHEN healing_status='healed' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS healing_rate<br>
+      FROM rpt.Assessment<br>
+      WHERE dimDateFk BETWEEN @start AND @end<br>
+      GROUP BY wound_type</div>
+    <div class="meta">✔ 2,847 rows processed · ✔ SQL validated · 1.3s</div>
+  `;
+  const actions = card.querySelector('.ai-card-actions');
+  card.insertBefore(panel, actions);
+  btn.textContent = '💡 Hide';
 }
+
+showThread('empty', document.querySelector('.sw-btn.on'));
 </script>
 </body>
 </html>

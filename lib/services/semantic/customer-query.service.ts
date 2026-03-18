@@ -135,7 +135,27 @@ export async function executeCustomerQuery(
     
     // Transform result to standard format
     const rows = result.recordset || [];
-    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    // If we have rows, infer columns from the first row.
+    // If we have zero rows, fall back to metadata so the UI can still render headers.
+    let columns: string[] = [];
+    if (rows.length > 0) {
+      columns = Object.keys(rows[0]);
+    } else {
+      const anyResult = result as unknown as {
+        columns?: Record<string, unknown>;
+        recordset?: Array<any> & { columns?: Record<string, unknown> };
+      };
+
+      const metaColumns = anyResult.columns
+        ? Object.keys(anyResult.columns)
+        : [];
+      const recordsetColumns =
+        anyResult.recordset?.columns
+          ? Object.keys(anyResult.recordset.columns)
+          : [];
+
+      columns = metaColumns.length > 0 ? metaColumns : recordsetColumns;
+    }
     
     console.log(`[CustomerQuery] ✅ Query completed in ${executionTime}ms, returned ${rows.length} rows`);
 

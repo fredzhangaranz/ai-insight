@@ -1,9 +1,14 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationMessage } from "@/lib/types/conversation";
 
 type ConversationMessageState = ConversationMessage & {
   isLoading?: boolean;
 };
+
+export interface UseConversationOptions {
+  /** External threadId (e.g. from first-question thread create). When provided, syncs into hook state. */
+  externalThreadId?: string | null;
+}
 
 interface UseConversationReturn {
   threadId: string | null;
@@ -32,7 +37,11 @@ interface SendMessageOptions {
   clarificationResponses?: Record<string, string>;
 }
 
-export function useConversation(): UseConversationReturn {
+export function useConversation(
+  options?: UseConversationOptions
+): UseConversationReturn {
+  const externalThreadId = options?.externalThreadId;
+
   // Initialize threadId from localStorage to survive component remounts
   const [threadId, setThreadId] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
@@ -52,6 +61,15 @@ export function useConversation(): UseConversationReturn {
   const [customerId, setCustomerId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (externalThreadId && !threadId) {
+      setThreadId(externalThreadId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("conversation_threadId", externalThreadId);
+      }
+    }
+  }, [externalThreadId, threadId]);
 
   const sendMessageInternal = useCallback(
     async (
