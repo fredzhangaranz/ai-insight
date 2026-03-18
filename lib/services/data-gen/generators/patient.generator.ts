@@ -44,7 +44,7 @@ const SKIP_DIRECT_COLUMNS = new Set([
  */
 export async function generatePatients(
   spec: GenerationSpec,
-  db: ConnectionPool
+  db: ConnectionPool,
 ): Promise<GenerationResult> {
   // Set session context for data generation operations
   // This allows the generation to bypass audit/trigger constraints
@@ -60,7 +60,7 @@ export async function generatePatients(
   if (unitResult.recordset.length === 0) {
     throw new DependencyMissingError(
       "Unit",
-      "No units found in dbo.Unit. Please create at least one unit before generating patients."
+      "No units found in dbo.Unit. Please create at least one unit before generating patients.",
     );
   }
 
@@ -70,10 +70,11 @@ export async function generatePatients(
     (f) =>
       f.enabled &&
       f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName)
+      !SKIP_DIRECT_COLUMNS.has(f.columnName) &&
+      f.columnName !== "domainId", // Exclude domainId - it will be set to sequential pattern
   );
   const eavFields = spec.fields.filter(
-    (f) => f.enabled && f.storageType === "patient_attribute"
+    (f) => f.enabled && f.storageType === "patient_attribute" && f.columnName !== "domainId", // Also exclude from EAV
   );
 
   const rows: Record<string, unknown>[] = [];
@@ -85,7 +86,7 @@ export async function generatePatients(
   if (unitField?.criteria.type === "distribution") {
     const unitWeights: Record<string, number> = {};
     for (const [unitName, weight] of Object.entries(
-      unitField.criteria.weights
+      unitField.criteria.weights,
     )) {
       const unit = units.find((u) => u.name === unitName);
       if (unit) unitWeights[unit.id] = weight;
@@ -106,9 +107,11 @@ export async function generatePatients(
   }
 
   for (let i = 0; i < spec.count; i++) {
+    const sequentialId = `IG-${String(i + 1).padStart(5, '0')}`;
     const row: Record<string, unknown> = {
       id: newGuid(),
-      accessCode: "IG" + randomAlphaNum(4),
+      accessCode: sequentialId,
+      domainId: sequentialId,
       unitFk: unitAssignments[i],
       isDeleted: 0,
       assignedToUnitDate: now,
@@ -126,8 +129,16 @@ export async function generatePatients(
         console.warn(`Failed to generate ${fieldSpec.columnName}:`, err);
       }
     }
+    console.log(`[Patient Generator] Patient ${i + 1} row domainId before push: ${row.domainId}`);
     rows.push(row);
   }
+
+  console.log(`[Patient Generator] About to insert ${rows.length} patients. First row sample:`, {
+    id: rows[0]?.id,
+    accessCode: rows[0]?.accessCode,
+    domainId: rows[0]?.domainId,
+    unitFk: rows[0]?.unitFk,
+  });
 
   let insertedCount = await batchInsert(db, "dbo.Patient", rows);
 
@@ -149,8 +160,7 @@ export async function generatePatients(
           .input("id", sql.UniqueIdentifier, pnId)
           .input("patientFk", sql.UniqueIdentifier, patientId)
           .input("assessmentTypeVersionFk", sql.UniqueIdentifier, atvId)
-          .input("serverChangeDate", sql.DateTime, now)
-          .query(`
+          .input("serverChangeDate", sql.DateTime, now).query(`
             INSERT INTO dbo.PatientNote (id, patientFk, assessmentTypeVersionFk, serverChangeDate, modSyncState, isDeleted)
             VALUES (@id, @patientFk, @assessmentTypeVersionFk, @serverChangeDate, 2, 0)
           `);
@@ -165,8 +175,7 @@ export async function generatePatients(
             .input("attributeTypeFk", sql.UniqueIdentifier, f.attributeTypeId)
             .input("value", sql.NVarChar, String(value))
             .input("patientNoteFk", sql.UniqueIdentifier, pnId)
-            .input("serverChangeDate", sql.DateTime, now)
-            .query(`
+            .input("serverChangeDate", sql.DateTime, now).query(`
               INSERT INTO dbo.PatientAttribute (id, attributeTypeFk, value, patientNoteFk, serverChangeDate, modSyncState, isDeleted)
               VALUES (@id, @attributeTypeFk, @value, @patientNoteFk, @serverChangeDate, 2, 0)
             `);
@@ -179,7 +188,7 @@ export async function generatePatients(
   const verification = await verifyPatientGeneration(
     db,
     spec,
-    rows.map((r) => r.id)
+    rows.map((r) => r.id),
   );
 
   return {
@@ -200,7 +209,7 @@ async function fetchBeforeState(
   db: ConnectionPool,
   patientId: string,
   directCols: string[],
-  byAtv: Map<string, { attributeTypeId: string }[]>
+  byAtv: Map<string, { attributeTypeId: string }[]>,
 ): Promise<BeforeState> {
   const direct: Record<string, unknown> = {};
   const uniqueDirectCols = [...new Set(directCols)];
@@ -209,7 +218,7 @@ async function fetchBeforeState(
       .request()
       .input("id", sql.UniqueIdentifier, patientId)
       .query(
-        `SELECT ${uniqueDirectCols.map((c) => `[${c}]`).join(", ")} FROM dbo.Patient WHERE id = @id AND isDeleted = 0`
+        `SELECT ${uniqueDirectCols.map((c) => `[${c}]`).join(", ")} FROM dbo.Patient WHERE id = @id AND isDeleted = 0`,
       );
     const row = r.recordset[0];
     if (row) {
@@ -219,22 +228,27 @@ async function fetchBeforeState(
     }
   }
 
-  const eav = new Map<string, Map<string, { value: string | null; existed: boolean }>>();
+  const eav = new Map<
+    string,
+    Map<string, { value: string | null; existed: boolean }>
+  >();
   const patientNoteExisted = new Set<string>();
 
   for (const [atvId, fields] of byAtv) {
     const pnResult = await db
       .request()
       .input("patientFk", sql.UniqueIdentifier, patientId)
-      .input("assessmentTypeVersionFk", sql.UniqueIdentifier, atvId)
-      .query(`
+      .input("assessmentTypeVersionFk", sql.UniqueIdentifier, atvId).query(`
         SELECT id FROM dbo.PatientNote
         WHERE patientFk = @patientFk AND assessmentTypeVersionFk = @assessmentTypeVersionFk AND isDeleted = 0
       `);
     const pnId = pnResult.recordset[0]?.id;
     if (pnId) patientNoteExisted.add(atvId);
 
-    const attrMap = new Map<string, { value: string | null; existed: boolean }>();
+    const attrMap = new Map<
+      string,
+      { value: string | null; existed: boolean }
+    >();
     for (const f of fields) {
       if (!f.attributeTypeId) continue;
       if (!pnId) {
@@ -265,10 +279,13 @@ function buildRollbackSql(
   patientIds: string[],
   beforeState: Record<string, BeforeState>,
   directFields: { columnName: string }[],
-  byAtv: Map<string, { attributeTypeId: string; assessmentTypeVersionId?: string }[]>,
+  byAtv: Map<
+    string,
+    { attributeTypeId: string; assessmentTypeVersionId?: string }[]
+  >,
   unitField: { enabled: boolean } | undefined,
   unitAssignments: string[],
-  now: Date
+  now: Date,
 ): string[] {
   const pid = (id: string) => `'${id.replace(/'/g, "''")}'`;
   const statements: string[] = [];
@@ -291,7 +308,7 @@ function buildRollbackSql(
     }
     if (setParts.length > 1) {
       blocks.push(
-        `UPDATE dbo.Patient SET ${setParts.join(", ")} WHERE id = ${pid(patientId)} AND isDeleted = 0`
+        `UPDATE dbo.Patient SET ${setParts.join(", ")} WHERE id = ${pid(patientId)} AND isDeleted = 0`,
       );
     }
 
@@ -305,7 +322,8 @@ function buildRollbackSql(
         if (!prev) continue;
 
         if (prev.existed) {
-          blocks.push(`
+          blocks.push(
+            `
 MERGE dbo.PatientAttribute AS tgt
 USING (
   SELECT id AS pnId FROM dbo.PatientNote
@@ -313,21 +331,26 @@ USING (
 ) AS src
 ON tgt.patientNoteFk = src.pnId AND tgt.attributeTypeFk = ${pid(f.attributeTypeId)} AND tgt.isDeleted = 0
 WHEN MATCHED THEN UPDATE SET value = ${toSqlLiteral(prev.value)}, serverChangeDate = ${toSqlLiteral(now)};
-`.trim());
+`.trim(),
+          );
         } else {
-          blocks.push(`
+          blocks.push(
+            `
 UPDATE dbo.PatientAttribute SET isDeleted = 1, serverChangeDate = ${toSqlLiteral(now)}
 WHERE patientNoteFk IN (SELECT id FROM dbo.PatientNote WHERE patientFk = ${pid(patientId)} AND assessmentTypeVersionFk = ${pid(atvId)} AND isDeleted = 0)
   AND attributeTypeFk = ${pid(f.attributeTypeId)} AND isDeleted = 0;
-`.trim());
+`.trim(),
+          );
         }
       }
 
       if (!before.patientNoteExisted.has(atvId)) {
-        blocks.push(`
+        blocks.push(
+          `
 UPDATE dbo.PatientNote SET isDeleted = 1
 WHERE patientFk = ${pid(patientId)} AND assessmentTypeVersionFk = ${pid(atvId)} AND isDeleted = 0;
-`.trim());
+`.trim(),
+        );
       }
     }
 
@@ -344,7 +367,7 @@ WHERE patientFk = ${pid(patientId)} AND assessmentTypeVersionFk = ${pid(atvId)} 
  */
 export async function updatePatients(
   spec: GenerationSpec,
-  db: ConnectionPool
+  db: ConnectionPool,
 ): Promise<GenerationResult> {
   // Set session context for data generation operations
   // This allows the generation to bypass audit/trigger constraints
@@ -352,7 +375,8 @@ export async function updatePatients(
     EXEC sp_set_session_context @key = 'all_access', @value = 1;
   `);
 
-  const patientIds = spec.target?.mode === "custom" ? spec.target.patientIds : [];
+  const patientIds =
+    spec.target?.mode === "custom" ? spec.target.patientIds : [];
   if (!patientIds?.length) {
     throw new Error("Update mode requires target.patientIds");
   }
@@ -366,7 +390,9 @@ export async function updatePatients(
   let unitAssignments: string[] = [];
   if (unitField?.enabled && unitField.criteria.type === "distribution") {
     const unitWeights: Record<string, number> = {};
-    for (const [unitName, weight] of Object.entries(unitField.criteria.weights)) {
+    for (const [unitName, weight] of Object.entries(
+      unitField.criteria.weights,
+    )) {
       const u = unitList.find((x: { name: string }) => x.name === unitName);
       if (u) unitWeights[(u as { id: string }).id] = weight;
     }
@@ -391,16 +417,20 @@ export async function updatePatients(
     (f) =>
       f.enabled &&
       f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName)
+      !SKIP_DIRECT_COLUMNS.has(f.columnName),
   );
   const eavFields = spec.fields.filter(
-    (f) => f.enabled && f.storageType === "patient_attribute"
+    (f) => f.enabled && f.storageType === "patient_attribute",
   );
 
   const byAtv = new Map<string, typeof eavFields>();
   for (const f of eavFields) {
     const atv = f.assessmentTypeVersionId ?? "";
-    if (atv && !byAtv.has(atv)) byAtv.set(atv, eavFields.filter((x) => x.assessmentTypeVersionId === atv));
+    if (atv && !byAtv.has(atv))
+      byAtv.set(
+        atv,
+        eavFields.filter((x) => x.assessmentTypeVersionId === atv),
+      );
   }
 
   const directCols = directFields.map((f) => f.columnName);
@@ -408,7 +438,12 @@ export async function updatePatients(
 
   const beforeState: Record<string, BeforeState> = {};
   for (const patientId of patientIds) {
-    beforeState[patientId] = await fetchBeforeState(db, patientId, directCols, byAtv);
+    beforeState[patientId] = await fetchBeforeState(
+      db,
+      patientId,
+      directCols,
+      byAtv,
+    );
   }
 
   const now = new Date();
@@ -443,7 +478,10 @@ export async function updatePatients(
         req.input(paramName, value);
       }
 
-      if (unitField?.enabled && !directFields.some((f) => f.columnName === "unitFk")) {
+      if (
+        unitField?.enabled &&
+        !directFields.some((f) => f.columnName === "unitFk")
+      ) {
         setClauses.push("[unitFk] = @unitFk");
         req.input("unitFk", unitAssignments[i]);
       }
@@ -462,8 +500,7 @@ export async function updatePatients(
       const pnResult = await db
         .request()
         .input("patientFk", sql.UniqueIdentifier, patientId)
-        .input("assessmentTypeVersionFk", sql.UniqueIdentifier, atvId)
-        .query(`
+        .input("assessmentTypeVersionFk", sql.UniqueIdentifier, atvId).query(`
           SELECT id FROM dbo.PatientNote
           WHERE patientFk = @patientFk AND assessmentTypeVersionFk = @assessmentTypeVersionFk AND isDeleted = 0
         `);
@@ -476,8 +513,7 @@ export async function updatePatients(
           .input("id", sql.UniqueIdentifier, pnId)
           .input("patientFk", sql.UniqueIdentifier, patientId)
           .input("assessmentTypeVersionFk", sql.UniqueIdentifier, atvId)
-          .input("serverChangeDate", sql.DateTime, now)
-          .query(`
+          .input("serverChangeDate", sql.DateTime, now).query(`
             INSERT INTO dbo.PatientNote (id, patientFk, assessmentTypeVersionFk, serverChangeDate, modSyncState, isDeleted)
             VALUES (@id, @patientFk, @assessmentTypeVersionFk, @serverChangeDate, 2, 0)
           `);
@@ -503,8 +539,7 @@ export async function updatePatients(
             .request()
             .input("value", sql.NVarChar, String(value))
             .input("serverChangeDate", sql.DateTime, now)
-            .input("id", sql.UniqueIdentifier, existingId)
-            .query(`
+            .input("id", sql.UniqueIdentifier, existingId).query(`
               UPDATE dbo.PatientAttribute SET value = @value, serverChangeDate = @serverChangeDate WHERE id = @id
             `);
         } else {
@@ -514,8 +549,7 @@ export async function updatePatients(
             .input("attributeTypeFk", sql.UniqueIdentifier, f.attributeTypeId)
             .input("value", sql.NVarChar, String(value))
             .input("patientNoteFk", sql.UniqueIdentifier, pnId)
-            .input("serverChangeDate", sql.DateTime, now)
-            .query(`
+            .input("serverChangeDate", sql.DateTime, now).query(`
               INSERT INTO dbo.PatientAttribute (id, attributeTypeFk, value, patientNoteFk, serverChangeDate, modSyncState, isDeleted)
               VALUES (@id, @attributeTypeFk, @value, @patientNoteFk, @serverChangeDate, 2, 0)
             `);
@@ -536,7 +570,7 @@ export async function updatePatients(
           byAtv,
           unitField,
           unitAssignments,
-          now
+          now,
         )
       : undefined;
 
@@ -555,9 +589,10 @@ export async function updatePatients(
  */
 export async function buildUpdatePatientSqlStatements(
   spec: GenerationSpec,
-  db: ConnectionPool
+  db: ConnectionPool,
 ): Promise<string[]> {
-  const patientIds = spec.target?.mode === "custom" ? spec.target.patientIds : [];
+  const patientIds =
+    spec.target?.mode === "custom" ? spec.target.patientIds : [];
   if (!patientIds?.length) return [];
 
   const unitResult = await db
@@ -569,7 +604,9 @@ export async function buildUpdatePatientSqlStatements(
   let unitAssignments: string[] = [];
   if (unitField?.enabled && unitField.criteria.type === "distribution") {
     const unitWeights: Record<string, number> = {};
-    for (const [unitName, weight] of Object.entries(unitField.criteria.weights)) {
+    for (const [unitName, weight] of Object.entries(
+      unitField.criteria.weights,
+    )) {
       const u = unitList.find((x: { name: string }) => x.name === unitName);
       if (u) unitWeights[(u as { id: string }).id] = weight;
     }
@@ -594,17 +631,20 @@ export async function buildUpdatePatientSqlStatements(
     (f) =>
       f.enabled &&
       f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName)
+      !SKIP_DIRECT_COLUMNS.has(f.columnName),
   );
   const eavFields = spec.fields.filter(
-    (f) => f.enabled && f.storageType === "patient_attribute"
+    (f) => f.enabled && f.storageType === "patient_attribute",
   );
 
   const byAtv = new Map<string, typeof eavFields>();
   for (const f of eavFields) {
     const atv = f.assessmentTypeVersionId ?? "";
     if (atv && !byAtv.has(atv)) {
-      byAtv.set(atv, eavFields.filter((x) => x.assessmentTypeVersionId === atv));
+      byAtv.set(
+        atv,
+        eavFields.filter((x) => x.assessmentTypeVersionId === atv),
+      );
     }
   }
 
@@ -616,7 +656,10 @@ export async function buildUpdatePatientSqlStatements(
     const patientId = patientIds[i];
     const blocks: string[] = [];
 
-    if (directFields.length > 0 || spec.fields.some((f) => f.columnName === "unitFk" && f.enabled)) {
+    if (
+      directFields.length > 0 ||
+      spec.fields.some((f) => f.columnName === "unitFk" && f.enabled)
+    ) {
       const setParts: string[] = [`serverChangeDate = ${toSqlLiteral(now)}`];
       for (const fieldSpec of directFields) {
         const col = fieldSpec.columnName;
@@ -633,13 +676,15 @@ export async function buildUpdatePatientSqlStatements(
           setParts.push(`[${col}] = ${toSqlLiteral(value)}`);
         }
       }
-      const unitField = spec.fields.find((f) => f.columnName === "unitFk" && f.enabled);
+      const unitField = spec.fields.find(
+        (f) => f.columnName === "unitFk" && f.enabled,
+      );
       if (unitField && !directFields.some((f) => f.columnName === "unitFk")) {
         setParts.push(`[unitFk] = ${toSqlLiteral(unitAssignments[i])}`);
       }
       if (setParts.length > 1) {
         blocks.push(
-          `UPDATE dbo.Patient SET ${setParts.join(", ")} WHERE id = ${pid(patientId)} AND isDeleted = 0`
+          `UPDATE dbo.Patient SET ${setParts.join(", ")} WHERE id = ${pid(patientId)} AND isDeleted = 0`,
         );
       }
     }
@@ -650,22 +695,28 @@ export async function buildUpdatePatientSqlStatements(
         if (!f.attributeTypeId) continue;
         const value = generateFieldValue(f, faker);
         if (value === null || value === undefined) continue;
-        eavValues.push({ attrId: f.attributeTypeId, value: toSqlLiteral(value) });
+        eavValues.push({
+          attrId: f.attributeTypeId,
+          value: toSqlLiteral(value),
+        });
       }
       if (eavValues.length === 0) continue;
 
       blocks.push(`-- Patient attributes (AssessmentTypeVersion: ${atvId})`);
-      blocks.push(`
+      blocks.push(
+        `
 MERGE dbo.PatientNote AS tgt
 USING (SELECT 1 AS x) AS src
 ON tgt.patientFk = ${pid(patientId)} AND tgt.assessmentTypeVersionFk = ${pid(atvId)} AND tgt.isDeleted = 0
 WHEN NOT MATCHED THEN
   INSERT (id, patientFk, assessmentTypeVersionFk, serverChangeDate, modSyncState, isDeleted)
   VALUES (NEWID(), ${pid(patientId)}, ${pid(atvId)}, ${toSqlLiteral(now)}, 2, 0);
-`.trim());
+`.trim(),
+      );
 
       for (const { attrId, value } of eavValues) {
-        blocks.push(`
+        blocks.push(
+          `
 MERGE dbo.PatientAttribute AS tgt
 USING (
   SELECT id AS pnId FROM dbo.PatientNote
@@ -676,7 +727,8 @@ WHEN MATCHED THEN UPDATE SET value = ${value}, serverChangeDate = ${toSqlLiteral
 WHEN NOT MATCHED THEN
   INSERT (id, attributeTypeFk, value, patientNoteFk, serverChangeDate, modSyncState, isDeleted)
   VALUES (NEWID(), ${pid(attrId)}, ${value}, src.pnId, ${toSqlLiteral(now)}, 2, 0);
-`.trim());
+`.trim(),
+        );
       }
     }
 
@@ -693,7 +745,7 @@ WHEN NOT MATCHED THEN
 export async function buildInsertPatientSqlStatements(
   spec: GenerationSpec,
   db: ConnectionPool,
-  sampleSize: number = 5
+  sampleSize: number = 5,
 ): Promise<string[]> {
   if (spec.entity !== "patient" || spec.mode === "update") {
     return [];
@@ -709,7 +761,7 @@ export async function buildInsertPatientSqlStatements(
     (f) =>
       f.enabled &&
       f.storageType !== "patient_attribute" &&
-      !SKIP_DIRECT_COLUMNS.has(f.columnName)
+      !SKIP_DIRECT_COLUMNS.has(f.columnName),
   );
 
   const unitField = spec.fields.find((f) => f.columnName === "unitFk");
@@ -718,7 +770,9 @@ export async function buildInsertPatientSqlStatements(
 
   if (unitField?.criteria.type === "distribution") {
     const unitWeights: Record<string, number> = {};
-    for (const [unitName, weight] of Object.entries(unitField.criteria.weights)) {
+    for (const [unitName, weight] of Object.entries(
+      unitField.criteria.weights,
+    )) {
       const u = units.find((x: { name: string }) => x.name === unitName);
       if (u) unitWeights[(u as { id: string }).id] = weight;
     }
@@ -766,7 +820,7 @@ export async function buildInsertPatientSqlStatements(
     const columnList = columns.map((c) => `[${c}]`).join(", ");
     const valuesList = columns.map((c) => toSqlLiteral(row[c])).join(", ");
     statements.push(
-      `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`
+      `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`,
     );
   }
 
@@ -776,7 +830,7 @@ export async function buildInsertPatientSqlStatements(
 async function verifyPatientUpdate(
   db: ConnectionPool,
   spec: GenerationSpec,
-  patientIds: string[]
+  patientIds: string[],
 ): Promise<VerificationResult[]> {
   const results: VerificationResult[] = [];
 
@@ -801,7 +855,7 @@ async function verifyPatientUpdate(
 async function verifyPatientGeneration(
   db: ConnectionPool,
   spec: GenerationSpec,
-  insertedIds: string[]
+  insertedIds: string[],
 ): Promise<VerificationResult[]> {
   const results: VerificationResult[] = [];
 
