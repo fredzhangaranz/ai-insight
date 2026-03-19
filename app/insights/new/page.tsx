@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import React from "react";
-import { LayoutToggle, LAYOUT_STORAGE_KEY, type LayoutMode } from "./components/LayoutToggle";
+import { LAYOUT_STORAGE_KEY, type LayoutMode } from "./components/LayoutToggle";
 import { ClassicLayout, type ClassicLayoutProps } from "./components/ClassicLayout";
 import { NewLayout } from "./components/NewLayout";
 import { useInsights } from "@/lib/hooks/useInsights";
@@ -314,14 +314,18 @@ export default function NewInsightPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-      <div className="fixed top-4 right-4 z-50">
-        <LayoutToggle value={layoutMode} onChange={setLayoutMode} />
-      </div>
-
       {layoutMode === "classic" ? (
-        <ClassicLayout {...classicProps} />
+        <ClassicLayout
+          {...classicProps}
+          layoutMode={layoutMode}
+          onLayoutModeChange={setLayoutMode}
+        />
       ) : (
-        <NewLayout {...newProps} />
+        <NewLayout
+          {...newProps}
+          layoutMode={layoutMode}
+          onLayoutModeChange={setLayoutMode}
+        />
       )}
     </div>
   );

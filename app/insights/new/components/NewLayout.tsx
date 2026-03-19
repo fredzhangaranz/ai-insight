@@ -12,6 +12,7 @@ import {
   type ComposerState,
 } from "./FixedBottomComposer";
 import { SmartSuggestions } from "./SmartSuggestions";
+import { LayoutToggle, type LayoutMode } from "./LayoutToggle";
 import { useConversation } from "@/lib/hooks/useConversation";
 import type { InsightResult } from "@/lib/hooks/useInsights";
 
@@ -37,6 +38,8 @@ export interface NewLayoutProps {
     clarificationAuditIds?: number[],
   ) => Promise<void>;
   analysis: { steps: Array<{ id: string; message: string; status?: string }> };
+  layoutMode: LayoutMode;
+  onLayoutModeChange: (mode: LayoutMode) => void;
 }
 
 export function NewLayout({
@@ -57,11 +60,14 @@ export function NewLayout({
   handleAsk,
   handleClarificationSubmit,
   analysis,
+  layoutMode,
+  onLayoutModeChange,
 }: NewLayoutProps) {
   const {
     messages: conversationMessages,
     isLoading: isConversationLoading,
     sendMessage,
+    sendMessageWithClarifications,
     editMessage,
     startNewConversation,
   } = useConversation({ externalThreadId: conversationThreadId ?? undefined });
@@ -233,62 +239,89 @@ export function NewLayout({
     _messageId: string,
     responses: Record<string, string>,
   ) => {
-    if (!customerId || !result?.question) return;
+    if (!customerId) return;
+
+    // Follow-up clarifications come from `useConversation()`, so we should
+    // continue the conversation via the conversation endpoint.
+    const followUpMessage = conversationMessages.find((m) => m.id === _messageId);
+    const followUpClarificationQuestion =
+      followUpMessage?.result?.mode === "clarification"
+        ? followUpMessage.result.question
+        : undefined;
+
+    if (followUpClarificationQuestion) {
+      await sendMessageWithClarifications(
+        followUpClarificationQuestion,
+        customerId,
+        responses,
+        modelId
+      );
+      return;
+    }
+
+    // First-question clarifications are handled by the first-question flow.
+    if (!result?.question) return;
     await handleClarificationSubmit(responses);
   };
 
   return (
     <div className="h-[100svh] bg-slate-50 overflow-x-hidden overflow-hidden flex flex-col">
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 overflow-x-hidden flex-shrink-0">
-        <div className="mb-6">
-          <div className="border-b border-slate-200 pb-6">
-            <div>
-              <nav className="flex text-sm text-slate-500 mb-2">
-                <Link href="/insights" className="hover:text-slate-700">
+      <div className="w-full pl-3 pr-3 sm:pl-4 sm:pr-4 lg:pr-6 py-3 sm:py-4 overflow-x-hidden flex-shrink-0">
+        <div className="mb-4">
+          <div className="border-b border-slate-200 pb-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 pr-2">
+                <nav className="flex text-sm text-slate-500 mb-2">
+                  <Link href="/insights" className="hover:text-slate-700">
+                    Insights
+                  </Link>
+                  <span className="mx-2">/</span>
+                  <span className="text-slate-900 font-medium">Ask Question</span>
+                </nav>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
                   Insights
-                </Link>
-                <span className="mx-2">/</span>
-                <span className="text-slate-900 font-medium">Ask Question</span>
-              </nav>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                Insights
-              </h1>
-              <p className="text-slate-600 mt-2">
-                Ask questions about your data in natural language
-              </p>
+                </h1>
+                <p className="text-slate-600 mt-2">
+                  Ask questions about your data in natural language
+                </p>
+              </div>
+              <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto sm:justify-start">
+                <LayoutToggle value={layoutMode} onChange={onLayoutModeChange} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    startNewConversation();
+                    handleNewQuestion();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium text-slate-700"
+                  title="Start a new question"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  New Question
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex gap-4 items-end mb-6">
-          <div className="flex-1 max-w-md">
+        <div className="flex flex-wrap gap-4 items-end mb-3">
+          <div className="flex-1 min-w-[12rem] max-w-md">
             <CustomerSelector value={customerId} onChange={setCustomerId} />
           </div>
-          <div className="flex-1 max-w-md">
+          <div className="flex-1 min-w-[12rem] max-w-md">
             <ModelSelector value={modelId} onChange={setModelId} />
           </div>
-          <button
-            onClick={() => {
-              startNewConversation();
-              handleNewQuestion();
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium text-slate-700"
-            title="Start a new question"
-          >
-            <MessageSquare className="h-4 w-4" />
-            New Question
-          </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 px-4 sm:px-6 lg:px-8">
+      <div className="flex-1 flex flex-col min-h-0 pl-3 pr-3 sm:pl-4 sm:pr-4 lg:pr-6">
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col space-y-4 py-4">
           <UnifiedThread
             items={threadItems}
             customerId={customerId}
             onClarify={handleClarify}
             onEditMessage={editMessage}
-            isClarificationSubmitting={isLoading}
+            isClarificationSubmitting={isLoading || isConversationLoading}
             lastClarificationMessageId={lastClarificationId}
           />
 
@@ -309,7 +342,7 @@ export function NewLayout({
           )}
         </div>
 
-        <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4">
+        <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm -mx-3 sm:-mx-4 lg:-mr-6 px-3 sm:px-4 lg:pr-6 py-3">
           <FixedBottomComposer
             onSubmit={handleComposerSubmit}
             state={composerState}

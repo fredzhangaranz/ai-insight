@@ -360,8 +360,11 @@ export function AssistantMessage({
   ) : null;
 
   return (
-    <div className="flex justify-start mb-6" id={`message-${message.id}`}>
-      <div className="max-w-3xl w-full">
+    <div
+      className="flex justify-start mb-6 w-full min-w-0"
+      id={`message-${message.id}`}
+    >
+      <div className="w-full min-w-0 max-w-full">
         <div className="bg-white border rounded-2xl shadow-sm p-6">
           <div className="flex items-start gap-3 mb-4">
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm font-semibold">

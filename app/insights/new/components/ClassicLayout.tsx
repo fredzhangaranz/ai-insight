@@ -10,6 +10,7 @@ import { SuggestedQuestions } from "./SuggestedQuestions";
 import { ConversationThread } from "./ConversationThread";
 import { ClarificationDialog } from "./ClarificationDialog";
 import { AnalysisProgressCard } from "./AnalysisProgressCard";
+import { LayoutToggle, type LayoutMode } from "./LayoutToggle";
 import type { InsightResult, ThinkingStep } from "@/lib/hooks/useInsights";
 
 export interface ClassicLayoutProps {
@@ -36,6 +37,8 @@ export interface ClassicLayoutProps {
   handleHistorySelect: (query: any) => Promise<void>;
   cancelAnalysis: () => void;
   loadCachedResult: (result: InsightResult) => void;
+  layoutMode: LayoutMode;
+  onLayoutModeChange: (mode: LayoutMode) => void;
 }
 
 export function ClassicLayout({
@@ -59,6 +62,8 @@ export function ClassicLayout({
   handleHistorySelect,
   cancelAnalysis,
   loadCachedResult,
+  layoutMode,
+  onLayoutModeChange,
 }: ClassicLayoutProps) {
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
@@ -95,12 +100,17 @@ export function ClassicLayout({
         </div>
 
         <div className="space-y-6">
-          <div className="flex gap-4 items-end">
-            <div className="flex-1 max-w-md">
-              <CustomerSelector value={customerId} onChange={setCustomerId} />
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-wrap gap-4 items-end flex-1 min-w-0">
+              <div className="flex-1 min-w-[12rem] max-w-md">
+                <CustomerSelector value={customerId} onChange={setCustomerId} />
+              </div>
+              <div className="flex-1 min-w-[12rem] max-w-md">
+                <ModelSelector value={modelId} onChange={setModelId} />
+              </div>
             </div>
-            <div className="flex-1 max-w-md">
-              <ModelSelector value={modelId} onChange={setModelId} />
+            <div className="flex-shrink-0 ml-auto">
+              <LayoutToggle value={layoutMode} onChange={onLayoutModeChange} />
             </div>
           </div>
 

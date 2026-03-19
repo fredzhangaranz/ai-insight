@@ -31,14 +31,22 @@ function AppContent({ children }: { children: React.ReactNode }) {
         } bg-slate-50 overflow-x-hidden`}
       >
         <main
-          className={`w-full px-6 py-8 overflow-x-hidden ${
-            isInsightsNew ? "h-full overflow-hidden" : ""
+          className={`w-full overflow-x-hidden ${
+            isInsightsNew
+              ? "h-full overflow-hidden px-0 py-0 pl-0 pr-0 sm:pr-3"
+              : "px-6 py-8"
           }`}
         >
           <QueryHistorySidebarProvider>
             <SidebarProvider>
               <SideNav />
-            <SidebarInset className="overflow-x-hidden">
+            <SidebarInset
+              className={
+                isInsightsNew
+                  ? "overflow-x-hidden md:!m-0 md:min-h-svh md:rounded-none md:shadow-none"
+                  : "overflow-x-hidden"
+              }
+            >
               <MustChangePasswordBanner />
               {children}
             </SidebarInset>
