@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Save, Download, Eye, EyeOff } from "lucide-react";
 import { ArtifactRenderer } from "./ArtifactRenderer";
@@ -12,6 +12,7 @@ import type { InsightResult } from "@/lib/hooks/useInsights";
 import type { ChartType } from "@/lib/chart-contracts";
 import type { ChartArtifact } from "@/lib/types/insight-artifacts";
 import { ResultsTable } from "./ResultsTable";
+import { getChartConfigForSave } from "@/lib/insight-save-chart-config";
 
 interface ResultBlockProps {
   result: InsightResult;
@@ -99,6 +100,11 @@ export function ResultBlock({
   const displayArtifacts = artifacts.filter(
     (a) =>
       a.kind === "chart" || a.kind === "table" || a.kind === "entity_resolution"
+  );
+
+  const saveChartConfig = useMemo(
+    () => getChartConfigForSave(result.artifacts, chartOverrides),
+    [result.artifacts, chartOverrides],
   );
   
   // For single-value results, optionally hide KPI from default view
@@ -245,6 +251,7 @@ export function ResultBlock({
         onClose={() => setShowSaveDialog(false)}
         result={result}
         customerId={customerId}
+        chartConfig={saveChartConfig}
       />
 
       {showChartDialog && result.results && (

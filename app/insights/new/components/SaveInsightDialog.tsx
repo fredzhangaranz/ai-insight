@@ -16,17 +16,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { InsightResult } from "@/lib/hooks/useInsights";
-import type { ChartType } from "@/lib/chart-contracts";
+import type { SaveChartConfig } from "@/lib/insight-save-chart-config";
 
 interface SaveInsightDialogProps {
   isOpen: boolean;
   onClose: () => void;
   result: InsightResult;
   customerId: string;
-  chartConfig?: {
-    chartType: ChartType;
-    chartMapping: Record<string, string>;
-  } | null;
+  chartConfig?: SaveChartConfig | null;
 }
 
 export function SaveInsightDialog({

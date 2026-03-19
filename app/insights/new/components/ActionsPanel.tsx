@@ -2,11 +2,12 @@
 
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Save, Download } from "lucide-react";
 import { SaveInsightDialog } from "./SaveInsightDialog";
 import { InsightResult } from "@/lib/hooks/useInsights";
+import { getChartConfigForSave } from "@/lib/insight-save-chart-config";
 
 interface ActionsPanelProps {
   result: InsightResult;
@@ -19,6 +20,11 @@ export function ActionsPanel({
   customerId,
 }: ActionsPanelProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+
+  const saveChartConfig = useMemo(
+    () => getChartConfigForSave(result.artifacts),
+    [result.artifacts],
+  );
 
   const handleExportCSV = () => {
     if (!result.results || result.results.rows.length === 0) {
@@ -86,6 +92,7 @@ export function ActionsPanel({
         onClose={() => setShowSaveDialog(false)}
         result={result}
         customerId={customerId}
+        chartConfig={saveChartConfig}
       />
     </>
   );

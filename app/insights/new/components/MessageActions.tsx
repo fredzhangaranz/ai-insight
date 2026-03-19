@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Save, BarChart3, Download, MoreHorizontal } from "lucide-react";
 import {
@@ -13,6 +13,10 @@ import { SaveInsightDialog } from "./SaveInsightDialog";
 import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
 import type { InsightResult } from "@/lib/hooks/useInsights";
 import type { ChartType } from "@/lib/chart-contracts";
+import {
+  getChartConfigForSave,
+  type SaveChartConfig,
+} from "@/lib/insight-save-chart-config";
 
 interface MessageActionsProps {
   result: InsightResult;
@@ -28,15 +32,28 @@ export function MessageActions({
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showChartDialog, setShowChartDialog] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("bar");
+  const [appliedChartConfig, setAppliedChartConfig] =
+    useState<SaveChartConfig | null>(null);
   const existingChartArtifact = result.artifacts?.find(
     (artifact) => artifact.kind === "chart"
+  );
+
+  useEffect(() => {
+    setAppliedChartConfig(null);
+  }, [messageId]);
+
+  const chartConfigForSave = useMemo(
+    () => appliedChartConfig ?? getChartConfigForSave(result.artifacts),
+    [appliedChartConfig, result.artifacts],
   );
 
   const handleApplyChart = (config: {
     chartType: ChartType;
     chartMapping: Record<string, string>;
   }) => {
-    console.log("Chart configuration applied to inline chart:", config);
+    setAppliedChartConfig(config);
+    setShowChartDialog(false);
+    setChartType("bar");
   };
 
   const handleExportCSV = () => {
@@ -131,6 +148,7 @@ export function MessageActions({
         onClose={() => setShowSaveDialog(false)}
         result={result}
         customerId={customerId}
+        chartConfig={chartConfigForSave}
       />
 
       {showChartDialog && result.results && (
