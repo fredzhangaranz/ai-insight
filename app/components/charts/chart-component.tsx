@@ -32,16 +32,15 @@ export interface ChartComponentProps {
 function isBarChartData(data: any): data is BarChartDataPoint[] {
   const isValid =
     Array.isArray(data) &&
-    data.length > 0 &&
-    "category" in data[0] &&
-    "value" in data[0];
+    (data.length === 0 || ("category" in data[0] && "value" in data[0]));
   console.log("isBarChartData:", { data, isValid });
   return isValid;
 }
 
 function isLineChartData(data: any): data is LineChartDataPoint[] {
   const isValid =
-    Array.isArray(data) && data.length > 0 && "x" in data[0] && "y" in data[0];
+    Array.isArray(data) &&
+    (data.length === 0 || ("x" in data[0] && "y" in data[0]));
   console.log("isLineChartData:", { data, isValid });
   return isValid;
 }
@@ -49,9 +48,7 @@ function isLineChartData(data: any): data is LineChartDataPoint[] {
 function isPieChartData(data: any): data is PieChartDataPoint[] {
   const isValid =
     Array.isArray(data) &&
-    data.length > 0 &&
-    "label" in data[0] &&
-    "value" in data[0];
+    (data.length === 0 || ("label" in data[0] && "value" in data[0]));
   console.log("isPieChartData:", { data, isValid });
   return isValid;
 }

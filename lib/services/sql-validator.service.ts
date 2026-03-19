@@ -211,6 +211,32 @@ export class SQLValidator {
         .map((expr) => this.extractColumnOnly(expr.raw))
     );
 
+    // If a SELECT expression is aliased (e.g. `DATEDIFF(...) AS Age`) and
+    // that expression appears in GROUP BY, allow `ORDER BY Age` even when
+    // GROUP BY uses the raw expression instead of the alias.
+    for (const aliasedItem of aliasLookup.values()) {
+      if (aliasedItem.isAggregate || aliasedItem.isGrouped) continue;
+
+      // Exact normalized expression match covers complex GROUP BY expressions.
+      if (groupNormalizedSet.has(aliasedItem.normalized)) {
+        aliasedItem.isGrouped = true;
+        continue;
+      }
+
+      // Extra heuristic for simple identifiers (qualified vs unqualified).
+      if (aliasedItem.isSimpleIdentifier) {
+        if (simpleGroupColumnSet.has(aliasedItem.normalized)) {
+          aliasedItem.isGrouped = true;
+          continue;
+        }
+
+        const columnOnly = this.extractColumnOnly(aliasedItem.normalized);
+        if (simpleGroupColumnNameSet.has(columnOnly)) {
+          aliasedItem.isGrouped = true;
+        }
+      }
+    }
+
     for (const order of parsed.orderByItems) {
       if (order.usesNumericPosition) {
         continue;

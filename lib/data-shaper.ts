@@ -132,17 +132,33 @@ function shapeBarChartData(
   data: RawDataRecord[],
   mapping: ChartDataMapping & { mapping: BarChartMapping }
 ): BarChartDataPoint[] {
-  return data.map((record, index) => ({
-    category: String(record[mapping.mapping.category]),
-    value: Number(record[mapping.mapping.value]),
-    id: record.id?.toString() || `bar-${index}`,
-    label: mapping.mapping.label
-      ? String(record[mapping.mapping.label])
-      : undefined,
-    color: mapping.mapping.color
-      ? String(record[mapping.mapping.color])
-      : undefined,
-  }));
+  return data
+    .map((record, index) => {
+      const category = record[mapping.mapping.category];
+      const value = Number(record[mapping.mapping.value]);
+
+      if (
+        category === null ||
+        category === undefined ||
+        category === "" ||
+        !Number.isFinite(value)
+      ) {
+        return null;
+      }
+
+      return {
+        category: String(category),
+        value,
+        id: record.id?.toString() || `bar-${index}`,
+        label: mapping.mapping.label
+          ? String(record[mapping.mapping.label])
+          : undefined,
+        color: mapping.mapping.color
+          ? String(record[mapping.mapping.color])
+          : undefined,
+      };
+    })
+    .filter((point): point is BarChartDataPoint => point !== null);
 }
 
 /**
@@ -153,14 +169,30 @@ function shapeLineChartData(
   data: RawDataRecord[],
   mapping: ChartDataMapping & { mapping: LineChartMapping }
 ): LineChartDataPoint[] {
-  return data.map((record, index) => ({
-    x: record[mapping.mapping.x],
-    y: Number(record[mapping.mapping.y]),
-    id: record.id?.toString() || `point-${index}`,
-    label: mapping.mapping.label
-      ? String(record[mapping.mapping.label])
-      : undefined,
-  }));
+  return data
+    .map((record, index) => {
+      const x = record[mapping.mapping.x];
+      const y = Number(record[mapping.mapping.y]);
+
+      if (
+        x === null ||
+        x === undefined ||
+        x === "" ||
+        !Number.isFinite(y)
+      ) {
+        return null;
+      }
+
+      return {
+        x,
+        y,
+        id: record.id?.toString() || `point-${index}`,
+        label: mapping.mapping.label
+          ? String(record[mapping.mapping.label])
+          : undefined,
+      };
+    })
+    .filter((point): point is LineChartDataPoint => point !== null);
 }
 
 /**
@@ -171,19 +203,40 @@ function shapePieChartData(
   data: RawDataRecord[],
   mapping: ChartDataMapping & { mapping: PieChartMapping }
 ): PieChartDataPoint[] {
-  const total = data.reduce(
-    (sum, record) => sum + Number(record[mapping.mapping.value]),
-    0
-  );
+  const shaped = data
+    .map((record, index) => {
+      const label = record[mapping.mapping.label];
+      const value = Number(record[mapping.mapping.value]);
 
-  return data.map((record, index) => ({
-    label: String(record[mapping.mapping.label]),
-    value: Number(record[mapping.mapping.value]),
-    id: record.id?.toString() || `slice-${index}`,
-    percentage: (Number(record[mapping.mapping.value]) / total) * 100,
-    color: mapping.mapping.color
-      ? String(record[mapping.mapping.color])
-      : undefined,
+      if (
+        label === null ||
+        label === undefined ||
+        label === "" ||
+        !Number.isFinite(value)
+      ) {
+        return null;
+      }
+
+      return {
+        label: String(label),
+        value,
+        id: record.id?.toString() || `slice-${index}`,
+        color: mapping.mapping.color
+          ? String(record[mapping.mapping.color])
+          : undefined,
+      };
+    })
+    .filter(
+      (
+        point
+      ): point is Omit<PieChartDataPoint, "percentage"> & { value: number } =>
+        point !== null
+    );
+  const total = shaped.reduce((sum, record) => sum + record.value, 0);
+
+  return shaped.map((record) => ({
+    ...record,
+    percentage: total > 0 ? (record.value / total) * 100 : 0,
   }));
 }
 

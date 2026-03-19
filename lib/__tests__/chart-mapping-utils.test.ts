@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   inferChartMapping,
+  isDateValue,
   normalizeChartMapping,
   normalizeAvailableMappings,
+  validateChartConfiguration,
 } from "@/lib/chart-mapping-utils";
 
 describe("normalizeChartMapping", () => {
@@ -62,5 +64,41 @@ describe("inferChartMapping", () => {
 
     expect(inferred.x).toBe("AssessmentDate");
     expect(inferred.y).toBe("WoundArea");
+  });
+});
+
+describe("isDateValue", () => {
+  it("does not classify numeric strings as dates", () => {
+    expect(isDateValue("12345")).toBe(false);
+    expect(isDateValue("20260101")).toBe(false);
+  });
+});
+
+describe("validateChartConfiguration", () => {
+  it("rejects a bar chart mapping when the mapped value field is missing", () => {
+    const validation = validateChartConfiguration(
+      "bar",
+      [{ assessmentDate: "2026-01-01", woundArea: 12.5 }],
+      { category: "assessmentDate", value: "missingField" },
+      ["assessmentDate", "woundArea"]
+    );
+
+    expect(validation.valid).toBe(false);
+    expect(validation.reason).toContain("Chart unavailable");
+  });
+
+  it("accepts numeric strings for a numeric bar value", () => {
+    const validation = validateChartConfiguration(
+      "bar",
+      [{ categoryName: "A", total: "12" }],
+      { category: "categoryName", value: "total" },
+      ["categoryName", "total"]
+    );
+
+    expect(validation.valid).toBe(true);
+    expect(validation.normalizedMapping).toEqual({
+      category: "categoryName",
+      value: "total",
+    });
   });
 });

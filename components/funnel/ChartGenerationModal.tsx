@@ -5,7 +5,10 @@ import {
   type ChartDataType,
 } from "@/app/components/charts/chart-component";
 import { shapeDataForChart } from "@/lib/data-shaper";
-import { normalizeChartMapping } from "@/lib/chart-mapping-utils";
+import {
+  normalizeChartMapping,
+  validateChartConfiguration,
+} from "@/lib/chart-mapping-utils";
 import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
 import { useErrorHandler } from "@/lib/error-handler";
 
@@ -202,9 +205,20 @@ export const ChartGenerationModal: React.FC<ChartGenerationModalProps> = (
       if (selectedChartType === "table") {
         setChartData(queryResults);
       } else {
+        const validation = validateChartConfiguration(
+          selectedChartType,
+          queryResults,
+          chartMapping
+        );
+        if (!validation.valid) {
+          throw new Error(
+            validation.reason ||
+              "Chart unavailable for this result shape. Showing a table instead."
+          );
+        }
         const normalizedMapping = normalizeChartMapping(
           selectedChartType,
-          chartMapping
+          validation.normalizedMapping
         ) as ChartMapping;
         const shapedData = shapeDataForChart(
           queryResults,

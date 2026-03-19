@@ -21,7 +21,10 @@ vi.mock("@/lib/services/semantic/customer-query.service", () => ({
   ),
 }));
 
-import { PatientEntityResolver } from "@/lib/services/patient-entity-resolver.service";
+import {
+  PatientEntityResolver,
+  isLikelyPatientNameCandidate,
+} from "@/lib/services/patient-entity-resolver.service";
 
 describe("PatientEntityResolver", () => {
   const resolver = new PatientEntityResolver();
@@ -176,5 +179,21 @@ describe("PatientEntityResolver", () => {
 
     expect(result.status).toBe("confirmation_required");
     expect(mockQuery.mock.calls[0]?.[1]).toEqual({ fullName: "melody crist" });
+  });
+
+  it("rejects generic analytics phrases as patient-name candidates", async () => {
+    expect(isLikelyPatientNameCandidate("age chart")).toBe(false);
+    expect(isLikelyPatientNameCandidate("diabetic wounds")).toBe(false);
+    expect(isLikelyPatientNameCandidate("Fred Smith")).toBe(true);
+  });
+
+  it("does not resolve generic analytics phrasing as a patient", async () => {
+    const result = await resolver.resolve(
+      "show me a patient age chart",
+      "customer-1"
+    );
+
+    expect(result.status).toBe("no_candidate");
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });

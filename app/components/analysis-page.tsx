@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import type { ChartType, TableData } from "@/lib/chart-contracts";
 import { shapeDataForChart } from "@/lib/data-shaper";
+import { validateChartConfiguration } from "@/lib/chart-mapping-utils";
 import { ModelSelector } from "@/components/funnel/ModelSelector";
 import { useAIModel } from "@/lib/context/AIModelContext";
 
@@ -147,11 +148,22 @@ export default function AnalysisPage({
     // If we have raw data, reshape it for the new chart type
     if (tableData && availableMappings[value]) {
       try {
+        const validation = validateChartConfiguration(
+          value,
+          tableData as any[],
+          availableMappings[value]
+        );
+        if (!validation.valid) {
+          throw new Error(
+            validation.reason ||
+              "Chart unavailable for this result shape. Showing a table instead."
+          );
+        }
         const shapedData = shapeDataForChart(
           tableData,
           {
             chartType: value,
-            mapping: availableMappings[value],
+            mapping: validation.normalizedMapping,
           },
           value
         );
@@ -338,11 +350,23 @@ export default function AnalysisPage({
           );
         }
 
+        const validation = validateChartConfiguration(
+          selectedChartType,
+          data,
+          mapping
+        );
+        if (!validation.valid) {
+          throw new Error(
+            validation.reason ||
+              "Chart unavailable for this result shape. Showing a table instead."
+          );
+        }
+
         const shapedData = shapeDataForChart(
           data, // Use extracted data
           {
             chartType: selectedChartType,
-            mapping: mapping,
+            mapping: validation.normalizedMapping,
           },
           selectedChartType
         );

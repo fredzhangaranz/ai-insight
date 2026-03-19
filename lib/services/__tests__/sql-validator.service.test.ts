@@ -35,6 +35,25 @@ describe("Runtime SQL Validator (Task 4.S23)", () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  it("allows ORDER BY alias when GROUP BY uses the raw expression", () => {
+    const sql = `
+      SELECT
+        DATEDIFF(year, p.dateOfBirth, GETDATE()) AS Age,
+        COUNT(p.id) AS NumberOfPatients
+      FROM rpt.Patient AS p
+      WHERE
+        p.gender = 'Female' AND p.dateOfBirth IS NOT NULL
+      GROUP BY
+        DATEDIFF(year, p.dateOfBirth, GETDATE())
+      ORDER BY
+        Age;
+    `;
+
+    const result = validator.validate(sql);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
   it("flags ORDER BY columns that are not part of GROUP BY", () => {
     const sql = `
       SELECT

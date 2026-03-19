@@ -42,6 +42,66 @@ function normalizeName(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+const GENERIC_PATIENT_CANDIDATE_TOKENS = new Set([
+  "age",
+  "ages",
+  "assessment",
+  "assessments",
+  "average",
+  "bar",
+  "chart",
+  "charts",
+  "clinic",
+  "clinics",
+  "cohort",
+  "count",
+  "counts",
+  "demographic",
+  "demographics",
+  "diabetic",
+  "distribution",
+  "graph",
+  "graphs",
+  "healing",
+  "histogram",
+  "in",
+  "infection",
+  "list",
+  "listing",
+  "measure",
+  "measures",
+  "metric",
+  "metrics",
+  "month",
+  "months",
+  "patient",
+  "patients",
+  "per",
+  "plot",
+  "plots",
+  "pressure",
+  "rate",
+  "rates",
+  "report",
+  "reports",
+  "status",
+  "summary",
+  "system",
+  "table",
+  "tables",
+  "the",
+  "trend",
+  "trends",
+  "ulcer",
+  "ulcers",
+  "unit",
+  "units",
+  "week",
+  "weeks",
+  "wound",
+  "wounds",
+]);
+
 const ALL_ACCESS_PREFIX =
   "EXEC sp_set_session_context @key = N'all_access', @value = 1;\n";
 
@@ -75,6 +135,23 @@ function extractDomainId(question: string): string | undefined {
   return undefined;
 }
 
+export function isLikelyPatientNameCandidate(value: string): boolean {
+  const candidate = value.trim().replace(/[.,!?;:]+$/, "");
+  if (!candidate) return false;
+  if (/\d/.test(candidate)) return false;
+
+  const tokens = candidate
+    .split(/\s+/)
+    .map((token) => token.toLowerCase())
+    .filter(Boolean);
+
+  if (tokens.length < 2 || tokens.length > 4) {
+    return false;
+  }
+
+  return !tokens.some((token) => GENERIC_PATIENT_CANDIDATE_TOKENS.has(token));
+}
+
 function extractFullName(question: string): string | undefined {
   const patterns = [
     /\b(?:patient|pt)\s+([A-Za-z][a-zA-Z'-]+(?:\s+[A-Za-z][a-zA-Z'-]+)+)\b/i,
@@ -84,7 +161,10 @@ function extractFullName(question: string): string | undefined {
   for (const pattern of patterns) {
     const match = question.match(pattern);
     if (match?.[1]) {
-      return match[1].trim().replace(/[.,!?;:]+$/, "");
+      const candidate = match[1].trim().replace(/[.,!?;:]+$/, "");
+      if (isLikelyPatientNameCandidate(candidate)) {
+        return candidate;
+      }
     }
   }
 
@@ -234,7 +314,14 @@ export class PatientEntityResolver {
       };
     }
 
-    const fullName = extractFullName(lookupText);
+    const directCandidateText = options?.candidateText?.trim();
+    const fullName =
+      directCandidateText &&
+      !extractGuid(directCandidateText) &&
+      !extractDomainId(directCandidateText) &&
+      isLikelyPatientNameCandidate(directCandidateText)
+        ? directCandidateText.replace(/[.,!?;:]+$/, "")
+        : extractFullName(lookupText);
     if (!fullName) {
       return { status: "no_candidate" };
     }

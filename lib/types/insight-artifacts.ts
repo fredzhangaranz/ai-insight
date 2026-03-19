@@ -31,6 +31,7 @@ export interface TableArtifact {
   title?: string;
   columns: string[];
   primary?: boolean;
+  reason?: string;
 }
 
 export interface SqlArtifact {

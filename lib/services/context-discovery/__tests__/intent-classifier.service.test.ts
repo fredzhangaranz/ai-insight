@@ -691,6 +691,27 @@ describe("IntentClassifierService", () => {
       expect(result.semanticFrame?.filters).toEqual([]);
       expect(result.filters).toEqual([]);
     });
+
+    it("should not infer a patient entity from generic patient analytics phrasing", async () => {
+      mockProviderResponse({
+        type: "outcome_analysis",
+        scope: "individual_patient",
+        metrics: ["patient_age"],
+        filters: [],
+        timeRange: null,
+        presentationIntent: "chart",
+        preferredVisualization: "bar",
+        confidence: 0.82,
+        reasoning: "Chart about patient age",
+      });
+
+      const result = await service.classifyIntent({
+        customerId: "TEST",
+        question: "show me a patient age chart",
+      });
+
+      expect(result.semanticFrame?.entityRefs).toEqual([]);
+    });
   });
 
   describe("Prompt Construction Tests", () => {

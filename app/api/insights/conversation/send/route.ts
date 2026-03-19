@@ -98,14 +98,30 @@ export async function POST(req: NextRequest) {
     if (featureFlags.patientEntityResolution) {
       const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
       const provider = await getAIProvider(resolvedModelId);
+      const patientResolverOptions = buildPatientResolverOptions(
+        clarificationResponses
+      );
 
-      if (threadId) {
+      if (!patientResolverOptions) {
         try {
-          const gate = await shouldResolvePatientLiterally(normalizedQuestion, provider, {
-            threadId,
-          });
+          const gate = await shouldResolvePatientLiterally(
+            normalizedQuestion,
+            provider,
+            {
+              threadId,
+            }
+          );
           if (!gate.requiresLiteralResolution) {
             patientResolution = { status: "no_candidate" };
+          } else if (gate.candidateText) {
+            patientResolution = await patientResolver.resolve(
+              normalizedQuestion,
+              normalizedCustomerId,
+              {
+                candidateText: gate.candidateText,
+                allowQuestionInference: false,
+              }
+            );
           }
         } catch (err) {
           console.warn(
@@ -116,7 +132,6 @@ export async function POST(req: NextRequest) {
       }
 
       if (!patientResolution) {
-        const patientResolverOptions = buildPatientResolverOptions(clarificationResponses);
         patientResolution = await patientResolver.resolve(
           normalizedQuestion,
           normalizedCustomerId,

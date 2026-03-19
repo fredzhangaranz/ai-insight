@@ -10,14 +10,18 @@ import type { IQueryFunnelProvider } from "@/lib/ai/providers/i-query-funnel-pro
 
 export interface PatientResolutionGateResult {
   requiresLiteralResolution: boolean;
+  candidateText?: string;
 }
 
 const SYSTEM_PROMPT = `You are a classifier for healthcare data questions.
 
-Your task: Determine whether the user's question contains a LITERAL patient reference that requires looking up a specific patient, or a CONTEXTUAL reference that should be resolved from the previous conversation.
+Your task: Determine whether the user's question contains a LITERAL patient reference that requires looking up a specific patient, or whether no literal patient lookup is needed.
 
-LITERAL: The question explicitly mentions a patient identifier—full name, patient ID, GUID, MRN, domain ID—that must be resolved before querying.
-CONTEXTUAL: The question refers to the previous result using language that resolves from conversation context. No lookup by name/ID is needed; the referent is the prior result set.
+LITERAL: The question explicitly mentions one specific patient identifier or patient name that must be resolved before querying.
+NOT LITERAL: The question is about a cohort, aggregate, condition, diagnosis, wound type, assessment type, or any other non-patient concept. Phrases such as "diabetic wounds", "pressure ulcers", "healing rate", "in the system", or "for diabetic wounds" are NOT patient references.
+
+If a literal patient reference exists, extract the exact patient reference text into candidateText.
+If no literal patient reference exists, candidateText must be null.
 
 Apply semantic understanding. Return only valid JSON.`;
 
@@ -25,39 +29,49 @@ function parseGateResponse(text: string): PatientResolutionGateResult {
   const trimmed = text.trim();
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    return { requiresLiteralResolution: true };
+    return { requiresLiteralResolution: false };
   }
   try {
     const parsed = JSON.parse(jsonMatch[0]) as unknown;
-    if (parsed && typeof parsed === "object" && "requiresLiteralResolution" in parsed) {
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "requiresLiteralResolution" in parsed
+    ) {
+      const record = parsed as Record<string, unknown>;
       return {
-        requiresLiteralResolution: Boolean(parsed.requiresLiteralResolution),
+        requiresLiteralResolution: Boolean(record.requiresLiteralResolution),
+        candidateText:
+          typeof record.candidateText === "string" &&
+          record.candidateText.trim()
+            ? record.candidateText.trim()
+            : undefined,
       };
     }
   } catch {
-    // Fallback: assume literal to avoid skipping needed resolution
+    // Fallback: avoid forcing patient lookup from malformed gate output
   }
-  return { requiresLiteralResolution: true };
+  return { requiresLiteralResolution: false };
 }
 
 /**
  * Asks the AI whether the question requires literal patient resolution.
- * Only call when threadId exists (follow-up context).
  */
 export async function shouldResolvePatientLiterally(
   question: string,
   provider: IQueryFunnelProvider,
   options?: { threadId?: string }
 ): Promise<PatientResolutionGateResult> {
-  if (!options?.threadId) {
-    return { requiresLiteralResolution: true };
-  }
-
   const userPrompt = `Question: "${question}"
 
-This is a follow-up in a conversation. Does this question contain a literal patient reference (full name, patient ID, GUID, MRN) that requires looking up a specific patient? Or is it a contextual reference to the previous result?
+Conversation context:
+- threadId present: ${options?.threadId ? "yes" : "no"}
 
-Return JSON only: {"requiresLiteralResolution": true or false}`;
+Does this question contain a literal patient reference that requires looking up a specific patient before querying?
+- Return requiresLiteralResolution=true only when a specific patient name or identifier is explicitly present.
+- Return requiresLiteralResolution=false for cohort or aggregate questions, medical concepts, wound types, and generic follow-up references.
+
+Return JSON only: {"requiresLiteralResolution": true or false, "candidateText": string or null}`;
 
   const response = await provider.complete({
     system: SYSTEM_PROMPT,

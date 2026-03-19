@@ -4,6 +4,7 @@ import { getInsightGenDbPool } from "@/lib/db";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 import { getCustomerById } from "@/lib/services/customer-service";
 import { shapeDataForChart } from "@/lib/data-shaper";
+import { validateChartConfiguration } from "@/lib/chart-mapping-utils";
 import type { ChartType } from "@/lib/chart-contracts";
 
 export type InsightScope = "form" | "schema";
@@ -405,15 +406,29 @@ export class InsightService {
     const data =
       insight.chartType === "table"
         ? rows
-        : shapeDataForChart(
-            rows,
-            {
-              chartType: insight.chartType,
-              mapping: insight.chartMapping,
-              options: insight.chartOptions,
-            },
-            insight.chartType,
-          );
+        : (() => {
+            const validation = validateChartConfiguration(
+              insight.chartType,
+              rows,
+              insight.chartMapping
+            );
+            if (!validation.valid) {
+              throw new Error(
+                validation.reason ||
+                  "Chart unavailable for this result shape. Showing a table instead."
+              );
+            }
+
+            return shapeDataForChart(
+              rows,
+              {
+                chartType: insight.chartType,
+                mapping: validation.normalizedMapping,
+                options: insight.chartOptions,
+              },
+              insight.chartType,
+            );
+          })();
     return { rows, chart: { chartType: insight.chartType, data } };
   }
 }

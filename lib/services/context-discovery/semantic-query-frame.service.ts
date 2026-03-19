@@ -11,6 +11,7 @@ import type {
   SemanticScope,
   TimeRange,
 } from "./types";
+import { isLikelyPatientNameCandidate } from "../patient-entity-resolver.service";
 
 function clampConfidence(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -204,9 +205,11 @@ function inferEntityRefs(question: string, scope: SemanticScope): EntityReferenc
   for (const pattern of patterns) {
     const match = question.match(pattern);
     if (!match?.[1]) continue;
+    const candidate = match[1].trim().replace(/[.,!?;:]+$/, "");
+    if (!isLikelyPatientNameCandidate(candidate)) continue;
     refs.push({
       type: "patient",
-      text: match[1].trim(),
+      text: candidate,
       confidence: 0.84,
       explicit: true,
     });

@@ -195,6 +195,10 @@ export async function POST(req: NextRequest) {
         sql: effectiveSql,
         assumptions: effectiveSemanticContext?.assumptions || [],
         resolvedEntities: effectiveSemanticContext?.resolvedEntities || undefined,
+        presentationIntent:
+          effectiveSemanticContext?.intent?.presentationIntent,
+        preferredVisualization:
+          effectiveSemanticContext?.intent?.preferredVisualization,
       });
     }
 

@@ -2,6 +2,12 @@ import type { ChartType } from "./chart-contracts";
 
 type AnyMapping = Record<string, any> | undefined | null;
 
+export interface ChartValidationResult {
+  valid: boolean;
+  normalizedMapping: Record<string, string>;
+  reason?: string;
+}
+
 function coalesce(mapping: Record<string, any>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = mapping[key];
@@ -67,24 +73,45 @@ export function normalizeChartMapping(
   return normalized;
 }
 
-function isDateValue(value: unknown): boolean {
+function getAvailableFields(
+  rows: Record<string, any>[],
+  columns: string[] = []
+): string[] {
+  const discovered = rows[0] ? Object.keys(rows[0]) : [];
+  return Array.from(new Set([...columns, ...discovered]));
+}
+
+export function isDateValue(value: unknown): boolean {
   if (value instanceof Date) {
-    return true;
+    return !Number.isNaN(value.getTime());
   }
   if (typeof value !== "string") {
     return false;
   }
-  return !Number.isNaN(new Date(value).getTime());
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    return false;
+  }
+
+  const parsed = Date.parse(trimmed);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+
+  return /[-/T:]/.test(trimmed) || /[A-Za-z]{3,}/.test(trimmed);
 }
 
-function isDateField(rows: Record<string, any>[], field: string): boolean {
+export function isDateField(rows: Record<string, any>[], field: string): boolean {
   if (/(date|time|day|month|year|created|measured|assessment)/i.test(field)) {
     return true;
   }
   return rows.some((row) => isDateValue(row?.[field]));
 }
 
-function isNumericField(rows: Record<string, any>[], field: string): boolean {
+export function isNumericField(rows: Record<string, any>[], field: string): boolean {
   const values = rows
     .map((row) => row?.[field])
     .filter((value) => value !== null && value !== undefined && value !== "");
@@ -98,7 +125,7 @@ function isNumericField(rows: Record<string, any>[], field: string): boolean {
   return values.every((value) => !Number.isNaN(Number(value)));
 }
 
-function pickMetricField(fields: string[]): string | undefined {
+export function pickMetricField(fields: string[]): string | undefined {
   const preferredPatterns = [
     /(area|volume|size|length|width|depth|height)/i,
     /(count|total|avg|average|mean|median|rate|score|value|percentage|percent)/i,
@@ -119,12 +146,13 @@ function pickMetricField(fields: string[]): string | undefined {
 export function inferChartMapping(
   chartType: ChartType,
   rows: Record<string, any>[],
-  mapping: AnyMapping
+  mapping: AnyMapping,
+  columns: string[] = []
 ): Record<string, string> {
   const normalized = {
     ...(normalizeChartMapping(chartType, mapping) as Record<string, string>),
   };
-  const availableFields = rows[0] ? Object.keys(rows[0]) : [];
+  const availableFields = getAvailableFields(rows, columns);
   const dateFields = availableFields.filter((field) => isDateField(rows, field));
   const numericFields = availableFields.filter((field) => isNumericField(rows, field));
   const nonNumericFields = availableFields.filter(
@@ -182,6 +210,111 @@ export function inferChartMapping(
   }
 
   return normalized;
+}
+
+function getRequiredFields(chartType: ChartType): string[] {
+  switch (chartType) {
+    case "bar":
+      return ["category", "value"];
+    case "line":
+      return ["x", "y"];
+    case "pie":
+      return ["label", "value"];
+    case "kpi":
+      return ["label", "value"];
+    case "table":
+    default:
+      return [];
+  }
+}
+
+export function validateChartConfiguration(
+  chartType: ChartType,
+  rows: Record<string, any>[],
+  mapping: AnyMapping,
+  columns: string[] = []
+): ChartValidationResult {
+  if (chartType === "table") {
+    return { valid: true, normalizedMapping: {} };
+  }
+
+  if (rows.length === 0) {
+    return {
+      valid: false,
+      normalizedMapping: {},
+      reason: "Chart unavailable for this result shape. Showing a table instead.",
+    };
+  }
+
+  const availableFields = getAvailableFields(rows, columns);
+  const normalizedMapping = {
+    ...((normalizeChartMapping(chartType, mapping) as Record<string, string>) ||
+      {}),
+  };
+  const requiredFields = getRequiredFields(chartType);
+
+  const missingMappingFields = requiredFields.filter(
+    (field) => !normalizedMapping[field]
+  );
+  if (missingMappingFields.length > 0) {
+    return {
+      valid: false,
+      normalizedMapping,
+      reason: "Chart unavailable for this result shape. Showing a table instead.",
+    };
+  }
+
+  const missingColumns = requiredFields
+    .map((field) => normalizedMapping[field])
+    .filter((fieldName): fieldName is string => !availableFields.includes(fieldName));
+  if (missingColumns.length > 0) {
+    return {
+      valid: false,
+      normalizedMapping,
+      reason: "Chart unavailable for this result shape. Showing a table instead.",
+    };
+  }
+
+  switch (chartType) {
+    case "bar":
+    case "pie":
+      if (!isNumericField(rows, normalizedMapping.value)) {
+        return {
+          valid: false,
+          normalizedMapping,
+          reason: "Chart unavailable for this result shape. Showing a table instead.",
+        };
+      }
+      break;
+    case "line":
+      if (
+        normalizedMapping.x === normalizedMapping.y ||
+        !isNumericField(rows, normalizedMapping.y)
+      ) {
+        return {
+          valid: false,
+          normalizedMapping,
+          reason: "Chart unavailable for this result shape. Showing a table instead.",
+        };
+      }
+      break;
+    case "kpi":
+      if (!availableFields.includes(normalizedMapping.value)) {
+        return {
+          valid: false,
+          normalizedMapping,
+          reason: "Chart unavailable for this result shape. Showing a table instead.",
+        };
+      }
+      break;
+    default:
+      break;
+  }
+
+  return {
+    valid: true,
+    normalizedMapping,
+  };
 }
 
 export function normalizeAvailableMappings(

@@ -7,6 +7,8 @@ import type {
 import { ContextDiscoveryService } from "../../context-discovery/context-discovery.service";
 import { PatientEntityResolver } from "../../patient-entity-resolver.service";
 import { buildUnresolvedFilterClarificationId } from "../filter-validator.service";
+import { getAIProvider } from "@/lib/ai/providers/provider-factory";
+import { shouldResolvePatientLiterally } from "../../patient-resolution-gate.service";
 
 // Mock dependencies
 vi.mock("../template-matcher.service", () => ({
@@ -108,6 +110,14 @@ vi.mock("../model-router.service", () => ({
   }),
 }));
 
+vi.mock("@/lib/ai/providers/provider-factory", () => ({
+  getAIProvider: vi.fn(),
+}));
+
+vi.mock("../../patient-resolution-gate.service", () => ({
+  shouldResolvePatientLiterally: vi.fn(),
+}));
+
 describe("ThreeModeOrchestrator - Clarification Flow", () => {
   let orchestrator: ThreeModeOrchestrator;
   const originalEnv = { ...process.env };
@@ -115,6 +125,13 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...originalEnv };
+
+    vi.mocked(getAIProvider).mockResolvedValue({
+      complete: vi.fn(),
+    } as any);
+    vi.mocked(shouldResolvePatientLiterally).mockResolvedValue({
+      requiresLiteralResolution: false,
+    });
 
     mockGenerateAIClarification.mockReset();
     mockGenerateAIClarification.mockImplementation(() => Promise.resolve(null));
@@ -476,6 +493,41 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
         term: "recent",
         assumedValue: "last 30 days",
       });
+    });
+  });
+
+  describe("Legacy Patient Resolution Gate", () => {
+    it("should skip legacy patient resolution for generic patient analytics questions", async () => {
+      process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+      delete process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2;
+      delete process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW;
+
+      vi.mocked(shouldResolvePatientLiterally).mockResolvedValue({
+        requiresLiteralResolution: false,
+      });
+
+      const patientResolveSpy = vi.spyOn(
+        PatientEntityResolver.prototype,
+        "resolve"
+      );
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql: "SELECT age FROM rpt.Patient",
+        explanation: "Patient age chart query",
+        confidence: 0.88,
+      };
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.ask(
+        "show me a patient age chart",
+        "test-customer-id"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.requiresClarification).toBeUndefined();
+      expect(shouldResolvePatientLiterally).toHaveBeenCalledTimes(1);
+      expect(patientResolveSpy).not.toHaveBeenCalled();
     });
   });
 

@@ -87,9 +87,11 @@ export function SideNav() {
       style={{
         // Expanded panel and icon rail
         // @ts-ignore - CSS var on React style
-        "--sidebar-width": "10rem",
+      // 30% wider than previous 10rem
+      "--sidebar-width": "13rem",
         // @ts-ignore
-        "--sidebar-width-icon": "2.75rem",
+      // 30% wider than previous 2.75rem
+      "--sidebar-width-icon": "3.575rem",
       }}
     >
       <SidebarRail />

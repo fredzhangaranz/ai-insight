@@ -107,6 +107,7 @@ IMPORTANT:
 - 'per patient', 'by clinic', 'per month' are grouping semantics, not value filters
 - '>5 assessments', 'at least 3 wounds' are aggregate predicates, not value filters
 - 'in the system' does NOT imply a patient entity reference
+- phrases like 'patient age chart' or 'patient status chart' describe cohort or aggregate analytics, not one named patient
 - Only create a patient entity reference when the user explicitly refers to one patient
 
 ## Filter Structure (CRITICAL - ARCHITECTURAL CHANGE)
@@ -206,6 +207,10 @@ Output: {"type":"operational_metrics","scope":"aggregate","metrics":["wound_coun
 Example 7 - Aggregate predicate:
 Input: "list patients with >5 assessments in the last 6 months"
 Output: {"type":"operational_metrics","scope":"patient_cohort","metrics":["assessment_count"],"filters":[],"semanticFrame":{"scope":{"value":"patient_cohort","confidence":0.93},"subject":{"value":"patient","confidence":0.92},"measure":{"value":"assessment_count","confidence":0.95},"grain":{"value":"per_patient","confidence":0.94},"groupBy":{"value":["patient"],"confidence":0.94},"filters":[],"aggregatePredicates":[{"measure":"assessment_count","operator":">","value":5,"rawText":">5 assessments","confidence":0.95}],"timeRange":{"unit":"months","value":6},"presentation":{"value":"table","confidence":0.88},"preferredVisualization":{"value":"table","confidence":0.88},"entityRefs":[],"clarificationNeeds":[],"confidence":0.94},"timeRange":{"unit":"months","value":6},"presentationIntent":"table","preferredVisualization":"table","confidence":0.94,"reasoning":"Patient cohort query filtered by total assessment count over a defined time range"}
+
+Example 8 - Generic patient analytics, not one patient:
+Input: "show me a patient age chart"
+Output: {"type":"outcome_analysis","scope":"aggregate","metrics":["patient_age"],"filters":[],"semanticFrame":{"scope":{"value":"aggregate","confidence":0.86},"subject":{"value":"patient","confidence":0.9},"measure":{"value":"patient_age","confidence":0.78},"grain":{"value":"total","confidence":0.7},"groupBy":{"value":[],"confidence":0.68},"filters":[],"aggregatePredicates":[],"timeRange":null,"presentation":{"value":"chart","confidence":0.95},"preferredVisualization":{"value":"bar","confidence":0.74},"entityRefs":[],"clarificationNeeds":[],"confidence":0.82},"timeRange":null,"presentationIntent":"chart","preferredVisualization":"bar","confidence":0.82,"reasoning":"The question asks for a chart about patient ages across the population, not a single named patient"}
 `;
 
 /**

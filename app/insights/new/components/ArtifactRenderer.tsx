@@ -1,5 +1,6 @@
 "use client";
 
+import { validateChartConfiguration } from "@/lib/chart-mapping-utils";
 import { shapeDataForChart } from "@/lib/data-shaper";
 import type { InsightArtifact } from "@/lib/types/insight-artifacts";
 import type { ChartType } from "@/lib/chart-contracts";
@@ -23,6 +24,22 @@ export function ArtifactRenderer({
   onEditChart,
   chartOverride,
 }: ArtifactRendererProps) {
+  const renderTableArtifact = (title?: string, reason?: string) => (
+    <div className="rounded-lg border bg-white p-4">
+      {title && (
+        <h3 className="mb-3 text-sm font-semibold text-slate-800">
+          {title}
+        </h3>
+      )}
+      {reason && (
+        <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {reason}
+        </p>
+      )}
+      <ResultsTable columns={columns} rows={rows} maxRows={10} />
+    </div>
+  );
+
   if (artifact.kind === "entity_resolution") {
     return (
       <div className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-700">
@@ -38,19 +55,32 @@ export function ArtifactRenderer({
       Object.entries(effectiveMapping).filter(([, value]) => Boolean(value))
     );
     if (effectiveType === "table") {
-      return <ResultsTable columns={columns} rows={rows} maxRows={10} />;
+      return renderTableArtifact(artifact.title, artifact.reason);
+    }
+
+    const validation = validateChartConfiguration(
+      effectiveType,
+      rows,
+      mapping,
+      columns
+    );
+    if (!validation.valid) {
+      return renderTableArtifact(
+        "Result table",
+        validation.reason || artifact.reason
+      );
     }
 
     const chartData = shapeDataForChart(
       rows,
       {
         chartType: effectiveType,
-        mapping: mapping as any,
+        mapping: validation.normalizedMapping as any,
       },
       effectiveType
     );
 
-    const mappingForDateFormat = chartOverride?.chartMapping ?? artifact.mapping;
+    const mappingForDateFormat = validation.normalizedMapping;
     return (
       <div className="rounded-lg border bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -95,16 +125,7 @@ export function ArtifactRenderer({
   }
 
   if (artifact.kind === "table") {
-    return (
-      <div className="rounded-lg border bg-white p-4">
-        {artifact.title && (
-          <h3 className="mb-3 text-sm font-semibold text-slate-800">
-            {artifact.title}
-          </h3>
-        )}
-        <ResultsTable columns={artifact.columns} rows={rows} maxRows={10} />
-      </div>
-    );
+    return renderTableArtifact(artifact.title, artifact.reason);
   }
 
   return null;

@@ -57,6 +57,8 @@ import {
   type SQLValidationResult,
 } from "../sql-validator.service";
 import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
+import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
+import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import {
   PatientEntityResolver,
   type PatientResolutionResult,
@@ -70,6 +72,7 @@ import type {
 } from "@/lib/types/insight-artifacts";
 import { validateTrustedSql } from "../trusted-sql-guard.service";
 import { normalizeSemanticQueryFrame } from "../context-discovery/semantic-query-frame.service";
+import { shouldResolvePatientLiterally } from "../patient-resolution-gate.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -1004,14 +1007,35 @@ export class ThreeModeOrchestrator {
       };
       thinking.push(patientStep);
 
-      const patientResolution = await this.patientResolver.resolve(question, customerId, {
+      const patientResolverOptions = {
         selectionOpaqueRef: clarifications?.patient_resolution_select,
         confirmedOpaqueRef:
           clarifications?.patient_resolution_confirm === "__CHANGE_PATIENT__"
             ? undefined
             : clarifications?.patient_resolution_confirm,
         overrideLookup: clarifications?.patient_lookup_input,
-      });
+      };
+
+      let patientResolution: PatientResolutionResult | null = null;
+      if (!this.hasExplicitPatientResolverInput(patientResolverOptions)) {
+        const gateResult = await this.runPatientResolutionGate(question, modelId);
+        if (!gateResult?.requiresLiteralResolution) {
+          patientResolution = { status: "no_candidate" };
+        } else if (gateResult.candidateText) {
+          patientResolution = await this.patientResolver.resolve(question, customerId, {
+            candidateText: gateResult.candidateText,
+            allowQuestionInference: false,
+          });
+        }
+      }
+
+      if (!patientResolution) {
+        patientResolution = await this.patientResolver.resolve(
+          question,
+          customerId,
+          patientResolverOptions
+        );
+      }
 
       patientStep.status = "complete";
       patientStep.duration = 0;
@@ -2067,6 +2091,41 @@ export class ThreeModeOrchestrator {
         (ref) => ref.type === "patient" && ref.confidence >= 0.7
       )
     );
+  }
+
+  private hasExplicitPatientResolverInput(options: {
+    selectionOpaqueRef?: string;
+    confirmedOpaqueRef?: string;
+    overrideLookup?: string;
+  }): boolean {
+    return Boolean(
+      options.selectionOpaqueRef ||
+        options.confirmedOpaqueRef ||
+        options.overrideLookup
+    );
+  }
+
+  private async runPatientResolutionGate(
+    question: string,
+    modelId?: string
+  ): Promise<
+    | {
+        requiresLiteralResolution: boolean;
+        candidateText?: string;
+      }
+    | null
+  > {
+    try {
+      const resolvedModelId = modelId?.trim() || DEFAULT_AI_MODEL_ID;
+      const provider = await getAIProvider(resolvedModelId);
+      return shouldResolvePatientLiterally(question, provider);
+    } catch (error) {
+      console.warn(
+        "[Orchestrator] Patient resolution gate failed; falling back to resolver",
+        error
+      );
+      return null;
+    }
   }
 
   private applyFrameClarifications(

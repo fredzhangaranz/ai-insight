@@ -7,6 +7,7 @@ const getAIProviderMock = vi.fn();
 const executeCustomerQueryMock = vi.fn();
 const logConversationQueryMock = vi.fn();
 const patientResolverResolveMock = vi.fn();
+const shouldResolvePatientLiterallyMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   authOptions: {},
@@ -68,6 +69,10 @@ vi.mock("@/lib/services/patient-entity-resolver.service", () => ({
   toPatientOpaqueRef: vi.fn((value: string) => `opaque-${value}`),
 }));
 
+vi.mock("@/lib/services/patient-resolution-gate.service", () => ({
+  shouldResolvePatientLiterally: shouldResolvePatientLiterallyMock,
+}));
+
 describe("POST /api/insights/conversation/send", () => {
   let POST: (req: NextRequest) => Promise<Response>;
   const threadId = "11111111-1111-4111-8111-111111111111";
@@ -83,6 +88,9 @@ describe("POST /api/insights/conversation/send", () => {
     delete process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION;
     logConversationQueryMock.mockResolvedValue(null);
     patientResolverResolveMock.mockResolvedValue({ status: "no_candidate" });
+    shouldResolvePatientLiterallyMock.mockResolvedValue({
+      requiresLiteralResolution: false,
+    });
     const routeModule = await import("../route");
     POST = routeModule.POST;
   });
@@ -163,6 +171,147 @@ describe("POST /api/insights/conversation/send", () => {
       "Single-pass contextual"
     );
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips patient resolution for non-patient cohort questions even when patient resolution is enabled", async () => {
+    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+    shouldResolvePatientLiterallyMock.mockResolvedValue({
+      requiresLiteralResolution: false,
+    });
+
+    const provider = {
+      completeWithConversation: vi.fn().mockResolvedValue("SELECT AVG(healingRate) FROM rpt.Wound"),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    executeCustomerQueryMock.mockResolvedValue({
+      rows: [{ healingRate: 0.72 }],
+      columns: ["healingRate"],
+    });
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "What is the average healing rate for diabetic wounds?",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(shouldResolvePatientLiterallyMock).toHaveBeenCalled();
+    expect(patientResolverResolveMock).not.toHaveBeenCalled();
+    expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses AI gate candidate text instead of regex-mining the full question for patient resolution", async () => {
+    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+    shouldResolvePatientLiterallyMock.mockResolvedValue({
+      requiresLiteralResolution: true,
+      candidateText: "Fred Smith",
+    });
+    patientResolverResolveMock.mockResolvedValue({
+      status: "resolved",
+      resolvedId: "patient-123",
+      opaqueRef: "opaque-patient-123",
+      matchType: "full_name",
+      selectedMatch: {
+        patientId: "patient-123",
+        domainId: null,
+        patientName: "Fred Smith",
+        unitName: null,
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi.fn().mockResolvedValue(
+        "SELECT * FROM rpt.Wound WHERE patientFk = @patientId1"
+      ),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    executeCustomerQueryMock.mockResolvedValue({
+      rows: [{ id: 1 }],
+      columns: ["id"],
+    });
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "show me the wound area chart for Fred Smith",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(patientResolverResolveMock).toHaveBeenCalledWith(
+      "show me the wound area chart for Fred Smith",
+      "cust-1",
+      {
+        candidateText: "Fred Smith",
+        allowQuestionInference: false,
+      }
+    );
+    expect(executeCustomerQueryMock).toHaveBeenCalledWith(
+      "cust-1",
+      expect.stringContaining("@patientId1"),
+      { patientId1: "patient-123" }
+    );
   });
 
   it("formats single-metric count response when completeWithConversation returns CTE SQL", async () => {
@@ -437,20 +586,18 @@ describe("POST /api/insights/conversation/send", () => {
     process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
     process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
-    patientResolverResolveMock
-      .mockResolvedValueOnce({ status: "no_candidate" })
-      .mockResolvedValueOnce({
-        status: "resolved",
-        resolvedId: "patient-777",
-        opaqueRef: "opaque-patient-777",
-        matchType: "full_name",
-        selectedMatch: {
-          patientId: "patient-777",
-          domainId: null,
-          patientName: "Fred Smith",
-          unitName: null,
-        },
-      });
+    patientResolverResolveMock.mockResolvedValueOnce({
+      status: "resolved",
+      resolvedId: "patient-777",
+      opaqueRef: "opaque-patient-777",
+      matchType: "full_name",
+      selectedMatch: {
+        patientId: "patient-777",
+        domainId: null,
+        patientName: "Fred Smith",
+        unitName: null,
+      },
+    });
 
     const sqlWithParams =
       "WITH previous_results AS (SELECT A.patientFk FROM rpt.Assessment A WHERE A.patientFk = @patientId1) SELECT COUNT(*) AS NumberOfWounds FROM previous_results";
@@ -540,16 +687,7 @@ describe("POST /api/insights/conversation/send", () => {
     process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
     process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
-    patientResolverResolveMock
-      .mockResolvedValueOnce({ status: "no_candidate" })
-      .mockResolvedValueOnce({
-        status: "confirmation_required",
-        selectedMatch: {
-          patientId: "patient-999",
-          patientName: "Melody Crist",
-          unitName: null,
-        },
-      });
+    patientResolverResolveMock.mockResolvedValueOnce({ status: "no_candidate" });
 
     const provider = {
       completeWithConversation: vi.fn().mockResolvedValue(
@@ -634,12 +772,7 @@ describe("POST /api/insights/conversation/send", () => {
     process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
     process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
-    patientResolverResolveMock
-      .mockResolvedValueOnce({ status: "no_candidate" })
-      .mockResolvedValueOnce({
-        status: "confirmation_required",
-        selectedMatch: { patientId: "p1", patientName: "Jane", unitName: null },
-      });
+    patientResolverResolveMock.mockResolvedValueOnce({ status: "no_candidate" });
 
     const provider = {
       completeWithConversation: vi.fn().mockResolvedValue(

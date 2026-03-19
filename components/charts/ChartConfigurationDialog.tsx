@@ -5,7 +5,10 @@ import {
   type ChartDataType,
 } from "@/app/components/charts/chart-component";
 import { shapeDataForChart } from "@/lib/data-shaper";
-import { inferChartMapping } from "@/lib/chart-mapping-utils";
+import {
+  inferChartMapping,
+  validateChartConfiguration,
+} from "@/lib/chart-mapping-utils";
 import { useErrorHandler } from "@/lib/error-handler";
 import {
   DropdownMenu,
@@ -148,11 +151,18 @@ export const ChartConfigurationDialog: React.FC<
       if (chartType === "table") {
         setChartData(queryResults);
       } else {
-        const normalizedMapping = inferChartMapping(
+        const validation = validateChartConfiguration(
           chartType,
           queryResults,
           chartMapping
         );
+        if (!validation.valid) {
+          throw new Error(
+            validation.reason ||
+              "Chart unavailable for this result shape. Showing a table instead."
+          );
+        }
+        const normalizedMapping = validation.normalizedMapping;
         const shapedData = shapeDataForChart(
           queryResults,
           {
@@ -176,6 +186,7 @@ export const ChartConfigurationDialog: React.FC<
       if (!chartType) {
         throw new Error("Please select a chart type");
       }
+      let normalizedMapping: Record<string, string> = chartMapping;
       if (chartType !== "table") {
         const required = getRequiredFields(chartType);
         const missing = required.filter((f) => !chartMapping[f]);
@@ -186,11 +197,23 @@ export const ChartConfigurationDialog: React.FC<
             )}`
           );
         }
+        const validation = validateChartConfiguration(
+          chartType,
+          queryResults,
+          chartMapping
+        );
+        if (!validation.valid) {
+          throw new Error(
+            validation.reason ||
+              "Chart unavailable for this result shape. Showing a table instead."
+          );
+        }
+        normalizedMapping = validation.normalizedMapping;
       }
 
       const config = {
         chartType: chartType,
-        chartMapping: chartType === "table" ? {} : chartMapping,
+        chartMapping: chartType === "table" ? {} : normalizedMapping,
       };
 
       if (mode === "preview") {
