@@ -3,7 +3,7 @@
  *
  * V6 Update:
  * - Removed non-existent isDeleted condition
- * - Using schema from database-schema-context.md
+ * - Using rpt schema (introspected dynamically; see lib/ai/schema-context.ts)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -26,7 +26,7 @@ export async function GET(
   try {
     const pool = await getSilhouetteDbPool();
 
-    // Query based on database-schema-context.md
+    // Query uses rpt schema (introspected)
     const query = `
       SELECT DISTINCT
         P.id AS patientId,

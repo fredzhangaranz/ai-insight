@@ -4,10 +4,34 @@ import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+/** Use only same-origin or relative callback to avoid redirecting to wrong host (e.g. localhost after deploy). */
+function sanitizeCallbackUrl(raw: string | null): string {
+  const fallback = "/home";
+  if (!raw || typeof raw !== "string") return fallback;
+  const trimmed = raw.trim();
+  if (!trimmed) return fallback;
+  // Relative path: allow only single leading slash (reject "//evil.com")
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
+  try {
+    const url = new URL(trimmed);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    if (origin && url.origin !== origin) {
+      // Different origin (e.g. localhost when deployed): use path on current host
+      const path = url.pathname || "/";
+      const search = url.search || "";
+      return path + search;
+    }
+    return url.pathname + url.search || "/";
+  } catch {
+    return fallback;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/home";
+  const rawCallback = searchParams.get("callbackUrl");
+  const callbackUrl = sanitizeCallbackUrl(rawCallback);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

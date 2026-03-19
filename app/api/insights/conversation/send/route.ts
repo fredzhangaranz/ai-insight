@@ -5,9 +5,7 @@ import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
 import type { Pool } from "pg";
 import { getAIProvider } from "@/lib/ai/get-provider";
-import type { BaseProvider } from "@/lib/ai/providers/base-provider";
 import {
-  SqlComposerService,
   COMPOSITION_STRATEGIES,
   type CompositionStrategy,
 } from "@/lib/services/sql-composer.service";
@@ -35,10 +33,25 @@ import type { InsightResult } from "@/lib/hooks/useInsights";
 import { normalizeJson } from "@/lib/utils/normalize-json";
 import { addResultToCache, trimContextCache } from "@/lib/services/context-cache.service";
 import {
+  type SendConversationMessageRequest,
   SendConversationMessageSchema,
   validateRequest,
 } from "@/lib/validation/conversation-schemas";
 import { cleanSqlQuery } from "@/lib/utils/sql-cleaning";
+import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
+import {
+  PatientEntityResolver,
+  type PatientResolutionResult,
+  toPatientOpaqueRef,
+} from "@/lib/services/patient-entity-resolver.service";
+import { shouldResolvePatientLiterally } from "@/lib/services/patient-resolution-gate.service";
+import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
+import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
+import type {
+  InsightArtifact,
+  ResolvedEntitySummary,
+} from "@/lib/types/insight-artifacts";
+import { validateTrustedSql } from "@/lib/services/trusted-sql-guard.service";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -53,7 +66,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Validate request with Zod
-    const validation = validateRequest(SendConversationMessageSchema, body);
+    const validation = validateRequest<SendConversationMessageRequest>(
+      SendConversationMessageSchema,
+      body
+    );
     if (!validation.valid) {
       return NextResponse.json(
         {
@@ -64,11 +80,96 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { threadId, customerId, question, modelId, userMessageId: userMessageIdParam } =
+    const { threadId, customerId, question, modelId, userMessageId: userMessageIdParam, clarificationResponses } =
       validation.data;
     const normalizedCustomerId = customerId;
     const normalizedQuestion = question;
     const normalizedUserMessageId = userMessageIdParam || null;
+    const featureFlags = getInsightsFeatureFlags();
+    const patientResolver = new PatientEntityResolver();
+    const promptSanitizer = new PromptSanitizationService();
+    const artifactPlanner = new ArtifactPlannerService();
+    let sanitizedQuestion = normalizedQuestion;
+    let trustedSqlInstructions: string | undefined;
+    let boundParameters: Record<string, string | number | boolean | null> | undefined;
+    let resolvedEntities: ResolvedEntitySummary[] | undefined;
+    let patientResolution: PatientResolutionResult | null = null;
+
+    if (featureFlags.patientEntityResolution) {
+      const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
+      const provider = await getAIProvider(resolvedModelId);
+
+      if (threadId) {
+        try {
+          const gate = await shouldResolvePatientLiterally(normalizedQuestion, provider, {
+            threadId,
+          });
+          if (!gate.requiresLiteralResolution) {
+            patientResolution = { status: "no_candidate" };
+          }
+        } catch (err) {
+          console.warn(
+            "[Conversation Send] Patient resolution gate failed; proceeding with resolver:",
+            err
+          );
+        }
+      }
+
+      if (!patientResolution) {
+        const patientResolverOptions = buildPatientResolverOptions(clarificationResponses);
+        patientResolution = await patientResolver.resolve(
+          normalizedQuestion,
+          normalizedCustomerId,
+          patientResolverOptions
+        );
+      }
+
+      if (
+        patientResolution.selectedMatch &&
+        patientResolution.opaqueRef &&
+        patientResolution.matchType
+      ) {
+        resolvedEntities = [
+          {
+            kind: "patient",
+            opaqueRef: patientResolution.opaqueRef,
+            displayLabel: patientResolution.selectedMatch.patientName,
+            matchType: patientResolution.matchType,
+            requiresConfirmation:
+              patientResolution.status === "confirmation_required",
+            unitName: patientResolution.selectedMatch.unitName,
+          },
+        ];
+      }
+
+      if (
+        patientResolution.status === "resolved" &&
+        patientResolution.selectedMatch &&
+        patientResolution.resolvedId &&
+        patientResolution.opaqueRef &&
+        patientResolution.matchType
+      ) {
+        boundParameters = { patientId1: patientResolution.resolvedId };
+
+        if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+          const sanitization = promptSanitizer.sanitize({
+            question: normalizedQuestion,
+            patientMentions: [
+              {
+                matchedText: patientResolution.matchedText,
+                opaqueRef: patientResolution.opaqueRef,
+              },
+            ],
+          });
+          sanitizedQuestion = sanitization.sanitizedQuestion;
+          trustedSqlInstructions = [
+            "A patient was resolved securely before SQL generation.",
+            ...sanitization.trustedContextLines,
+            "You must use @patientId1 in the SQL and must not embed literal patient identifiers.",
+          ].join("\n");
+        }
+      }
+    }
     const userId = extractUserIdFromSession(session);
     const pool = await getInsightGenDbPool();
 
@@ -122,12 +223,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!currentThreadId) {
+      throw new Error("Conversation thread could not be established");
+    }
+    const ensuredThreadId = currentThreadId;
+
     let userMessageId: string | undefined = normalizedUserMessageId || undefined;
 
     if (userMessageId) {
       const validation = await validateUserMessage(
         userMessageId,
-        currentThreadId,
+        ensuredThreadId,
         normalizedCustomerId,
         normalizedQuestion,
         userId,
@@ -148,14 +254,92 @@ export async function POST(req: NextRequest) {
         VALUES ($1, 'user', $2, $3)
         RETURNING id, "createdAt"
         `,
-        [currentThreadId, question, JSON.stringify({})]
+        [
+          ensuredThreadId,
+          question,
+          JSON.stringify(
+            {
+              ...(sanitizedQuestion !== normalizedQuestion
+                ? { sanitizedQuestion }
+                : {}),
+              ...(resolvedEntities?.length
+                ? {
+                    resolvedEntities: resolvedEntities.map((entity) => ({
+                      kind: entity.kind,
+                      opaqueRef: entity.opaqueRef,
+                      matchType: entity.matchType,
+                    })),
+                  }
+                : {}),
+            }
+          ),
+        ]
       );
 
       userMessageId = userMsgResult.rows[0].id;
     }
 
+    if (
+      patientResolution &&
+      (patientResolution.status === "confirmation_required" ||
+        patientResolution.status === "disambiguation_required" ||
+        patientResolution.status === "not_found")
+    ) {
+      const clarificationResult = buildPatientClarificationResult(
+        normalizedQuestion,
+        patientResolution,
+        resolvedEntities
+      );
+      const assistantMetadata: MessageMetadata = {
+        modelUsed: String(modelId || "").trim() || DEFAULT_AI_MODEL_ID,
+        mode: "clarification",
+        executionTimeMs: Date.now() - startTime,
+        resolvedEntities: (resolvedEntities || []).map((entity) => ({
+          kind: entity.kind,
+          opaqueRef: entity.opaqueRef,
+          matchType: entity.matchType,
+        })),
+      };
+
+      const phiProtection = new PHIProtectionService();
+      phiProtection.validateNoPHI(assistantMetadata);
+
+      const assistantMsgResult = await pool.query(
+        `
+        INSERT INTO "ConversationMessages"
+          ("threadId", "role", "content", "metadata")
+        VALUES ($1, 'assistant', $2, $3)
+        RETURNING id, "createdAt"
+        `,
+        [
+          ensuredThreadId,
+          generateResponseText(clarificationResult),
+          JSON.stringify(assistantMetadata),
+        ]
+      );
+
+      return NextResponse.json({
+        threadId: ensuredThreadId,
+        userMessageId,
+        message: {
+          id: assistantMsgResult.rows[0].id,
+          role: "assistant",
+          content: generateResponseText(clarificationResult),
+          result: clarificationResult,
+          metadata: assistantMetadata,
+          createdAt: assistantMsgResult.rows[0].createdAt,
+        },
+        compositionStrategy: COMPOSITION_STRATEGIES.FRESH,
+        executionTimeMs: Date.now() - startTime,
+      });
+    }
+
+    if (!userMessageId) {
+      throw new Error("User message could not be established");
+    }
+
     const conversationHistory = await loadConversationHistory(
-      currentThreadId,
+      ensuredThreadId,
       userMessageId
     );
 
@@ -175,13 +359,42 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const sqlComposer = new SqlComposerService();
     const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
     const provider = await getAIProvider(resolvedModelId);
-    const baseProvider = provider as BaseProvider;
 
-    const { assistantMessage: lastAssistant, previousQuestion } =
+    const {
+      assistantMessage: lastAssistant,
+      previousQuestion,
+      previousRawQuestion,
+    } =
       findLastAssistantWithQuestion(conversationHistory);
+    const shouldAttemptInheritedBoundParameters =
+      !boundParameters &&
+      typeof lastAssistant?.metadata?.sql === "string" &&
+      /@\w+/.test(lastAssistant.metadata.sql);
+    const inheritedBoundParameters =
+      shouldAttemptInheritedBoundParameters
+        ? await loadInheritedBoundParameters({
+            queryHistoryId: lastAssistant?.metadata?.queryHistoryId,
+            messageId: lastAssistant?.id,
+            threadId: ensuredThreadId,
+          }).catch((err) => {
+            console.error(
+              "[loadInheritedBoundParameters] Lookup error; proceeding without inherited params:",
+              err
+            );
+            return undefined;
+          })
+        : undefined;
+    let effectiveBoundParameters = boundParameters || inheritedBoundParameters;
+
+    if (process.env.DEBUG_COMPOSITION === "true" && effectiveBoundParameters) {
+      console.log(
+        `[Layer 2A: Bound Params] Reusing bound params: ${Object.keys(
+          effectiveBoundParameters
+        ).join(",")}`
+      );
+    }
 
     // 🔍 LOGGING LAYER 2: Check composition decision criteria
     if (process.env.DEBUG_COMPOSITION === "true") {
@@ -200,83 +413,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let compositionStrategy: CompositionStrategy = COMPOSITION_STRATEGIES.FRESH;
-    let sqlText = "";
+    const compositionStrategy: CompositionStrategy = COMPOSITION_STRATEGIES.FRESH;
+    const compositionDecision: MessageMetadata["compositionDecision"] = {
+      status: "determined",
+      decisionType: "fresh",
+      reasoning:
+        "Single-pass contextual SQL generation with full conversation history",
+      confidence: 1,
+    };
 
-    if (lastAssistant?.metadata?.sql && previousQuestion) {
-      const decision = await sqlComposer.shouldComposeQuery(
-        question,
-        previousQuestion,
-        lastAssistant.metadata.sql,
-        baseProvider
-      );
-
+    if (process.env.DEBUG_COMPOSITION === "true") {
       console.log(
-        `[Composition Decision] ${
-          decision.shouldCompose ? "COMPOSE" : "FRESH"
-        } (confidence: ${decision.confidence})`
+        `[Layer 3: Contextual SQL Generation] Passing ${conversationHistory.length} messages to provider`
       );
-
-      if (decision.shouldCompose) {
-        const composed = await sqlComposer.composeQuery(
-          lastAssistant.metadata.sql,
-          previousQuestion,
-          question,
-          baseProvider
-        );
-
+      conversationHistory.forEach((msg, idx) => {
         console.log(
-          `[SqlComposerService] Composed SQL (strategy: ${composed.strategy}):`,
-          composed.sql?.slice(0, 500)
+          `  [${idx}] role=${msg.role}, sql=${!!msg.metadata?.sql}, content_len=${msg.content?.length || 0}`
         );
-
-        const validation = sqlComposer.validateComposedSql(composed.sql);
-        if (validation.valid) {
-          const cleanedComposed = composed.sql?.trim() || "";
-          // Additional safety check: ensure SQL starts with SELECT or WITH
-          const upperComposed = cleanedComposed.toUpperCase().trim();
-          if (
-            upperComposed.startsWith("SELECT") ||
-            upperComposed.startsWith("WITH")
-          ) {
-            sqlText = cleanedComposed;
-            compositionStrategy = composed.strategy;
-          } else {
-            console.warn(
-              "[SqlComposerService] Composed SQL does not start with SELECT or WITH; falling back to fresh query.",
-              `First 100 chars: ${cleanedComposed.slice(0, 100)}`
-            );
-          }
-        } else {
-          console.warn(
-            "[SqlComposerService] Composed SQL failed validation; falling back to fresh query.",
-            validation.errors
-          );
-        }
-      }
-    }
-
-    if (!sqlText) {
-      // 🔍 LOGGING LAYER 3: Fresh query generation path
-      if (process.env.DEBUG_COMPOSITION === "true") {
-        console.log(
-          `[Layer 3: Fresh Query Generation] Passing ${conversationHistory.length} messages to provider`
-        );
-        conversationHistory.forEach((msg, idx) => {
-          console.log(
-            `  [${idx}] role=${msg.role}, sql=${!!msg.metadata?.sql}, content_len=${msg.content?.length || 0}`
-          );
-        });
-      }
-
-      const generatedSql = await provider.completeWithConversation({
-        conversationHistory,
-        currentQuestion: question,
-        customerId: customerId,
       });
-      sqlText = generatedSql.trim();
-      compositionStrategy = COMPOSITION_STRATEGIES.FRESH;
     }
+
+    const effectiveTrustedInstructions =
+      trustedSqlInstructions ||
+      buildInheritedParameterInstructions(effectiveBoundParameters);
+
+    const generatedSql = await provider.completeWithConversation({
+      conversationHistory,
+      currentQuestion: sanitizedQuestion,
+      customerId: customerId,
+      trustedSqlInstructions: effectiveTrustedInstructions,
+    });
+    const sqlText = generatedSql.trim();
 
     if (!sqlText) {
       throw new Error("AI provider did not return SQL");
@@ -285,13 +452,26 @@ export async function POST(req: NextRequest) {
     // Clean SQL: remove markdown code blocks if present
     const cleanedSql = cleanSqlQuery(sqlText);
 
+    effectiveBoundParameters = await recoverMissingBoundParameters({
+      sqlText: cleanedSql,
+      boundParameters: effectiveBoundParameters,
+      patientResolver: featureFlags.patientEntityResolution
+        ? patientResolver
+        : undefined,
+      customerId: normalizedCustomerId,
+      previousQuestion: previousRawQuestion || previousQuestion,
+    });
+
     // Log the SQL that will be executed (first 500 chars for debugging)
     console.log(
       `[Conversation Send] Executing SQL (${compositionStrategy}):`,
       cleanedSql.slice(0, 500)
     );
 
-    const execution = await executeSql(cleanedSql, normalizedCustomerId);
+    const execution = await executeSql(cleanedSql, normalizedCustomerId, {
+      boundParameters: effectiveBoundParameters,
+      resolvedEntities,
+    });
     const executionTimeMs = Date.now() - startTime;
 
     const result: InsightResult = {
@@ -302,13 +482,35 @@ export async function POST(req: NextRequest) {
       results: execution.results,
       sqlValidation: execution.sqlValidation,
       error: execution.error,
+      boundParameters: effectiveBoundParameters,
+      resolvedEntities,
     };
+
+    if (
+      (featureFlags.chartFirstResults || featureFlags.conversationArtifacts) &&
+      result.results
+    ) {
+      result.artifacts = artifactPlanner.plan({
+        question: normalizedQuestion,
+        rows: result.results.rows,
+        columns: result.results.columns,
+        sql: result.sql,
+        resolvedEntities,
+      });
+    }
 
     const phiProtection = new PHIProtectionService();
     const safeResultSummary = phiProtection.createSafeResultSummary(
       result.results?.rows || [],
       result.results?.columns || []
     );
+    const artifactSummary =
+      featureFlags.followUpReliability && result.artifacts
+        ? buildArtifactSummary(
+            result.artifacts,
+            result.results?.rows || []
+          )
+        : undefined;
 
     const contextDependencies =
       lastAssistant?.id && compositionStrategy !== COMPOSITION_STRATEGIES.FRESH
@@ -322,7 +524,14 @@ export async function POST(req: NextRequest) {
       compositionStrategy,
       contextDependencies,
       resultSummary: safeResultSummary,
+      artifactSummary,
+      compositionDecision,
       executionTimeMs,
+      resolvedEntities: resolvedEntities?.map((entity) => ({
+        kind: entity.kind,
+        opaqueRef: entity.opaqueRef,
+        matchType: entity.matchType,
+      })),
     };
 
     phiProtection.validateNoPHI(assistantMetadata);
@@ -349,7 +558,9 @@ export async function POST(req: NextRequest) {
       `,
       [
         currentThreadId,
-        generateResponseText(result),
+        generateResponseText(result, {
+          followUpReliability: featureFlags.followUpReliability,
+        }),
         JSON.stringify(assistantMetadata),
       ]
     );
@@ -395,15 +606,28 @@ export async function POST(req: NextRequest) {
         ? parentQueryHistoryId
         : undefined;
     const queryHistoryId = await logQueryHistory({
-      question: question,
+      question: sanitizedQuestion,
       customerId: customerId,
       userId,
       sql: historySql,
       mode: historyMode,
       resultCount: result.results?.rows.length || 0,
       sqlValidation: result.sqlValidation,
-      semanticContext: { compositionStrategy },
-      threadId: currentThreadId,
+      semanticContext: {
+        compositionStrategy,
+        compositionDecisionType: compositionDecision?.decisionType || null,
+        compositionDecisionStatus: compositionDecision?.status || null,
+        compositionFallbackReason: compositionDecision?.fallbackReason || null,
+        resolvedEntities:
+          resolvedEntities?.map((entity) => ({
+            kind: entity.kind,
+            opaqueRef: entity.opaqueRef,
+            matchType: entity.matchType,
+          })) || null,
+        boundParameters: effectiveBoundParameters || null,
+        boundParameterNames: Object.keys(effectiveBoundParameters || {}),
+      },
+      threadId: ensuredThreadId,
       messageId: assistantMessageId,
       compositionStrategy,
       parentQueryHistoryId: normalizedParentQueryHistoryId,
@@ -426,19 +650,22 @@ export async function POST(req: NextRequest) {
     }
 
     await updateContextCache(
-      currentThreadId,
+      ensuredThreadId,
       normalizedCustomerId,
       assistantMessageId,
-      safeResultSummary
+      safeResultSummary,
+      effectiveBoundParameters
     );
 
     return NextResponse.json({
-      threadId: currentThreadId,
+      threadId: ensuredThreadId,
       userMessageId,
       message: {
         id: assistantMessageId,
         role: "assistant",
-        content: generateResponseText(result),
+        content: generateResponseText(result, {
+          followUpReliability: featureFlags.followUpReliability,
+        }),
         result,
         metadata: assistantMetadata,
         createdAt: assistantMsgResult.rows[0].createdAt,
@@ -517,9 +744,249 @@ async function loadConversationHistory(
     });
 }
 
+function normalizeBoundParameters(
+  rawValue: unknown
+): Record<string, string | number | boolean | null> | undefined {
+  const rawBoundParameters =
+    rawValue && typeof rawValue === "object" ? rawValue : null;
+
+  if (!rawBoundParameters) {
+    return undefined;
+  }
+
+  const normalized: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(rawBoundParameters)) {
+    if (
+      typeof key === "string" &&
+      key.trim() &&
+      (typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        value === null)
+    ) {
+      normalized[key] = value;
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function parseQueryHistoryId(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+async function loadBoundParametersFromQueryHistory(
+  queryHistoryId: number
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!Number.isFinite(queryHistoryId)) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await pool.query(
+    `
+    SELECT "semanticContext"
+    FROM "QueryHistory"
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [queryHistoryId]
+  );
+
+  if (result.rows.length === 0) {
+    return undefined;
+  }
+
+  const semanticContext = normalizeJson(result.rows[0].semanticContext || {});
+  return normalizeBoundParameters(semanticContext?.boundParameters);
+}
+
+async function loadBoundParametersFromMessageId(
+  messageId: string
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!messageId) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await queryHistoryByMessageId(pool, messageId);
+
+  if (result.rows.length === 0) {
+    return undefined;
+  }
+
+  const semanticContext = normalizeJson(result.rows[0].semanticContext || {});
+  return normalizeBoundParameters(semanticContext?.boundParameters);
+}
+
+async function loadLatestBoundParametersFromThread(
+  threadId: string
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!threadId) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await queryHistoryByThreadId(pool, threadId);
+
+  for (const row of result.rows) {
+    const semanticContext = normalizeJson(row.semanticContext || {});
+    const normalized = normalizeBoundParameters(semanticContext?.boundParameters);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+}
+
+function isMissingColumnError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "42703"
+  );
+}
+
+async function queryHistoryByMessageId(pool: Pool, messageId: string) {
+  try {
+    return await pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "conversationMessageId" = $1
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [messageId]
+    );
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    // Backward compatibility for older schemas.
+    return pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "messageId" = $1
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [messageId]
+    );
+  }
+}
+
+async function queryHistoryByThreadId(pool: Pool, threadId: string) {
+  try {
+    return await pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "conversationThreadId" = $1
+      ORDER BY id DESC
+      LIMIT 10
+      `,
+      [threadId]
+    );
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    // Backward compatibility for older schemas.
+    return pool.query(
+      `
+      SELECT "semanticContext"
+      FROM "QueryHistory"
+      WHERE "threadId" = $1
+      ORDER BY id DESC
+      LIMIT 10
+      `,
+      [threadId]
+    );
+  }
+}
+
+async function loadBoundParametersFromThreadCache(
+  threadId: string
+): Promise<Record<string, string | number | boolean | null> | undefined> {
+  if (!threadId) {
+    return undefined;
+  }
+
+  const pool = await getInsightGenDbPool();
+  const result = await pool.query(
+    `
+    SELECT "contextCache"
+    FROM "ConversationThreads"
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [threadId]
+  );
+
+  if (result.rows.length === 0) {
+    return undefined;
+  }
+
+  const contextCache = normalizeJson(result.rows[0].contextCache || {});
+  return normalizeBoundParameters(contextCache?.lastBoundParameters);
+}
+
+async function loadInheritedBoundParameters(input: {
+  queryHistoryId?: unknown;
+  messageId?: string;
+  threadId?: string;
+}): Promise<Record<string, string | number | boolean | null> | undefined> {
+  const parsedQueryHistoryId = parseQueryHistoryId(input.queryHistoryId);
+  if (parsedQueryHistoryId !== undefined) {
+    const fromQueryHistory = await loadBoundParametersFromQueryHistory(
+      parsedQueryHistoryId
+    );
+    if (fromQueryHistory) {
+      return fromQueryHistory;
+    }
+  }
+
+  if (input.messageId) {
+    const fromMessage = await loadBoundParametersFromMessageId(input.messageId);
+    if (fromMessage) {
+      return fromMessage;
+    }
+  }
+
+  if (input.threadId) {
+    const fromThread = await loadLatestBoundParametersFromThread(input.threadId);
+    if (fromThread) {
+      return fromThread;
+    }
+
+    return loadBoundParametersFromThreadCache(input.threadId);
+  }
+
+  return undefined;
+}
+
 function findLastAssistantWithQuestion(
   history: ConversationMessage[]
-): { assistantMessage?: ConversationMessage; previousQuestion?: string } {
+): {
+  assistantMessage?: ConversationMessage;
+  previousQuestion?: string;
+  previousRawQuestion?: string;
+} {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
     if (message.role !== "assistant" || !message.metadata?.sql) {
@@ -528,7 +995,12 @@ function findLastAssistantWithQuestion(
 
     for (let j = i - 1; j >= 0; j -= 1) {
       if (history[j].role === "user") {
-        return { assistantMessage: message, previousQuestion: history[j].content };
+        return {
+          assistantMessage: message,
+          previousQuestion:
+            history[j].metadata?.sanitizedQuestion || history[j].content,
+          previousRawQuestion: history[j].content,
+        };
       }
     }
 
@@ -538,15 +1010,161 @@ function findLastAssistantWithQuestion(
   return {};
 }
 
+function extractSqlParameterNames(sqlText: string): string[] {
+  const matches = sqlText.match(/(?<!@)@([A-Za-z_][A-Za-z0-9_]*)/g) || [];
+  const uniqueNames = new Set<string>();
+
+  for (const token of matches) {
+    const parameterName = token.slice(1);
+    if (parameterName) {
+      uniqueNames.add(parameterName);
+    }
+  }
+
+  return Array.from(uniqueNames);
+}
+
+function getMissingBoundParameters(
+  sqlText: string,
+  boundParameters?: Record<string, string | number | boolean | null>
+): string[] {
+  const requiredParameterNames = extractSqlParameterNames(sqlText);
+  if (!requiredParameterNames.length) {
+    return [];
+  }
+
+  return requiredParameterNames.filter(
+    (name) => !Object.prototype.hasOwnProperty.call(boundParameters || {}, name)
+  );
+}
+
+async function recoverMissingBoundParameters(input: {
+  sqlText: string;
+  boundParameters?: Record<string, string | number | boolean | null>;
+  patientResolver?: PatientEntityResolver;
+  customerId: string;
+  previousQuestion?: string;
+}): Promise<Record<string, string | number | boolean | null> | undefined> {
+  const missingParameterNames = getMissingBoundParameters(
+    input.sqlText,
+    input.boundParameters
+  );
+
+  if (!missingParameterNames.length) {
+    return input.boundParameters;
+  }
+
+  if (!input.patientResolver || !input.previousQuestion) {
+    return input.boundParameters;
+  }
+
+  const missingPatientParameters = missingParameterNames.filter((name) =>
+    /^patientId\d+$/i.test(name)
+  );
+
+  // Avoid guessing when non-patient variables are missing or multiple patient refs exist.
+  if (
+    missingPatientParameters.length !== missingParameterNames.length ||
+    missingPatientParameters.length !== 1
+  ) {
+    return input.boundParameters;
+  }
+
+  const patientResolution = await input.patientResolver.resolve(
+    input.previousQuestion,
+    input.customerId
+  );
+
+  if (
+    patientResolution.status !== "resolved" ||
+    !patientResolution.resolvedId
+  ) {
+    return input.boundParameters;
+  }
+
+  return {
+    ...(input.boundParameters || {}),
+    [missingPatientParameters[0]]: patientResolution.resolvedId,
+  };
+}
+
 async function executeSql(
   sqlText: string,
-  customerId: string
+  customerId: string,
+  options?: {
+    boundParameters?: Record<string, string | number | boolean | null>;
+    resolvedEntities?: ResolvedEntitySummary[];
+  }
 ): Promise<{
   executedSql: string;
   results: { rows: any[]; columns: string[] };
   sqlValidation: SQLValidationResult;
   error?: { message: string; step: string; details?: any };
 }> {
+  const trustedValidation = validateTrustedSql({
+    sql: sqlText,
+    patientParamNames: Object.keys(options?.boundParameters || {}),
+    resolvedPatientIds: Object.values(options?.boundParameters || {})
+      .map((value) => (typeof value === "string" ? value : undefined))
+      .filter((value): value is string => Boolean(value)),
+  });
+
+  if (!trustedValidation.valid) {
+    return {
+      executedSql: sqlText,
+      results: { rows: [], columns: [] },
+      sqlValidation: {
+        isValid: false,
+        warnings: [],
+        analyzedAt: new Date().toISOString(),
+        errors: [
+          {
+            type: "TRUSTED_SQL_VIOLATION",
+            message:
+              trustedValidation.message || "Trusted SQL validation failed",
+            suggestion:
+              "Use the bound patient parameter instead of embedding patient identifiers.",
+          },
+        ],
+      } as unknown as SQLValidationResult,
+      error: {
+        message: trustedValidation.message || "Trusted SQL validation failed",
+        step: "execute_query",
+      },
+    };
+  }
+
+  const missingBoundParameters = getMissingBoundParameters(
+    sqlText,
+    options?.boundParameters
+  );
+  if (missingBoundParameters.length > 0) {
+    const missingList = missingBoundParameters
+      .map((name) => `@${name}`)
+      .join(", ");
+    return {
+      executedSql: sqlText,
+      results: { rows: [], columns: [] },
+      sqlValidation: {
+        isValid: false,
+        warnings: [],
+        analyzedAt: new Date().toISOString(),
+        errors: [
+          {
+            type: "MISSING_BOUND_PARAMETER",
+            message: `Missing secure SQL parameter(s): ${missingList}.`,
+            suggestion:
+              "Re-run from the original patient question so secure parameters are re-bound.",
+          },
+        ],
+      } as unknown as SQLValidationResult,
+      error: {
+        message: `Missing secure SQL parameter(s): ${missingList}.`,
+        step: "execute_query",
+      },
+    };
+  }
+
   const validator = getSQLValidator();
   const sqlValidation = validator.validate(sqlText);
 
@@ -565,7 +1183,11 @@ async function executeSql(
 
   try {
     const fixedSql = validateAndFixQuery(sqlText);
-    const execution = await executeCustomerQuery(customerId, fixedSql);
+    const execution = await executeCustomerQuery(
+      customerId,
+      fixedSql,
+      options?.boundParameters
+    );
     return {
       executedSql: fixedSql,
       results: {
@@ -634,7 +1256,7 @@ async function logQueryHistory(input: {
 
     return queryHistoryId ?? null;
   } catch (error) {
-    console.warn(
+    console.error(
       "[/api/insights/conversation/send] Failed to log query history:",
       error
     );
@@ -693,7 +1315,8 @@ async function updateContextCache(
   threadId: string,
   customerId: string,
   assistantMessageId: string,
-  resultSummary: ResultSummary
+  resultSummary: ResultSummary,
+  boundParameters?: Record<string, string | number | boolean | null>
 ) {
   const pool = await getInsightGenDbPool();
   const existingCacheResult = await pool.query(
@@ -716,6 +1339,9 @@ async function updateContextCache(
     {
       customerId,
       ...existingCache,
+      ...(boundParameters && Object.keys(boundParameters).length > 0
+        ? { lastBoundParameters: boundParameters }
+        : {}),
     },
     {
       messageId: assistantMessageId,
@@ -820,8 +1446,141 @@ async function validateUserMessage(
   return { valid: true };
 }
 
-function generateResponseText(result: InsightResult): string {
+function buildInheritedParameterInstructions(
+  boundParameters?: Record<string, string | number | boolean | null>
+): string | undefined {
+  if (!boundParameters || Object.keys(boundParameters).length === 0) {
+    return undefined;
+  }
+
+  const placeholders = Object.keys(boundParameters)
+    .map((name) => `@${name}`)
+    .join(", ");
+  return (
+    `The previous query used these parameter placeholders: ${placeholders}. ` +
+    "If your generated SQL logically operates on or filters the previous result, you must include these parameters in your SQL; the system will substitute the resolved values at execution."
+  );
+}
+
+function buildPatientResolverOptions(
+  clarificationResponses?: Record<string, string>
+): { selectionOpaqueRef?: string; confirmedOpaqueRef?: string; overrideLookup?: string } | undefined {
+  if (!clarificationResponses) return undefined;
+
+  const select = clarificationResponses["patient_resolution_select"];
+  if (select) return { selectionOpaqueRef: select };
+
+  const confirm = clarificationResponses["patient_resolution_confirm"];
+  if (confirm) {
+    if (confirm === "__CHANGE_PATIENT__") return undefined;
+    if (confirm.startsWith("patient:")) return { confirmedOpaqueRef: confirm };
+    return { overrideLookup: confirm };
+  }
+
+  const lookup = clarificationResponses["patient_lookup_input"];
+  if (lookup) return { overrideLookup: lookup };
+
+  return undefined;
+}
+
+function buildPatientClarificationResult(
+  question: string,
+  resolution: PatientResolutionResult,
+  resolvedEntities?: ResolvedEntitySummary[]
+): InsightResult {
+  if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
+    return {
+      mode: "clarification",
+      question,
+      thinking: [],
+      requiresClarification: true,
+      resolvedEntities,
+      clarifications: [
+        {
+          placeholder: "patient_resolution_confirm",
+          prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
+          options: [
+            {
+              label: `Use ${resolution.selectedMatch.patientName}`,
+              value: resolution.opaqueRef || "",
+            },
+            {
+              label: "Choose a different patient",
+              value: "__CHANGE_PATIENT__",
+            },
+          ],
+          freeformAllowed: {
+            allowed: true,
+            placeholder: "Enter an exact patient name or ID",
+            hint: "Use an exact full name, patient ID, or domain ID",
+            minChars: 3,
+            maxChars: 100,
+          },
+        },
+      ],
+      clarificationReasoning:
+        "I found one exact full-name match and need a quick confirmation before running the query.",
+    };
+  }
+
+  if (
+    resolution.status === "disambiguation_required" &&
+    Array.isArray(resolution.matches) &&
+    resolution.matches.length > 0
+  ) {
+    return {
+      mode: "clarification",
+      question,
+      thinking: [],
+      requiresClarification: true,
+      clarifications: [
+        {
+          placeholder: "patient_resolution_select",
+          prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
+          options: resolution.matches.map((match) => ({
+            label: match.unitName
+              ? `${match.patientName} (${match.unitName})`
+              : match.patientName,
+            value: toPatientOpaqueRef(match.patientId),
+          })),
+        },
+      ],
+      clarificationReasoning:
+        "I found multiple exact full-name matches and need you to choose the correct patient.",
+    };
+  }
+
+  return {
+    mode: "clarification",
+    question,
+    thinking: [],
+    requiresClarification: true,
+    clarifications: [
+      {
+        placeholder: "patient_lookup_input",
+        prompt: resolution.candidateText
+          ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
+          : "Please enter an exact full name or patient ID.",
+        freeformAllowed: {
+          allowed: true,
+          placeholder: "e.g. Fred Smith or 12345",
+          hint: "Use an exact full name, patient ID, or domain ID",
+          minChars: 3,
+          maxChars: 100,
+        },
+      },
+    ],
+    clarificationReasoning:
+      "I couldn't resolve the patient reference securely. Please provide an exact patient name or ID.",
+  };
+}
+
+function generateResponseText(
+  result: InsightResult,
+  options?: { followUpReliability?: boolean }
+): string {
   const rowCount = result.results?.rows.length || 0;
+  const countFormatted = tryFormatAggregateCountResponse(result, options);
 
   if (result.mode === "clarification") {
     return "I need some clarification before I can answer that question.";
@@ -835,9 +1594,91 @@ function generateResponseText(result: InsightResult): string {
     return "I didn't find any matching records.";
   }
 
+  if (countFormatted) {
+    return countFormatted;
+  }
+
   if (rowCount === 1) {
     return "Found 1 record matching your criteria.";
   }
 
   return `Found ${rowCount} records matching your criteria.`;
+}
+
+function tryFormatAggregateCountResponse(
+  result: InsightResult,
+  options?: { followUpReliability?: boolean }
+): string | null {
+  if (!options?.followUpReliability) {
+    return null;
+  }
+
+  const question = (result.question || "").toLowerCase();
+  if (!/(how many|count|number of)/i.test(question)) {
+    return null;
+  }
+
+  const rows = result.results?.rows || [];
+  const columns = result.results?.columns || [];
+  if (rows.length !== 1 || columns.length !== 1) {
+    return null;
+  }
+
+  const value = Number(rows[0]?.[columns[0]]);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  if (question.includes("wound")) {
+    const rounded = Math.round(value);
+    return `We are displaying ${rounded} wound${rounded === 1 ? "" : "s"}.`;
+  }
+
+  return `The count is ${value}.`;
+}
+
+function buildArtifactSummary(
+  artifacts: InsightArtifact[],
+  rows: any[]
+): MessageMetadata["artifactSummary"] | undefined {
+  const chartArtifact = artifacts.find(
+    (artifact): artifact is Extract<InsightArtifact, { kind: "chart" }> =>
+      artifact.kind === "chart" && artifact.primary === true
+  ) ||
+    artifacts.find(
+      (artifact): artifact is Extract<InsightArtifact, { kind: "chart" }> =>
+        artifact.kind === "chart"
+    );
+
+  if (!chartArtifact) {
+    return undefined;
+  }
+
+  const seriesKeyColumn =
+    chartArtifact.seriesKey ||
+    (typeof chartArtifact.mapping.label === "string"
+      ? chartArtifact.mapping.label
+      : undefined);
+
+  let distinctSeriesCount: number | undefined;
+  if (seriesKeyColumn) {
+    const seriesValues = new Set(
+      rows
+        .map((row) => row?.[seriesKeyColumn])
+        .filter(
+          (value) => value !== null && value !== undefined && value !== ""
+        )
+        .map((value) => String(value))
+    );
+    if (seriesValues.size > 0) {
+      distinctSeriesCount = seriesValues.size;
+    }
+  }
+
+  return {
+    primaryChartType: chartArtifact.chartType,
+    mappingKeys: Object.keys(chartArtifact.mapping || {}),
+    seriesKeyColumn,
+    distinctSeriesCount,
+  };
 }

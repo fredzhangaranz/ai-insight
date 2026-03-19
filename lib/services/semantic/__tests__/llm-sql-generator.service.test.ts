@@ -1,9 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import type { ContextBundle } from "../../context-discovery/types";
-import {
-  generateSQLWithLLM,
-  clearSchemaCache,
-} from "../llm-sql-generator.service";
+import { generateSQLWithLLM } from "../llm-sql-generator.service";
+import { clearSchemaCache } from "@/lib/ai/schema-context";
 
 const mocks = vi.hoisted(() => {
   const schemaRows = [
@@ -28,7 +26,9 @@ const mocks = vi.hoisted(() => {
   const mockGetAIProvider = vi.fn(async () => ({
     complete: mockComplete,
   }));
-  const mockLoadSchemaContext = vi.fn(() => "# Mock schema documentation");
+  const mockLoadSchemaContext = vi.fn(() =>
+    Promise.resolve("# Mock schema documentation")
+  );
   const mockExecuteCustomerQuery = vi.fn<
     [string, string],
     Promise<{ rows: any[]; columns: string[] }>
@@ -51,12 +51,19 @@ vi.mock("@/lib/ai/providers/provider-factory", () => ({
   getAIProvider: mocks.mockGetAIProvider,
 }));
 
-vi.mock("@/lib/ai/schema-context", () => ({
-  loadDatabaseSchemaContext: mocks.mockLoadSchemaContext,
-}));
+vi.mock("@/lib/ai/schema-context", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ai/schema-context")>();
+  return {
+    ...actual,
+    loadDatabaseSchemaContext: mocks.mockLoadSchemaContext,
+  };
+});
 
 vi.mock("@/lib/services/semantic/customer-query.service", () => ({
   executeCustomerQuery: mocks.mockExecuteCustomerQuery,
+  withCustomerPool: vi.fn(async (_id: string, fn: (p: unknown) => Promise<unknown>) =>
+    fn({ request: () => ({ query: () => ({ recordset: [] }) }) })
+  ),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -163,7 +170,9 @@ describe("generateSQLWithLLM", () => {
     await generateSQLWithLLM(baseContext, "customer-1");
     await generateSQLWithLLM(baseContext, "customer-1");
 
-    expect(mocks.mockExecuteCustomerQuery).toHaveBeenCalledTimes(1);
+    // Schema is loaded via loadDatabaseSchemaContext(customerId); cache is in schema-context
+    expect(mocks.mockLoadSchemaContext).toHaveBeenCalledWith("customer-1");
+    expect(mocks.mockLoadSchemaContext).toHaveBeenCalledTimes(2);
   });
 
   it("throws when LLM response is not valid JSON", async () => {

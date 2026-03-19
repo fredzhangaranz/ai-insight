@@ -77,9 +77,37 @@ JSON must include these fields:
 - scope: One of patient_cohort, individual_patient, aggregate
 - metrics: Array of metric names
 - filters: Array of filter objects with EXACT structure below
+- semanticFrame: object describing structural query semantics (see below)
 - timeRange: null or object with unit (days/weeks/months/years) and number value
+- presentationIntent: "chart" | "table" | "either"
+- preferredVisualization: "line" | "bar" | "kpi" | "table" | null
 - confidence: number between 0.0 and 1.0
 - reasoning: string explanation
+
+## Semantic Frame (CRITICAL FOR STRUCTURAL QUERIES)
+
+Provide a 'semanticFrame' object that captures structural query meaning beyond flat filters.
+
+Required frame slots:
+- scope: { value, confidence }
+- subject: { value, confidence }
+- measure: { value, confidence }
+- grain: { value, confidence }
+- groupBy: { value: string[], confidence }
+- filters: Array of value/enum/date filters only
+- aggregatePredicates: Array for HAVING-style conditions like assessment_count > 5
+- timeRange: null or time range
+- presentation: { value, confidence }
+- preferredVisualization: { value, confidence }
+- entityRefs: explicit named references such as patient IDs or patient names
+- clarificationNeeds: array of missing/ambiguous slots only when clarification is truly required
+- confidence: overall frame confidence
+
+IMPORTANT:
+- 'per patient', 'by clinic', 'per month' are grouping semantics, not value filters
+- '>5 assessments', 'at least 3 wounds' are aggregate predicates, not value filters
+- 'in the system' does NOT imply a patient entity reference
+- Only create a patient entity reference when the user explicitly refers to one patient
 
 ## Filter Structure (CRITICAL - ARCHITECTURAL CHANGE)
 
@@ -120,7 +148,16 @@ For "how many patients" respond with:
    - Healing rate, infection rate, closure rate, assessment frequency, etc.
    - Be specific: "average_healing_rate" not just "healing"
 
-4. **Classify Intent**: Choose the BEST matching intent type
+4. **Determine Presentation Intent**:
+   - Use "chart" when user explicitly asks for a chart/graph/plot or the request is clearly a trend over time.
+   - Use "table" when user asks to list/show rows.
+   - Use "either" otherwise.
+   - Use preferredVisualization "line" for time-series/trend language such as "over time", "trend", "change over time", "healing progression".
+   - Use preferredVisualization "bar" for comparisons by category.
+   - Use preferredVisualization "kpi" for single-metric requests.
+   - Use preferredVisualization null when none is clearly preferred.
+
+5. **Classify Intent**: Choose the BEST matching intent type
    - outcome_analysis: measuring results (default for most clinical questions)
    - trend_analysis: tracking changes over time
    - cohort_comparison: comparing groups explicitly mentioned
@@ -128,7 +165,7 @@ For "how many patients" respond with:
    - quality_metrics: system performance measures
    - operational_metrics: efficiency measures
 
-5. **Estimate Confidence**: Score 0-1 based on:
+6. **Estimate Confidence**: Score 0-1 based on:
    - Clarity of the question (higher if clear, lower if ambiguous)
    - Completeness of information (higher if most details present)
    - Unambiguous intent type (higher if only one clear type)
@@ -161,6 +198,14 @@ Output: {"type":"trend_analysis","scope":"patient_cohort","metrics":["healing_ra
 Example 5 - Comparison with multiple filters:
 Input: "Do diabetic wounds heal faster than arterial wounds?"
 Output: {"type":"cohort_comparison","scope":"patient_cohort","metrics":["healing_rate","closure_time"],"filters":[{"operator":"equals","userPhrase":"diabetic wounds","value":null},{"operator":"equals","userPhrase":"arterial wounds","value":null}],"timeRange":null,"confidence":0.92,"reasoning":"Explicit comparison between two wound classifications"}
+
+Example 6 - Structural aggregation by entity:
+Input: "show me a chart with number of wounds per patient in the system"
+Output: {"type":"operational_metrics","scope":"aggregate","metrics":["wound_count"],"filters":[],"semanticFrame":{"scope":{"value":"aggregate","confidence":0.96},"subject":{"value":"patient","confidence":0.92},"measure":{"value":"wound_count","confidence":0.95},"grain":{"value":"per_patient","confidence":0.96},"groupBy":{"value":["patient"],"confidence":0.96},"filters":[],"aggregatePredicates":[],"timeRange":null,"presentation":{"value":"chart","confidence":0.95},"preferredVisualization":{"value":"bar","confidence":0.85},"entityRefs":[],"clarificationNeeds":[],"confidence":0.95},"timeRange":null,"presentationIntent":"chart","preferredVisualization":"bar","confidence":0.95,"reasoning":"System-wide wound counts grouped by patient for chart display"}
+
+Example 7 - Aggregate predicate:
+Input: "list patients with >5 assessments in the last 6 months"
+Output: {"type":"operational_metrics","scope":"patient_cohort","metrics":["assessment_count"],"filters":[],"semanticFrame":{"scope":{"value":"patient_cohort","confidence":0.93},"subject":{"value":"patient","confidence":0.92},"measure":{"value":"assessment_count","confidence":0.95},"grain":{"value":"per_patient","confidence":0.94},"groupBy":{"value":["patient"],"confidence":0.94},"filters":[],"aggregatePredicates":[{"measure":"assessment_count","operator":">","value":5,"rawText":">5 assessments","confidence":0.95}],"timeRange":{"unit":"months","value":6},"presentation":{"value":"table","confidence":0.88},"preferredVisualization":{"value":"table","confidence":0.88},"entityRefs":[],"clarificationNeeds":[],"confidence":0.94},"timeRange":{"unit":"months","value":6},"presentationIntent":"table","preferredVisualization":"table","confidence":0.94,"reasoning":"Patient cohort query filtered by total assessment count over a defined time range"}
 `;
 
 /**
@@ -258,6 +303,73 @@ export function validateIntentClassificationResponse(response: unknown): {
     return { valid: false, error: "Missing or invalid 'filters' array" };
   }
 
+  // Normalize presentationIntent: LLMs often return case variants or synonyms
+  const validPresentationIntents = ["chart", "table", "either"];
+  const presentationIntentMap: Record<string, "chart" | "table" | "either"> = {
+    chart: "chart",
+    table: "table",
+    either: "either",
+    graph: "chart",
+    list: "table",
+    bar: "chart", // bar chart is a chart type
+  };
+  if (
+    result.presentationIntent !== undefined &&
+    result.presentationIntent !== null &&
+    typeof result.presentationIntent === "string"
+  ) {
+    const normalized = presentationIntentMap[
+      (result.presentationIntent as string).trim().toLowerCase()
+    ];
+    result.presentationIntent = normalized ?? "either";
+  }
+
+  if (
+    result.presentationIntent !== undefined &&
+    result.presentationIntent !== null &&
+    !validPresentationIntents.includes(result.presentationIntent as string)
+  ) {
+    return {
+      valid: false,
+      error: "Invalid presentationIntent value",
+    };
+  }
+
+  // Normalize preferredVisualization: same resilience for LLM variations
+  const validPreferredVisualizations = ["line", "bar", "kpi", "table"];
+  const preferredVizMap: Record<string, "line" | "bar" | "kpi" | "table"> = {
+    line: "line",
+    bar: "bar",
+    kpi: "kpi",
+    table: "table",
+    chart: "bar", // generic chart -> bar
+    graph: "line", // generic graph -> line
+    list: "table",
+  };
+  if (
+    result.preferredVisualization !== undefined &&
+    result.preferredVisualization !== null &&
+    typeof result.preferredVisualization === "string"
+  ) {
+    const normalized = preferredVizMap[
+      (result.preferredVisualization as string).trim().toLowerCase()
+    ];
+    result.preferredVisualization = normalized ?? null;
+  }
+
+  if (
+    result.preferredVisualization !== undefined &&
+    result.preferredVisualization !== null &&
+    !validPreferredVisualizations.includes(
+      result.preferredVisualization as string
+    )
+  ) {
+    return {
+      valid: false,
+      error: "Invalid preferredVisualization value",
+    };
+  }
+
   if (
     typeof result.confidence !== "number" ||
     result.confidence < 0 ||
@@ -325,8 +437,7 @@ export function validateIntentClassificationResponse(response: unknown): {
     }
   }
 
-  // Cast to IntentClassificationResult
-  const typedResult: IntentClassificationResult = {
+  const baseResult: IntentClassificationResult = {
     type: result.type as IntentType,
     scope: result.scope as
       | "patient_cohort"
@@ -336,10 +447,10 @@ export function validateIntentClassificationResponse(response: unknown): {
     filters: (result.filters as unknown[]).map((f: unknown) => {
       const filter = f as Record<string, unknown>;
       return {
-        field: filter.field as string | undefined, // Optional: assigned by semantic search
+        field: filter.field as string | undefined,
         operator: filter.operator as string,
         userPhrase: filter.userPhrase as string,
-        value: null, // Always null per new architecture
+        value: null,
       };
     }),
     timeRange: result.timeRange
@@ -352,8 +463,24 @@ export function validateIntentClassificationResponse(response: unknown): {
           value: (result.timeRange as Record<string, unknown>).value as number,
         }
       : undefined,
+    presentationIntent:
+      (result.presentationIntent as "chart" | "table" | "either" | undefined) ||
+      undefined,
+    preferredVisualization:
+      (result.preferredVisualization as
+        | "line"
+        | "bar"
+        | "kpi"
+        | "table"
+        | null
+        | undefined) ?? undefined,
     confidence: result.confidence as number,
     reasoning: result.reasoning as string,
+  };
+
+  const typedResult: IntentClassificationResult = {
+    ...baseResult,
+    semanticFrame: undefined,
   };
 
   return { valid: true, result: typedResult };

@@ -68,19 +68,13 @@ export async function PUT(
 
         if (checkResult.rows.length === 0) {
           console.log(`Question ${questionId} not found in database`);
-          return NextResponse.json(
-            { message: "Question not found." },
-            { status: 404 }
-          );
+          throw new Error("Question not found");
         } else {
           const existingQuestion = checkResult.rows[0];
           console.log(
             `Question exists but no changes made. Current: "${existingQuestion.questionText}", New: "${questionText}"`
           );
-          return NextResponse.json(
-            { message: "Question not found or no changes made." },
-            { status: 404 }
-          );
+          throw new Error("Question not found or no changes made");
         }
       }
 
@@ -195,10 +189,7 @@ export async function DELETE(
       ]);
 
       if (result.rowCount === 0) {
-        return NextResponse.json(
-          { message: "Question not found." },
-          { status: 404 }
-        );
+        throw new Error("Question not found");
       }
 
       // Update the cached insights to reflect the deleted custom question
@@ -276,6 +267,14 @@ export async function DELETE(
       return NextResponse.json({
         message: "Question deleted successfully.",
       });
+    } catch (error) {
+      if (error instanceof Error && error.message === "Question not found") {
+        return NextResponse.json(
+          { message: "Question not found." },
+          { status: 404 }
+        );
+      }
+      throw error;
     } finally {
       client.release();
     }

@@ -106,10 +106,27 @@ function validateAndFixQuery(sql: string): string {
       );
     }
   }
-  // Prefix common tables with rpt.
-  const tableRegex =
-    /(?<!rpt\.)(Assessment|Patient|Wound|Note|Measurement|AttributeType|DimDate)\b/g;
-  sql = sql.replace(tableRegex, "rpt.$1");
+  // Prefix common tables with rpt. (only in FROM/JOIN clauses, not in string values)
+  // CRITICAL: Must not modify values inside quotes like: ATV.name IN ('Wound Assessment')
+  const tableNames = [
+    "Assessment",
+    "Patient", 
+    "Wound",
+    "Note",
+    "Measurement",
+    "AttributeType",
+    "DimDate",
+    "AssessmentTypeVersion"
+  ];
+  
+  for (const tableName of tableNames) {
+    // Only match in FROM/JOIN context to avoid corrupting string literals
+    const fromJoinPattern = new RegExp(
+      `(FROM|JOIN)\\s+(?!rpt\\.)${tableName}\\b`,
+      "gi"
+    );
+    sql = sql.replace(fromJoinPattern, `$1 rpt.${tableName}`);
+  }
   // Add TOP limit if not present
   if (!sql.match(/\bTOP\s+\d+\b/i) && !sql.match(/\bOFFSET\b/i)) {
     // Handle DISTINCT + TOP syntax correctly for MS SQL Server
@@ -308,12 +325,33 @@ export class InsightService {
     rows: any[];
     chart: { chartType: ChartType; data: any };
   } | null> {
+    console.log("[InsightService.execute] Starting with id:", id, "customerId param:", customerId);
+    
     const insight = await this.getById(id, ownerId);
     if (!insight || !insight.isActive) return null;
+    
+    console.log("[InsightService.execute] Loaded insight:", {
+      id: insight.id,
+      name: insight.name,
+      savedCustomerId: insight.customerId,
+      sqlPreview: insight.sql.slice(0, 200),
+    });
+    
     const sqlText = validateAndFixQuery(insight.sql);
+    
+    console.log("[InsightService.execute] After validateAndFixQuery:", {
+      originalLength: insight.sql.length,
+      fixedLength: sqlText.length,
+      preview: sqlText.slice(0, 200),
+    });
 
     // Use customer-specific DB pool if customerId is provided (either from insight or parameter)
     const targetCustomerId = customerId || insight.customerId;
+    console.log("[InsightService.execute] Target customer ID:", targetCustomerId, {
+      fromParameter: !!customerId,
+      fromSavedInsight: !!insight.customerId,
+    });
+    
     if (!targetCustomerId) {
       throw new Error(
         "Customer ID is required to execute insight. Please select a customer.",
@@ -325,6 +363,12 @@ export class InsightService {
     if (!customer) {
       throw new Error(`Customer not found: ${targetCustomerId}`);
     }
+    console.log("[InsightService.execute] Customer found:", {
+      id: customer.id,
+      name: customer.name,
+      hasConnection: !!customer.dbConnectionEncrypted,
+    });
+    
     if (!customer.dbConnectionEncrypted) {
       throw new Error(
         `Customer ${targetCustomerId} does not have a database connection configured`,
@@ -337,12 +381,27 @@ export class InsightService {
     const connectionString = decryptConnectionString(
       customer.dbConnectionEncrypted,
     );
+    
+    console.log("[InsightService.execute] Decrypted connection string (first 100 chars):", connectionString.slice(0, 100));
 
     // Get customer-specific DB pool
     const pool = await getSqlServerPool(connectionString);
+    // Set session context for rpt schema / row-level security (same connection as query)
+    const allAccessBatch = `EXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${sqlText}`;
     const req = pool.request();
-    const result = await req.query(sqlText);
+
+    console.log("[InsightService.execute] Executing SQL (with all_access)...");
+    const startTime = Date.now();
+    const result = await req.query(allAccessBatch);
+    const executionTime = Date.now() - startTime;
+    
     const rows = result.recordset || [];
+    console.log(`[InsightService.execute] ✅ Query completed in ${executionTime}ms, returned ${rows.length} rows`);
+    
+    if (rows.length === 0) {
+      console.warn("[InsightService.execute] ⚠️ ZERO ROWS RETURNED - Full SQL:", sqlText);
+    }
+    
     const data =
       insight.chartType === "table"
         ? rows

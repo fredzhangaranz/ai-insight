@@ -39,6 +39,8 @@ export interface ClarificationOption {
   label: string;
   description?: string;
   sqlConstraint: string;
+  submissionValue?: string;
+  kind?: "sql" | "semantic";
   isDefault?: boolean;
 }
 
@@ -51,6 +53,9 @@ export interface ClarificationRequest {
   question: string;
   options: ClarificationOption[];
   allowCustom: boolean;
+  slot?: string;
+  target?: string;
+  reason?: string;
 }
 
 /**

@@ -33,7 +33,8 @@ export function ClarificationPanel({
     clarifications.forEach((clarification) => {
       const defaultOption = clarification.options.find((opt) => opt.isDefault);
       if (defaultOption) {
-        defaults[clarification.id] = defaultOption.sqlConstraint;
+        defaults[clarification.id] =
+          defaultOption.submissionValue ?? defaultOption.sqlConstraint;
       }
     });
     setSelections(defaults);
@@ -41,10 +42,10 @@ export function ClarificationPanel({
     setCustomMode({});
   }, [clarifications]);
 
-  const handleOptionSelect = (clarificationId: string, sqlConstraint: string) => {
+  const handleOptionSelect = (clarificationId: string, value: string) => {
     setSelections((prev) => ({
       ...prev,
-      [clarificationId]: sqlConstraint,
+      [clarificationId]: value,
     }));
     setCustomMode((prev) => ({
       ...prev,
@@ -131,11 +132,15 @@ export function ClarificationPanel({
                     <button
                       key={option.id}
                       onClick={() =>
-                        handleOptionSelect(clarification.id, option.sqlConstraint)
+                        handleOptionSelect(
+                          clarification.id,
+                          option.submissionValue ?? option.sqlConstraint
+                        )
                       }
                       disabled={isSubmitting}
                       className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                        selections[clarification.id] === option.sqlConstraint &&
+                        selections[clarification.id] ===
+                          (option.submissionValue ?? option.sqlConstraint) &&
                         !customMode[clarification.id]
                           ? "border-blue-500 bg-blue-50"
                           : "border-slate-200 hover:border-slate-300 bg-white"
@@ -143,7 +148,8 @@ export function ClarificationPanel({
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 mt-0.5">
-                          {selections[clarification.id] === option.sqlConstraint &&
+                          {selections[clarification.id] ===
+                            (option.submissionValue ?? option.sqlConstraint) &&
                           !customMode[clarification.id] ? (
                             <CheckCircle2 className="h-5 w-5 text-blue-600" />
                           ) : (
@@ -166,9 +172,11 @@ export function ClarificationPanel({
                               {option.description}
                             </p>
                           )}
-                          <code className="text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded font-mono">
-                            {option.sqlConstraint}
-                          </code>
+                          {option.kind !== "semantic" && option.sqlConstraint && (
+                            <code className="text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded font-mono">
+                              {option.sqlConstraint}
+                            </code>
+                          )}
                         </div>
                       </div>
                     </button>

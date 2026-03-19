@@ -31,6 +31,10 @@ import {
 } from "./expanded-concept-builder.service";
 import { getParallelExecutorService } from "../semantic/parallel-executor.service";
 import { getModelRouterService } from "../semantic/model-router.service";
+import {
+  hasStructuralAggregationSignal,
+  normalizeSemanticQueryFrame,
+} from "./semantic-query-frame.service";
 import { createAssessmentTypeSearcher } from "./assessment-type-searcher.service";
 import type {
   ContextDiscoveryRequest,
@@ -118,13 +122,21 @@ export class ContextDiscoveryService {
         );
 
         const terminologyMapper = getTerminologyMapperService();
+        const filtersForMapping =
+          intentResult.semanticFrame?.filters ?? intentResult.filters;
         const mappedFilters = await terminologyMapper.mapFilters(
-          intentResult.filters,
+          filtersForMapping,
           request.customerId
         );
 
         // Replace filters in intentResult with mapped values
         intentResult.filters = mappedFilters as any; // Type assertion needed due to MappedFilter extending IntentFilter
+        if (intentResult.semanticFrame) {
+          intentResult.semanticFrame = {
+            ...intentResult.semanticFrame,
+            filters: mappedFilters as any,
+          };
+        }
 
         const filterDuration = logger.endTimer(
           "step1_5",
@@ -347,8 +359,10 @@ export class ContextDiscoveryService {
       const modelRouter = getModelRouterService();
       const modelSelection = await modelRouter.selectModel({
         userSelectedModelId: request.modelId || 'claude-3-5-sonnet-20241022',
-        complexity: 'simple', // Intent classification is always simple
-        taskType: 'intent',
+        complexity: hasStructuralAggregationSignal(request.question)
+          ? 'complex'
+          : 'simple',
+        taskType: 'frame',
       });
 
       console.log(`[ContextDiscovery] 🎯 Model selected for intent classification:`, {
@@ -365,6 +379,14 @@ export class ContextDiscoveryService {
         modelId: modelSelection.modelId, // Use router-selected model
         signal: request.signal, // Pass abort signal for early cancellation (Task 1.1.5)
       });
+      result.semanticFrame = normalizeSemanticQueryFrame(
+        request.question,
+        result,
+        result.semanticFrame
+      );
+      if (result.semanticFrame?.filters) {
+        result.filters = result.semanticFrame.filters;
+      }
 
       console.log(
         `[ContextDiscovery] ✅ Intent classified: type=${result.type}, confidence=${result.confidence.toFixed(2)}`

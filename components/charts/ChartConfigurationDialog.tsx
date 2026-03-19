@@ -5,8 +5,17 @@ import {
   type ChartDataType,
 } from "@/app/components/charts/chart-component";
 import { shapeDataForChart } from "@/lib/data-shaper";
-import { normalizeChartMapping } from "@/lib/chart-mapping-utils";
+import { inferChartMapping } from "@/lib/chart-mapping-utils";
 import { useErrorHandler } from "@/lib/error-handler";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronDown } from "lucide-react";
+
+const CHART_TYPES: ChartType[] = ["bar", "line", "pie", "kpi", "table"];
 
 interface ChartConfigurationDialogProps {
   isOpen: boolean;
@@ -15,7 +24,12 @@ interface ChartConfigurationDialogProps {
   chartType: ChartType;
   initialMapping?: Record<string, string>;
   title?: string;
+  mode?: "create" | "preview"; // "create" = save as insight, "preview" = apply to inline chart
   onSave?: (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => void;
+  onApply?: (config: {
     chartType: ChartType;
     chartMapping: Record<string, string>;
   }) => void;
@@ -37,7 +51,9 @@ export const ChartConfigurationDialog: React.FC<
   chartType,
   initialMapping,
   title = "Configure Chart",
+  mode = "create",
   onSave,
+  onApply,
   saveButtonText = "Save",
   allowTypeChange = false,
   onTypeChange,
@@ -57,7 +73,11 @@ export const ChartConfigurationDialog: React.FC<
       setStep("mapping");
       setChartData(null);
 
-      const baseMapping = initialMapping ?? {};
+      const baseMapping = inferChartMapping(
+        chartType,
+        queryResults || [],
+        initialMapping ?? {}
+      );
 
       // Extract available fields from query results
       if (queryResults && queryResults.length > 0) {
@@ -128,8 +148,9 @@ export const ChartConfigurationDialog: React.FC<
       if (chartType === "table") {
         setChartData(queryResults);
       } else {
-        const normalizedMapping = normalizeChartMapping(
+        const normalizedMapping = inferChartMapping(
           chartType,
+          queryResults,
           chartMapping
         );
         const shapedData = shapeDataForChart(
@@ -167,10 +188,16 @@ export const ChartConfigurationDialog: React.FC<
         }
       }
 
-      onSave?.({
+      const config = {
         chartType: chartType,
         chartMapping: chartType === "table" ? {} : chartMapping,
-      });
+      };
+
+      if (mode === "preview") {
+        onApply?.(config);
+      } else {
+        onSave?.(config);
+      }
       onClose();
     } catch (err: any) {
       handleError(err, "Save Configuration");
@@ -186,7 +213,8 @@ export const ChartConfigurationDialog: React.FC<
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-lg font-semibold text-gray-900">
             {step === "mapping" && "Map Data Fields"}
-            {step === "preview" && "Chart Preview"}
+            {step === "preview" &&
+              (mode === "create" ? "Chart Preview" : "Chart Configuration")}
           </h2>
           <button
             onClick={onClose}
@@ -209,13 +237,28 @@ export const ChartConfigurationDialog: React.FC<
                     {chartType}
                   </span>
                 </div>
-                {allowTypeChange && (
-                  <button
-                    onClick={() => onTypeChange?.(chartType)}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                  >
-                    Change Type
-                  </button>
+                {allowTypeChange && onTypeChange && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1"
+                      >
+                        Change Type
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="z-[100]">
+                      {CHART_TYPES.map((type) => (
+                        <DropdownMenuItem
+                          key={type}
+                          onClick={() => onTypeChange(type)}
+                        >
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
 
@@ -317,13 +360,28 @@ export const ChartConfigurationDialog: React.FC<
                   >
                     Edit Mapping
                   </button>
-                  {allowTypeChange && (
-                    <button
-                      onClick={() => onTypeChange?.(chartType)}
-                      className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                    >
-                      Change Type
-                    </button>
+                  {allowTypeChange && onTypeChange && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1"
+                        >
+                          Change Type
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="z-[100]">
+                        {CHART_TYPES.map((type) => (
+                          <DropdownMenuItem
+                            key={type}
+                            onClick={() => onTypeChange(type)}
+                          >
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </div>
@@ -380,9 +438,13 @@ export const ChartConfigurationDialog: React.FC<
             {step === "preview" && (
               <button
                 onClick={handleSave}
-                className="px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                className={
+                  mode === "preview"
+                    ? "px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+                    : "px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                }
               >
-                {saveButtonText}
+                {mode === "preview" ? "Apply" : saveButtonText}
               </button>
             )}
           </div>

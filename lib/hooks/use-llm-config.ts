@@ -28,7 +28,7 @@ export interface UseLLMConfigReturn {
   setupError: string | null;
 
   // Actions
-  refreshProviders: () => Promise<void>;
+  refreshProviders: () => Promise<ProviderStatus[]>;
   saveConfiguration: (
     providerType: string,
     providerName: string,
@@ -80,40 +80,46 @@ export function useLLMConfig(): UseLLMConfigReturn {
   const defaultProvider = providers.find((p) => p.config.isDefault) || null;
 
   /**
-   * Refresh all providers from the API
+   * Refresh all providers from the API.
+   * Returns the new provider list so callers can use it without waiting for state update.
    */
-  const refreshProviders = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const refreshProviders = useCallback(
+    async (): Promise<ProviderStatus[]> => {
+      setIsLoading(true);
+      setError(null);
 
-    try {
-      const response = await fetch("/api/admin/ai-config");
-      if (!response.ok) {
-        throw new Error("Failed to fetch configurations");
+      try {
+        const response = await fetch("/api/admin/ai-config");
+        if (!response.ok) {
+          throw new Error("Failed to fetch configurations");
+        }
+
+        const configs: AIConfiguration[] = await response.json();
+
+        // Convert configurations to ProviderStatus objects
+        const providerStatuses: ProviderStatus[] = configs.map((config) => ({
+          config,
+          status: config.validationStatus,
+          lastChecked: config.lastValidatedDate,
+          errorMessage: config.validationMessage,
+          isValidating: false,
+        }));
+
+        setProviders(providerStatuses);
+        return providerStatuses;
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to load configurations";
+        setError(errorMessage);
+        console.error("Error refreshing providers:", err);
+        setProviders([]);
+        return [];
+      } finally {
+        setIsLoading(false);
       }
-
-      const configs: AIConfiguration[] = await response.json();
-
-      // Convert configurations to ProviderStatus objects
-      const providerStatuses: ProviderStatus[] = configs.map((config) => ({
-        config,
-        status: config.validationStatus,
-        lastChecked: config.lastValidatedDate,
-        errorMessage: config.validationMessage,
-        isValidating: false,
-      }));
-
-      setProviders(providerStatuses);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to load configurations";
-      setError(errorMessage);
-      console.error("Error refreshing providers:", err);
-      setProviders([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   /**
    * Check setup status
@@ -177,13 +183,12 @@ export function useLLMConfig(): UseLLMConfigReturn {
           throw new Error("Failed to save configuration");
         }
 
-        const savedConfig: AIConfiguration = await response.json();
+        await response.json();
 
-        // Refresh providers to get updated state
-        await refreshProviders();
+        // Refresh providers and use the returned list (state update is async)
+        const providerStatuses = await refreshProviders();
 
-        // Return the updated provider status
-        const updatedProvider = providers.find(
+        const updatedProvider = providerStatuses.find(
           (p) =>
             p.config.providerType === providerType &&
             p.config.providerName === providerName
@@ -197,7 +202,7 @@ export function useLLMConfig(): UseLLMConfigReturn {
         return null;
       }
     },
-    [refreshProviders, providers]
+    [refreshProviders]
   );
 
   /**

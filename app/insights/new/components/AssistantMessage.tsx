@@ -1,13 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, Link2, Paperclip, Sparkles, Zap } from "lucide-react";
+import { Loader2, Link2, Paperclip, Sparkles, Zap, CheckCircle2, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { ThinkingStream } from "./ThinkingStream";
 import { ResultsTable } from "./ResultsTable";
 import { MessageActions } from "./MessageActions";
 import { SQLPreview } from "./SQLPreview";
-import type { InsightResult } from "@/lib/hooks/useInsights";
+import type {
+  InsightResult,
+  ClarificationRequest as TemplateClarificationRequest,
+  OldClarificationRequest,
+} from "@/lib/hooks/useInsights";
 import type { MessageMetadata } from "@/lib/types/conversation";
+import { ArtifactRenderer } from "./ArtifactRenderer";
+import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
+import type { ChartType } from "@/lib/chart-contracts";
+import type { ChartArtifact } from "@/lib/types/insight-artifacts";
 
 const STRATEGY_METADATA: Record<
   NonNullable<MessageMetadata["compositionStrategy"]>,
@@ -50,6 +61,185 @@ interface AssistantMessageProps {
   customerId: string;
   showActions?: boolean;
   isFollowUp?: boolean;
+  onClarify?: (responses: Record<string, string>) => void;
+}
+
+interface ClarificationOption {
+  label: string;
+  value: string;
+}
+
+interface InlineClarificationItem {
+  placeholder: string;
+  prompt: string;
+  options?: string[] | ClarificationOption[];
+  freeformAllowed?: { allowed: boolean; placeholder?: string; hint?: string; maxChars?: number };
+}
+
+interface InlineClarificationProps {
+  clarifications: InlineClarificationItem[];
+  isSubmitting?: boolean;
+  onSubmit: (responses: Record<string, string>) => void;
+}
+
+function isTemplateClarification(
+  clarification: TemplateClarificationRequest | OldClarificationRequest
+): clarification is TemplateClarificationRequest {
+  return "placeholder" in clarification && "prompt" in clarification;
+}
+
+function toInlineClarificationItems(
+  clarifications: Array<TemplateClarificationRequest | OldClarificationRequest>
+): InlineClarificationItem[] {
+  const items: InlineClarificationItem[] = [];
+
+  clarifications.forEach((clarification) => {
+    if (isTemplateClarification(clarification)) {
+      const freeformAllowed = clarification.freeformAllowed
+        ? {
+            allowed: clarification.freeformAllowed.allowed,
+            placeholder: clarification.freeformAllowed.placeholder,
+            hint: clarification.freeformAllowed.hint,
+            maxChars: clarification.freeformAllowed.maxChars,
+          }
+        : undefined;
+
+      items.push({
+        placeholder: clarification.placeholder,
+        prompt: clarification.prompt,
+        options: clarification.options?.map((option) =>
+          typeof option === "string"
+            ? { label: option, value: option }
+            : option
+        ),
+        freeformAllowed,
+      });
+      return;
+    }
+
+    items.push({
+      placeholder: clarification.id,
+      prompt: clarification.question,
+      options: clarification.options.map((option) => ({
+        label: option.label,
+        value: option.submissionValue ?? option.sqlConstraint,
+      })),
+      freeformAllowed: clarification.allowCustom
+        ? {
+            allowed: true,
+            placeholder: "Enter a custom constraint",
+          }
+        : undefined,
+    });
+  });
+
+  return items;
+}
+
+function normalizeOptions(options?: string[] | ClarificationOption[]): ClarificationOption[] {
+  if (!options) return [];
+  return options.map((opt) =>
+    typeof opt === "string" ? { label: opt, value: opt } : opt
+  );
+}
+
+function InlineClarification({ clarifications, isSubmitting, onSubmit }: InlineClarificationProps) {
+  const normalizedClarifications = clarifications.map((c) => ({
+    ...c,
+    options: normalizeOptions(c.options),
+  }));
+
+  const [responses, setResponses] = useState<Record<string, string>>(() => {
+    const defaults: Record<string, string> = {};
+    normalizedClarifications.forEach((c) => {
+      if (c.options.length > 0) {
+        defaults[c.placeholder] = c.options[0].value;
+      }
+    });
+    return defaults;
+  });
+
+  const allAnswered = normalizedClarifications.every(
+    (c) => responses[c.placeholder] && responses[c.placeholder].trim() !== ""
+  );
+
+  return (
+    <div className="mt-4 pt-4 border-t space-y-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
+        <AlertCircle className="h-4 w-4 flex-shrink-0" />
+        <span>Please answer the following to continue:</span>
+      </div>
+
+      {normalizedClarifications.map((c, index) => (
+        <div key={c.placeholder} className="space-y-2">
+          <div className="flex items-start gap-2">
+            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-semibold mt-0.5">
+              {index + 1}
+            </div>
+            <p className="text-sm font-medium text-slate-800">{c.prompt}</p>
+          </div>
+
+          {c.options.length > 0 && (
+            <div className="pl-7 space-y-1.5">
+              {c.options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() =>
+                    setResponses((prev) => ({ ...prev, [c.placeholder]: opt.value }))
+                  }
+                  className={`w-full text-left px-3 py-2 rounded-lg border-2 text-sm transition-all ${
+                    responses[c.placeholder] === opt.value
+                      ? "border-blue-500 bg-blue-50 text-blue-900"
+                      : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+                  } ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <div className="flex items-center gap-2">
+                    {responses[c.placeholder] === opt.value ? (
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border-2 border-slate-300 flex-shrink-0" />
+                    )}
+                    <span>{opt.label}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {c.freeformAllowed?.allowed && (
+            <div className="pl-7 space-y-1">
+              {c.freeformAllowed.hint && (
+                <p className="text-xs text-slate-500">{c.freeformAllowed.hint}</p>
+              )}
+              <Textarea
+                value={responses[c.placeholder] ?? ""}
+                onChange={(e) =>
+                  setResponses((prev) => ({ ...prev, [c.placeholder]: e.target.value }))
+                }
+                disabled={isSubmitting}
+                placeholder={c.freeformAllowed.placeholder ?? "Please describe what you meant..."}
+                className="text-sm min-h-16"
+                maxLength={c.freeformAllowed.maxChars ?? 500}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          disabled={!allAnswered || isSubmitting}
+          onClick={() => onSubmit(responses)}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          {isSubmitting ? "Processing..." : "Continue"}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function AssistantMessage({
@@ -57,8 +247,18 @@ export function AssistantMessage({
   customerId,
   showActions = true,
   isFollowUp = false,
+  onClarify,
 }: AssistantMessageProps) {
   const isLoading = Boolean(message.isLoading);
+  const [showChartDialog, setShowChartDialog] = useState(false);
+  const [editingChartIndex, setEditingChartIndex] = useState<number | null>(null);
+  const [chartOverrides, setChartOverrides] = useState<
+    Record<number, { chartType: ChartType; chartMapping: Record<string, string> }>
+  >({});
+  const [chartType, setChartType] = useState<ChartType>("bar");
+  const [initialChartMapping, setInitialChartMapping] = useState<
+    Record<string, string> | undefined
+  >(undefined);
   const loadingText = isFollowUp
     ? "AI is analyzing your follow-up..."
     : "AI is composing your insights...";
@@ -127,6 +327,26 @@ export function AssistantMessage({
     }
   };
 
+  const handleEditChart = (artifact: ChartArtifact, index: number) => {
+    setEditingChartIndex(index);
+    setChartType(chartOverrides[index]?.chartType ?? artifact.chartType);
+    setInitialChartMapping(chartOverrides[index]?.chartMapping ?? artifact.mapping);
+    setShowChartDialog(true);
+  };
+
+  const handleApplyChart = (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => {
+    if (editingChartIndex !== null) {
+      setChartOverrides((prev) => ({ ...prev, [editingChartIndex]: config }));
+    }
+    setShowChartDialog(false);
+    setEditingChartIndex(null);
+    setInitialChartMapping(undefined);
+  };
+
+
   const strategyBadge = showStrategyBadge && strategyMeta ? (
     <button
       type="button"
@@ -140,8 +360,11 @@ export function AssistantMessage({
   ) : null;
 
   return (
-    <div className="flex justify-start mb-6" id={`message-${message.id}`}>
-      <div className="max-w-3xl w-full">
+    <div
+      className="flex justify-start mb-6 w-full min-w-0"
+      id={`message-${message.id}`}
+    >
+      <div className="w-full min-w-0 max-w-full">
         <div className="bg-white border rounded-2xl shadow-sm p-6">
           <div className="flex items-start gap-3 mb-4">
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm font-semibold">
@@ -207,13 +430,45 @@ export function AssistantMessage({
             </div>
           )}
 
-          {message.result && !isLoading && message.result.results && (
-            <div className="mt-4">
-              <ResultsTable
-                columns={message.result.results.columns}
-                rows={message.result.results.rows}
-                maxRows={10}
+          {message.result?.mode === "clarification" &&
+            message.result.clarifications &&
+            message.result.clarifications.length > 0 &&
+            !isLoading &&
+            onClarify && (
+              <InlineClarification
+                clarifications={toInlineClarificationItems(
+                  message.result.clarifications
+                )}
+                onSubmit={onClarify}
               />
+            )}
+
+          {message.result && !isLoading && message.result.results && (
+            <div className="mt-4 space-y-4">
+              {message.result.artifacts && message.result.artifacts.length > 0 ? (
+                message.result.artifacts.map((artifact, index) => (
+                  <ArtifactRenderer
+                    key={`${artifact.kind}-${index}`}
+                    artifact={artifact}
+                    rows={message.result?.results?.rows || []}
+                    columns={message.result?.results?.columns || []}
+                    onEditChart={
+                      artifact.kind === "chart"
+                        ? (a) => handleEditChart(a, index)
+                        : undefined
+                    }
+                    chartOverride={
+                      artifact.kind === "chart" ? chartOverrides[index] : undefined
+                    }
+                  />
+                ))
+              ) : (
+                <ResultsTable
+                  columns={message.result.results.columns}
+                  rows={message.result.results.rows}
+                  maxRows={10}
+                />
+              )}
             </div>
           )}
 
@@ -228,6 +483,25 @@ export function AssistantMessage({
           )}
         </div>
       </div>
+
+      {showChartDialog && message.result?.results && (
+        <ChartConfigurationDialog
+          isOpen={showChartDialog}
+          onClose={() => {
+            setShowChartDialog(false);
+            setEditingChartIndex(null);
+            setInitialChartMapping(undefined);
+          }}
+          queryResults={message.result.results.rows}
+          chartType={chartType}
+          initialMapping={initialChartMapping}
+          title={message.result.question || "Query Results"}
+          mode="preview"
+          onApply={handleApplyChart}
+          allowTypeChange={true}
+          onTypeChange={setChartType}
+        />
+      )}
     </div>
   );
 }

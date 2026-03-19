@@ -12,6 +12,7 @@ import {
 import { SaveInsightDialog } from "./SaveInsightDialog";
 import { ChartConfigurationDialog } from "@/components/charts/ChartConfigurationDialog";
 import type { InsightResult } from "@/lib/hooks/useInsights";
+import type { ChartType } from "@/lib/chart-contracts";
 
 interface MessageActionsProps {
   result: InsightResult;
@@ -26,6 +27,17 @@ export function MessageActions({
 }: MessageActionsProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showChartDialog, setShowChartDialog] = useState(false);
+  const [chartType, setChartType] = useState<ChartType>("bar");
+  const existingChartArtifact = result.artifacts?.find(
+    (artifact) => artifact.kind === "chart"
+  );
+
+  const handleApplyChart = (config: {
+    chartType: ChartType;
+    chartMapping: Record<string, string>;
+  }) => {
+    console.log("Chart configuration applied to inline chart:", config);
+  };
 
   const handleExportCSV = () => {
     if (!result.results) {
@@ -124,9 +136,26 @@ export function MessageActions({
       {showChartDialog && result.results && (
         <ChartConfigurationDialog
           isOpen={showChartDialog}
-          onClose={() => setShowChartDialog(false)}
-          data={result.results.rows}
-          columns={result.results.columns}
+          onClose={() => {
+            setShowChartDialog(false);
+            setChartType("bar");
+          }}
+          queryResults={result.results.rows}
+          chartType={
+            existingChartArtifact?.kind === "chart"
+              ? existingChartArtifact.chartType
+              : chartType
+          }
+          initialMapping={
+            existingChartArtifact?.kind === "chart"
+              ? existingChartArtifact.mapping
+              : undefined
+          }
+          title={result.question || "Query Results"}
+          mode="preview"
+          onApply={handleApplyChart}
+          allowTypeChange={true}
+          onTypeChange={setChartType}
         />
       )}
     </>

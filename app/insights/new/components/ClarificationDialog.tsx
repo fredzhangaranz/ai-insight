@@ -19,7 +19,7 @@ interface NormalizedClarification {
   placeholder: string;
   prompt: string;
   examples?: string[];
-  options?: string[];
+  options?: Array<{ label: string; value: string }>;
   templateName?: string;
   templateSummary?: string;
   reason?: string;
@@ -57,13 +57,18 @@ function normalizeClarifications(clarifications: any[]): NormalizedClarification
     if (isOldFormat) {
       // Convert old format to new format
       const convertedOptions = (clarification.options || [])
-        .map((opt: any) => opt.label || opt.description || opt.sqlConstraint)
-        .filter(Boolean); // Remove empty options
+        .map((opt: any) => {
+          const label = opt.label || opt.description || opt.sqlConstraint;
+          const value = opt.sqlConstraint || opt.value || label;
+          if (!label || !value) return null;
+          return { label, value };
+        })
+        .filter(Boolean);
 
       return {
         placeholder: clarification.id || clarification.ambiguousTerm || "unknown",
         prompt: clarification.question || `Please clarify: ${clarification.ambiguousTerm}`,
-        options: convertedOptions.length > 0 ? convertedOptions : undefined,
+        options: convertedOptions.length > 0 ? (convertedOptions as Array<{ label: string; value: string }>) : undefined,
         // Only allow freeform if: no options exist OR allowCustom is explicitly true
         freeformAllowed:
           convertedOptions.length === 0 || clarification.allowCustom
@@ -81,7 +86,17 @@ function normalizeClarifications(clarifications: any[]): NormalizedClarification
     }
 
     // Already in new format, return as-is
-    return clarification as NormalizedClarification;
+    return {
+      ...clarification,
+      options: (clarification.options || []).map((option: any) =>
+        typeof option === "string"
+          ? { label: option, value: option }
+          : {
+              label: option.label,
+              value: option.value ?? option.label,
+            }
+      ),
+    } as NormalizedClarification;
   });
 }
 
@@ -117,7 +132,7 @@ export function ClarificationDialog({
     normalizedClarifications.forEach((clarification) => {
       if (clarification.options && clarification.options.length > 0) {
         // Only set first option as default if there are actual options
-        defaults[clarification.placeholder] = clarification.options[0];
+        defaults[clarification.placeholder] = clarification.options[0].value;
       } else if (clarification.freeformAllowed?.allowed) {
         // If no options but freeform is allowed, initialize with empty string
         defaults[clarification.placeholder] = "";
@@ -139,7 +154,7 @@ export function ClarificationDialog({
         const clarificationLogs = normalizedClarifications.map((clarification) => ({
           placeholderSemantic: clarification.semantic || clarification.placeholder,
           promptText: clarification.prompt,
-          optionsPresented: clarification.options || [],
+          optionsPresented: (clarification.options || []).map((option) => option.label),
           templateName: clarification.templateName,
           templateSummary: clarification.templateSummary,
           presentedAt: presentedAtRef.current.toISOString(),
@@ -235,7 +250,9 @@ export function ClarificationDialog({
 
         normalizedClarifications.forEach((clarification) => {
           const userResponse = responses[clarification.placeholder];
-          const isAccepted = clarification.options?.includes(userResponse);
+          const isAccepted = (clarification.options || []).some(
+            (option) => option.value === userResponse
+          );
           const placeholderSemantic = clarification.semantic || clarification.placeholder;
           const auditId = auditIdsByPlaceholderRef.current[placeholderSemantic];
 
@@ -250,7 +267,7 @@ export function ClarificationDialog({
             fallbackInserts.push({
               placeholderSemantic,
               promptText: clarification.prompt,
-              optionsPresented: clarification.options || [],
+              optionsPresented: (clarification.options || []).map((option) => option.label),
               responseType: isAccepted ? 'accepted' : 'custom',
               acceptedValue: userResponse,
               timeSpentMs,
@@ -508,24 +525,24 @@ function ClarificationItem({
             <div className="space-y-2">
               {clarification.options.map((option) => (
                 <button
-                  key={option}
-                  onClick={() => onOptionSelect(option)}
+                  key={option.value}
+                  onClick={() => onOptionSelect(option.value)}
                   disabled={isSubmitting}
                   className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                    value === option
+                    value === option.value
                       ? "border-blue-500 bg-blue-50"
                       : "border-slate-200 hover:border-slate-300 bg-white"
                   } ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex-shrink-0">
-                      {value === option ? (
+                      {value === option.value ? (
                         <CheckCircle2 className="h-5 w-5 text-blue-600" />
                       ) : (
                         <div className="h-5 w-5 rounded-full border-2 border-slate-300" />
                       )}
                     </div>
-                    <span className="font-medium text-slate-900">{option}</span>
+                    <span className="font-medium text-slate-900">{option.label}</span>
                   </div>
                 </button>
               ))}
@@ -533,7 +550,7 @@ function ClarificationItem({
           ) : null}
 
           {/* Natural Language Fallback */}
-          {clarification.freeformAllowed?.allowed && (!clarification.options || clarification.options.length === 0) && (
+          {clarification.freeformAllowed?.allowed && (
             <div className="mt-3">
               {clarification.freeformAllowed.hint && (
                 <p className="text-xs text-slate-600 mb-2">{clarification.freeformAllowed.hint}</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 interface ProtectedRouteProps {
@@ -23,19 +23,23 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (status === "loading") return;
 
     if (!session) {
-      router.replace("/login");
+      const callback = pathname
+        ? `/login?callbackUrl=${encodeURIComponent(pathname)}`
+        : "/login";
+      router.replace(callback);
       return;
     }
 
     if (requireAdmin && session.user.role !== "admin") {
       router.replace("/unauthorized");
     }
-  }, [session, status, requireAdmin, router]);
+  }, [session, status, requireAdmin, router, pathname]);
 
   if (status === "loading") {
     return <>{loadingFallback}</>;

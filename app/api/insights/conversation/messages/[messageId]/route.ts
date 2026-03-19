@@ -44,33 +44,24 @@ export async function PATCH(
 
       if (originalMsgResult.rows.length === 0) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Message not found" },
-          { status: 404 }
-        );
+        throw new Error("Message not found");
       }
 
       const original = originalMsgResult.rows[0];
 
       if (original.userId !== session.user.id) {
         await client.query("ROLLBACK");
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        throw new Error("Forbidden");
       }
 
       if (original.role !== "user") {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Only user messages can be edited" },
-          { status: 400 }
-        );
+        throw new Error("Only user messages can be edited");
       }
 
       if (original.deletedAt) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Message already deleted" },
-          { status: 409 }
-        );
+        throw new Error("Message already deleted");
       }
 
       const deletedAt = new Date();
@@ -128,7 +119,34 @@ export async function PATCH(
         requiresReexecution: true, // Flag for frontend to call /send
       });
     } catch (error) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
+      if (error instanceof Error && error.message === "Message not found") {
+        return NextResponse.json(
+          { error: "Message not found" },
+          { status: 404 }
+        );
+      }
+      if (error instanceof Error && error.message === "Forbidden") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (
+        error instanceof Error &&
+        error.message === "Only user messages can be edited"
+      ) {
+        return NextResponse.json(
+          { error: "Only user messages can be edited" },
+          { status: 400 }
+        );
+      }
+      if (
+        error instanceof Error &&
+        error.message === "Message already deleted"
+      ) {
+        return NextResponse.json(
+          { error: "Message already deleted" },
+          { status: 409 }
+        );
+      }
       throw error;
     } finally {
       client.release();

@@ -5,6 +5,7 @@ import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
 import { normalizeJson } from "@/lib/utils/normalize-json";
 import type { InsightResult } from "@/lib/hooks/useInsights";
+import type { MessageMetadata } from "@/lib/types/conversation";
 
 export async function GET(
   _req: NextRequest,
@@ -53,7 +54,7 @@ export async function GET(
         contextCache: normalizeJson(thread.contextCache),
       },
       messages: messagesResult.rows.map((row) => {
-        const metadata = normalizeJson(row.metadata);
+        const metadata = normalizeJson(row.metadata) as MessageMetadata;
         const message: any = {
           ...row,
           metadata,
@@ -62,14 +63,21 @@ export async function GET(
         // Reconstruct InsightResult from metadata for assistant messages
         if (row.role === "assistant" && metadata.sql) {
           const result: InsightResult = {
-            mode: metadata.mode || "direct",
+            mode:
+              metadata.mode === "template" ||
+              metadata.mode === "direct" ||
+              metadata.mode === "funnel" ||
+              metadata.mode === "clarification"
+                ? metadata.mode
+                : "direct",
             question: row.content,
             thinking: [],
-            sql: metadata.sql,
+            sql: metadata.sql || "",
             results: {
               rows: [],
               columns: metadata.resultSummary?.columns || [],
             },
+            resolvedEntities: metadata.resolvedEntities as any,
           };
           message.result = result;
         }

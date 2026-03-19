@@ -1,0 +1,368 @@
+"use client";
+
+import React, { useMemo, useEffect, type Dispatch, type SetStateAction } from "react";
+import Link from "next/link";
+import { MessageSquare } from "lucide-react";
+import { CustomerSelector } from "./CustomerSelector";
+import { ModelSelector } from "./ModelSelector";
+import { SuggestedQuestions } from "./SuggestedQuestions";
+import { UnifiedThread, type ThreadItem } from "./UnifiedThread";
+import {
+  FixedBottomComposer,
+  type ComposerState,
+} from "./FixedBottomComposer";
+import { SmartSuggestions } from "./SmartSuggestions";
+import { LayoutToggle, type LayoutMode } from "./LayoutToggle";
+import { useConversation } from "@/lib/hooks/useConversation";
+import type { InsightResult } from "@/lib/hooks/useInsights";
+
+export interface NewLayoutProps {
+  customerId: string;
+  setCustomerId: Dispatch<SetStateAction<string>>;
+  modelId: string;
+  setModelId: Dispatch<SetStateAction<string>>;
+  question: string;
+  setQuestion: Dispatch<SetStateAction<string>>;
+  conversationThreadId: string | undefined;
+  setConversationThreadId: Dispatch<SetStateAction<string | undefined>>;
+  historyRefreshKey: number;
+  handleNewQuestion: () => void;
+  handleHistorySelect: (query: any) => Promise<void>;
+  // First question flow (from useInsights)
+  result: InsightResult | null;
+  isLoading: boolean;
+  isQuestionSubmitted: boolean;
+  handleAsk: (question: string) => Promise<void>;
+  handleClarificationSubmit: (
+    clarifications: Record<string, string>,
+    clarificationAuditIds?: number[],
+  ) => Promise<void>;
+  analysis: { steps: Array<{ id: string; message: string; status?: string }> };
+  layoutMode: LayoutMode;
+  onLayoutModeChange: (mode: LayoutMode) => void;
+}
+
+export function NewLayout({
+  customerId,
+  setCustomerId,
+  modelId,
+  setModelId,
+  question,
+  setQuestion,
+  conversationThreadId,
+  setConversationThreadId,
+  historyRefreshKey,
+  handleNewQuestion,
+  handleHistorySelect,
+  result,
+  isLoading,
+  isQuestionSubmitted,
+  handleAsk,
+  handleClarificationSubmit,
+  analysis,
+  layoutMode,
+  onLayoutModeChange,
+}: NewLayoutProps) {
+  const {
+    messages: conversationMessages,
+    isLoading: isConversationLoading,
+    sendMessage,
+    sendMessageWithClarifications,
+    editMessage,
+    startNewConversation,
+  } = useConversation({ externalThreadId: conversationThreadId ?? undefined });
+
+  useEffect(() => {
+    if (conversationThreadId && typeof window !== "undefined") {
+      localStorage.setItem("conversation_threadId", conversationThreadId);
+    }
+  }, [conversationThreadId]);
+
+  const threadItems = useMemo((): ThreadItem[] => {
+    const items: ThreadItem[] = [];
+    const baseTime = Date.now();
+
+    if (isQuestionSubmitted && question.trim()) {
+      items.push({
+        id: "first-user",
+        type: "user_message",
+        content: question,
+        createdAt: new Date(baseTime),
+      });
+
+      if (isLoading && !result) {
+        items.push({
+          id: "first-assistant-loading",
+          type: "assistant_loading",
+          thinking: analysis.steps.map((s) => ({
+            id: s.id,
+            message: s.message,
+            status: s.status,
+          })),
+          createdAt: new Date(baseTime + 1),
+        });
+      } else if (result) {
+        if (result.mode === "clarification" && result.clarifications) {
+          items.push({
+            id: "first-assistant-clarification",
+            type: "assistant_clarification",
+            question: result.question ?? question,
+            clarifications: result.clarifications,
+            result,
+            createdAt: new Date(baseTime + 1),
+          });
+        } else if (result.error) {
+          items.push({
+            id: "first-assistant-error",
+            type: "assistant_error",
+            error: result.error,
+            thinking: result.thinking?.map((t) => ({
+              id: t.id,
+              message: t.message,
+              status: t.status,
+            })),
+            createdAt: new Date(baseTime + 1),
+          });
+        } else {
+          items.push({
+            id: "first-assistant-result",
+            type: "assistant_result",
+            result,
+            createdAt: new Date(baseTime + 1),
+          });
+        }
+      }
+    }
+
+    const followUpItems: ThreadItem[] = conversationMessages.map((msg) => {
+      if (msg.role === "user") {
+        return {
+          id: msg.id,
+          type: "user_message" as const,
+          content: msg.content,
+          createdAt: msg.createdAt,
+        };
+      }
+      if (msg.isLoading) {
+        return {
+          id: msg.id,
+          type: "assistant_loading" as const,
+          thinking: msg.result?.thinking?.map((t) => ({
+            id: t.id,
+            message: t.message,
+            status: t.status,
+          })),
+          createdAt: msg.createdAt,
+        };
+      }
+      if (msg.result?.mode === "clarification" && msg.result.clarifications) {
+        return {
+          id: msg.id,
+          type: "assistant_clarification" as const,
+          question: msg.result.question ?? "",
+          clarifications: msg.result.clarifications,
+          result: msg.result,
+          createdAt: msg.createdAt,
+        };
+      }
+      if (msg.result?.error) {
+        return {
+          id: msg.id,
+          type: "assistant_error" as const,
+          error: msg.result.error,
+          thinking: msg.result.thinking?.map((t) => ({
+            id: t.id,
+            message: t.message,
+            status: t.status,
+          })),
+          createdAt: msg.createdAt,
+        };
+      }
+      return {
+        id: msg.id,
+        type: "assistant_result" as const,
+        result: msg.result!,
+        metadata: msg.metadata,
+        createdAt: msg.createdAt,
+      };
+    });
+
+    return [...items, ...followUpItems];
+  }, [
+    isQuestionSubmitted,
+    question,
+    isLoading,
+    result,
+    analysis.steps,
+    conversationMessages,
+  ]);
+
+  const isFirstQuestion = !result && !conversationMessages.length;
+  const isWaitingForResponse = isLoading || isConversationLoading;
+  const hasBlockingClarification =
+    result?.mode === "clarification" && result.clarifications;
+
+  const composerState: ComposerState = !customerId
+    ? "disabled_no_customer"
+    : hasBlockingClarification
+      ? "blocked_by_clarification"
+      : isWaitingForResponse
+        ? "waiting_for_response"
+        : "ready";
+
+  const lastClarificationId =
+    threadItems.find((i) => i.type === "assistant_clarification")?.id ?? null;
+
+  const lastAssistantResult = useMemo(() => {
+    const found = [...threadItems].reverse().find(
+      (i) => i.type === "assistant_result" || i.type === "assistant_clarification"
+    );
+    if (found?.type === "assistant_result") return found.result;
+    if (found?.type === "assistant_clarification") return found.result;
+    return undefined;
+  }, [threadItems]);
+
+  const [composerDraft, setComposerDraft] = React.useState("");
+
+  const handleComposerSubmit = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || !customerId) return;
+
+    if (isFirstQuestion) {
+      await handleAsk(trimmed);
+    } else {
+      await sendMessage(trimmed, customerId, modelId);
+    }
+  };
+
+  const handleClarify = async (
+    _messageId: string,
+    responses: Record<string, string>,
+  ) => {
+    if (!customerId) return;
+
+    // Follow-up clarifications come from `useConversation()`, so we should
+    // continue the conversation via the conversation endpoint.
+    const followUpMessage = conversationMessages.find((m) => m.id === _messageId);
+    const followUpClarificationQuestion =
+      followUpMessage?.result?.mode === "clarification"
+        ? followUpMessage.result.question
+        : undefined;
+
+    if (followUpClarificationQuestion) {
+      await sendMessageWithClarifications(
+        followUpClarificationQuestion,
+        customerId,
+        responses,
+        modelId
+      );
+      return;
+    }
+
+    // First-question clarifications are handled by the first-question flow.
+    if (!result?.question) return;
+    await handleClarificationSubmit(responses);
+  };
+
+  return (
+    <div className="h-[100svh] bg-slate-50 overflow-x-hidden overflow-hidden flex flex-col">
+      <div className="w-full pl-3 pr-3 sm:pl-4 sm:pr-4 lg:pr-6 py-3 sm:py-4 overflow-x-hidden flex-shrink-0">
+        <div className="mb-4">
+          <div className="border-b border-slate-200 pb-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 pr-2">
+                <nav className="flex text-sm text-slate-500 mb-2">
+                  <Link href="/insights" className="hover:text-slate-700">
+                    Insights
+                  </Link>
+                  <span className="mx-2">/</span>
+                  <span className="text-slate-900 font-medium">Ask Question</span>
+                </nav>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+                  Insights
+                </h1>
+                <p className="text-slate-600 mt-2">
+                  Ask questions about your data in natural language
+                </p>
+              </div>
+              <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto sm:justify-start">
+                <LayoutToggle value={layoutMode} onChange={onLayoutModeChange} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    startNewConversation();
+                    handleNewQuestion();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium text-slate-700"
+                  title="Start a new question"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  New Question
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-4 items-end mb-3">
+          <div className="flex-1 min-w-[12rem] max-w-md">
+            <CustomerSelector value={customerId} onChange={setCustomerId} />
+          </div>
+          <div className="flex-1 min-w-[12rem] max-w-md">
+            <ModelSelector value={modelId} onChange={setModelId} />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col min-h-0 pl-3 pr-3 sm:pl-4 sm:pr-4 lg:pr-6">
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col space-y-4 py-4">
+          <UnifiedThread
+            items={threadItems}
+            customerId={customerId}
+            onClarify={handleClarify}
+            onEditMessage={editMessage}
+            isClarificationSubmitting={isLoading || isConversationLoading}
+            lastClarificationMessageId={lastClarificationId}
+          />
+
+          {threadItems.length === 0 && customerId && (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-slate-600">Ask anything about your patients</p>
+            </div>
+          )}
+
+          {lastAssistantResult && !isWaitingForResponse && (
+            <div className="mb-4">
+              <SmartSuggestions
+                result={lastAssistantResult}
+                onSuggestionClick={(text) => setComposerDraft(text)}
+                showRefinements={true}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex-shrink-0 sticky bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm -mx-3 sm:-mx-4 lg:-mr-6 px-3 sm:px-4 lg:pr-6 py-3">
+          <FixedBottomComposer
+            onSubmit={handleComposerSubmit}
+            state={composerState}
+            placeholder={
+              isFirstQuestion
+                ? "Ask a question about your wound care data…"
+                : "Ask a follow-up question…"
+            }
+            customerId={customerId}
+            showPills={threadItems.length === 0}
+            onPillSelect={(q) => {
+              setQuestion(q);
+              setComposerDraft(q);
+            }}
+            draft={composerDraft}
+            onDraftChange={setComposerDraft}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+

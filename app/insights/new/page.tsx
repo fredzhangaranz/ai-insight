@@ -2,28 +2,30 @@
 
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import React from "react";
-import Link from "next/link";
-import { MessageSquare } from "lucide-react";
-import { CustomerSelector } from "./components/CustomerSelector";
-import { ModelSelector } from "./components/ModelSelector";
-import { QuestionInput } from "./components/QuestionInput";
-import { SuggestedQuestions } from "./components/SuggestedQuestions";
-import { QueryHistory } from "./components/QueryHistory";
-import { InsightResults } from "./components/InsightResults";
-import { ClarificationDialog } from "./components/ClarificationDialog";
+import { LAYOUT_STORAGE_KEY, type LayoutMode } from "./components/LayoutToggle";
+import { ClassicLayout, type ClassicLayoutProps } from "./components/ClassicLayout";
+import { NewLayout } from "./components/NewLayout";
 import { useInsights } from "@/lib/hooks/useInsights";
-import { AnalysisProgressCard } from "./components/AnalysisProgressCard";
+import { useSetQueryHistorySidebar } from "@/lib/context/QueryHistorySidebarContext";
 
 export default function NewInsightPage() {
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("classic");
   const [customerId, setCustomerId] = useState<string>("");
   const [question, setQuestion] = useState<string>("");
-  const [modelId, setModelId] = useState<string>(""); // Will be set by ModelSelector from config
+  const [modelId, setModelId] = useState<string>("");
   const [conversationThreadId, setConversationThreadId] = useState<
     string | undefined
   >();
   const [isQuestionSubmitted, setIsQuestionSubmitted] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(LAYOUT_STORAGE_KEY) as LayoutMode | null;
+    if (stored === "classic" || stored === "new") setLayoutMode(stored);
+  }, []);
 
   const {
     result,
@@ -76,10 +78,14 @@ export default function NewInsightPage() {
 
           if (response.ok) {
             const data = await response.json();
-            setConversationThreadId(data.threadId);
+            const threadId = data.threadId;
+            setConversationThreadId(threadId);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("conversation_threadId", threadId);
+            }
             if (process.env.NODE_ENV === "development") {
               console.log(
-                `[NewInsightPage] Created conversation thread for follow-ups: ${data.threadId}`,
+                `[NewInsightPage] Created conversation thread for follow-ups: ${threadId}`,
               );
             }
           }
@@ -92,6 +98,11 @@ export default function NewInsightPage() {
       createConversationThread();
     }
   }, [result, customerId]);
+
+  // Refetch query history when a new result arrives (after Ask or load from history).
+  React.useEffect(() => {
+    if (result) setHistoryRefreshKey((k) => k + 1);
+  }, [result]);
 
   const handleClarificationSubmit = async (
     clarifications: Record<string, string>,
@@ -115,7 +126,13 @@ export default function NewInsightPage() {
     await ask(newQuestion, customerId, modelId);
   };
 
-  const handleHistorySelect = async (query: any) => {
+  const handleHistorySelect = useCallback(async (query: any) => {
+    // NewLayout's unified thread renders the first user+assistant turn only
+    // when `isQuestionSubmitted` is true.
+    setIsQuestionSubmitted(true);
+    setQuestion(query.question);
+    setConversationThreadId(query.conversationThreadId);
+
     // Load cached result from history instead of re-executing
     if (query.mode === "error") {
       // For failed queries, reconstruct the error result so user can see what went wrong
@@ -148,13 +165,11 @@ export default function NewInsightPage() {
       };
 
       loadCachedResult(errorResult);
-      setQuestion(query.question);
       return;
     }
 
-    if (!query.sql || !query.semanticContext) {
+    if (!query.id) {
       // No cached data, just copy the question
-      setQuestion(query.question);
       return;
     }
 
@@ -164,7 +179,9 @@ export default function NewInsightPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          queryId: query.id,
           customerId,
+          // Backward-compat fallback payload fields
           sql: query.sql,
           question: query.question,
           mode: query.mode,
@@ -173,199 +190,143 @@ export default function NewInsightPage() {
       });
 
       if (!response.ok) {
-        // Fallback: just copy the question
-        setQuestion(query.question);
+        const errorData = await response.json().catch(() => ({}));
+        const replayErrorResult = {
+          mode: "direct" as const,
+          question: query.question,
+          thinking: [
+            {
+              id: "load_from_history",
+              status: "complete" as const,
+              message: "Attempted to load cached result",
+              duration: 50,
+            },
+            {
+              id: "history_replay_error",
+              status: "error" as const,
+              message:
+                errorData?.error ||
+                "Unable to replay cached query from history",
+              duration: 0,
+            },
+          ],
+          error: {
+            message:
+              errorData?.error ||
+              "Unable to replay cached query from history",
+            step: "history_replay",
+            details: errorData,
+          },
+        };
+        loadCachedResult(replayErrorResult as any);
         return;
       }
 
       const cachedResult = await response.json();
       loadCachedResult(cachedResult);
-      setQuestion(query.question);
     } catch (err) {
       console.error("Failed to load cached result:", err);
-      // Fallback: just copy the question
-      setQuestion(query.question);
+      const replayErrorResult = {
+        mode: "direct" as const,
+        question: query.question,
+        thinking: [
+          {
+            id: "load_from_history",
+            status: "complete" as const,
+            message: "Attempted to load cached result",
+            duration: 50,
+          },
+          {
+            id: "history_replay_error",
+            status: "error" as const,
+            message: err instanceof Error ? err.message : "History replay failed",
+            duration: 0,
+          },
+        ],
+        error: {
+          message: err instanceof Error ? err.message : "History replay failed",
+          step: "history_replay",
+        },
+      };
+      loadCachedResult(replayErrorResult as any);
     }
+  }, [customerId, loadCachedResult]);
+
+  useSetQueryHistorySidebar(
+    customerId
+      ? {
+          customerId,
+          onSelect: handleHistorySelect,
+          refreshTrigger: historyRefreshKey,
+        }
+      : null,
+  );
+
+  const classicProps: ClassicLayoutProps = {
+    customerId,
+    setCustomerId,
+    modelId,
+    setModelId,
+    question,
+    setQuestion,
+    conversationThreadId,
+    setConversationThreadId,
+    isQuestionSubmitted,
+    historyRefreshKey,
+    result,
+    isLoading,
+    error,
+    analysis,
+    handleAsk,
+    handleNewQuestion,
+    handleClarificationSubmit,
+    handleHistorySelect,
+    cancelAnalysis,
+    loadCachedResult,
+  };
+
+  const handleAskWithQuestion = async (q: string) => {
+    if (!customerId || !q.trim()) return;
+    setQuestion(q);
+    setIsQuestionSubmitted(true);
+    await ask(q, customerId, modelId);
+  };
+
+  const newProps = {
+    customerId,
+    setCustomerId,
+    modelId,
+    setModelId,
+    question,
+    setQuestion,
+    conversationThreadId,
+    setConversationThreadId,
+    historyRefreshKey,
+    handleNewQuestion,
+    handleHistorySelect,
+    result,
+    isLoading,
+    isQuestionSubmitted,
+    handleAsk: handleAskWithQuestion,
+    handleClarificationSubmit,
+    analysis,
   };
 
   return (
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-      {/* Floating Action Button - appears in bottom-right when a question is submitted */}
-      {(result || isQuestionSubmitted) && (
-        <button
-          onClick={handleNewQuestion}
-          className="fixed bottom-8 right-8 z-40 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-3 shadow-lg transition-all duration-200 hover:shadow-xl"
-          title="Start a new question"
-        >
-          <MessageSquare className="h-5 w-5" />
-          <span className="text-sm font-medium">New Question</span>
-        </button>
+      {layoutMode === "classic" ? (
+        <ClassicLayout
+          {...classicProps}
+          layoutMode={layoutMode}
+          onLayoutModeChange={setLayoutMode}
+        />
+      ) : (
+        <NewLayout
+          {...newProps}
+          layoutMode={layoutMode}
+          onLayoutModeChange={setLayoutMode}
+        />
       )}
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full overflow-x-hidden">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="border-b border-slate-200 pb-6">
-            <div>
-              <nav className="flex text-sm text-slate-500 mb-2">
-                <Link href="/insights" className="hover:text-slate-700">
-                  Insights
-                </Link>
-                <span className="mx-2">/</span>
-                <span className="text-slate-900 font-medium">Ask Question</span>
-              </nav>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                Insights
-              </h1>
-              <p className="text-slate-600 mt-2">
-                Ask questions about your data in natural language
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="flex gap-4 items-end">
-            <div className="flex-1 max-w-md">
-              <CustomerSelector value={customerId} onChange={setCustomerId} />
-            </div>
-            <div className="flex-1 max-w-md">
-              <ModelSelector value={modelId} onChange={setModelId} />
-            </div>
-          </div>
-
-          <QuestionInput
-            value={question}
-            onChange={setQuestion}
-            onSubmit={handleAsk}
-            disabled={!customerId || isLoading}
-            isLoading={isLoading}
-            submitted={isQuestionSubmitted}
-            onClearQuestion={handleNewQuestion}
-          />
-
-          {analysis.status === "running" && (
-            <AnalysisProgressCard
-              status="running"
-              steps={analysis.steps}
-              elapsedMs={analysis.elapsedMs}
-              modelLabel={analysis.model}
-              onCancel={cancelAnalysis}
-            />
-          )}
-
-          {analysis.status === "canceled" && !result && (
-            <AnalysisProgressCard
-              status="canceled"
-              steps={analysis.steps}
-              elapsedMs={analysis.elapsedMs}
-              modelLabel={analysis.model}
-            />
-          )}
-
-          {(analysis.status === "error" && !result) || result?.error ? (
-            <AnalysisProgressCard
-              status="error"
-              steps={analysis.steps}
-              elapsedMs={analysis.elapsedMs}
-              modelLabel={analysis.model}
-            />
-          ) : null}
-
-          {customerId && !result && analysis.status !== "running" && (
-            <SuggestedQuestions
-              customerId={customerId}
-              onSelect={setQuestion}
-            />
-          )}
-
-          {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-6 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-6 w-6 text-red-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold text-red-800 mb-1">
-                    Unable to Process Question
-                  </h3>
-                  <p className="text-sm text-red-700 mb-3">{error.message}</p>
-                  {error.message.includes("AI model") ||
-                  error.message.includes("configuration") ? (
-                    <div className="mt-3 pt-3 border-t border-red-200">
-                      <p className="text-sm text-red-600 mb-2">
-                        <strong>Tip:</strong> Make sure you have configured at
-                        least one AI provider in the Admin settings.
-                      </p>
-                      <Link
-                        href="/admin/ai-config"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-red-700 hover:text-red-800 underline"
-                      >
-                        Go to AI Configuration
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 7l5 5m0 0l-5 5m5-5H6"
-                          />
-                        </svg>
-                      </Link>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {result &&
-            result.mode === "clarification" &&
-            result.clarifications && (
-              <ClarificationDialog
-                question={result.question || question}
-                clarifications={result.clarifications}
-                onSubmit={handleClarificationSubmit}
-                isSubmitting={isLoading}
-              />
-            )}
-
-          {result && result.mode !== "clarification" && !result.error && (
-            <InsightResults
-              result={result}
-              customerId={customerId}
-              modelId={modelId}
-              onRefine={setQuestion}
-              onRerun={handleRerun}
-              threadId={conversationThreadId}
-              onNewQuestion={handleNewQuestion}
-            />
-          )}
-
-          {customerId && (
-            <QueryHistory
-              customerId={customerId}
-              onSelect={handleHistorySelect}
-            />
-          )}
-        </div>
-      </div>
     </div>
   );
 }

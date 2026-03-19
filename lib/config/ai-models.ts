@@ -18,7 +18,7 @@ export interface AIModel {
    * The provider of the AI model.
    * e.g., 'Anthropic', 'Google'
    */
-  provider: "Anthropic" | "Google" | "OpenWebUI" | "Other";
+  provider: "Anthropic" | "Google" | "OpenWebUI" | "LMStudio" | "Other";
 
   /**
    * A brief, user-friendly description of the model's strengths.
@@ -98,6 +98,42 @@ export const SUPPORTED_AI_MODELS: AIModel[] = [
     name: "Mistral 7B (Local)",
     provider: "OpenWebUI",
     description: "Mistral 7B model running locally via Open WebUI.",
+  },
+  {
+    id: "qwen2.5:7b",
+    name: "Qwen 2.5 7B (LM Studio)",
+    provider: "LMStudio",
+    description: "Alibaba's Qwen 2.5 7B model running locally via LM Studio. Excellent for structured tasks and JSON output.",
+  },
+  {
+    id: "qwen/qwen3.5-9b",
+    name: "Qwen 3.5 9B (LM Studio)",
+    provider: "LMStudio",
+    description: "Alibaba's Qwen 3.5 9B model running locally via LM Studio. Strong medical knowledge and instruction following.",
+  },
+  {
+    id: "qwen3.5:9b",
+    name: "Qwen 3.5 9B (LM Studio, legacy id)",
+    provider: "LMStudio",
+    description: "Alias for qwen/qwen3.5-9b. Prefer qwen/qwen3.5-9b when configuring.",
+  },
+  {
+    id: "mistral:7b-lmstudio",
+    name: "Mistral 7B (LM Studio)",
+    provider: "LMStudio",
+    description: "Mistral 7B model running locally via LM Studio.",
+  },
+  {
+    id: "llama2:7b-lmstudio",
+    name: "Llama 2 7B (LM Studio)",
+    provider: "LMStudio",
+    description: "Meta's Llama 2 7B model running locally via LM Studio.",
+  },
+  {
+    id: "natural-sql-7b",
+    name: "Natural SQL 7B (LM Studio)",
+    provider: "LMStudio",
+    description: "SQL-specialized 7B model (QuantFactory/natural-sql-7b-GGUF). Good for structured and SQL tasks.",
   },
 ];
 

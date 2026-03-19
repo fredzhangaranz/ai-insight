@@ -38,6 +38,10 @@ export const SendConversationMessageSchema = z.object({
     .uuid()
     .optional()
     .describe("Optional existing user message ID for re-execution"),
+  clarificationResponses: z
+    .record(z.string())
+    .optional()
+    .describe("Responses to previous clarification prompts, keyed by placeholder"),
 });
 
 export type SendConversationMessageRequest = z.infer<

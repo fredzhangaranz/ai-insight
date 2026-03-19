@@ -80,6 +80,38 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // Handle empty, null, or invalid URLs
+      if (!url || url === "/" || url.startsWith("/")) {
+        try {
+          // Combine relative path with baseUrl to create absolute URL
+          return new URL(url || "/", baseUrl).toString();
+        } catch {
+          return baseUrl;
+        }
+      }
+      
+      // Try to parse as absolute URL
+      try {
+        const urlObj = new URL(url);
+        const baseUrlObj = new URL(baseUrl);
+        
+        // Only allow redirect if same origin
+        if (urlObj.origin === baseUrlObj.origin) {
+          return url;
+        }
+      } catch {
+        // If URL parsing fails, treat as relative and construct absolute
+        try {
+          return new URL(url, baseUrl).toString();
+        } catch {
+          return baseUrl;
+        }
+      }
+      
+      // Fall back to baseUrl for safety
+      return baseUrl;
+    },
   },
   pages: {
     signIn: "/login",

@@ -115,9 +115,12 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
   }
 
   /**
-   * Retrieves the database schema context, loading from a file if not provided.
+   * Retrieves the database schema context. Uses provided context if set;
+   * otherwise introspects rpt schema from app-level Silhouette DB.
    */
-  protected getDatabaseSchemaContext(providedContext?: string): string {
+  protected async getDatabaseSchemaContext(
+    providedContext?: string
+  ): Promise<string> {
     if (providedContext && providedContext.trim() !== "") {
       return providedContext;
     }
@@ -126,10 +129,10 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
 
   /**
    * Build schema context for a specific customer.
-   * This is used for prompt caching in conversation mode.
+   * Introspects rpt schema from the customer's DB. Used for prompt caching in conversation mode.
    */
-  protected async buildSchemaContext(_customerId: string): Promise<string> {
-    return this.getDatabaseSchemaContext();
+  protected async buildSchemaContext(customerId: string): Promise<string> {
+    return loadDatabaseSchemaContext(customerId);
   }
 
   /**
@@ -182,7 +185,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
       "Only SELECT or WITH queries are allowed.",
       "Use the provided schema context; do not invent tables or columns.",
       "Do not include PHI or raw patient identifiers in the response.",
-      "Prefer CTE composition when the question builds on prior results.",
+      "When the current question operates on prior results (references, aggregates, filters), wrap the prior query in a CTE and apply the operation. Use your judgment from the full conversation context.",
     ].join("\n");
   }
 
@@ -573,7 +576,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     const aiStartTime = Date.now();
 
     try {
-      const schemaContext = this.getDatabaseSchemaContext(
+      const schemaContext = await this.getDatabaseSchemaContext(
         request.databaseSchemaContext,
       );
       const prompt = constructFunnelSubquestionsPrompt(
@@ -673,7 +676,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
         );
       }
 
-      const schemaContext = this.getDatabaseSchemaContext(
+      const schemaContext = await this.getDatabaseSchemaContext(
         request.databaseSchemaContext,
       );
 
@@ -856,7 +859,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     const aiStartTime = Date.now();
 
     try {
-      const schemaContext = this.getDatabaseSchemaContext(
+      const schemaContext = await this.getDatabaseSchemaContext(
         request.databaseSchemaContext,
       );
       const prompt = constructChartRecommendationsPrompt(
@@ -925,7 +928,7 @@ export abstract class BaseProvider implements IQueryFunnelProvider {
     }
 
     try {
-      const schemaContext = this.getDatabaseSchemaContext(
+      const schemaContext = await this.getDatabaseSchemaContext(
         request.schemaContext,
       );
       const prompt = constructTemplateExtractionPrompt(

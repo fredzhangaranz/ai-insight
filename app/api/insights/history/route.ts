@@ -2,9 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getInsightGenDbPool } from "@/lib/db";
+import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
+import { PatientEntityResolver } from "@/lib/services/patient-entity-resolver.service";
+import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
 import { SqlValidationAuditService, type LogSqlValidationInput } from "@/lib/services/audit/sql-validation-audit.service";
 import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import { ClarificationAuditService } from "@/lib/services/audit/clarification-audit.service";
+
+function sanitizeSemanticContextForClient(
+  semanticContext: Record<string, unknown> | null | undefined
+) {
+  if (!semanticContext || typeof semanticContext !== "object") {
+    return semanticContext ?? null;
+  }
+
+  const { boundParameters: _boundParameters, ...safeContext } = semanticContext as Record<
+    string,
+    unknown
+  >;
+  return safeContext;
+}
 
 /**
  * GET /api/insights/history
@@ -31,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     const pool = await getInsightGenDbPool();
 
-    // Fetch recent queries from QueryHistory table
+    // Fetch main questions only (exclude follow-ups; parentQueryId IS NULL = root of chain)
     const query = `
       SELECT
         id,
@@ -40,9 +57,11 @@ export async function GET(req: NextRequest) {
         mode,
         "resultCount",
         sql,
-        "semanticContext"
+        "semanticContext",
+        "conversationThreadId"
       FROM "QueryHistory"
       WHERE "userId" = $1 AND "customerId" = $2::uuid
+        AND "parentQueryId" IS NULL
       ORDER BY "createdAt" DESC
       LIMIT 10
     `;
@@ -52,12 +71,13 @@ export async function GET(req: NextRequest) {
     // Transform database rows to match expected interface
     const queries = result.rows.map((row: any) => ({
       id: String(row.id),
-      question: row.question,
+      question: row.semanticContext?.originalQuestion || row.question,
       createdAt: new Date(row.createdAt),
       mode: row.mode,
       recordCount: row.resultCount,
       sql: row.sql,
-      semanticContext: row.semanticContext, // JSONB field
+      semanticContext: sanitizeSemanticContextForClient(row.semanticContext), // JSONB field
+      conversationThreadId: row.conversationThreadId ?? undefined,
     }));
 
     return NextResponse.json(queries);
@@ -93,6 +113,7 @@ export async function POST(req: NextRequest) {
       clarificationAuditIds,
       sqlValidation,
     } = body;
+    const featureFlags = getInsightsFeatureFlags();
 
     // Validate required fields
     if (!question || !customerId || !sql || !mode) {
@@ -100,6 +121,29 @@ export async function POST(req: NextRequest) {
         { error: "Missing required fields: question, customerId, sql, mode" },
         { status: 400 }
       );
+    }
+
+    let sanitizedQuestion = question;
+    if (featureFlags.promptPhiSanitization) {
+      const patientResolver = new PatientEntityResolver();
+      const promptSanitizer = new PromptSanitizationService();
+      const resolution = await patientResolver.resolve(question, customerId);
+
+      if (
+        resolution.status !== "no_candidate" &&
+        resolution.matchedText &&
+        resolution.opaqueRef
+      ) {
+        sanitizedQuestion = promptSanitizer.sanitize({
+          question,
+          patientMentions: [
+            {
+              matchedText: resolution.matchedText,
+              opaqueRef: resolution.opaqueRef,
+            },
+          ],
+        }).sanitizedQuestion;
+      }
     }
 
     const pool = await getInsightGenDbPool();
@@ -116,7 +160,7 @@ export async function POST(req: NextRequest) {
     const result = await pool.query(query, [
       customerId,
       session.user.id,
-      question,
+      sanitizedQuestion,
       sql,
       mode,
       resultCount || 0,

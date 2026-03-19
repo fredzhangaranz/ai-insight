@@ -1,9 +1,14 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationMessage } from "@/lib/types/conversation";
 
 type ConversationMessageState = ConversationMessage & {
   isLoading?: boolean;
 };
+
+export interface UseConversationOptions {
+  /** External threadId (e.g. from first-question thread create). When provided, syncs into hook state. */
+  externalThreadId?: string | null;
+}
 
 interface UseConversationReturn {
   threadId: string | null;
@@ -15,6 +20,12 @@ interface UseConversationReturn {
     customerId: string,
     modelId?: string
   ) => Promise<void>;
+  sendMessageWithClarifications: (
+    question: string,
+    customerId: string,
+    clarificationResponses: Record<string, string>,
+    modelId?: string
+  ) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   startNewConversation: () => void;
   loadConversation: (threadId: string) => Promise<void>;
@@ -23,9 +34,14 @@ interface UseConversationReturn {
 interface SendMessageOptions {
   userMessageId?: string;
   skipOptimistic?: boolean;
+  clarificationResponses?: Record<string, string>;
 }
 
-export function useConversation(): UseConversationReturn {
+export function useConversation(
+  options?: UseConversationOptions
+): UseConversationReturn {
+  const externalThreadId = options?.externalThreadId;
+
   // Initialize threadId from localStorage to survive component remounts
   const [threadId, setThreadId] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
@@ -45,6 +61,15 @@ export function useConversation(): UseConversationReturn {
   const [customerId, setCustomerId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (externalThreadId && !threadId) {
+      setThreadId(externalThreadId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("conversation_threadId", externalThreadId);
+      }
+    }
+  }, [externalThreadId, threadId]);
 
   const sendMessageInternal = useCallback(
     async (
@@ -111,6 +136,7 @@ export function useConversation(): UseConversationReturn {
           question: trimmedQuestion,
           ...(modelId && { modelId }),
           ...(options?.userMessageId && { userMessageId: options.userMessageId }),
+          ...(options?.clarificationResponses && { clarificationResponses: options.clarificationResponses }),
         };
 
         const response = await fetch("/api/insights/conversation/send", {
@@ -200,6 +226,20 @@ export function useConversation(): UseConversationReturn {
   const sendMessage = useCallback(
     async (question: string, targetCustomerId: string, modelId?: string) => {
       await sendMessageInternal(question, targetCustomerId, modelId);
+    },
+    [sendMessageInternal]
+  );
+
+  const sendMessageWithClarifications = useCallback(
+    async (
+      question: string,
+      targetCustomerId: string,
+      clarificationResponses: Record<string, string>,
+      modelId?: string
+    ) => {
+      await sendMessageInternal(question, targetCustomerId, modelId, {
+        clarificationResponses,
+      });
     },
     [sendMessageInternal]
   );
@@ -300,6 +340,7 @@ export function useConversation(): UseConversationReturn {
     isLoading,
     error,
     sendMessage,
+    sendMessageWithClarifications,
     editMessage,
     startNewConversation,
     loadConversation,

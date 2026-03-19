@@ -612,6 +612,13 @@ export default function AdminDashboard() {
                   </Button>
                 </Link>
 
+                <Link href="/admin/data-gen">
+                  <Button variant="outline" className="w-full justify-start">
+                    <CpuChipIcon className="w-4 h-4 mr-2" />
+                    Data Generation
+                  </Button>
+                </Link>
+
                 <Link href="/">
                   <Button variant="outline" className="w-full justify-start">
                     <ArrowRightIcon className="w-4 h-4 mr-2" />

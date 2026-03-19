@@ -72,8 +72,8 @@ async function generateAIPlan(
 
   console.log("Starting AI plan generation...");
   try {
-    // Load the static database schema context from the file
-    const databaseSchemaContext = loadDatabaseSchemaContext();
+    // Load database schema context (introspects rpt schema + guidelines)
+    const databaseSchemaContext = await loadDatabaseSchemaContext();
 
     // Construct the System Prompt for the AI
     const systemPrompt = `

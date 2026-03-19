@@ -22,12 +22,29 @@ import { InsightResult } from "@/lib/hooks/useInsights";
 interface InspectionPanelProps {
   result: InsightResult;
   onChallengeAssumption?: (assumption: string, explanation: string) => void;
+  /** Controlled open state; when provided, panel is controlled by parent */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 type TabId = "understanding" | "sql" | "context";
 
-export function InspectionPanel({ result, onChallengeAssumption }: InspectionPanelProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function InspectionPanel({
+  result,
+  onChallengeAssumption,
+  open: controlledOpen,
+  onOpenChange,
+}: InspectionPanelProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const isOpen = isControlled ? controlledOpen : internalOpen;
+  const setIsOpen = (value: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(value);
+    } else {
+      setInternalOpen(value);
+    }
+  };
   const [activeTab, setActiveTab] = useState<TabId>("understanding");
 
   const tabs = [

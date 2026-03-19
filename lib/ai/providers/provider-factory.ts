@@ -3,6 +3,7 @@ import { IQueryFunnelProvider } from "./i-query-funnel-provider";
 import { ClaudeProvider } from "./claude-provider";
 import { GeminiProvider } from "./gemini-provider";
 import { OpenWebUIProvider } from "./openwebui-provider";
+import { LMStudioProvider } from "./lmstudio-provider";
 import { aiConfigService } from "../../services/ai-config.service";
 
 /**
@@ -39,6 +40,9 @@ export async function getAIProvider(
         break;
       case "OpenWebUI":
         provider = new OpenWebUIProvider(model.id);
+        break;
+      case "LMStudio":
+        provider = new LMStudioProvider(model.id);
         break;
       case "Other":
       default:
@@ -118,7 +122,7 @@ export async function findFallbackProvider(
         (c) => c.providerType === providerType && c.providerName === providerName
       );
       const defaultPriority =
-        providerType === "anthropic" ? 10 : providerType === "google" ? 20 : providerType === "openwebui" ? 30 : 100;
+        providerType === "anthropic" ? 10 : providerType === "google" ? 20 : providerType === "openwebui" ? 30 : providerType === "lmstudio" ? 35 : 100;
       return (cfg && typeof cfg.configData.priority === "number")
         ? (cfg.configData.priority as number)
         : defaultPriority;
@@ -158,6 +162,9 @@ export async function findFallbackProvider(
                 break;
               case "openwebui":
                 instance = new OpenWebUIProvider(fallbackModel.id);
+                break;
+              case "lmstudio":
+                instance = new LMStudioProvider(fallbackModel.id);
                 break;
               default:
                 continue;
@@ -204,6 +211,8 @@ export function getAIProviderSync(modelId: string): IQueryFunnelProvider {
       return new GeminiProvider(model.id);
     case "OpenWebUI":
       return new OpenWebUIProvider(model.id);
+    case "LMStudio":
+      return new LMStudioProvider(model.id);
     case "Other":
     default:
       throw new Error(

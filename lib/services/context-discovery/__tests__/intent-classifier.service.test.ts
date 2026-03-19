@@ -16,7 +16,40 @@ import {
   validateIntentClassificationResponse,
   constructIntentClassificationPrompt,
 } from "@/lib/prompts/intent-classification.prompt";
-import type { IntentClassificationResult } from "../types";
+import { getAIProvider } from "@/lib/ai/providers/provider-factory";
+
+vi.mock("@/lib/ai/providers/provider-factory", () => ({
+  getAIProvider: vi.fn(),
+}));
+
+vi.mock("@/lib/db", () => ({
+  getInsightGenDbPool: vi.fn().mockResolvedValue({
+    query: vi.fn().mockResolvedValue({ rows: [] }),
+  }),
+}));
+
+vi.mock("@/lib/services/embeddings/gemini-embedding", () => ({
+  getEmbeddingService: vi.fn(() => ({
+    generateEmbedding: vi.fn().mockResolvedValue([]),
+  })),
+}));
+
+vi.mock("@/lib/config/ai-config-loader", () => ({
+  AIConfigLoader: {
+    getInstance: vi.fn(() => ({
+      getConfiguration: vi.fn().mockResolvedValue({
+        providers: [
+          {
+            isDefault: true,
+            configData: {
+              complexQueryModelId: "test-model-id",
+            },
+          },
+        ],
+      }),
+    })),
+  },
+}));
 
 /**
  * Mock LLM Provider responses for different scenarios
@@ -125,6 +158,12 @@ const MOCK_RESPONSES = {
 describe("IntentClassifierService", () => {
   let service: IntentClassifierService;
 
+  function mockProviderResponse(payload: unknown) {
+    vi.mocked(getAIProvider).mockResolvedValueOnce({
+      complete: vi.fn().mockResolvedValueOnce(JSON.stringify(payload)),
+    } as any);
+  }
+
   beforeEach(() => {
     service = new IntentClassifierService();
     vi.clearAllMocks();
@@ -136,14 +175,7 @@ describe("IntentClassifierService", () => {
 
   describe("2.1 – Basic Intent Type Classification (6 tests)", () => {
     it("should classify outcome_analysis intent correctly", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.outcomeAnalysis)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.outcomeAnalysis);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -155,12 +187,7 @@ describe("IntentClassifierService", () => {
     });
 
     it("should classify trend_analysis intent correctly", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(JSON.stringify(MOCK_RESPONSES.trendAnalysis)),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.trendAnalysis);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -172,14 +199,7 @@ describe("IntentClassifierService", () => {
     });
 
     it("should classify cohort_comparison intent correctly", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.cohortComparison)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.cohortComparison);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -191,12 +211,7 @@ describe("IntentClassifierService", () => {
     });
 
     it("should classify risk_assessment intent correctly", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(JSON.stringify(MOCK_RESPONSES.riskAssessment)),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.riskAssessment);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -208,12 +223,7 @@ describe("IntentClassifierService", () => {
     });
 
     it("should classify quality_metrics intent correctly", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(JSON.stringify(MOCK_RESPONSES.qualityMetrics)),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.qualityMetrics);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -225,14 +235,7 @@ describe("IntentClassifierService", () => {
     });
 
     it("should classify operational_metrics intent correctly", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.operationalMetrics)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.operationalMetrics);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -246,15 +249,10 @@ describe("IntentClassifierService", () => {
 
   describe("2.2 – Time Range Extraction (4 tests)", () => {
     it("should extract 6-month time range", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            ...MOCK_RESPONSES.outcomeAnalysis,
-            timeRange: { unit: "months", value: 6 },
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        timeRange: { unit: "months", value: 6 },
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -265,15 +263,10 @@ describe("IntentClassifierService", () => {
     });
 
     it("should extract 1-year time range", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            ...MOCK_RESPONSES.outcomeAnalysis,
-            timeRange: { unit: "years", value: 1 },
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        timeRange: { unit: "years", value: 1 },
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -284,15 +277,10 @@ describe("IntentClassifierService", () => {
     });
 
     it("should extract 30-day time range", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            ...MOCK_RESPONSES.outcomeAnalysis,
-            timeRange: { unit: "days", value: 30 },
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        timeRange: { unit: "days", value: 30 },
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -303,15 +291,10 @@ describe("IntentClassifierService", () => {
     });
 
     it("should handle missing time range", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            ...MOCK_RESPONSES.trendAnalysis,
-            timeRange: null,
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        ...MOCK_RESPONSES.trendAnalysis,
+        timeRange: null,
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -324,36 +307,23 @@ describe("IntentClassifierService", () => {
 
   describe("2.3 – Filter Extraction (3 tests)", () => {
     it("should extract wound_classification filter", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.outcomeAnalysis)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.outcomeAnalysis);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
         question: "Average healing for diabetic wounds?",
       });
 
-      const filter = result.filters.find(
-        (f) => f.field === "wound_classification"
+      const filter = result.filters.find((f) =>
+        f.userPhrase.includes("diabetic")
       );
       expect(filter).toBeDefined();
       expect(filter?.userPhrase).toContain("diabetic");
+      expect(filter?.field).toBe("wound_classification");
     });
 
     it("should extract multiple filters", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.cohortComparison)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.cohortComparison);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -364,15 +334,10 @@ describe("IntentClassifierService", () => {
     });
 
     it("should handle questions with no filters", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            ...MOCK_RESPONSES.qualityMetrics,
-            filters: [],
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        ...MOCK_RESPONSES.qualityMetrics,
+        filters: [],
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -385,14 +350,7 @@ describe("IntentClassifierService", () => {
 
   describe("2.3.1 – Filter Value Null Requirement (NEW - Task 1.2)", () => {
     it("should leave filter.value as null for single filter", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.simpleBandagesQuery)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.simpleBandagesQuery);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -407,14 +365,7 @@ describe("IntentClassifierService", () => {
     });
 
     it("should leave all filter values null for multiple filters", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.cohortComparison)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.cohortComparison);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -424,20 +375,12 @@ describe("IntentClassifierService", () => {
       result.filters.forEach((filter) => {
         expect(filter.value).toBeNull();
         expect(filter.userPhrase).toBeDefined();
-        expect(filter.field).toBeDefined();
         expect(filter.operator).toBeDefined();
       });
     });
 
     it("should populate userPhrase with exact user text", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.simpleBandagesQuery)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse(MOCK_RESPONSES.simpleBandagesQuery);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -449,27 +392,22 @@ describe("IntentClassifierService", () => {
     });
 
     it("should handle operators correctly with null values", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            type: "outcome_analysis",
-            scope: "patient_cohort",
-            metrics: ["patient_count"],
-            filters: [
-              {
-                field: "visit_count",
-                operator: "greater_than",
-                userPhrase: "more than 5 visits",
-                value: null,
-              },
-            ],
-            timeRange: null,
-            confidence: 0.90,
-            reasoning: "Filter by visit count",
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        type: "outcome_analysis",
+        scope: "patient_cohort",
+        metrics: ["patient_count"],
+        filters: [
+          {
+            field: "visit_count",
+            operator: "greater_than",
+            userPhrase: "more than 5 visits",
+            value: null,
+          },
+        ],
+        timeRange: null,
+        confidence: 0.9,
+        reasoning: "Filter by visit count",
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -483,27 +421,21 @@ describe("IntentClassifierService", () => {
   });
 
   describe("2.4 – Edge Cases (4 tests)", () => {
-    it("should handle empty question", async () => {
-      const result = await service.classifyIntent({
-        customerId: "TEST",
-        question: "   ",
-      });
-
-      expect(result.confidence).toBe(0.0);
-      expect(result.reasoning).toContain("Classification failed");
+    it("should reject empty question", async () => {
+      await expect(
+        service.classifyIntent({
+          customerId: "TEST",
+          question: "   ",
+        })
+      ).rejects.toThrow("question cannot be empty");
     });
 
     it("should handle ambiguous question", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            ...MOCK_RESPONSES.outcomeAnalysis,
-            confidence: 0.55,
-            reasoning: "Multiple interpretations possible",
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        confidence: 0.55,
+        reasoning: "Multiple interpretations possible",
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -514,17 +446,12 @@ describe("IntentClassifierService", () => {
     });
 
     it("should handle questions with multiple intents", async () => {
-      const mockProvider = {
-        complete: vi.fn().mockResolvedValueOnce(
-          JSON.stringify({
-            ...MOCK_RESPONSES.outcomeAnalysis,
-            confidence: 0.68,
-            reasoning:
-              "Primary intent is outcome_analysis, but trend analysis also relevant",
-          })
-        ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      mockProviderResponse({
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        confidence: 0.68,
+        reasoning:
+          "Primary intent is outcome_analysis, but trend analysis also relevant",
+      });
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -536,10 +463,9 @@ describe("IntentClassifierService", () => {
     });
 
     it("should handle malformed LLM response", async () => {
-      const mockProvider = {
+      vi.mocked(getAIProvider).mockResolvedValueOnce({
         complete: vi.fn().mockResolvedValueOnce("This is not valid JSON"),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+      } as any);
 
       const result = await service.classifyIntent({
         customerId: "TEST",
@@ -552,32 +478,20 @@ describe("IntentClassifierService", () => {
   });
 
   describe("2.5 – Performance (1 test)", () => {
-    it("should respond within 2 seconds (with cache)", async () => {
-      const mockProvider = {
-        complete: vi
-          .fn()
-          .mockResolvedValueOnce(
-            JSON.stringify(MOCK_RESPONSES.outcomeAnalysis)
-          ),
-      };
-      vi.mocked(getAIProvider).mockResolvedValueOnce(mockProvider as any);
+    it("should reuse the cached response on the second call", async () => {
+      mockProviderResponse(MOCK_RESPONSES.outcomeAnalysis);
 
-      const startTime = Date.now();
       await service.classifyIntent({
         customerId: "TEST",
         question: "What is average healing rate?",
       });
-      const firstCallDuration = Date.now() - startTime;
 
-      // Second call should be faster (cached)
-      const startTime2 = Date.now();
       const result = await service.classifyIntent({
         customerId: "TEST",
         question: "What is average healing rate?",
       });
-      const secondCallDuration = Date.now() - startTime2;
 
-      expect(secondCallDuration).toBeLessThan(firstCallDuration);
+      expect(getAIProvider).toHaveBeenCalledTimes(1);
       expect(result.confidence).toBeGreaterThan(0);
     });
   });
@@ -628,15 +542,14 @@ describe("IntentClassifierService", () => {
     });
 
     // NEW: Filter structure validation tests (Task 1.2)
-    it("should reject filter missing 'field' property", () => {
-      const invalid = {
+    it("should accept filter missing 'field' property", () => {
+      const valid = {
         ...MOCK_RESPONSES.outcomeAnalysis,
         filters: [{ operator: "equals", userPhrase: "test", value: null }],
       };
-      const validation = validateIntentClassificationResponse(invalid);
+      const validation = validateIntentClassificationResponse(valid);
 
-      expect(validation.valid).toBe(false);
-      expect(validation.error).toContain("field");
+      expect(validation.valid).toBe(true);
     });
 
     it("should reject filter missing 'operator' property", () => {
@@ -691,6 +604,93 @@ describe("IntentClassifierService", () => {
       expect(validation.valid).toBe(true);
       expect(validation.result?.filters[0].value).toBeNull();
     });
+
+    it("should normalize presentationIntent case and synonyms (Chart, graph -> chart)", () => {
+      const withChartVariant = {
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        presentationIntent: "Chart",
+        preferredVisualization: "bar",
+      };
+      const validationChart = validateIntentClassificationResponse(
+        withChartVariant
+      );
+      expect(validationChart.valid).toBe(true);
+      expect(validationChart.result?.presentationIntent).toBe("chart");
+
+      const withGraphSynonym = {
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        presentationIntent: "graph",
+        preferredVisualization: null,
+      };
+      const validationGraph = validateIntentClassificationResponse(
+        withGraphSynonym
+      );
+      expect(validationGraph.valid).toBe(true);
+      expect(validationGraph.result?.presentationIntent).toBe("chart");
+    });
+  });
+
+  describe("Semantic Frame Normalization", () => {
+    it("should derive aggregate grouping for wounds per patient", async () => {
+      mockProviderResponse({
+        type: "operational_metrics",
+        scope: "aggregate",
+        metrics: ["wound_count"],
+        filters: [],
+        timeRange: null,
+        presentationIntent: "chart",
+        preferredVisualization: "bar",
+        confidence: 0.95,
+        reasoning: "Counts wounds grouped by patient",
+      });
+
+      const result = await service.classifyIntent({
+        customerId: "TEST",
+        question: "show me a chart with number of wounds per patient in the system",
+      });
+
+      expect(result.semanticFrame).toBeDefined();
+      expect(result.semanticFrame?.scope.value).toBe("aggregate");
+      expect(result.semanticFrame?.measure.value).toBe("wound_count");
+      expect(result.semanticFrame?.grain.value).toBe("per_patient");
+      expect(result.semanticFrame?.groupBy.value).toEqual(["patient"]);
+      expect(result.semanticFrame?.entityRefs).toHaveLength(0);
+    });
+
+    it("should separate aggregate predicates from value filters", async () => {
+      mockProviderResponse({
+        type: "operational_metrics",
+        scope: "patient_cohort",
+        metrics: ["assessment_count"],
+        filters: [
+          {
+            operator: "greater_than",
+            userPhrase: ">5 assessments",
+            value: null,
+          },
+        ],
+        timeRange: { unit: "months", value: 6 },
+        presentationIntent: "table",
+        preferredVisualization: "table",
+        confidence: 0.94,
+        reasoning: "Patients filtered by assessment totals",
+      });
+
+      const result = await service.classifyIntent({
+        customerId: "TEST",
+        question: "list patients with >5 assessments in the last 6 months",
+      });
+
+      expect(result.semanticFrame?.aggregatePredicates).toEqual([
+        expect.objectContaining({
+          measure: "assessment_count",
+          operator: ">",
+          value: 5,
+        }),
+      ]);
+      expect(result.semanticFrame?.filters).toEqual([]);
+      expect(result.filters).toEqual([]);
+    });
   });
 
   describe("Prompt Construction Tests", () => {
@@ -718,11 +718,3 @@ describe("IntentClassifierService", () => {
     });
   });
 });
-
-/**
- * Helper to mock getAIProvider
- * Note: In real tests, you would use vi.mock() at module level
- */
-function getAIProvider(modelId: string): Promise<any> {
-  return Promise.resolve({});
-}

@@ -75,6 +75,7 @@ const migrations = [
   "047_save_insight_conversation_link.sql",
   "048_conversation_audit_tracking.sql",
   "049_add_customer_to_dashboards.sql",
+  "050_add_lmstudio_provider_type.sql",
 ];
 
 /**

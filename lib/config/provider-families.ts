@@ -11,7 +11,7 @@
  * - User-facing model selector to show provider families
  */
 
-export type ProviderType = 'anthropic' | 'google' | 'openwebui';
+export type ProviderType = 'anthropic' | 'google' | 'openwebui' | 'lmstudio';
 
 export interface ModelOption {
   id: string;
@@ -216,6 +216,67 @@ export const PROVIDER_FAMILIES: Record<ProviderType, ProviderFamily> = {
     setupGuideUrl: 'https://docs.openwebui.com/',
     pricingUrl: undefined, // Self-hosted, no pricing
   },
+
+  lmstudio: {
+    type: 'lmstudio',
+    name: 'LMStudio',
+    displayName: 'LM Studio (Local)',
+    description: 'High-performance local LLM inference via LM Studio',
+    icon: '⚡',
+
+    simpleQueryModels: [
+      {
+        id: 'qwen2.5:7b',
+        name: 'Qwen 2.5 7B',
+        description: 'Fast and efficient for structured tasks (Recommended)',
+        recommended: true,
+      },
+      {
+        id: 'natural-sql-7b',
+        name: 'Natural SQL 7B',
+        description: 'SQL-specialized model, good for structured output',
+      },
+      {
+        id: 'mistral:7b-lmstudio',
+        name: 'Mistral 7B',
+        description: 'Fast and capable general-purpose model',
+      },
+      {
+        id: 'llama2:7b-lmstudio',
+        name: 'Llama 2 7B',
+        description: 'Meta small model',
+      },
+    ],
+
+    complexQueryModels: [
+      {
+        id: 'qwen/qwen3.5-9b',
+        name: 'Qwen 3.5 9B',
+        description: 'Strong medical knowledge and reasoning (Recommended)',
+        recommended: true,
+      },
+      {
+        id: 'natural-sql-7b',
+        name: 'Natural SQL 7B',
+        description: 'SQL-specialized model',
+      },
+      {
+        id: 'mistral:7b-lmstudio',
+        name: 'Mistral 7B',
+        description: 'Capable general-purpose model',
+      },
+    ],
+
+    defaultSimpleModel: 'qwen2.5:7b',
+    defaultComplexModel: 'qwen/qwen3.5-9b',
+
+    requiresApiKey: false,
+    requiresProjectId: false,
+    requiresBaseUrl: true,
+
+    setupGuideUrl: 'https://lmstudio.ai/docs/user-guide/server',
+    pricingUrl: undefined, // Self-hosted, no pricing
+  },
 };
 
 /**
@@ -252,6 +313,9 @@ export function getModelOption(modelId: string): ModelOption | null {
 export function getProviderTypeFromModelId(modelId: string): ProviderType | null {
   if (modelId.startsWith('claude')) return 'anthropic';
   if (modelId.startsWith('gemini')) return 'google';
-  if (modelId.includes('llama') || modelId.includes('mistral') || modelId.includes('phi')) return 'openwebui';
+  if (modelId.includes('llama') || modelId.includes('mistral') || modelId.includes('phi')) {
+    return modelId.includes('-lmstudio') ? 'lmstudio' : 'openwebui';
+  }
+  if (modelId.includes('qwen')) return 'lmstudio';
   return null;
 }

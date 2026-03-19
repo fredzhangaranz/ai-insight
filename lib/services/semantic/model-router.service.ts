@@ -26,7 +26,12 @@ export type QueryComplexity = 'simple' | 'medium' | 'complex';
 /**
  * Task type for model selection
  */
-export type TaskType = 'intent' | 'sql' | 'clarification';
+export type TaskType =
+  | 'intent'
+  | 'frame'
+  | 'sql'
+  | 'clarification'
+  | 'ambiguity_judge';
 
 /**
  * Input for model selection
@@ -60,6 +65,48 @@ export interface ModelSelection {
  * - Complex query / SQL generation → Routes to gemini-2.5-pro (complex model)
  */
 export class ModelRouterService {
+  /**
+   * Get the model to use for data generation.
+   * Data generation (spec interpretation, field resolution, profile generation) uses the
+   * provider's simple/fast model by default for speed and cost; the UI still shows the
+   * provider family (complex model id). Call this with the user's dropdown selection to
+   * resolve to the simple model id.
+   *
+   * @param userSelectedModelId - The model id from the UI (typically complex model id per provider)
+   * @returns The model id to use for data generation (simple model for that provider)
+   */
+  async getModelForDataGeneration(userSelectedModelId: string): Promise<ModelSelection> {
+    const providerType = getProviderTypeFromModelId(userSelectedModelId);
+
+    if (!providerType) {
+      return {
+        modelId: userSelectedModelId,
+        provider: "Unknown",
+        rationale: "Using user-selected model (provider type unknown)",
+      };
+    }
+
+    const config = await aiConfigService.getConfigurationByType(providerType);
+
+    if (
+      !config ||
+      !config.configData.simpleQueryModelId ||
+      !config.configData.complexQueryModelId
+    ) {
+      return {
+        modelId: userSelectedModelId,
+        provider: providerType,
+        rationale: "Using user-selected model (provider configuration incomplete)",
+      };
+    }
+
+    return {
+      modelId: config.configData.simpleQueryModelId,
+      provider: providerType,
+      rationale: "Data generation uses fast model for speed and cost",
+    };
+  }
+
   /**
    * Select the best model for a given input
    *
@@ -121,9 +168,18 @@ export class ModelRouterService {
       return true;
     }
 
+    // Frame extraction can use the fast tier unless structural reasoning is required.
+    if (input.taskType === 'frame') {
+      return input.complexity !== 'complex';
+    }
+
     // Clarification generation → use simple model
     if (input.taskType === 'clarification') {
       return true;
+    }
+
+    if (input.taskType === 'ambiguity_judge') {
+      return false;
     }
 
     // SQL generation with simple complexity → use simple model
@@ -156,8 +212,16 @@ export class ModelRouterService {
 
     if (input.taskType === 'intent') {
       reasons.push('intent classification task');
+    } else if (input.taskType === 'frame') {
+      reasons.push(
+        input.complexity === 'complex'
+          ? 'structural frame extraction'
+          : 'frame extraction task'
+      );
     } else if (input.taskType === 'clarification') {
       reasons.push('clarification generation');
+    } else if (input.taskType === 'ambiguity_judge') {
+      reasons.push('ambiguity judgment');
     } else if (input.complexity === 'simple') {
       reasons.push('simple query');
     } else if (input.complexity === 'complex') {

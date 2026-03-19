@@ -93,6 +93,7 @@ function capitalizeProvider(providerType: string): string {
     anthropic: "Anthropic",
     google: "Google",
     openwebui: "OpenWebUI",
+    lmstudio: "LM Studio",
   };
   return mapping[providerType] || providerType;
 }

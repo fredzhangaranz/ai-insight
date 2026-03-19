@@ -39,6 +39,7 @@ export interface ConversationCompletionParams {
   customerId: string;
   temperature?: number;
   maxTokens?: number;
+  trustedSqlInstructions?: string;
 }
 
 /**

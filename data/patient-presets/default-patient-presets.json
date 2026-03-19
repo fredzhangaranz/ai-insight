@@ -1,0 +1,142 @@
+[
+  {
+    "id": "nz-urban",
+    "name": "NZ Urban",
+    "description": "New Zealand urban demographic defaults with weighted Auckland and Christchurch address bundles.",
+    "fieldDefaults": [
+      {
+        "columnName": "addressCountry",
+        "criteria": {
+          "type": "fixed",
+          "value": "New Zealand"
+        }
+      },
+      {
+        "columnName": "addressState",
+        "criteria": {
+          "type": "options",
+          "pickFrom": [
+            "Auckland",
+            "Canterbury"
+          ]
+        }
+      }
+    ],
+    "profileSelection": {
+      "mode": "weighted_random_per_patient"
+    },
+    "profiles": [
+      {
+        "id": "auckland-central",
+        "name": "Auckland Central",
+        "weight": 0.65,
+        "values": [
+          {
+            "columnName": "addressCity",
+            "value": "Auckland"
+          },
+          {
+            "columnName": "addressState",
+            "value": "Auckland"
+          },
+          {
+            "columnName": "addressCountry",
+            "value": "New Zealand"
+          },
+          {
+            "columnName": "addressPostcode",
+            "value": "1010"
+          }
+        ]
+      },
+      {
+        "id": "christchurch-central",
+        "name": "Christchurch Central",
+        "weight": 0.35,
+        "values": [
+          {
+            "columnName": "addressCity",
+            "value": "Christchurch"
+          },
+          {
+            "columnName": "addressState",
+            "value": "Canterbury"
+          },
+          {
+            "columnName": "addressCountry",
+            "value": "New Zealand"
+          },
+          {
+            "columnName": "addressPostcode",
+            "value": "8011"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "au-coastal",
+    "name": "AU Coastal",
+    "description": "Australian coastal defaults with weighted Sydney and Gold Coast location bundles.",
+    "fieldDefaults": [
+      {
+        "columnName": "addressCountry",
+        "criteria": {
+          "type": "fixed",
+          "value": "Australia"
+        }
+      }
+    ],
+    "profileSelection": {
+      "mode": "weighted_random_per_patient"
+    },
+    "profiles": [
+      {
+        "id": "sydney-metro",
+        "name": "Sydney Metro",
+        "weight": 0.7,
+        "values": [
+          {
+            "columnName": "addressCity",
+            "value": "Sydney"
+          },
+          {
+            "columnName": "addressState",
+            "value": "New South Wales"
+          },
+          {
+            "columnName": "addressCountry",
+            "value": "Australia"
+          },
+          {
+            "columnName": "addressPostcode",
+            "value": "2000"
+          }
+        ]
+      },
+      {
+        "id": "gold-coast",
+        "name": "Gold Coast",
+        "weight": 0.3,
+        "values": [
+          {
+            "columnName": "addressCity",
+            "value": "Gold Coast"
+          },
+          {
+            "columnName": "addressState",
+            "value": "Queensland"
+          },
+          {
+            "columnName": "addressCountry",
+            "value": "Australia"
+          },
+          {
+            "columnName": "addressPostcode",
+            "value": "4217"
+          }
+        ]
+      }
+    ]
+  }
+]
