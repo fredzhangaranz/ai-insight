@@ -13,15 +13,17 @@ describe("silhouette-version-mapper", () => {
       expect(mapSchemaVersionToSilhouetteVersion("37.0")).toBe("4.20");
       expect(mapSchemaVersionToSilhouetteVersion("38.0")).toBe("4.21");
       expect(mapSchemaVersionToSilhouetteVersion("39.0")).toBe("4.22");
+      expect(mapSchemaVersionToSilhouetteVersion("40.0")).toBe("4.23");
     });
 
     it("should handle numeric inputs", () => {
       expect(mapSchemaVersionToSilhouetteVersion(35.0)).toBe("4.18");
       expect(mapSchemaVersionToSilhouetteVersion(39.0)).toBe("4.22");
+      expect(mapSchemaVersionToSilhouetteVersion(40)).toBe("4.23");
     });
 
     it("should return null for unknown versions", () => {
-      expect(mapSchemaVersionToSilhouetteVersion("40.0")).toBe(null);
+      expect(mapSchemaVersionToSilhouetteVersion("41.0")).toBe(null);
       expect(mapSchemaVersionToSilhouetteVersion("1.0")).toBe(null);
       expect(mapSchemaVersionToSilhouetteVersion("")).toBe(null);
     });
@@ -35,7 +37,7 @@ describe("silhouette-version-mapper", () => {
   describe("getSupportedVersions", () => {
     it("should return all supported version mappings", () => {
       const versions = getSupportedVersions();
-      expect(versions).toHaveLength(10);
+      expect(versions).toHaveLength(12);
       // Both decimal and integer formats should be supported
       expect(versions).toContainEqual(["35.0", "4.18"]);
       expect(versions).toContainEqual(["35", "4.18"]);
@@ -47,6 +49,8 @@ describe("silhouette-version-mapper", () => {
       expect(versions).toContainEqual(["38", "4.21"]);
       expect(versions).toContainEqual(["39.0", "4.22"]);
       expect(versions).toContainEqual(["39", "4.22"]);
+      expect(versions).toContainEqual(["40.0", "4.23"]);
+      expect(versions).toContainEqual(["40", "4.23"]);
     });
   });
 
@@ -57,11 +61,13 @@ describe("silhouette-version-mapper", () => {
       expect(isSupportedSchemaVersion("37.0")).toBe(true);
       expect(isSupportedSchemaVersion("38.0")).toBe(true);
       expect(isSupportedSchemaVersion("39.0")).toBe(true);
+      expect(isSupportedSchemaVersion("40.0")).toBe(true);
       expect(isSupportedSchemaVersion(35.0)).toBe(true);
+      expect(isSupportedSchemaVersion(40)).toBe(true);
     });
 
     it("should return false for unsupported versions", () => {
-      expect(isSupportedSchemaVersion("40.0")).toBe(false);
+      expect(isSupportedSchemaVersion("41.0")).toBe(false);
       expect(isSupportedSchemaVersion("1.0")).toBe(false);
       expect(isSupportedSchemaVersion("")).toBe(false);
     });

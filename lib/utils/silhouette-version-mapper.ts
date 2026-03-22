@@ -14,6 +14,20 @@ const SCHEMA_VERSION_MAP: Record<string, string> = {
   "38": "4.21",
   "39.0": "4.22",
   "39": "4.22",
+  "40.0": "4.23",
+  "40": "4.23",
+  "41.0": "4.24",
+  "41": "4.24",
+  "42.0": "4.25",
+  "42": "4.25",
+  "43.0": "4.26",
+  "43": "4.26",
+  "44.0": "4.27",
+  "44": "4.27",
+  "45.0": "4.28",
+  "45": "4.28",
+  "46.0": "4.29",
+  "46": "4.29",
 };
 
 /**
@@ -21,7 +35,7 @@ const SCHEMA_VERSION_MAP: Record<string, string> = {
  * Returns null if the version is not recognized.
  */
 export function mapSchemaVersionToSilhouetteVersion(
-  schemaVersion: string | number
+  schemaVersion: string | number,
 ): string | null {
   const normalized = String(schemaVersion).trim();
   return SCHEMA_VERSION_MAP[normalized] ?? null;
@@ -38,7 +52,7 @@ export function getSupportedVersions(): [string, string][] {
  * Check if a schema version is supported.
  */
 export function isSupportedSchemaVersion(
-  schemaVersion: string | number
+  schemaVersion: string | number,
 ): boolean {
   return mapSchemaVersionToSilhouetteVersion(schemaVersion) !== null;
 }
