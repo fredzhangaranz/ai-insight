@@ -8,6 +8,10 @@ import type {
 import type { FieldAssumption } from "@/lib/services/semantic/sql-generator.types";
 import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
+import type {
+  PatientContextBundle,
+  WorkspacePlan,
+} from "@/lib/types/workspace-plan";
 
 export interface ThinkingStep {
   id: string;
@@ -122,6 +126,8 @@ export interface InsightResult {
   artifacts?: InsightArtifact[];
   resolvedEntities?: ResolvedEntitySummary[];
   boundParameters?: Record<string, string | number | boolean | null>;
+  workspacePlan?: WorkspacePlan;
+  patientContextBundle?: PatientContextBundle;
 }
 
 type AnalysisStatus = "idle" | "running" | "completed" | "canceled" | "error";

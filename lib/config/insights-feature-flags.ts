@@ -12,9 +12,15 @@ export interface InsightsFeatureFlags {
   followUpReliability: boolean;
   clarificationPipelineV2: boolean;
   clarificationPipelineV2Shadow: boolean;
+  workspacePlanningV2: boolean;
+  patientContextBundle: boolean;
+  workspaceActionRecommendations: boolean;
+  patientCardBlock: boolean;
 }
 
 export function getInsightsFeatureFlags(): InsightsFeatureFlags {
+  const workspacePlanningV2 = envFlag("INSIGHTS_WORKSPACE_PLANNING_V2");
+
   return {
     patientEntityResolution: envFlag("INSIGHTS_PATIENT_ENTITY_RESOLUTION"),
     promptPhiSanitization: envFlag("INSIGHTS_PROMPT_PHI_SANITIZATION"),
@@ -25,5 +31,13 @@ export function getInsightsFeatureFlags(): InsightsFeatureFlags {
     clarificationPipelineV2Shadow: envFlag(
       "INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW"
     ),
+    workspacePlanningV2,
+    patientContextBundle:
+      workspacePlanningV2 && envFlag("INSIGHTS_PATIENT_CONTEXT_BUNDLE"),
+    workspaceActionRecommendations:
+      workspacePlanningV2 &&
+      envFlag("INSIGHTS_WORKSPACE_ACTION_RECOMMENDATIONS"),
+    patientCardBlock:
+      workspacePlanningV2 && envFlag("INSIGHTS_PATIENT_CARD_BLOCK"),
   };
 }
