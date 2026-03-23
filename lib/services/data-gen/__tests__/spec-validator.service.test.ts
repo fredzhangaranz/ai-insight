@@ -10,6 +10,7 @@ import type { GenerationSpec } from "../generation-spec.types";
 describe("Spec Validator Service", () => {
   let mockDb: any;
   let mockRequest: any;
+  const originalVisibilityMode = process.env.DATA_GEN_ASSESSMENT_VISIBILITY_MODE;
 
   beforeEach(() => {
     mockRequest = {
@@ -23,6 +24,11 @@ describe("Spec Validator Service", () => {
   });
 
   afterEach(() => {
+    if (originalVisibilityMode == null) {
+      delete process.env.DATA_GEN_ASSESSMENT_VISIBILITY_MODE;
+    } else {
+      process.env.DATA_GEN_ASSESSMENT_VISIBILITY_MODE = originalVisibilityMode;
+    }
     vi.clearAllMocks();
   });
 
@@ -306,9 +312,13 @@ describe("Spec Validator Service", () => {
     });
 
     it("should fail when target is missing", async () => {
-      mockRequest.query.mockResolvedValue({
-        recordset: [{ count: 1 }],
-      });
+      mockRequest.query
+        .mockResolvedValueOnce({
+          recordset: [{ count: 1 }],
+        })
+        .mockResolvedValueOnce({
+          recordset: [],
+        });
 
       const spec = { ...baseAssessmentSpec, target: undefined };
 
@@ -326,6 +336,9 @@ describe("Spec Validator Service", () => {
           recordset: [{ count: 1 }], // Form exists
         })
         .mockResolvedValueOnce({
+          recordset: [], // Form fields
+        })
+        .mockResolvedValueOnce({
           recordset: [{ count: 0 }], // No patients
         });
 
@@ -341,6 +354,9 @@ describe("Spec Validator Service", () => {
           recordset: [{ count: 1 }], // Form exists
         })
         .mockResolvedValueOnce({
+          recordset: [], // Form fields
+        })
+        .mockResolvedValueOnce({
           recordset: [{ count: 10 }], // Patients exist
         });
 
@@ -353,6 +369,7 @@ describe("Spec Validator Service", () => {
     it("should fail when trajectoryDistribution does not sum to 1.0", async () => {
       mockRequest.query
         .mockResolvedValueOnce({ recordset: [{ count: 1 }] })
+        .mockResolvedValueOnce({ recordset: [] })
         .mockResolvedValueOnce({ recordset: [{ count: 10 }] });
 
       const spec: GenerationSpec = {
@@ -374,6 +391,7 @@ describe("Spec Validator Service", () => {
     it("should pass when trajectoryDistribution sums to 1.0", async () => {
       mockRequest.query
         .mockResolvedValueOnce({ recordset: [{ count: 1 }] })
+        .mockResolvedValueOnce({ recordset: [] })
         .mockResolvedValueOnce({ recordset: [{ count: 10 }] });
 
       const spec: GenerationSpec = {
@@ -390,6 +408,62 @@ describe("Spec Validator Service", () => {
 
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
+    });
+
+    it("does not block on visibility diagnostics in diagnostic mode", async () => {
+      process.env.DATA_GEN_ASSESSMENT_VISIBILITY_MODE = "diagnostic";
+      mockRequest.query
+        .mockResolvedValueOnce({ recordset: [{ count: 1 }] }) // form exists
+        .mockResolvedValueOnce({
+          recordset: [
+            {
+              fieldName: "Child",
+              columnName: "child",
+              dataType: 231,
+              attributeTypeId: "attr-child",
+              minValue: null,
+              maxValue: null,
+              isRequired: false,
+              calculatedValueExpression: null,
+              visibilityExpression: "HasValue(missing_parent)",
+              attributeSetOrderIndex: 1,
+              attributeOrderIndex: 1,
+            },
+          ],
+        }) // form fields
+        .mockResolvedValueOnce({ recordset: [{ count: 10 }] }); // patient count
+
+      const result = await validateGenerationSpec(baseAssessmentSpec, mockDb);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("blocks on visibility diagnostics in enforce mode", async () => {
+      process.env.DATA_GEN_ASSESSMENT_VISIBILITY_MODE = "enforce";
+      mockRequest.query
+        .mockResolvedValueOnce({ recordset: [{ count: 1 }] }) // form exists
+        .mockResolvedValueOnce({
+          recordset: [
+            {
+              fieldName: "Child",
+              columnName: "child",
+              dataType: 231,
+              attributeTypeId: "attr-child",
+              minValue: null,
+              maxValue: null,
+              isRequired: false,
+              calculatedValueExpression: null,
+              visibilityExpression: "HasValue(missing_parent)",
+              attributeSetOrderIndex: 1,
+              attributeOrderIndex: 1,
+            },
+          ],
+        }) // form fields
+        .mockResolvedValueOnce({ recordset: [{ count: 10 }] }); // patient count
+
+      const result = await validateGenerationSpec(baseAssessmentSpec, mockDb);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('unknown field "missing_parent"'))).toBe(true);
     });
   });
 });

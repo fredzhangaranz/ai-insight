@@ -229,7 +229,10 @@ export async function getFormFields(
       att.minValue,
       att.maxValue,
       att.isRequired,
-      att.calculatedValueExpression
+      att.calculatedValueExpression,
+      att.visibilityExpression,
+      asatv.orderIndex as attributeSetOrderIndex,
+      att.orderIndex as attributeOrderIndex
     FROM dbo.AssessmentTypeVersion atv
     INNER JOIN dbo.AttributeSetAssessmentTypeVersion asatv ON atv.id = asatv.assessmentTypeVersionFk
     INNER JOIN dbo.AttributeSet ats ON asatv.attributeSetFk = ats.id
@@ -267,6 +270,13 @@ export async function getFormFields(
       systemManaged: false,
       fieldClass,
       calculatedValueExpression: field.calculatedValueExpression ?? null,
+      visibilityExpression: field.visibilityExpression ?? null,
+      attributeSetOrderIndex: field.attributeSetOrderIndex ?? undefined,
+      attributeOrderIndex: field.attributeOrderIndex ?? undefined,
+      isGeneratable:
+        fieldType !== "ImageCapture" &&
+        fieldType !== "Information" &&
+        String(field.calculatedValueExpression ?? "").trim() === "",
     };
 
     // Add min/max for numeric fields

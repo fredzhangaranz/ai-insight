@@ -11,6 +11,7 @@ import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 import { getPatientSchema } from "@/lib/services/data-gen/schema-discovery.service";
 import { generatePreview } from "@/lib/services/data-gen/preview.service";
 import {
+  buildInsertPatientSqlStatements,
   buildInsertPatientPreviewData,
   buildUpdatePatientSqlStatements,
 } from "@/lib/services/data-gen/generators/patient.generator";
@@ -126,10 +127,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (effectiveSpec.entity === "assessment_bundle" && effectiveSpec.form?.assessmentTypeVersionId) {
-      const previewSql = await buildAssessmentSqlStatements(effectiveSpec, pool);
+      const assessmentPreview = await buildAssessmentSqlStatements(effectiveSpec, pool);
       return NextResponse.json({
         ...preview,
-        previewSql: previewSql.length > 0 ? previewSql : undefined,
+        previewSql:
+          assessmentPreview.statements.length > 0
+            ? assessmentPreview.statements
+            : undefined,
+        diagnostics:
+          assessmentPreview.diagnostics && assessmentPreview.diagnostics.length > 0
+            ? assessmentPreview.diagnostics
+            : undefined,
       });
     }
 

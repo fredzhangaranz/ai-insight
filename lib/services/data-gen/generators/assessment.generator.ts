@@ -19,11 +19,8 @@ import {
   newGuid,
   batchInsert,
   pickRandom,
-  weightedPick,
-  generateFieldValue,
 } from "./base.generator";
 import { getFormFields } from "../schema-discovery.service";
-import { isFixedPerWoundField } from "../field-classifier.service";
 import {
   generateTrajectory,
   pickProgressionStyle,
@@ -35,7 +32,13 @@ import {
   insertScaffolding,
   insertAssessmentSignature,
 } from "./wound-scaffolding";
-import type { FieldProfileSet } from "../trajectory-field-profile.types";
+import {
+  compileAssessmentForm,
+  generateNoteValue,
+  generateVisibleAssessmentFields,
+  getAssessmentVisibilityMode,
+  sampleFromProfile,
+} from "../assessment-form.service";
 
 /** Midnight UTC for a given date (used for assessment date when hasTimeRecorded=0) */
 function toMidnightUtc(d: Date): Date {
@@ -90,93 +93,6 @@ interface WoundStage {
 export { pickProgressionStyle } from "./trajectory-engine";
 
 /**
- * Sample a field value from trajectory-aware profiles.
- * Returns null if no matching distribution (caller falls back to generateNoteValue).
- */
-export function sampleFromProfile(
-  profiles: FieldProfileSet,
-  trajectoryStyle: WoundProgressionStyle,
-  assessmentIndex: number,
-  totalAssessments: number,
-  columnName: string
-): string | null {
-  if (totalAssessments <= 0) return null;
-
-  const ratio = assessmentIndex / totalAssessments;
-  const phase: "early" | "mid" | "late" =
-    ratio < 0.33 ? "early" : ratio < 0.66 ? "mid" : "late";
-
-  const profile = profiles.find((p) => p.trajectoryStyle === trajectoryStyle);
-  if (!profile?.phases) return null;
-
-  const phaseData = profile.phases.find((p) => p.phase === phase);
-  if (!phaseData?.fieldDistributions) return null;
-
-  const dist = phaseData.fieldDistributions.find(
-    (d) => d.columnName === columnName
-  );
-  if (!dist?.weights || Object.keys(dist.weights).length === 0) return null;
-
-  const total = Object.values(dist.weights).reduce((a, b) => a + b, 0);
-  if (total <= 0) return null;
-
-  return weightedPick(dist.weights as Record<string, number>);
-}
-
-/**
- * Build values for fixed-per-wound fields (e.g. wound type, etiology).
- * Sampled once per wound from early phase; reused across all assessments.
- */
-function buildFixedPerWoundValues(
-  woundAttrFields: Array<{ fieldName: string; columnName?: string; attributeTypeId?: string; dataType?: string; options?: string[]; min?: number; max?: number }>,
-  spec: GenerationSpec,
-  progressionStyle: WoundProgressionStyle,
-  trajectoryPoints: Array<{ area: number; perimeter: number }>,
-  fieldSpecsByColumn: Map<string, FieldSpec>,
-  faker: typeof import("@faker-js/faker").faker
-): Map<string, string | number> {
-  const result = new Map<string, string | number>();
-  const firstPoint = trajectoryPoints[0];
-  const earlyStage: WoundStage = firstPoint
-    ? {
-        area: firstPoint.area,
-        depth: firstPoint.area > 0 ? 0.1 + Math.random() * 1.5 : 0,
-        perimeter: firstPoint.perimeter,
-        volume: firstPoint.area > 0 ? firstPoint.area * 0.5 : 0,
-      }
-    : { area: 0, depth: 0, perimeter: 0, volume: 0 };
-
-  for (const f of woundAttrFields) {
-    const columnName = f.columnName ?? "";
-    if (!isFixedPerWoundField(f.fieldName, columnName)) continue;
-
-    let value: string | number | null = null;
-    if (spec.fieldProfiles) {
-      value = sampleFromProfile(
-        spec.fieldProfiles,
-        progressionStyle,
-        0,
-        trajectoryPoints.length,
-        columnName
-      );
-    }
-    if (value === null) {
-      const fieldSpec = fieldSpecsByColumn.get(columnName);
-      if (fieldSpec) {
-        value = generateFieldValue(fieldSpec, faker);
-      }
-    }
-    if (value === null) {
-      value = generateNoteValue(f as FieldSpec, f, earlyStage);
-    }
-    if (value !== null && value !== undefined) {
-      result.set(columnName, value);
-    }
-  }
-  return result;
-}
-
-/**
  * Generate progression timeline for wound measurements (legacy API for tests)
  */
 export function generateProgressionTimeline(
@@ -206,51 +122,7 @@ export function generateProgressionTimeline(
   return stages;
 }
 
-/**
- * Generate note value for a form field
- */
-export function generateNoteValue(
-  fieldSpec: FieldSpec,
-  formField: any,
-  stage: WoundStage
-): string | number | null {
-  const dataType = formField.dataType;
-
-  if (dataType === "SingleSelectList" && formField.options) {
-    return pickRandom(formField.options, 1)[0];
-  }
-
-  if (dataType === "MultiSelectList" && formField.options) {
-    const count = 1 + Math.floor(Math.random() * 3);
-    return pickRandom(formField.options, Math.min(count, formField.options.length)).join(", ");
-  }
-
-  if (dataType === "Decimal") {
-    const min = formField.min ?? 0;
-    const max = formField.max ?? 100;
-    return parseFloat((min + Math.random() * (max - min)).toFixed(2));
-  }
-
-  if (dataType === "Integer") {
-    const min = formField.min ?? 0;
-    const max = formField.max ?? 100;
-    return Math.floor(min + Math.random() * (max - min + 1));
-  }
-
-  if (dataType === "Boolean") {
-    return Math.random() > 0.5 ? 1 : 0;
-  }
-
-  if (dataType === "Text") {
-    return faker.lorem.sentence();
-  }
-
-  if (dataType === "Date" || dataType === "DateTime") {
-    return faker.date.recent({ days: 30 }).toISOString();
-  }
-
-  return null;
-}
+export { generateNoteValue, sampleFromProfile } from "../assessment-form.service";
 
 /**
  * Generate wounds and assessments for target patients
@@ -320,6 +192,11 @@ export async function generateWoundsAndAssessments(
   }
 
   const formFields = await getFormFields(db, spec.form.assessmentTypeVersionId);
+  const compiledForm = compileAssessmentForm(formFields);
+  const visibilityMode = getAssessmentVisibilityMode();
+  if (compiledForm.blockingDiagnostics.length > 0 && visibilityMode === "enforce") {
+    throw new Error(formatDiagnostics(compiledForm.blockingDiagnostics));
+  }
   const unitResult = await db
     .request()
     .query("SELECT id FROM dbo.Unit WHERE isDeleted = 0 ORDER BY name");
@@ -350,6 +227,7 @@ export async function generateWoundsAndAssessments(
   const insertedIds: string[] = [];
   let totalWounds = 0;
   let totalAssessments = 0;
+  const generationDiagnostics = [...compiledForm.diagnostics];
   const now = new Date();
   const intervalDays = spec.assessmentIntervalDays ?? 7;
   const wobbleDays = spec.assessmentTimingWobbleDays ?? 2;
@@ -357,7 +235,9 @@ export async function generateWoundsAndAssessments(
   const assessmentsRange = spec.assessmentsPerWound ?? [8, 16];
   const assessmentCount = resolveCount(assessmentsRange);
   const maxAssessments =
-    typeof assessmentsRange[1] === "number" ? assessmentsRange[1] : 16;
+    Array.isArray(assessmentsRange) && typeof assessmentsRange[1] === "number"
+      ? assessmentsRange[1]
+      : 16;
 
   const window = (() => {
     const periodDays = spec.assessmentPeriodDays;
@@ -437,21 +317,7 @@ export async function generateWoundsAndAssessments(
       totalWounds++;
       woundIndex++;
 
-      const woundAttrFields = formFields.filter(
-        (f) =>
-          f.attributeTypeId &&
-          f.isNullable !== false &&
-          f.dataType !== "ImageCapture"
-      );
-
-      const fixedPerWoundValues = buildFixedPerWoundValues(
-        woundAttrFields,
-        spec,
-        progressionStyle,
-        trajectoryPoints,
-        fieldSpecsByColumn,
-        faker
-      );
+      const fixedPerWoundValues = new Map<string, ReturnType<typeof generateVisibleAssessmentFields>["generated"][number]>();
 
       for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
         const point = trajectoryPoints[assessmentIdx];
@@ -506,37 +372,31 @@ export async function generateWoundsAndAssessments(
           volume: point.area > 0 ? point.area * 0.5 : 0,
         };
 
-        for (const formField of woundAttrFields) {
-          const columnName = formField.columnName ?? "";
-          const fieldSpec = fieldSpecsByColumn.get(columnName);
+        const visibleFields = generateVisibleAssessmentFields({
+          compiledForm,
+          fieldSpecsByColumn,
+          fieldProfiles: spec.fieldProfiles,
+          progressionStyle,
+          assessmentIdx,
+          totalAssessments: trajectoryPoints.length,
+          stage,
+          fixedPerWoundCache: fixedPerWoundValues,
+        });
+        generationDiagnostics.push(...visibleFields.diagnostics);
+        if (
+          visibilityMode === "enforce" &&
+          visibleFields.diagnostics.some((diagnostic) => diagnostic.severity === "error")
+        ) {
+          throw new Error(formatDiagnostics(visibleFields.diagnostics));
+        }
 
-          let value: string | number | null = null;
-          if (isFixedPerWoundField(formField.fieldName, columnName)) {
-            value = fixedPerWoundValues.get(columnName) ?? null;
-          }
-          if (value === null && spec.fieldProfiles) {
-            value = sampleFromProfile(
-              spec.fieldProfiles,
-              progressionStyle,
-              assessmentIdx,
-              trajectoryPoints.length,
-              columnName
-            );
-          }
-          if (value === null && fieldSpec) {
-            value = generateFieldValue(fieldSpec, faker);
-          }
-          if (value === null || value === undefined) {
-            value = generateNoteValue(formField as FieldSpec, formField, stage);
-          }
-          if (value === null) continue;
-
+        for (const generatedField of visibleFields.generated) {
           await db
             .request()
             .input("id", sql.UniqueIdentifier, newGuid())
             .input("seriesFk", sql.UniqueIdentifier, seriesId)
-            .input("attributeTypeFk", sql.UniqueIdentifier, formField.attributeTypeId)
-            .input("value", sql.NVarChar, String(value))
+            .input("attributeTypeFk", sql.UniqueIdentifier, generatedField.field.attributeTypeId)
+            .input("value", sql.NVarChar, generatedField.serializedValue)
             .input("serverChangeDate", sql.DateTime, now)
             .query(`
               INSERT INTO dbo.WoundAttribute (id, seriesFk, attributeTypeFk, value, serverChangeDate, modSyncState, isDeleted)
@@ -573,6 +433,7 @@ export async function generateWoundsAndAssessments(
     insertedIds,
     insertedPatientIds,
     verification,
+    diagnostics: dedupeDiagnostics(generationDiagnostics),
   };
 }
 
@@ -601,29 +462,32 @@ function toSqlLiteral(value: unknown): string {
 export async function buildAssessmentSqlStatements(
   spec: GenerationSpec,
   db: ConnectionPool
-): Promise<string[]> {
-  if (!spec.form?.assessmentTypeVersionId) return [];
+): Promise<{ statements: string[]; diagnostics: GenerationResult["diagnostics"] }> {
+  if (!spec.form?.assessmentTypeVersionId) {
+    return { statements: [], diagnostics: [] };
+  }
 
   const patientResult = await db.request().query(`
     SELECT TOP 1 id FROM dbo.Patient WHERE isDeleted = 0
   `);
   const patientId = patientResult.recordset[0]?.id;
-  if (!patientId) return [];
+  if (!patientId) return { statements: [], diagnostics: [] };
 
   const formFields = await getFormFields(db, spec.form.assessmentTypeVersionId);
+  const compiledForm = compileAssessmentForm(formFields);
   const anatomyResult = await db.request().query(
     "SELECT TOP 1 id, [text] AS name FROM dbo.Anatomy WHERE isDeleted = 0"
   );
   const anatomyRow = anatomyResult.recordset[0] as { id: string; name: string };
   const anatomyFk = anatomyRow?.id;
   const anatomyName = anatomyRow?.name ?? "";
-  if (!anatomyFk) return [];
+  if (!anatomyFk) return { statements: [], diagnostics: compiledForm.diagnostics };
 
   const unitResult = await db.request().query("SELECT TOP 1 id FROM dbo.Unit WHERE isDeleted = 0");
   const defaultUnitId = unitResult.recordset[0]?.id;
-  if (!defaultUnitId) return [];
+  if (!defaultUnitId) return { statements: [], diagnostics: compiledForm.diagnostics };
 
-  let scaffoldingDeps: Awaited<ReturnType<typeof loadScaffoldingDeps>>;
+  let scaffoldingDeps: Awaited<ReturnType<typeof loadScaffoldingDeps>> | null;
   try {
     scaffoldingDeps = await loadScaffoldingDeps(
       db,
@@ -656,13 +520,6 @@ export async function buildAssessmentSqlStatements(
   const now = new Date();
   const pid = (id: string) => `'${id.replace(/'/g, "''")}'`;
 
-  const woundAttrFieldsDescriptive = formFields.filter(
-    (f) =>
-      f.attributeTypeId &&
-      f.isNullable !== false &&
-      f.dataType !== "ImageCapture"
-  );
-
   const fieldSpecsByColumnPreview = new Map<string, FieldSpec>();
   for (const f of spec.fields ?? []) {
     if (f.enabled && f.columnName) fieldSpecsByColumnPreview.set(f.columnName, f);
@@ -670,6 +527,7 @@ export async function buildAssessmentSqlStatements(
 
   const blocks: string[] = [];
   const dosById = new Map<string, string>();
+  const previewDiagnostics = [...compiledForm.diagnostics];
 
   for (let w = 0; w < woundsCount; w++) {
     const progressionStyle = resolveProgressionStyle(w);
@@ -695,14 +553,7 @@ INSERT INTO dbo.Wound (id, patientFk, anatomyFk, auxText, baselineDate, baseline
 VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W${w + 1}', ${toSqlLiteral(baselineDateOffset)}, N'UTC', ${w + 1}, ${toSqlLiteral(now)}, 2, ${toSqlLiteral(now)}, 0);
 `.trim());
 
-    const fixedPerWoundValuesPreview = buildFixedPerWoundValues(
-      woundAttrFieldsDescriptive,
-      spec,
-      progressionStyle,
-      trajectoryPoints,
-      fieldSpecsByColumnPreview,
-      faker
-    );
+    const fixedPerWoundValuesPreview = new Map<string, ReturnType<typeof generateVisibleAssessmentFields>["generated"][number]>();
 
     for (let assessmentIdx = 0; assessmentIdx < trajectoryPoints.length; assessmentIdx++) {
     const point = trajectoryPoints[assessmentIdx];
@@ -761,35 +612,54 @@ VALUES (${pid(signatureId)}, ${pid(seriesId)}, ${pid(scaffoldingDeps.capturedByS
       perimeter: point.perimeter,
       volume: point.area > 0 ? point.area * 0.5 : 0,
     };
-    if (woundAttrFieldsDescriptive.length > 0) {
+    if (compiledForm.fields.some((field) => field.isGeneratable)) {
       blocks.push(`-- dbo.WoundAttribute (descriptive fields)`);
-      for (const formField of woundAttrFieldsDescriptive) {
-        const columnName = formField.columnName ?? "";
-        let value: string | number | null = null;
-        if (isFixedPerWoundField(formField.fieldName, columnName)) {
-          value = fixedPerWoundValuesPreview.get(columnName) ?? null;
-        }
-        if (value === null && spec.fieldProfiles) {
-          value = sampleFromProfile(
-            spec.fieldProfiles,
-            progressionStyle,
-            assessmentIdx,
-            trajectoryPoints.length,
-            columnName
-          );
-        }
-        if (value === null) {
-          value = generateNoteValue(formField as FieldSpec, formField, stage);
-        }
-        if (value === null) continue;
+      const visibleFields = generateVisibleAssessmentFields({
+        compiledForm,
+        fieldSpecsByColumn: fieldSpecsByColumnPreview,
+        fieldProfiles: spec.fieldProfiles,
+        progressionStyle,
+        assessmentIdx,
+        totalAssessments: trajectoryPoints.length,
+        stage,
+        fixedPerWoundCache: fixedPerWoundValuesPreview,
+      });
+      previewDiagnostics.push(...visibleFields.diagnostics);
+      for (const generatedField of visibleFields.generated) {
         blocks.push(`
 INSERT INTO dbo.WoundAttribute (id, seriesFk, attributeTypeFk, value, serverChangeDate, modSyncState, isDeleted)
-VALUES (NEWID(), ${pid(seriesId)}, ${pid(formField.attributeTypeId!)}, ${toSqlLiteral(String(value))}, ${toSqlLiteral(now)}, 2, 0);
+VALUES (NEWID(), ${pid(seriesId)}, ${pid(generatedField.field.attributeTypeId!)}, ${toSqlLiteral(generatedField.serializedValue)}, ${toSqlLiteral(now)}, 2, 0);
 `.trim());
       }
     }
   }
   }
 
-  return [blocks.join("\n\n")];
+  return {
+    statements: [blocks.join("\n\n")],
+    diagnostics: dedupeDiagnostics(previewDiagnostics),
+  };
+}
+
+function dedupeDiagnostics(
+  diagnostics: GenerationResult["diagnostics"] = []
+): GenerationResult["diagnostics"] {
+  const seen = new Set<string>();
+  return diagnostics.filter((diagnostic) => {
+    const key = [
+      diagnostic.severity,
+      diagnostic.code,
+      diagnostic.columnName ?? "",
+      diagnostic.message,
+    ].join("::");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function formatDiagnostics(
+  diagnostics: NonNullable<GenerationResult["diagnostics"]>
+): string {
+  return diagnostics.map((diagnostic) => diagnostic.message).join("; ");
 }

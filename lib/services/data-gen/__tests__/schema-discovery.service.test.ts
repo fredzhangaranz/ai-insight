@@ -152,6 +152,9 @@ describe("Schema Discovery Service", () => {
               minValue: null,
               maxValue: null,
               isRequired: true,
+              visibilityExpression: "HasValue(parent_field)",
+              attributeSetOrderIndex: 1,
+              attributeOrderIndex: 2,
             },
           ],
         })
@@ -171,6 +174,10 @@ describe("Schema Discovery Service", () => {
         dataType: "SingleSelectList",
         isNullable: false,
         options: ["Left Heel", "Right Heel", "Sacrum"],
+        visibilityExpression: "HasValue(parent_field)",
+        attributeSetOrderIndex: 1,
+        attributeOrderIndex: 2,
+        isGeneratable: true,
       });
     });
 
@@ -185,6 +192,9 @@ describe("Schema Discovery Service", () => {
             minValue: 0,
             maxValue: 500,
             isRequired: false,
+            visibilityExpression: null,
+            attributeSetOrderIndex: 1,
+            attributeOrderIndex: 3,
           },
         ],
       });
@@ -213,6 +223,9 @@ describe("Schema Discovery Service", () => {
             minValue: null,
             maxValue: null,
             isRequired: false,
+            visibilityExpression: null,
+            attributeSetOrderIndex: 1,
+            attributeOrderIndex: 4,
           },
         ],
       });

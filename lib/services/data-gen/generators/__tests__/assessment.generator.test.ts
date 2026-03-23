@@ -435,6 +435,7 @@ describe("Assessment Generator", () => {
     it("inserts ImageCapture and Outline per assessment", async () => {
       const queries: string[] = [];
       const responses = [
+        { recordset: [] },
         { recordset: [{ id: "patient-1" }] },
         {
           recordset: [

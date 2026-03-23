@@ -5,12 +5,22 @@
 
 import type { ConnectionPool } from "mssql";
 import sql from "mssql";
+import { getFormFields } from "./schema-discovery.service";
+import {
+  compileAssessmentForm,
+  evaluateFieldVisibility,
+  getAssessmentVisibilityMode,
+  parseStoredContextValue,
+  validateContextValue,
+} from "./assessment-form.service";
+import type { AssessmentFormDiagnostic } from "./generation-spec.types";
 
 export interface ValidationResult {
   isValid: boolean;
   error?: string;
   warnings?: string[];
   rowsInserted?: number;
+  diagnostics?: AssessmentFormDiagnostic[];
 }
 
 /**
@@ -119,6 +129,131 @@ export async function validateInsertedData(
     return {
       isValid: false,
       error: `Validation query failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+export async function validateInsertedAssessmentAttributes(
+  db: ConnectionPool,
+  assessmentTypeVersionId: string,
+  insertedSeriesIds: string[]
+): Promise<ValidationResult> {
+  if (!insertedSeriesIds.length) {
+    return { isValid: true, rowsInserted: 0, diagnostics: [] };
+  }
+
+  try {
+    const formFields = await getFormFields(db, assessmentTypeVersionId);
+    const compiledForm = compileAssessmentForm(formFields);
+    const mode = getAssessmentVisibilityMode();
+    if (compiledForm.blockingDiagnostics.length > 0) {
+      if (mode === "enforce") {
+        return {
+          isValid: false,
+          error: compiledForm.blockingDiagnostics.map((d) => d.message).join("; "),
+          diagnostics: compiledForm.diagnostics,
+        };
+      }
+    }
+    const visibilityChecksEnabled = compiledForm.blockingDiagnostics.length === 0;
+
+    const req = db.request();
+    const placeholders = insertedSeriesIds
+      .map((seriesId, idx) => {
+        req.input(`sid${idx}`, sql.UniqueIdentifier, seriesId);
+        return `@sid${idx}`;
+      })
+      .join(", ");
+
+    const attributes = await req.query(`
+      SELECT
+        wa.seriesFk,
+        at.id AS attributeTypeId,
+        at.variableName AS columnName,
+        wa.value
+      FROM dbo.WoundAttribute wa
+      INNER JOIN dbo.AttributeType at ON at.id = wa.attributeTypeFk
+      WHERE wa.seriesFk IN (${placeholders})
+        AND wa.isDeleted = 0
+        AND at.isDeleted = 0
+    `);
+
+    const rowsBySeries = new Map<string, Map<string, string>>();
+    for (const row of attributes.recordset ?? []) {
+      const seriesId = String(row.seriesFk);
+      if (!rowsBySeries.has(seriesId)) {
+        rowsBySeries.set(seriesId, new Map<string, string>());
+      }
+      rowsBySeries.get(seriesId)!.set(String(row.columnName), String(row.value ?? ""));
+    }
+
+    const diagnostics: AssessmentFormDiagnostic[] = [...compiledForm.diagnostics];
+    for (const seriesId of insertedSeriesIds) {
+      const rowMap = rowsBySeries.get(seriesId) ?? new Map<string, string>();
+      const context = new Map<string, ReturnType<typeof parseStoredContextValue>>();
+
+      for (const field of compiledForm.fields) {
+        if (!rowMap.has(field.columnName)) continue;
+        context.set(field.columnName, parseStoredContextValue(field, rowMap.get(field.columnName)));
+      }
+
+      for (const field of compiledForm.fields.filter((candidate) => candidate.isGeneratable)) {
+        const stored = rowMap.get(field.columnName);
+        if (visibilityChecksEnabled) {
+          const visible = evaluateFieldVisibility(field, context);
+          if (!visible && stored != null) {
+            diagnostics.push({
+              severity: "error",
+              code: "hidden_field_generated",
+              message: `Inserted hidden field "${field.fieldName}" on series ${seriesId}`,
+              fieldName: field.fieldName,
+              columnName: field.columnName,
+              visibilityExpression: field.visibilityExpression ?? null,
+            });
+            continue;
+          }
+          if (visible && field.isNullable === false && stored == null) {
+            diagnostics.push({
+              severity: "error",
+              code: "missing_visible_required_field",
+              message: `Missing visible required field "${field.fieldName}" on series ${seriesId}`,
+              fieldName: field.fieldName,
+              columnName: field.columnName,
+              visibilityExpression: field.visibilityExpression ?? null,
+            });
+            continue;
+          }
+        }
+        if (stored == null) continue;
+        const parsed = parseStoredContextValue(field, stored);
+        const validationError = validateContextValue(field, parsed);
+        if (validationError) {
+          diagnostics.push({
+            severity: "error",
+            code: "invalid_generated_value",
+            message: `${validationError} on series ${seriesId}`,
+            fieldName: field.fieldName,
+            columnName: field.columnName,
+            visibilityExpression: field.visibilityExpression ?? null,
+          });
+        }
+      }
+    }
+
+    const blocking = diagnostics.filter((diagnostic) => diagnostic.severity === "error");
+    return {
+      isValid: mode === "enforce" ? blocking.length === 0 : true,
+      error:
+        mode === "enforce" && blocking.length > 0
+          ? blocking.map((diagnostic) => diagnostic.message).join("; ")
+          : undefined,
+      diagnostics,
+      rowsInserted: attributes.recordset?.length ?? 0,
+    };
+  } catch (error) {
+    return {
+      isValid: false,
+      error: `Assessment visibility validation failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

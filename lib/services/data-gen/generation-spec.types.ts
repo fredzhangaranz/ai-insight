@@ -197,6 +197,29 @@ export interface FieldSchema {
   max?: number;
   fieldClass?: FieldClass;
   calculatedValueExpression?: string | null;
+  visibilityExpression?: string | null;
+  attributeSetOrderIndex?: number;
+  attributeOrderIndex?: number;
+  isGeneratable?: boolean;
+  dependencies?: string[];
+}
+
+export interface AssessmentFormDiagnostic {
+  severity: "warning" | "error";
+  code:
+    | "invalid_visibility_expression"
+    | "unsupported_visibility_expression"
+    | "unknown_visibility_reference"
+    | "non_generatable_visibility_reference"
+    | "cyclic_visibility_dependency"
+    | "unreachable_visibility_branch"
+    | "missing_visible_required_field"
+    | "hidden_field_generated"
+    | "invalid_generated_value";
+  message: string;
+  fieldName?: string;
+  columnName?: string;
+  visibilityExpression?: string | null;
 }
 
 export interface FormVersionInfo {
@@ -219,6 +242,7 @@ export interface GenerationResult {
   insertedIds: string[];
   verification: VerificationResult[];
   error?: string;
+  diagnostics?: AssessmentFormDiagnostic[];
   /** Rollback SQL for update mode; execute to revert field changes */
   rollbackSql?: string[];
   /** Patient IDs that received data (for assessment_bundle); used by validation */

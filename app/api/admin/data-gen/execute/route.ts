@@ -23,6 +23,7 @@ import {
 import { generateWoundsAndAssessments } from "@/lib/services/data-gen/generators/assessment.generator";
 import {
   validateInsertedData,
+  validateInsertedAssessmentAttributes,
   clonePatientDataToRpt,
   syncChangeTrackingVersion,
   updateLastExportedVersion,
@@ -171,6 +172,28 @@ export async function POST(request: NextRequest) {
         throw new Error(
           `Data validation failed: ${validationResult.error}`
         );
+      }
+      if (
+        effectiveSpec.form?.assessmentTypeVersionId &&
+        Array.isArray(result.insertedIds) &&
+        result.insertedIds.length > 0
+      ) {
+        const assessmentValidation = await validateInsertedAssessmentAttributes(
+          pool,
+          effectiveSpec.form.assessmentTypeVersionId,
+          result.insertedIds
+        );
+        if (!assessmentValidation.isValid) {
+          throw new Error(
+            `Assessment validation failed: ${assessmentValidation.error}`
+          );
+        }
+        if (assessmentValidation.diagnostics?.length) {
+          result.diagnostics = [
+            ...(result.diagnostics ?? []),
+            ...assessmentValidation.diagnostics,
+          ];
+        }
       }
       addStep(
         "validate_data",

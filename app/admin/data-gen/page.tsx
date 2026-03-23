@@ -24,6 +24,7 @@ import {
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import type {
+  AssessmentFormDiagnostic,
   GenerationSpec,
   GenerationResult,
 } from "@/lib/services/data-gen/generation-spec.types";
@@ -77,6 +78,7 @@ export default function DataGenPage() {
   >([]);
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[]>([]);
   const [previewSql, setPreviewSql] = useState<string[]>([]);
+  const [previewDiagnostics, setPreviewDiagnostics] = useState<AssessmentFormDiagnostic[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
@@ -335,6 +337,7 @@ export default function DataGenPage() {
       const data = await res.json();
       setPreviewRows(data.sampleRows ?? []);
       setPreviewSql(Array.isArray(data.previewSql) ? data.previewSql : []);
+      setPreviewDiagnostics(Array.isArray(data.diagnostics) ? data.diagnostics : []);
       setStep(4);
     } catch (e) {
       toast({ title: "Error", description: String(e), variant: "destructive" });
@@ -382,6 +385,7 @@ export default function DataGenPage() {
     setWarnings([]);
     setPreviewRows([]);
     setPreviewSql([]);
+    setPreviewDiagnostics([]);
     setResult(null);
   };
 
@@ -736,6 +740,28 @@ export default function DataGenPage() {
                       ? `Will update ${spec.count} patient(s).`
                       : `Will insert ${spec.count} rows total.`}
                   </p>
+                  {previewDiagnostics.length > 0 && (
+                    <Alert
+                      className={`mb-4 ${
+                        previewDiagnostics.some((diagnostic) => diagnostic.severity === "error")
+                          ? "border-destructive"
+                          : ""
+                      }`}
+                      variant={
+                        previewDiagnostics.some((diagnostic) => diagnostic.severity === "error")
+                          ? "destructive"
+                          : "default"
+                      }
+                    >
+                      <AlertDescription className="space-y-1">
+                        {previewDiagnostics.map((diagnostic, idx) => (
+                          <p key={`${diagnostic.code}-${idx}`}>
+                            {diagnostic.severity === "error" ? "Error" : "Warning"}: {diagnostic.message}
+                          </p>
+                        ))}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {previewSql.length > 0 && (
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-2">
@@ -771,7 +797,13 @@ export default function DataGenPage() {
                     <Button variant="outline" onClick={() => setStep(3)}>
                       ← Back
                     </Button>
-                    <Button onClick={handleExecute} disabled={isGenerating}>
+                    <Button
+                      onClick={handleExecute}
+                      disabled={
+                        isGenerating ||
+                        previewDiagnostics.some((diagnostic) => diagnostic.severity === "error")
+                      }
+                    >
                       Execute
                     </Button>
                   </div>

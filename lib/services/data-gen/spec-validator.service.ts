@@ -9,6 +9,11 @@ import {
   DependencyMissingError,
   ValidationError,
 } from "./generation-spec.types";
+import { getFormFields } from "./schema-discovery.service";
+import {
+  compileAssessmentForm,
+  getAssessmentVisibilityMode,
+} from "./assessment-form.service";
 
 /**
  * Validate a generation spec and check all dependencies exist
@@ -202,6 +207,22 @@ async function validateAssessmentSpec(
     }
   } catch (error: any) {
     errors.push(`Failed to check form: ${error.message}`);
+  }
+
+  try {
+    const formFields = await getFormFields(db, spec.form.assessmentTypeVersionId);
+    const compiledForm = compileAssessmentForm(formFields);
+    const mode = getAssessmentVisibilityMode();
+    const relevantDiagnostics = mode === "enforce" ? compiledForm.blockingDiagnostics : [];
+    for (const diagnostic of relevantDiagnostics) {
+      const prefix =
+        diagnostic.columnName != null
+          ? `${diagnostic.columnName}: `
+          : "";
+      errors.push(`${prefix}${diagnostic.message}`);
+    }
+  } catch (error: any) {
+    errors.push(`Failed to compile form visibility rules: ${error.message}`);
   }
 
   // Check that target patients exist
