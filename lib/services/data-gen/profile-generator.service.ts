@@ -16,6 +16,7 @@ import {
   buildFallbackProfiles,
   buildSingleFallbackProfile,
   buildFallbackPhase,
+  sanitizeFieldProfiles,
 } from "./profile-fallback";
 
 const TRAJECTORY_STYLES: WoundProgressionStyle[] = [
@@ -77,7 +78,10 @@ export async function generateFieldProfiles(
     return buildSingleFallbackProfile(style, schema);
   });
 
-  return normalizeProfiles(profiles, schema, stylesToGenerate);
+  return sanitizeFieldProfiles(
+    normalizeProfiles(profiles, schema, stylesToGenerate),
+    schema,
+  );
 }
 
 const SYSTEM_PROMPT = `You are a clinical data generation assistant. Given a wound assessment form schema and a single wound healing trajectory, produce ONE TrajectoryFieldProfile as a JSON object.
@@ -161,7 +165,7 @@ function normalizeProfiles(
       ? { ...existing, trajectoryStyle: style }
       : buildSingleFallbackProfile(style, schema);
 
-    const phases: TrajectoryPhaseProfile[] = ["early", "mid", "late"].map(
+    const phases: TrajectoryPhaseProfile[] = (["early", "mid", "late"] as const).map(
       (phase) => {
         const phaseData = profile.phases?.find((p) => p.phase === phase);
         return phaseData ?? buildFallbackPhase(phase, schema);

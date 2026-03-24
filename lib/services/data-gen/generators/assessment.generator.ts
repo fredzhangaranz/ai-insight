@@ -43,6 +43,7 @@ import {
   sampleFromProfile,
   type SeededAssessmentContext,
 } from "../assessment-form.service";
+import { sanitizeFieldProfiles } from "../profile-fallback";
 import {
   buildSeededContextFromGeneratedFields,
   insertWoundStateAttributes,
@@ -249,9 +250,14 @@ export async function generateWoundsAndAssessments(
     db,
     spec.form.assessmentTypeVersionId
   );
+  const sanitizedFieldProfiles = spec.fieldProfiles
+    ? sanitizeFieldProfiles(spec.fieldProfiles, formFields)
+    : undefined;
 
   const insertedIds: string[] = [];
   const insertedWoundIds: string[] = [];
+  const insertedBaselineWoundStateIds: string[] = [];
+  const insertedAssessmentWoundStateIds: string[] = [];
   const insertedWoundStateIds: string[] = [];
   let totalWounds = 0;
   let totalAssessments = 0;
@@ -366,6 +372,7 @@ export async function generateWoundsAndAssessments(
         serverChangeDate: now,
       });
       insertedWoundStateIds.push(baselineWoundStateId);
+      insertedBaselineWoundStateIds.push(baselineWoundStateId);
 
       const baselineWoundStateFields = generateVisibleAssessmentFields({
         compiledForm: compiledWoundStateCompanion,
@@ -475,7 +482,7 @@ export async function generateWoundsAndAssessments(
         const visibleWoundFields = generateVisibleAssessmentFields({
           compiledForm,
           fieldSpecsByColumn,
-          fieldProfiles: spec.fieldProfiles,
+          fieldProfiles: sanitizedFieldProfiles,
           progressionStyle,
           assessmentIdx,
           totalAssessments: trajectoryPoints.length,
@@ -523,11 +530,12 @@ export async function generateWoundsAndAssessments(
           serverChangeDate: now,
         });
         insertedWoundStateIds.push(assessmentWoundStateId);
+        insertedAssessmentWoundStateIds.push(assessmentWoundStateId);
 
         const woundStateMetaFields = generateVisibleAssessmentFields({
           compiledForm,
           fieldSpecsByColumn,
-          fieldProfiles: spec.fieldProfiles,
+          fieldProfiles: sanitizedFieldProfiles,
           progressionStyle,
           assessmentIdx,
           totalAssessments: trajectoryPoints.length,
@@ -560,6 +568,13 @@ export async function generateWoundsAndAssessments(
     }
   }
 
+  assertWoundStateCoverage({
+    woundIds: insertedWoundIds,
+    seriesIds: insertedIds,
+    baselineWoundStateIds: insertedBaselineWoundStateIds,
+    assessmentWoundStateIds: insertedAssessmentWoundStateIds,
+  });
+
   const verification: VerificationResult[] = [
     {
       check: "Wounds created",
@@ -575,6 +590,22 @@ export async function generateWoundsAndAssessments(
       check: "Target patients",
       result: patients.length,
       status: "PASS",
+    },
+    {
+      check: "Baseline wound states created",
+      result: `${insertedBaselineWoundStateIds.length}/${insertedWoundIds.length}`,
+      status:
+        insertedBaselineWoundStateIds.length === insertedWoundIds.length
+          ? "PASS"
+          : "FAIL",
+    },
+    {
+      check: "Assessment wound states created",
+      result: `${insertedAssessmentWoundStateIds.length}/${insertedIds.length}`,
+      status:
+        insertedAssessmentWoundStateIds.length === insertedIds.length
+          ? "PASS"
+          : "FAIL",
     },
   ];
 
@@ -683,6 +714,9 @@ export async function buildAssessmentSqlStatements(
   for (const f of spec.fields ?? []) {
     if (f.enabled && f.columnName) fieldSpecsByColumnPreview.set(f.columnName, f);
   }
+  const sanitizedFieldProfiles = spec.fieldProfiles
+    ? sanitizeFieldProfiles(spec.fieldProfiles, formFields)
+    : undefined;
 
   const blocks: string[] = [];
   const dosById = new Map<string, string>();
@@ -843,7 +877,7 @@ VALUES (${pid(assessmentWoundStateId)}, ${pid(woundStateLookup.id)}, ${pid(wound
       visibleFields = generateVisibleAssessmentFields({
         compiledForm,
         fieldSpecsByColumn: fieldSpecsByColumnPreview,
-        fieldProfiles: spec.fieldProfiles,
+        fieldProfiles: sanitizedFieldProfiles,
         progressionStyle,
         assessmentIdx,
         totalAssessments: trajectoryPoints.length,
@@ -867,7 +901,7 @@ VALUES (NEWID(), ${pid(seriesId)}, ${pid(generatedField.field.attributeTypeId!)}
       const woundStateMetaFields = generateVisibleAssessmentFields({
         compiledForm,
         fieldSpecsByColumn: fieldSpecsByColumnPreview,
-        fieldProfiles: spec.fieldProfiles,
+        fieldProfiles: sanitizedFieldProfiles,
         progressionStyle,
         assessmentIdx,
         totalAssessments: trajectoryPoints.length,
@@ -920,4 +954,23 @@ function formatDiagnostics(
   diagnostics: NonNullable<GenerationResult["diagnostics"]>
 ): string {
   return diagnostics.map((diagnostic) => diagnostic.message).join("; ");
+}
+
+function assertWoundStateCoverage(params: {
+  woundIds: string[];
+  seriesIds: string[];
+  baselineWoundStateIds: string[];
+  assessmentWoundStateIds: string[];
+}): void {
+  if (params.baselineWoundStateIds.length !== params.woundIds.length) {
+    throw new Error(
+      `Expected ${params.woundIds.length} baseline wound states, got ${params.baselineWoundStateIds.length}`
+    );
+  }
+
+  if (params.assessmentWoundStateIds.length !== params.seriesIds.length) {
+    throw new Error(
+      `Expected ${params.seriesIds.length} assessment wound states, got ${params.assessmentWoundStateIds.length}`
+    );
+  }
 }

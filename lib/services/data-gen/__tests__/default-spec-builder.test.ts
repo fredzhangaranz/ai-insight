@@ -241,6 +241,46 @@ describe("default-spec-builder", () => {
       expect(spec.fields.every((f) => f.enabled)).toBe(true);
     });
 
+    it("sanitizes invalid profile option values against the form schema", () => {
+      const selectedForm = {
+        assessmentFormId: "form-123",
+        assessmentFormName: "Wound Assessment",
+      };
+      const invalidProfiles = [
+        {
+          trajectoryStyle: "Exponential",
+          clinicalSummary: "Fast healing",
+          phases: [
+            {
+              phase: "early" as const,
+              description: "Early",
+              fieldDistributions: [
+                {
+                  fieldName: "Etiology",
+                  columnName: "etiology",
+                  weights: { None: 1 },
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const spec = buildDefaultAssessmentSpec(
+        formSchema,
+        trajectoryConfig,
+        selectedForm,
+        ["p1"],
+        invalidProfiles
+      );
+
+      expect(spec.fieldProfiles?.[0]?.phases[0]?.fieldDistributions[0]?.weights).toEqual({
+        Pressure: 1 / 3,
+        Diabetic: 1 / 3,
+        Venous: 1 / 3,
+      });
+    });
+
     it("excludes ImageCapture fields when not in schema", () => {
       const schemaWithImage: FieldSchema[] = [
         ...formSchema,

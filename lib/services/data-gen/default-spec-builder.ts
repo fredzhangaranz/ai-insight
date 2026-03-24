@@ -11,6 +11,7 @@ import type {
   TrajectoryDistribution,
 } from "./generation-spec.types";
 import type { FieldProfileSet } from "./trajectory-field-profile.types";
+import { sanitizeFieldProfiles } from "./profile-fallback";
 
 /** Shape passed from WoundTrajectoryStep */
 export interface TrajectoryConfigInput {
@@ -248,7 +249,7 @@ export function buildDefaultAssessmentSpec(
   };
 
   if (fieldProfiles) {
-    spec.fieldProfiles = fieldProfiles;
+    spec.fieldProfiles = sanitizeFieldProfiles(fieldProfiles, woundFields);
   }
 
   return spec;
