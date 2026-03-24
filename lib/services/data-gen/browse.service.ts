@@ -8,7 +8,13 @@ import type { ConnectionPool } from "mssql";
 import { getPatientColumnForAttributeTypeKey } from "./patient-storage-mapping";
 
 export type BrowseEntity = "patient" | "wound" | "assessment";
-export type BrowseFilter = "all" | "generated" | "incomplete";
+export type BrowseFilter =
+  | "all"
+  | "generated"
+  | "incomplete"
+  | "no_wounds"
+  | "no_assessments"
+  | "wounds_missing_assessments";
 
 export interface BrowseColumn {
   key: string;
@@ -29,6 +35,9 @@ export interface BrowseStats {
   total: number;
   generated: number;
   missingGender?: number;
+  noWounds?: number;
+  noAssessments?: number;
+  woundsMissingAssessments?: number;
 }
 
 const PATIENT_SEARCH_COLUMNS = ["firstName", "lastName", "accessCode"];
@@ -145,6 +154,42 @@ function buildWhereClause(
     if (filter === "incomplete" && patientHasGender) {
       conditions.push("gender IS NULL");
     }
+    if (filter === "no_wounds") {
+      conditions.push(`
+        NOT EXISTS (
+          SELECT 1
+          FROM dbo.Wound w
+          WHERE w.patientFk = dbo.Patient.id
+            AND w.isDeleted = 0
+        )
+      `);
+    }
+    if (filter === "no_assessments") {
+      conditions.push(`
+        NOT EXISTS (
+          SELECT 1
+          FROM dbo.Series s
+          WHERE s.patientFk = dbo.Patient.id
+            AND s.isDeleted = 0
+        )
+      `);
+    }
+    if (filter === "wounds_missing_assessments") {
+      conditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM dbo.Wound w
+          WHERE w.patientFk = dbo.Patient.id
+            AND w.isDeleted = 0
+            AND NOT EXISTS (
+              SELECT 1
+              FROM dbo.Series s
+              WHERE s.woundFk = w.id
+                AND s.isDeleted = 0
+            )
+        )
+      `);
+    }
     if (search && search.trim() && patientSearchColumns.length > 0) {
       const searchPattern = `%${search.trim()}%`;
       const orParts = patientSearchColumns.map(
@@ -183,6 +228,78 @@ function buildWhereClause(
     clause: conditions.join(" AND "),
     params,
   };
+}
+
+async function getPatientCompletenessMetrics(
+  db: ConnectionPool,
+  patientIds: string[]
+): Promise<
+  Map<
+    string,
+    {
+      woundCount: number;
+      assessmentCount: number;
+      woundsWithoutAssessments: number;
+    }
+  >
+> {
+  if (patientIds.length === 0) return new Map();
+
+  const req = db.request();
+  const patientIn = patientIds
+    .map((id, idx) => {
+      req.input(`pcPid${idx}`, id);
+      return `@pcPid${idx}`;
+    })
+    .join(", ");
+
+  const result = await req.query<{
+    patientFk: string;
+    woundCount: number;
+    assessmentCount: number;
+    woundsWithoutAssessments: number;
+  }>(`
+    WITH wound_assessment_counts AS (
+      SELECT
+        w.id AS woundId,
+        w.patientFk,
+        COUNT(s.id) AS assessmentCount
+      FROM dbo.Wound w
+      LEFT JOIN dbo.Series s
+        ON s.woundFk = w.id
+        AND s.isDeleted = 0
+      WHERE w.isDeleted = 0
+        AND w.patientFk IN (${patientIn})
+      GROUP BY w.id, w.patientFk
+    )
+    SELECT
+      patientFk,
+      COUNT(*) AS woundCount,
+      ISNULL(SUM(assessmentCount), 0) AS assessmentCount,
+      SUM(CASE WHEN assessmentCount = 0 THEN 1 ELSE 0 END) AS woundsWithoutAssessments
+    FROM wound_assessment_counts
+    GROUP BY patientFk
+  `);
+
+  const metrics = new Map<
+    string,
+    {
+      woundCount: number;
+      assessmentCount: number;
+      woundsWithoutAssessments: number;
+    }
+  >();
+
+  for (const row of result.recordset ?? []) {
+    if (!row.patientFk) continue;
+    metrics.set(String(row.patientFk), {
+      woundCount: Number(row.woundCount ?? 0),
+      assessmentCount: Number(row.assessmentCount ?? 0),
+      woundsWithoutAssessments: Number(row.woundsWithoutAssessments ?? 0),
+    });
+  }
+
+  return metrics;
 }
 
 /**
@@ -309,9 +426,24 @@ export async function browsePatients(
     });
   }
 
+  const completenessByPatient = await getPatientCompletenessMetrics(db, patientIds);
+  rows = rows.map((row) => {
+    const patientId = String(row.id);
+    const completeness = completenessByPatient.get(patientId);
+    return {
+      ...row,
+      woundCount: completeness?.woundCount ?? 0,
+      assessmentCount: completeness?.assessmentCount ?? 0,
+      woundsWithoutAssessments: completeness?.woundsWithoutAssessments ?? 0,
+    };
+  });
+
   const displayColumns: BrowseColumn[] = [
     { key: "id", label: "ID" },
     { key: "name", label: "Name" },
+    { key: "woundCount", label: "Wounds" },
+    { key: "assessmentCount", label: "Assessments" },
+    { key: "woundsWithoutAssessments", label: "Wounds w/o Assessments" },
     ...attrColumns.map((ec) => ({
       key: ec.attributeTypeId,
       label: ec.displayLabel,
@@ -320,15 +452,50 @@ export async function browsePatients(
 
   let stats: BrowseStats | undefined;
   if (filter === "all") {
-    const missingGenderExpr = hasGender
-      ? "SUM(CASE WHEN gender IS NULL THEN 1 ELSE 0 END) as missingGender"
-      : "0 as missingGender";
+    // SQL Server rejects SUM/CASE when CASE contains EXISTS (subquery inside aggregate).
+    // Compute 0/1 flags per row in a CTE, then aggregate scalars only.
+    const missingGenderSelect = hasGender
+      ? "CASE WHEN p.gender IS NULL THEN 1 ELSE 0 END AS missingGender"
+      : "CAST(0 AS int) AS missingGender";
     const statsQuery = `
-      SELECT COUNT(*) as total,
-        SUM(CASE WHEN accessCode LIKE 'IG%' THEN 1 ELSE 0 END) as generated,
-        ${missingGenderExpr}
-      FROM dbo.Patient
-      WHERE isDeleted = 0
+      WITH patient_browse_flags AS (
+        SELECT
+          CASE WHEN p.accessCode LIKE 'IG%' THEN 1 ELSE 0 END AS generated,
+          ${missingGenderSelect},
+          CASE WHEN NOT EXISTS (
+            SELECT 1
+            FROM dbo.Wound w
+            WHERE w.patientFk = p.id
+              AND w.isDeleted = 0
+          ) THEN 1 ELSE 0 END AS noWounds,
+          CASE WHEN NOT EXISTS (
+            SELECT 1
+            FROM dbo.Series s
+            WHERE s.patientFk = p.id
+              AND s.isDeleted = 0
+          ) THEN 1 ELSE 0 END AS noAssessments,
+          CASE WHEN EXISTS (
+            SELECT 1
+            FROM dbo.Wound w
+            WHERE w.patientFk = p.id
+              AND w.isDeleted = 0
+              AND NOT EXISTS (
+                SELECT 1
+                FROM dbo.Series s
+                WHERE s.woundFk = w.id
+                  AND s.isDeleted = 0
+              )
+          ) THEN 1 ELSE 0 END AS woundsMissingAssessments
+        FROM dbo.Patient p
+        WHERE p.isDeleted = 0
+      )
+      SELECT COUNT(*) AS total,
+        SUM(generated) AS generated,
+        SUM(missingGender) AS missingGender,
+        SUM(noWounds) AS noWounds,
+        SUM(noAssessments) AS noAssessments,
+        SUM(woundsMissingAssessments) AS woundsMissingAssessments
+      FROM patient_browse_flags
     `;
     const statsResult = await db.request().query(statsQuery);
     const s = statsResult.recordset[0];
@@ -336,6 +503,9 @@ export async function browsePatients(
       total: s?.total ?? 0,
       generated: s?.generated ?? 0,
       missingGender: hasGender ? (s?.missingGender ?? 0) : undefined,
+      noWounds: s?.noWounds ?? 0,
+      noAssessments: s?.noAssessments ?? 0,
+      woundsMissingAssessments: s?.woundsMissingAssessments ?? 0,
     };
   }
 

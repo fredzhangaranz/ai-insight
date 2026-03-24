@@ -15,7 +15,14 @@ import {
 } from "@/lib/services/data-gen/browse.service";
 
 const VALID_ENTITIES: BrowseEntity[] = ["patient", "wound", "assessment"];
-const VALID_FILTERS: BrowseFilter[] = ["all", "generated", "incomplete"];
+const VALID_FILTERS: BrowseFilter[] = [
+  "all",
+  "generated",
+  "incomplete",
+  "no_wounds",
+  "no_assessments",
+  "wounds_missing_assessments",
+];
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,7 +55,10 @@ export async function GET(request: NextRequest) {
 
     if (!VALID_FILTERS.includes(filter)) {
       return NextResponse.json(
-        { error: "filter must be: all | generated | incomplete" },
+        {
+          error:
+            "filter must be: all | generated | incomplete | no_wounds | no_assessments | wounds_missing_assessments",
+        },
         { status: 400 }
       );
     }

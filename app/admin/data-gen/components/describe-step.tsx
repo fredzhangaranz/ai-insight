@@ -52,6 +52,8 @@ const DEFAULT_AGE_MIN = 60;
 const DEFAULT_AGE_MAX = 80;
 const DEFAULT_AGE_MEAN = 70;
 const DEFAULT_AGE_SD = 8;
+/** Default insert preset; must match `id` in `data/patient-presets/default-patient-presets.json`. */
+const DEFAULT_PATIENT_PRESET_ID = "nz-urban";
 
 function clampCount(n: number): number {
   return Math.min(MAX_PATIENT_COUNT, Math.max(MIN_PATIENT_COUNT, n));
@@ -70,7 +72,9 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
   const [error, setError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<FieldResolution | null>(null);
   const [patientPresets, setPatientPresets] = useState<PatientPresetSummary[]>([]);
-  const [selectedPresetId, setSelectedPresetId] = useState<string>("none");
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(
+    DEFAULT_PATIENT_PRESET_ID,
+  );
   const isInsertPatient = selection.entity === "patient" && selection.mode === "insert";
   const [insertCountRaw, setInsertCountRaw] = useState(() =>
     String(selection.count ?? DEFAULT_PATIENT_COUNT)
@@ -128,6 +132,14 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!patientPresets.length) return;
+    setSelectedPresetId((prev) => {
+      if (prev === "none") return prev;
+      return patientPresets.some((p) => p.id === prev) ? prev : "none";
+    });
+  }, [patientPresets]);
 
   useEffect(() => {
     if (!customerId) return;

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,16 +14,17 @@ import {
 import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import type {
   FieldProfileSet,
-  TrajectoryFieldProfile,
   TrajectoryPhaseProfile,
   PhaseFieldDistribution,
 } from "@/lib/services/data-gen/trajectory-field-profile.types";
 import type { TrajectorySelectionResult } from "@/lib/services/data-gen/trajectory-selector";
+import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types";
 import { AlertCircle, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface FieldProfilesReviewStepProps {
   profiles: FieldProfileSet;
+  formSchema?: FieldSchema[];
   onProceed: (profiles: FieldProfileSet) => void;
   onBack: () => void;
   trajectorySelection?: TrajectorySelectionResult;
@@ -30,6 +32,7 @@ interface FieldProfilesReviewStepProps {
 
 export function FieldProfilesReviewStep({
   profiles: initialProfiles,
+  formSchema,
   onProceed,
   onBack,
   trajectorySelection,
@@ -37,6 +40,36 @@ export function FieldProfilesReviewStep({
   const [profiles, setProfiles] = useState<FieldProfileSet>(initialProfiles);
   const [openProfile, setOpenProfile] = useState<string | null>(
     initialProfiles[0]?.trajectoryStyle ?? null
+  );
+  const schemaFieldMeta = useMemo(() => {
+    const meta = new Map<
+      string,
+      {
+        required: boolean;
+        order: number;
+        hasVisibilityRule: boolean;
+      }
+    >();
+    const selectableFields = (formSchema ?? []).filter(
+      (field) =>
+        (field.dataType === "SingleSelectList" || field.dataType === "MultiSelectList") &&
+        (field.options?.length ?? 0) > 0
+    );
+    selectableFields.forEach((field, idx) => {
+      const setOrder = field.attributeSetOrderIndex ?? 999;
+      const attributeOrder = field.attributeOrderIndex ?? idx;
+      meta.set(field.columnName, {
+        required: field.isNullable === false,
+        order: setOrder * 1000 + attributeOrder,
+        hasVisibilityRule: String(field.visibilityExpression ?? "").trim().length > 0,
+      });
+    });
+    return meta;
+  }, [formSchema]);
+  const schemaRequiredSelectableCount = useMemo(
+    () =>
+      [...schemaFieldMeta.values()].filter((fieldMeta) => fieldMeta.required).length,
+    [schemaFieldMeta]
   );
 
   const updateWeight = (
@@ -102,6 +135,15 @@ export function FieldProfilesReviewStep({
           Each trajectory style has early, mid, and late phases. Field values are sampled from these
           distributions during generation.
         </p>
+        {schemaFieldMeta.size > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Required selectable fields:{" "}
+            <span className="font-medium">
+              {schemaRequiredSelectableCount}/{schemaFieldMeta.size}
+            </span>
+            . Required fields are still generated; profile weights only tune option likelihood.
+          </div>
+        )}
 
         <div className="space-y-2">
           {profiles.map((profile, profileIdx) => (
@@ -137,6 +179,7 @@ export function FieldProfilesReviewStep({
                         phase={phase}
                         profileIdx={profileIdx}
                         phaseIdx={phaseIdx}
+                        schemaFieldMeta={schemaFieldMeta}
                         onUpdateWeight={updateWeight}
                       />
                     ))}
@@ -162,11 +205,20 @@ function PhaseSection({
   phase,
   profileIdx,
   phaseIdx,
+  schemaFieldMeta,
   onUpdateWeight,
 }: {
   phase: TrajectoryPhaseProfile;
   profileIdx: number;
   phaseIdx: number;
+  schemaFieldMeta: Map<
+    string,
+    {
+      required: boolean;
+      order: number;
+      hasVisibilityRule: boolean;
+    }
+  >;
   onUpdateWeight: (
     profileIdx: number,
     phaseIdx: number,
@@ -175,22 +227,38 @@ function PhaseSection({
     value: number
   ) => void;
 }) {
+  const sortedDistributions = phase.fieldDistributions
+    .map((distribution, originalIndex) => ({ distribution, originalIndex }))
+    .sort((a, b) => {
+      const aMeta = schemaFieldMeta.get(a.distribution.columnName);
+      const bMeta = schemaFieldMeta.get(b.distribution.columnName);
+      const aOrder = aMeta?.order ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = bMeta?.order ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.originalIndex - b.originalIndex;
+    });
+
   return (
     <div className="space-y-2">
       <h5 className="text-sm font-medium text-muted-foreground">
         {phase.phase} — {phase.description}
       </h5>
       <div className="space-y-3 pl-4">
-        {phase.fieldDistributions?.map((dist, fieldIdx) => (
-          <FieldDistributionEditor
-            key={`${dist.columnName}-${phase.phase}`}
-            dist={dist}
-            profileIdx={profileIdx}
-            phaseIdx={phaseIdx}
-            fieldIdx={fieldIdx}
-            onUpdateWeight={onUpdateWeight}
-          />
-        ))}
+        {sortedDistributions.map(({ distribution, originalIndex }) => {
+          const meta = schemaFieldMeta.get(distribution.columnName);
+          return (
+            <FieldDistributionEditor
+              key={`${distribution.columnName}-${phase.phase}`}
+              dist={distribution}
+              profileIdx={profileIdx}
+              phaseIdx={phaseIdx}
+              fieldIdx={originalIndex}
+              required={meta?.required ?? false}
+              hasVisibilityRule={meta?.hasVisibilityRule ?? false}
+              onUpdateWeight={onUpdateWeight}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -201,12 +269,16 @@ function FieldDistributionEditor({
   profileIdx,
   phaseIdx,
   fieldIdx,
+  required,
+  hasVisibilityRule,
   onUpdateWeight,
 }: {
   dist: PhaseFieldDistribution;
   profileIdx: number;
   phaseIdx: number;
   fieldIdx: number;
+  required: boolean;
+  hasVisibilityRule: boolean;
   onUpdateWeight: (
     profileIdx: number,
     phaseIdx: number,
@@ -221,7 +293,11 @@ function FieldDistributionEditor({
   return (
     <div className="border rounded p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">{dist.fieldName}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{dist.fieldName}</span>
+          {required && <Badge variant="destructive">Required</Badge>}
+          {hasVisibilityRule && <Badge variant="outline">Conditional Visibility</Badge>}
+        </div>
         <span className="text-xs text-muted-foreground">
           Sum: {(sum * 100).toFixed(0)}%
         </span>

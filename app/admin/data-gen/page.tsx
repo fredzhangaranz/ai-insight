@@ -646,6 +646,7 @@ export default function DataGenPage() {
               !isGeneratingProfiles && (
                 <FieldProfilesReviewStep
                   profiles={fieldProfiles}
+                  formSchema={woundFormSchema}
                   trajectorySelection={trajectorySelection ?? undefined}
                   onProceed={handleProfilesProceed}
                   onBack={() => {

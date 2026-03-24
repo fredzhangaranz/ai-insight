@@ -36,6 +36,7 @@ import type {
   BrowseEntity,
   BrowseFilter,
   BrowseColumn,
+  BrowseStats,
 } from "@/lib/services/data-gen/browse.service";
 
 export interface BrowseSelection {
@@ -94,7 +95,7 @@ export function DataBrowserStep({
   const [pageSize] = useState(10);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
-  const [stats, setStats] = useState<{ total: number; generated: number; missingGender?: number } | null>(null);
+  const [stats, setStats] = useState<BrowseStats | null>(null);
   const [columns, setColumns] = useState<BrowseColumn[] | null>(null);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -253,7 +254,13 @@ export function DataBrowserStep({
                 className="pl-9"
               />
             </div>
-            <Select value={filter} onValueChange={(v) => setFilter(v as BrowseFilter)}>
+            <Select
+              value={filter}
+              onValueChange={(v) => {
+                setFilter(v as BrowseFilter);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Filter" />
               </SelectTrigger>
@@ -261,6 +268,11 @@ export function DataBrowserStep({
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="generated">Generated (IG)</SelectItem>
                 <SelectItem value="incomplete">Incomplete</SelectItem>
+                <SelectItem value="no_wounds">No Wounds</SelectItem>
+                <SelectItem value="no_assessments">No Assessments</SelectItem>
+                <SelectItem value="wounds_missing_assessments">
+                  Wounds Missing Assessments
+                </SelectItem>
               </SelectContent>
             </Select>
             {showColumnFilter && (
@@ -318,7 +330,24 @@ export function DataBrowserStep({
             <div className="text-sm text-muted-foreground">
               Total: {stats.total} • Generated (IG): {stats.generated}
               {stats.missingGender != null && stats.missingGender > 0 && (
-                <> • Missing gender: {stats.missingGender} ({Math.round((stats.missingGender / stats.total) * 100)}%)</>
+                <>
+                  {" "}
+                  • Missing gender: {stats.missingGender} (
+                  {Math.round((stats.missingGender / Math.max(stats.total, 1)) * 100)}
+                  %)
+                </>
+              )}
+              {stats.noWounds != null && (
+                <> • No wounds: {stats.noWounds}</>
+              )}
+              {stats.noAssessments != null && (
+                <> • No assessments: {stats.noAssessments}</>
+              )}
+              {stats.woundsMissingAssessments != null && (
+                <>
+                  {" "}
+                  • Wounds missing assessments: {stats.woundsMissingAssessments}
+                </>
               )}
             </div>
           )}

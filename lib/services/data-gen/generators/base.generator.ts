@@ -83,16 +83,15 @@ export function sampleNormal(mean: number, sd: number): number {
 }
 
 /**
- * Generate date of birth from age in years (today minus age, with random day-of-year)
+ * Generate date of birth from age in years (today minus age, with random day-of-year).
+ * Uses UTC calendar dates so normalising to `YYYY-MM-DD` does not shift the day.
  */
 function dateFromAge(ageYears: number): Date {
   const today = new Date();
-  const year = today.getFullYear() - Math.floor(ageYears);
+  const year = today.getUTCFullYear() - Math.floor(ageYears);
   const frac = ageYears - Math.floor(ageYears);
-  const dayOfYear = Math.floor(frac * 365.25);
-  const d = new Date(year, 0, 1);
-  d.setDate(d.getDate() + dayOfYear);
-  return d;
+  const dayOfYear = Math.min(365, Math.floor(frac * 365.25));
+  return new Date(Date.UTC(year, 0, 1 + dayOfYear));
 }
 
 /**
