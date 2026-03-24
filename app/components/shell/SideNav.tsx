@@ -34,6 +34,7 @@ import { UserIcon } from "@/components/heroicons";
 import { DocumentDuplicateIcon } from "@/components/heroicons";
 import { ArrowRightOnRectangleIcon } from "@/components/heroicons";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { getAppBuildLabel } from "@/lib/app-build-label";
 import { QueryHistorySidebar } from "@/app/insights/new/components/QueryHistorySidebar";
 
 const items = [
@@ -64,6 +65,7 @@ export function SideNav() {
   const { user, isAdmin } = useAuth();
 
   const displayName = user?.name || user?.username || "Account";
+  const buildLabel = getAppBuildLabel();
 
   const handleLogout = () => signOut({ callbackUrl: "/login" });
 
@@ -255,6 +257,14 @@ export function SideNav() {
                 </DropdownMenu>
               </SidebarMenuItem>
             </SidebarMenu>
+            {state === "expanded" && buildLabel ? (
+              <p
+                className="px-2 pt-1 text-[11px] leading-tight text-sidebar-foreground/50 tabular-nums"
+                title={buildLabel}
+              >
+                {buildLabel}
+              </p>
+            ) : null}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarFooter>
