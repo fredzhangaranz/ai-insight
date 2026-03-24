@@ -25,16 +25,27 @@ import {
   reserveNextPatientSequenceRange,
 } from "../patient-id.service";
 import {
+  applyPresetFieldDefaults,
   applyPresetProfileValues,
   getPatientPresetFieldKey,
   pickWeightedPresetProfile,
   type PatientPresetDefinition,
 } from "../patient-preset.service";
+import {
+  applyRegionalPhoneNumbers,
+  formatUtcDateOnly,
+  normalizeDateOfBirthValue,
+} from "../patient-value-format";
 
 /** Escape a value for use in SQL literal (strings: single-quote doubled; dates: ISO string) */
-function toSqlLiteral(value: unknown): string {
+function toSqlLiteral(value: unknown, sqlColumn?: string): string {
   if (value == null) return "NULL";
-  if (value instanceof Date) return `'${value.toISOString().slice(0, 23)}'`;
+  if (value instanceof Date) {
+    if (sqlColumn && sqlColumn.toLowerCase() === "dateofbirth") {
+      return `'${formatUtcDateOnly(value)}'`;
+    }
+    return `'${value.toISOString().slice(0, 23)}'`;
+  }
   if (typeof value === "number") return String(value);
   if (typeof value === "boolean") return value ? "1" : "0";
   const s = String(value);
@@ -53,7 +64,11 @@ const SKIP_DIRECT_COLUMNS = new Set([
 type RequestSource = ConnectionPool | Transaction;
 
 interface PatientInsertGenerationOptions {
-  explicitFieldKeys?: Set<string>;
+  /**
+   * Column/attr keys with user `fixed` criteria — presets must not replace them.
+   * (Default spec fields use faker/range/etc. and remain preset-overridable.)
+   */
+  presetDoNotOverrideKeys?: Set<string>;
   patientIdFieldName?: string;
   preset?: PatientPresetDefinition;
 }
@@ -133,7 +148,7 @@ function buildUnitAssignments(
   return assignments;
 }
 
-function buildPatientInsertRows(
+export function buildPatientInsertRows(
   spec: GenerationSpec,
   units: Array<{ id: string; name: string }>,
   startSequenceNumber: number,
@@ -144,7 +159,7 @@ function buildPatientInsertRows(
   const { directFields, eavFields } = getPatientInsertFields(spec);
   const identifiers = buildGeneratedPatientIdentifiers(startSequenceNumber, count);
   const unitAssignments = buildUnitAssignments(spec, count, units);
-  const explicitFieldKeys = options.explicitFieldKeys ?? new Set<string>();
+  const presetDoNotOverrideKeys = options.presetDoNotOverrideKeys ?? new Set<string>();
   const patientIdFieldName = options.patientIdFieldName ?? "Patient ID";
   const rows: BuiltPatientInsertRow[] = [];
 
@@ -183,12 +198,21 @@ function buildPatientInsertRows(
       }
     }
 
-    applyPresetProfileValues(rowValues, profile, explicitFieldKeys);
+    applyPresetFieldDefaults(rowValues, options.preset, presetDoNotOverrideKeys);
+    applyPresetProfileValues(rowValues, profile, presetDoNotOverrideKeys);
+    applyRegionalPhoneNumbers(
+      rowValues,
+      options.preset?.id,
+      presetDoNotOverrideKeys,
+    );
 
     for (const field of directFields) {
       const key = getPatientFieldKey(field);
       if (!key || !rowValues.has(key)) continue;
-      const value = rowValues.get(key);
+      let value = rowValues.get(key);
+      if (field.columnName.toLowerCase() === "dateofbirth") {
+        value = normalizeDateOfBirthValue(value);
+      }
       patientRow[field.columnName] = value;
       displayRow[field.fieldName] = value;
     }
@@ -432,7 +456,7 @@ function buildRollbackSql(
     for (const col of directCols) {
       const val = before.direct[col];
       if (val !== undefined) {
-        setParts.push(`[${col}] = ${toSqlLiteral(val)}`);
+        setParts.push(`[${col}] = ${toSqlLiteral(val, col)}`);
       }
     }
     if (setParts.length > 1) {
@@ -608,6 +632,9 @@ export async function updatePatients(
           }
         }
         if (value === null || value === undefined) continue;
+        if (col.toLowerCase() === "dateofbirth") {
+          value = normalizeDateOfBirthValue(value);
+        }
         const paramName = `v_${col}_${i}`;
         setClauses.push(`[${col}] = @${paramName}`);
         req.input(paramName, value);
@@ -814,7 +841,11 @@ export async function buildUpdatePatientSqlStatements(
           }
         }
         if (value !== null && value !== undefined) {
-          setParts.push(`[${col}] = ${toSqlLiteral(value)}`);
+          const out =
+            col.toLowerCase() === "dateofbirth"
+              ? normalizeDateOfBirthValue(value)
+              : value;
+          setParts.push(`[${col}] = ${toSqlLiteral(out, col)}`);
         }
       }
       const unitField = spec.fields.find(
@@ -928,11 +959,11 @@ export async function buildInsertPatientPreviewData(
 
   return {
     sampleRows: rows.map((row) => row.displayRow),
-    previewSql: rows.map(({ patientRow }) => {
+      previewSql: rows.map(({ patientRow }) => {
       const columns = Object.keys(patientRow);
       const columnList = columns.map((column) => `[${column}]`).join(", ");
       const valuesList = columns
-        .map((column) => toSqlLiteral(patientRow[column]))
+        .map((column) => toSqlLiteral(patientRow[column], column))
         .join(", ");
       return `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`;
     }),
@@ -978,7 +1009,9 @@ export async function buildInsertPatientSqlStatements(
   return rows.map(({ patientRow }) => {
     const columns = Object.keys(patientRow);
     const columnList = columns.map((c) => `[${c}]`).join(", ");
-    const valuesList = columns.map((c) => toSqlLiteral(patientRow[c])).join(", ");
+    const valuesList = columns
+      .map((c) => toSqlLiteral(patientRow[c], c))
+      .join(", ");
     return `INSERT INTO dbo.Patient (${columnList})\nVALUES (${valuesList})`;
   });
 }

@@ -339,8 +339,31 @@ export function generateVisibleAssessmentFields(params: {
         fixedPerWoundCache: params.fixedPerWoundCache,
       });
 
+      const requiredFallback = field.isNullable
+        ? null
+        : buildRequiredFallbackGeneratedField(field);
+
       const normalized = normalizeGeneratedValue(field, rawValue);
       if (normalized.ok === false) {
+        if (requiredFallback) {
+          diagnostics.push({
+            severity: "warning",
+            code: "invalid_generated_value",
+            message: `Generated value could not be normalized; required fallback was used for "${field.fieldName}"`,
+            fieldName: field.fieldName,
+            columnName: field.columnName,
+            visibilityExpression: field.visibilityExpression ?? null,
+          });
+          const generatedField = requiredFallback;
+          generatedByColumn.set(field.columnName, generatedField);
+          context.set(field.columnName, generatedField.contextValue);
+          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+            params.fixedPerWoundCache.set(field.columnName, generatedField);
+          }
+          changed = true;
+          continue;
+        }
+
         diagnostics.push({
           severity: "error",
           code: "invalid_generated_value",
@@ -351,10 +374,81 @@ export function generateVisibleAssessmentFields(params: {
         });
         continue;
       }
-      if (normalized.value == null) continue;
 
-      const validationError = validateContextValue(field, normalized.value);
+      if (normalized.value == null) {
+        if (requiredFallback) {
+          diagnostics.push({
+            severity: "warning",
+            code: "invalid_generated_value",
+            message: `Missing generated value; required fallback was used for "${field.fieldName}"`,
+            fieldName: field.fieldName,
+            columnName: field.columnName,
+            visibilityExpression: field.visibilityExpression ?? null,
+          });
+          const generatedField = requiredFallback;
+          generatedByColumn.set(field.columnName, generatedField);
+          context.set(field.columnName, generatedField.contextValue);
+          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+            params.fixedPerWoundCache.set(field.columnName, generatedField);
+          }
+          changed = true;
+        }
+        continue;
+      }
+
+      const sanitizedValue = sanitizeGeneratedValueForField(field, normalized.value);
+      if (sanitizedValue == null) {
+        if (requiredFallback) {
+          diagnostics.push({
+            severity: "warning",
+            code: "invalid_generated_value",
+            message: `Generated value did not match configured options; required fallback was used for "${field.fieldName}"`,
+            fieldName: field.fieldName,
+            columnName: field.columnName,
+            visibilityExpression: field.visibilityExpression ?? null,
+          });
+          const generatedField = requiredFallback;
+          generatedByColumn.set(field.columnName, generatedField);
+          context.set(field.columnName, generatedField.contextValue);
+          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+            params.fixedPerWoundCache.set(field.columnName, generatedField);
+          }
+          changed = true;
+          continue;
+        }
+
+        diagnostics.push({
+          severity: "warning",
+          code: "invalid_generated_value",
+          message: `Generated value did not match configured options and was skipped for "${field.fieldName}"`,
+          fieldName: field.fieldName,
+          columnName: field.columnName,
+          visibilityExpression: field.visibilityExpression ?? null,
+        });
+        continue;
+      }
+
+      const validationError = validateContextValue(field, sanitizedValue);
       if (validationError) {
+        if (requiredFallback) {
+          diagnostics.push({
+            severity: "warning",
+            code: "invalid_generated_value",
+            message: `Generated value failed validation; required fallback was used for "${field.fieldName}"`,
+            fieldName: field.fieldName,
+            columnName: field.columnName,
+            visibilityExpression: field.visibilityExpression ?? null,
+          });
+          const generatedField = requiredFallback;
+          generatedByColumn.set(field.columnName, generatedField);
+          context.set(field.columnName, generatedField.contextValue);
+          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+            params.fixedPerWoundCache.set(field.columnName, generatedField);
+          }
+          changed = true;
+          continue;
+        }
+
         diagnostics.push({
           severity: "error",
           code: "invalid_generated_value",
@@ -368,11 +462,11 @@ export function generateVisibleAssessmentFields(params: {
 
       const generatedField: GeneratedAssessmentField = {
         field,
-        contextValue: normalized.value,
-        serializedValue: serializeContextValue(field, normalized.value),
+        contextValue: sanitizedValue,
+        serializedValue: serializeContextValue(field, sanitizedValue),
       };
       generatedByColumn.set(field.columnName, generatedField);
-      context.set(field.columnName, normalized.value);
+      context.set(field.columnName, sanitizedValue);
       if (isFixedPerWoundField(field.fieldName, field.columnName)) {
         params.fixedPerWoundCache.set(field.columnName, generatedField);
       }
@@ -479,6 +573,83 @@ function selectRawFieldValue(params: {
   }
 
   return generateNoteValue(undefined, params.field, params.stage);
+}
+
+function buildRequiredFallbackGeneratedField(
+  field: CompiledAssessmentField
+): GeneratedAssessmentField | null {
+  const fallbackValue = buildRequiredFallbackValue(field);
+  if (fallbackValue == null) return null;
+
+  const validationError = validateContextValue(field, fallbackValue);
+  if (validationError) return null;
+
+  return {
+    field,
+    contextValue: fallbackValue,
+    serializedValue: serializeContextValue(field, fallbackValue),
+  };
+}
+
+function buildRequiredFallbackValue(
+  field: CompiledAssessmentField
+): VisibilityValue {
+  if (field.dataType === "SingleSelectList") {
+    return field.options?.[0] ?? null;
+  }
+
+  if (field.dataType === "MultiSelectList") {
+    if (!field.options?.length) return null;
+    return [field.options[0]];
+  }
+
+  if (field.dataType === "Boolean") {
+    return false;
+  }
+
+  if (field.dataType === "Integer") {
+    const min = typeof field.min === "number" ? Math.trunc(field.min) : 0;
+    const max = typeof field.max === "number" ? Math.trunc(field.max) : min;
+    return max < min ? max : min;
+  }
+
+  if (field.dataType === "Decimal") {
+    const min = typeof field.min === "number" ? field.min : 0;
+    const max = typeof field.max === "number" ? field.max : min;
+    return max < min ? max : min;
+  }
+
+  if (field.dataType === "Date" || field.dataType === "DateTime") {
+    return new Date();
+  }
+
+  if (field.dataType === "Text") {
+    return faker.lorem.sentence();
+  }
+
+  return "required-value";
+}
+
+function sanitizeGeneratedValueForField(
+  field: Pick<FieldSchema, "dataType" | "options">,
+  value: VisibilityValue
+): VisibilityValue {
+  if (value == null) return null;
+
+  if (field.dataType === "SingleSelectList") {
+    if (typeof value !== "string") return null;
+    if (!field.options?.length) return value;
+    return field.options.includes(value) ? value : null;
+  }
+
+  if (field.dataType === "MultiSelectList") {
+    if (!Array.isArray(value)) return null;
+    if (!field.options?.length) return value;
+    const filtered = value.filter((item) => field.options!.includes(item));
+    return filtered.length > 0 ? filtered : null;
+  }
+
+  return value;
 }
 
 function normalizeGeneratedValue(

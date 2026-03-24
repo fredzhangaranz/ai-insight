@@ -18,6 +18,10 @@ export default function NewInsightPage() {
   const [conversationThreadId, setConversationThreadId] = useState<
     string | undefined
   >();
+  /** DB id for the first user message in the thread (edit/re-run); avoids synthetic `first-user` PATCH 404. */
+  const [firstThreadUserMessageId, setFirstThreadUserMessageId] = useState<
+    string | undefined
+  >();
   const [isQuestionSubmitted, setIsQuestionSubmitted] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
@@ -49,6 +53,7 @@ export default function NewInsightPage() {
     setQuestion("");
     setIsQuestionSubmitted(false);
     setConversationThreadId(undefined);
+    setFirstThreadUserMessageId(undefined);
     reset();
   };
 
@@ -80,6 +85,9 @@ export default function NewInsightPage() {
             const data = await response.json();
             const threadId = data.threadId;
             setConversationThreadId(threadId);
+            if (typeof data.userMessageId === "string") {
+              setFirstThreadUserMessageId(data.userMessageId);
+            }
             if (typeof window !== "undefined") {
               localStorage.setItem("conversation_threadId", threadId);
             }
@@ -132,6 +140,26 @@ export default function NewInsightPage() {
     setIsQuestionSubmitted(true);
     setQuestion(query.question);
     setConversationThreadId(query.conversationThreadId);
+    if (query.conversationThreadId) {
+      try {
+        const res = await fetch(
+          `/api/insights/conversation/${query.conversationThreadId}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const firstUser = (data.messages ?? []).find(
+            (m: { role: string }) => m.role === "user",
+          );
+          setFirstThreadUserMessageId(firstUser?.id);
+        } else {
+          setFirstThreadUserMessageId(undefined);
+        }
+      } catch {
+        setFirstThreadUserMessageId(undefined);
+      }
+    } else {
+      setFirstThreadUserMessageId(undefined);
+    }
 
     // Load cached result from history instead of re-executing
     if (query.mode === "error") {
@@ -301,6 +329,7 @@ export default function NewInsightPage() {
     setQuestion,
     conversationThreadId,
     setConversationThreadId,
+    firstThreadUserMessageId,
     historyRefreshKey,
     handleNewQuestion,
     handleHistorySelect,

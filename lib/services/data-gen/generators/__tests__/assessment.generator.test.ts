@@ -575,5 +575,114 @@ describe("Assessment Generator", () => {
       );
       expect(outlineInserts.length).toBeGreaterThanOrEqual(result.insertedCount);
     });
+
+    it("creates exactly one baseline wound state per wound and one wound state per assessment", async () => {
+      mockRequest.query.mockImplementation((q: string) => {
+        if (q.includes("sp_set_session_context")) {
+          return Promise.resolve({ recordset: [] });
+        }
+        if (q.includes("SELECT id FROM dbo.Patient")) {
+          return Promise.resolve({ recordset: [{ id: "patient-1" }] });
+        }
+        if (
+          q.includes("assessmentTypeFk = 'CE64FA35-9CC6-4D6A-9A7B-C97761681EFC'")
+        ) {
+          return Promise.resolve({
+            recordset: [{ id: "wound-state-atv", definitionVersion: 3 }],
+          });
+        }
+        if (q.includes("WHERE atv.id = @id")) {
+          const requestedId = mockRequest.input.mock.calls.at(-1)?.[2];
+          if (requestedId === "wound-state-atv") {
+            return Promise.resolve({
+              recordset: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  dataType: 1000,
+                  attributeTypeId: "wound-state-selector",
+                  attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                  attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                  isRequired: true,
+                  calculatedValueExpression: null,
+                  visibilityExpression: null,
+                  attributeSetOrderIndex: 1,
+                  attributeOrderIndex: 1,
+                },
+              ],
+            });
+          }
+          return Promise.resolve({
+            recordset: [
+              {
+                fieldName: "Wound State",
+                columnName: "wound_state",
+                dataType: 1000,
+                attributeTypeId: "assessment-wound-state-selector",
+                attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                isRequired: true,
+                calculatedValueExpression: null,
+                visibilityExpression: null,
+                attributeSetOrderIndex: 1,
+                attributeOrderIndex: 1,
+              },
+            ],
+          });
+        }
+        if (q.includes("FROM dbo.AttributeLookup")) {
+          return Promise.resolve({
+            recordset: [
+              { id: "lookup-open", text: "Open" },
+              { id: "lookup-healed", text: "Healed" },
+              { id: "lookup-amputated", text: "Amputated" },
+            ],
+          });
+        }
+        if (q.includes("SELECT id FROM dbo.Unit")) {
+          return Promise.resolve({ recordset: [{ id: "unit-1" }] });
+        }
+        if (q.includes("SELECT id, [text] AS name FROM dbo.Anatomy")) {
+          return Promise.resolve({ recordset: [{ id: "anatomy-1", name: "Heel" }] });
+        }
+        if (q.includes("att.dataType = 1004")) {
+          return Promise.resolve({ recordset: [{ id: "wound-images-attr" }] });
+        }
+        if (q.includes("FROM dbo.ImageFormat")) {
+          return Promise.resolve({ recordset: [{ id: "image-format-1" }] });
+        }
+        if (q.includes("FROM dbo.StaffUser")) {
+          return Promise.resolve({
+            recordset: [
+              { id: "staff-user-1", firstName: "ARANZ", lastName: "Support" },
+            ],
+          });
+        }
+        return Promise.resolve({ recordset: [] });
+      });
+
+      const result = await generateWoundsAndAssessments(baseSpec, mockDb);
+
+      expect(result.insertedWoundIds).toHaveLength(1);
+      expect(result.insertedIds).toHaveLength(2);
+      expect(result.insertedWoundStateIds).toHaveLength(3);
+      expect(result.insertedWoundStateIds).toHaveLength(
+        (result.insertedWoundIds?.length ?? 0) + (result.insertedIds?.length ?? 0)
+      );
+      expect(result.verification).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            check: "Baseline wound states created",
+            result: "1/1",
+            status: "PASS",
+          }),
+          expect.objectContaining({
+            check: "Assessment wound states created",
+            result: "2/2",
+            status: "PASS",
+          }),
+        ])
+      );
+    });
   });
 });

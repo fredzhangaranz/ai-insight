@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Check, X } from "lucide-react";
@@ -18,9 +18,15 @@ interface UserMessageProps {
 export function UserMessage({ message, onEdit }: UserMessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
+
+  useEffect(() => {
+    setEditedContent(message.content);
+  }, [message.content]);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSaveEdit = async () => {
+    setSaveError(null);
     if (!onEdit || editedContent.trim() === message.content) {
       setIsEditing(false);
       return;
@@ -32,6 +38,9 @@ export function UserMessage({ message, onEdit }: UserMessageProps) {
       setIsEditing(false);
     } catch (error) {
       console.error("Failed to save edit:", error);
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to save edit",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -39,6 +48,7 @@ export function UserMessage({ message, onEdit }: UserMessageProps) {
 
   const handleCancelEdit = () => {
     setEditedContent(message.content);
+    setSaveError(null);
     setIsEditing(false);
   };
 
@@ -75,6 +85,11 @@ export function UserMessage({ message, onEdit }: UserMessageProps) {
             <p className="text-xs text-amber-600 mt-2">
               ⚠️ This will discard all messages after this one
             </p>
+            {saveError ? (
+              <p className="text-xs text-red-600 mt-2" role="alert">
+                {saveError}
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="bg-blue-600 text-white rounded-2xl px-4 py-3">
@@ -89,7 +104,11 @@ export function UserMessage({ message, onEdit }: UserMessageProps) {
                 <>
                   <span>•</span>
                   <button
-                    onClick={() => setIsEditing(true)}
+                    onClick={() => {
+                      setSaveError(null);
+                      setEditedContent(message.content);
+                      setIsEditing(true);
+                    }}
                     className="hover:text-white flex items-center gap-1"
                   >
                     <Pencil className="h-3 w-3" />

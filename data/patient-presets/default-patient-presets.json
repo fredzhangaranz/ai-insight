@@ -138,5 +138,104 @@
         ]
       }
     ]
+  },
+  {
+    "id": "us-urban",
+    "name": "US Urban",
+    "description": "United States urban defaults with weighted New York, Los Angeles, and Chicago address bundles.",
+    "fieldDefaults": [
+      {
+        "columnName": "addressCountry",
+        "criteria": {
+          "type": "fixed",
+          "value": "United States"
+        }
+      },
+      {
+        "columnName": "addressState",
+        "criteria": {
+          "type": "options",
+          "pickFrom": [
+            "New York",
+            "California",
+            "Illinois"
+          ]
+        }
+      }
+    ],
+    "profileSelection": {
+      "mode": "weighted_random_per_patient"
+    },
+    "profiles": [
+      {
+        "id": "nyc-metro",
+        "name": "New York City",
+        "weight": 0.4,
+        "values": [
+          {
+            "columnName": "addressCity",
+            "value": "New York"
+          },
+          {
+            "columnName": "addressState",
+            "value": "New York"
+          },
+          {
+            "columnName": "addressCountry",
+            "value": "United States"
+          },
+          {
+            "columnName": "addressPostcode",
+            "value": "10001"
+          }
+        ]
+      },
+      {
+        "id": "la-metro",
+        "name": "Los Angeles",
+        "weight": 0.35,
+        "values": [
+          {
+            "columnName": "addressCity",
+            "value": "Los Angeles"
+          },
+          {
+            "columnName": "addressState",
+            "value": "California"
+          },
+          {
+            "columnName": "addressCountry",
+            "value": "United States"
+          },
+          {
+            "columnName": "addressPostcode",
+            "value": "90012"
+          }
+        ]
+      },
+      {
+        "id": "chicago-metro",
+        "name": "Chicago",
+        "weight": 0.25,
+        "values": [
+          {
+            "columnName": "addressCity",
+            "value": "Chicago"
+          },
+          {
+            "columnName": "addressState",
+            "value": "Illinois"
+          },
+          {
+            "columnName": "addressCountry",
+            "value": "United States"
+          },
+          {
+            "columnName": "addressPostcode",
+            "value": "60601"
+          }
+        ]
+      }
+    ]
   }
 ]

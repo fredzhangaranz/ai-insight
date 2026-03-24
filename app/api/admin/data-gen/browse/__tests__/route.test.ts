@@ -7,41 +7,35 @@ vi.mock("@/lib/services/customer-service", () => ({
   getConnectionStringForCustomer: vi.fn().mockResolvedValue("Server=.;Database=test;"),
 }));
 vi.mock("@/lib/services/sqlserver/client", () => ({ getSqlServerPool: vi.fn() }));
+vi.mock("@/lib/services/data-gen/browse.service", () => ({ browse: vi.fn() }));
 
 import { getServerSession } from "next-auth";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 import { getConnectionStringForCustomer } from "@/lib/services/customer-service";
+import { browse } from "@/lib/services/data-gen/browse.service";
 
 describe("Browse API", () => {
-  const mockPool = {
-    request: vi.fn().mockReturnValue({
-      input: vi.fn().mockReturnThis(),
-      query: vi.fn()
-        .mockResolvedValueOnce({
-          recordset: [
-            { columnName: "id" },
-            { columnName: "firstName" },
-            { columnName: "lastName" },
-            { columnName: "gender" },
-            { columnName: "dateOfBirth" },
-            { columnName: "accessCode" },
-          ],
-        })
-        .mockResolvedValueOnce({ recordset: [{ total: 50 }] })
-        .mockResolvedValueOnce({
-          recordset: [
-            { id: "p1", firstName: "John", lastName: "Doe", gender: "Male", dateOfBirth: new Date(), accessCode: "IG001" },
-          ],
-        })
-        .mockResolvedValueOnce({ recordset: [{ total: 100, generated: 10, missingGender: 20 }] }),
-    }),
-  };
+  const mockPool = {};
 
   beforeEach(() => {
     vi.clearAllMocks();
     (getServerSession as any).mockResolvedValue({ user: {} });
     (getSqlServerPool as any).mockResolvedValue(mockPool);
     (getConnectionStringForCustomer as any).mockResolvedValue("Server=.;Database=test;");
+    (browse as any).mockResolvedValue({
+      rows: [{ id: "p1", name: "John Doe", woundCount: 2, assessmentCount: 5 }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+      stats: {
+        total: 1,
+        generated: 1,
+        noWounds: 0,
+        noAssessments: 0,
+        woundsMissingAssessments: 0,
+      },
+      columns: [{ key: "id", label: "ID" }],
+    });
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -77,6 +71,38 @@ describe("Browse API", () => {
     expect(data).toHaveProperty("rows");
     expect(data).toHaveProperty("total");
     expect(data.page).toBe(1);
+    expect(browse).toHaveBeenCalledWith(
+      mockPool,
+      "patient",
+      expect.objectContaining({
+        page: 1,
+        pageSize: 20,
+        filter: "all",
+      })
+    );
+  });
+
+  it("accepts no_assessments filter", async () => {
+    const req = new NextRequest(
+      "http://localhost/api/admin/data-gen/browse?customerId=c1&entity=patient&filter=no_assessments"
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(browse).toHaveBeenCalledWith(
+      mockPool,
+      "patient",
+      expect.objectContaining({
+        filter: "no_assessments",
+      })
+    );
+  });
+
+  it("returns 400 when filter is invalid", async () => {
+    const req = new NextRequest(
+      "http://localhost/api/admin/data-gen/browse?customerId=c1&entity=patient&filter=bad_filter"
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(400);
   });
 
   it("returns 500 when customer connection fails", async () => {

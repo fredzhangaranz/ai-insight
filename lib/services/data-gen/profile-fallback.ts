@@ -53,7 +53,7 @@ export function buildSingleFallbackProfile(
   return {
     trajectoryStyle: style,
     clinicalSummary: TRAJECTORY_DESCRIPTIONS[style],
-    phases: ["early", "mid", "late"].map((phase) =>
+    phases: (["early", "mid", "late"] as const).map((phase) =>
       buildFallbackPhase(phase, schema)
     ),
   };
@@ -89,4 +89,69 @@ export function buildFallbackPhase(
     description: `${phase} phase`,
     fieldDistributions,
   };
+}
+
+export function sanitizeFieldProfiles(
+  profiles: FieldProfileSet,
+  schema: FieldSchema[]
+): FieldProfileSet {
+  const selectableFields = new Map(
+    schema
+      .filter(
+        (field) =>
+          (field.dataType === "SingleSelectList" ||
+            field.dataType === "MultiSelectList") &&
+          field.options &&
+          field.options.length > 0
+      )
+      .map((field) => [field.columnName, field])
+  );
+
+  return profiles.map((profile) => ({
+    ...profile,
+    phases: profile.phases.map((phase) => ({
+      ...phase,
+      fieldDistributions: phase.fieldDistributions.flatMap((distribution) => {
+        const field = selectableFields.get(distribution.columnName);
+        if (!field?.options?.length) return [];
+
+        return [
+          {
+            fieldName: field.fieldName,
+            columnName: field.columnName,
+            weights: sanitizeDistributionWeights(
+              distribution.weights,
+              field.options
+            ),
+          },
+        ];
+      }),
+    })),
+  }));
+}
+
+function sanitizeDistributionWeights(
+  weights: Record<string, number>,
+  options: string[]
+): Record<string, number> {
+  const positiveEntries = options
+    .map((option) => [option, Number(weights[option] ?? 0)] as const)
+    .filter(([, weight]) => Number.isFinite(weight) && weight > 0);
+
+  if (positiveEntries.length === 0) {
+    const equalWeight = 1 / options.length;
+    return Object.fromEntries(options.map((option) => [option, equalWeight]));
+  }
+
+  const totalWeight = positiveEntries.reduce(
+    (sum, [, weight]) => sum + weight,
+    0
+  );
+  const normalized = Object.fromEntries(options.map((option) => [option, 0]));
+
+  for (const [option, weight] of positiveEntries) {
+    normalized[option] = weight / totalWeight;
+  }
+
+  return normalized;
 }

@@ -16,11 +16,15 @@ const mockPool = {
 };
 
 describe("browse.service", () => {
+  let executedQueries: string[] = [];
+
   beforeEach(() => {
     vi.clearAllMocks();
+    executedQueries = [];
     mockPool.request.mockImplementation(() => {
       const req = mockRequest();
       req.query.mockImplementation((q: string) => {
+        executedQueries.push(q);
         if (q.includes("INFORMATION_SCHEMA")) {
           return Promise.resolve({
             recordset: [
@@ -33,13 +37,34 @@ describe("browse.service", () => {
             ],
           });
         }
+        if (q.includes("WITH wound_assessment_counts")) {
+          return Promise.resolve({
+            recordset: [
+              {
+                patientFk: "p1",
+                woundCount: 2,
+                assessmentCount: 5,
+                woundsWithoutAssessments: 1,
+              },
+            ],
+          });
+        }
+        if (q.includes("patient_browse_flags")) {
+          return Promise.resolve({
+            recordset: [
+              {
+                total: 100,
+                generated: 10,
+                missingGender: 30,
+                noWounds: 4,
+                noAssessments: 7,
+                woundsMissingAssessments: 3,
+              },
+            ],
+          });
+        }
         if (q.includes("COUNT(*)")) {
           return Promise.resolve({ recordset: [{ total: 42 }] });
-        }
-        if (q.includes("SUM(CASE")) {
-          return Promise.resolve({
-            recordset: [{ total: 100, generated: 10, missingGender: 30 }],
-          });
         }
         return Promise.resolve({
           recordset: [
@@ -68,6 +93,22 @@ describe("browse.service", () => {
     expect(result.total).toBe(42);
     expect(result.page).toBe(1);
     expect(result.pageSize).toBe(20);
+    expect(result.rows[0]).toMatchObject({
+      woundCount: 2,
+      assessmentCount: 5,
+      woundsWithoutAssessments: 1,
+    });
+  });
+
+  it("browsePatients applies no_assessments patient filter", async () => {
+    await browsePatients(mockPool as any, {
+      page: 1,
+      pageSize: 20,
+      filter: "no_assessments",
+    });
+    expect(executedQueries.join("\n")).toContain(
+      "WHERE s.patientFk = dbo.Patient.id"
+    );
   });
 
   it("browse dispatches to browsePatients for patient entity", async () => {

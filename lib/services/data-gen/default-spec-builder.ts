@@ -11,6 +11,7 @@ import type {
   TrajectoryDistribution,
 } from "./generation-spec.types";
 import type { FieldProfileSet } from "./trajectory-field-profile.types";
+import { sanitizeFieldProfiles } from "./profile-fallback";
 
 /** Shape passed from WoundTrajectoryStep */
 export interface TrajectoryConfigInput {
@@ -47,6 +48,26 @@ const FAKER_BY_COLUMN: Record<string, string> = {
   lastName: "person.lastName",
   firstname: "person.firstName",
   lastname: "person.lastName",
+  middleName: "person.middleName",
+  middlename: "person.middleName",
+  addressStreet: "location.streetAddress",
+  addressstreet: "location.streetAddress",
+  addressSuburb: "location.county",
+  addresssuburb: "location.county",
+  addressCity: "location.city",
+  addresscity: "location.city",
+  addressState: "location.state",
+  addressstate: "location.state",
+  addressCountry: "location.country",
+  addresscountry: "location.country",
+  addressPostcode: "location.zipCode",
+  addresspostcode: "location.zipCode",
+  homePhone: "phone.number",
+  homephone: "phone.number",
+  mobilePhone: "phone.number",
+  mobilephone: "phone.number",
+  workPhone: "phone.number",
+  workphone: "phone.number",
   // Wound assessment: comment fields → sentence for readability
   woundReleaseComment: "lorem.sentence",
   releaseComment: "lorem.sentence",
@@ -248,7 +269,7 @@ export function buildDefaultAssessmentSpec(
   };
 
   if (fieldProfiles) {
-    spec.fieldProfiles = fieldProfiles;
+    spec.fieldProfiles = sanitizeFieldProfiles(fieldProfiles, woundFields);
   }
 
   return spec;

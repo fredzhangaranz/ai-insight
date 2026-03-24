@@ -35,6 +35,7 @@ import type {
 import { DependencyMissingError, ValidationError } from "@/lib/services/data-gen/generation-spec.types";
 import {
   getPatientPresetById,
+  getPresetDoNotOverrideKeys,
   resolvePatientSpecWithPreset,
 } from "@/lib/services/data-gen/patient-preset.service";
 
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
       const resolved = resolvePatientSpecWithPreset(spec, patientSchema, preset);
       effectiveSpec = resolved.spec;
       patientInsertOptions = {
-        explicitFieldKeys: resolved.explicitFieldKeys,
+        presetDoNotOverrideKeys: getPresetDoNotOverrideKeys(spec),
         patientIdFieldName: resolved.patientIdFieldName,
         preset: resolved.preset,
       };

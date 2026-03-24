@@ -5,7 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Loader2, Link2, Paperclip, Sparkles, Zap, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ThinkingStream } from "./ThinkingStream";
+import { ThinkingStream, type ThinkingStep } from "./ThinkingStream";
 import { ResultsTable } from "./ResultsTable";
 import { MessageActions } from "./MessageActions";
 import { SQLPreview } from "./SQLPreview";
@@ -143,6 +143,31 @@ function normalizeOptions(options?: string[] | ClarificationOption[]): Clarifica
   );
 }
 
+/** Collapse "How I got this answer" only when execution looks successful (rows or artifacts). */
+function shouldCollapseThinkingStream(opts: {
+  isLoading: boolean;
+  result?: InsightResult;
+  thinkingSteps: ThinkingStep[];
+}): boolean {
+  const { isLoading, result, thinkingSteps } = opts;
+  if (isLoading) return false;
+  if (thinkingSteps.some((s) => s.status === "error")) return false;
+  if (!result) return false;
+  if (result.error) return false;
+  const blockingClarification =
+    result.mode === "clarification" && Boolean(result.clarifications?.length);
+  if (blockingClarification) return false;
+
+  const hasArtifacts = Boolean(result.artifacts && result.artifacts.length > 0);
+  const rows = result.results?.rows;
+  const rowCount = Array.isArray(rows) ? rows.length : null;
+
+  if (hasArtifacts) return true;
+  if (rowCount === null) return false;
+  if (rowCount === 0) return false;
+  return true;
+}
+
 function InlineClarification({ clarifications, isSubmitting, onSubmit }: InlineClarificationProps) {
   const normalizedClarifications = clarifications.map((c) => ({
     ...c,
@@ -262,8 +287,14 @@ export function AssistantMessage({
   const loadingText = isFollowUp
     ? "AI is analyzing your follow-up..."
     : "AI is composing your insights...";
-  const thinkingSteps = message.result?.thinking ?? [];
+  const thinkingSteps = (message.result?.thinking ?? []) as ThinkingStep[];
   const hasThinking = thinkingSteps.length > 0;
+  const thinkingCollapsed = shouldCollapseThinkingStream({
+    isLoading,
+    result: message.result,
+    thinkingSteps,
+  });
+  const thinkingStreamKey = `${message.id}-${isLoading ? "load" : thinkingCollapsed ? "ok" : "open"}`;
   const thinkingDurationMs = thinkingSteps.reduce(
     (sum, step) => sum + (step.duration || 0),
     0
@@ -412,8 +443,9 @@ export function AssistantMessage({
           {hasThinkingContent && (
             <div className="mt-4 pt-4 border-t">
               <ThinkingStream
+                key={thinkingStreamKey}
                 steps={thinkingSteps}
-                collapsed={isFollowUp}
+                collapsed={thinkingCollapsed}
                 title="How I got this answer"
                 subtitle={thinkingSubtitle}
                 headerActions={showStrategyInThinkingHeader ? strategyBadge : undefined}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
 import { PHIProtectionService } from "@/lib/services/phi-protection.service";
 
@@ -49,7 +50,9 @@ export async function PATCH(
 
       const original = originalMsgResult.rows[0];
 
-      if (original.userId !== session.user.id) {
+      const sessionUserId = extractUserIdFromSession(session);
+      const threadOwnerUserId = Number(original.userId);
+      if (threadOwnerUserId !== sessionUserId) {
         await client.query("ROLLBACK");
         throw new Error("Forbidden");
       }

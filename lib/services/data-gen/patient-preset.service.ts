@@ -45,9 +45,27 @@ export interface PatientPresetSummary {
 
 export interface ResolvedPatientSpec {
   spec: GenerationSpec;
-  explicitFieldKeys: Set<string>;
   patientIdFieldName: string;
   preset?: PatientPresetDefinition;
+}
+
+/**
+ * Fields the user fixed in the spec (`criteria.type === "fixed"`).
+ * Patient presets may override faker/range/distribution values but must not replace these.
+ */
+export function getPresetDoNotOverrideKeys(spec: GenerationSpec): Set<string> {
+  const keys = new Set<string>();
+  for (const field of spec.fields) {
+    if (!field.enabled || field.criteria.type !== "fixed") continue;
+    const key = getPatientPresetFieldKey({
+      attributeTypeId:
+        field.storageType === "patient_attribute" ? field.attributeTypeId : undefined,
+      columnName:
+        field.storageType !== "patient_attribute" ? field.columnName : undefined,
+    });
+    if (key) keys.add(key);
+  }
+  return keys;
 }
 
 export function getPatientPresetFieldKey(
@@ -127,13 +145,13 @@ export function pickWeightedPresetProfile(
 export function applyPresetProfileValues(
   rowValues: Map<string, unknown>,
   profile: PatientPresetProfile | undefined,
-  explicitFieldKeys: Set<string>,
+  doNotOverrideKeys: Set<string>,
 ): void {
   if (!profile) return;
 
   for (const value of profile.values) {
     const key = getPatientPresetFieldKey(value);
-    if (!key || explicitFieldKeys.has(key)) continue;
+    if (!key || doNotOverrideKeys.has(key)) continue;
     rowValues.set(key, value.value);
   }
 }
@@ -172,7 +190,6 @@ export function resolvePatientSpecWithPreset(
   if (!preset) {
     return {
       spec,
-      explicitFieldKeys,
       patientIdFieldName: patientIdField?.fieldName ?? "Patient ID",
     };
   }
@@ -230,8 +247,35 @@ export function resolvePatientSpecWithPreset(
       ...spec,
       fields: resolvedFields,
     },
-    explicitFieldKeys,
     patientIdFieldName: patientIdField?.fieldName ?? "Patient ID",
     preset,
   };
+}
+
+/**
+ * Apply preset field defaults (fixed / options) on top of generated row values.
+ * Runs before per-profile overlays; profile values override defaults for the same key.
+ */
+export function applyPresetFieldDefaults(
+  rowValues: Map<string, unknown>,
+  preset: PatientPresetDefinition | undefined,
+  doNotOverrideKeys: Set<string>,
+): void {
+  if (!preset?.fieldDefaults?.length) return;
+
+  for (const fieldDefault of preset.fieldDefaults) {
+    const key = getPatientPresetFieldKey(fieldDefault);
+    if (!key || doNotOverrideKeys.has(key)) continue;
+
+    const { criteria } = fieldDefault;
+    if (criteria.type === "fixed") {
+      rowValues.set(key, criteria.value);
+      continue;
+    }
+    if (criteria.type === "options" && criteria.pickFrom?.length) {
+      const pick =
+        criteria.pickFrom[Math.floor(Math.random() * criteria.pickFrom.length)];
+      rowValues.set(key, pick);
+    }
+  }
 }

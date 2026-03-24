@@ -248,11 +248,13 @@ export async function validateInsertedAssessmentAttributes(
       string,
       { woundStateId: string; woundFk: string; woundStateText: string }
     >();
+    const woundStateCountBySeries = new Map<string, number>();
     const woundStateAttributeBySeries = new Map<string, Map<string, string>>();
     const baselineWoundStateByWound = new Map<
       string,
       { woundStateId: string; woundStateText: string }
     >();
+    const baselineWoundStateCountByWound = new Map<string, number>();
     const baselineWoundStateAttributesByWound = new Map<string, Map<string, string>>();
 
     if (insertedSeriesIds.length > 0) {
@@ -304,7 +306,12 @@ export async function validateInsertedAssessmentAttributes(
       `);
 
       for (const row of woundStates.recordset ?? []) {
-        woundStateBySeries.set(String(row.seriesFk), {
+        const seriesId = String(row.seriesFk);
+        woundStateCountBySeries.set(
+          seriesId,
+          (woundStateCountBySeries.get(seriesId) ?? 0) + 1
+        );
+        woundStateBySeries.set(seriesId, {
           woundStateId: String(row.woundStateId),
           woundFk: String(row.woundFk),
           woundStateText: String(row.woundStateText),
@@ -369,7 +376,12 @@ export async function validateInsertedAssessmentAttributes(
       `);
 
       for (const row of baselineWoundStates.recordset ?? []) {
-        baselineWoundStateByWound.set(String(row.woundFk), {
+        const woundId = String(row.woundFk);
+        baselineWoundStateCountByWound.set(
+          woundId,
+          (baselineWoundStateCountByWound.get(woundId) ?? 0) + 1
+        );
+        baselineWoundStateByWound.set(woundId, {
           woundStateId: String(row.woundStateId),
           woundStateText: String(row.woundStateText),
         });
@@ -413,6 +425,16 @@ export async function validateInsertedAssessmentAttributes(
     }
 
     for (const seriesId of insertedSeriesIds) {
+      const woundStateCount = woundStateCountBySeries.get(seriesId) ?? 0;
+      if (woundStateCount !== 1) {
+        diagnostics.push({
+          severity: "error",
+          code: "missing_visible_required_field",
+          message: `Expected exactly one wound state row for series ${seriesId}, found ${woundStateCount}`,
+        });
+        continue;
+      }
+
       const woundRow = rowsBySeries.get(seriesId) ?? new Map<string, string>();
       const woundStateRow = woundStateBySeries.get(seriesId);
       if (!woundStateRow) {
@@ -476,6 +498,16 @@ export async function validateInsertedAssessmentAttributes(
     }
 
     for (const woundId of insertedWoundIds) {
+      const baselineCount = baselineWoundStateCountByWound.get(woundId) ?? 0;
+      if (baselineCount !== 1) {
+        diagnostics.push({
+          severity: "error",
+          code: "missing_visible_required_field",
+          message: `Expected exactly one baseline wound state row for wound ${woundId}, found ${baselineCount}`,
+        });
+        continue;
+      }
+
       const baselineState = baselineWoundStateByWound.get(woundId);
       if (!baselineState) {
         diagnostics.push({

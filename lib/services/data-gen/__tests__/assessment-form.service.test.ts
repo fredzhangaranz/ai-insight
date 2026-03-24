@@ -429,6 +429,58 @@ describe("assessment-form.service", () => {
     expect(evaluateFieldVisibility(compiled.fieldByColumn.get("gate")!, context)).toBe(true);
   });
 
+  it("falls back to a valid required multi-select option when generated value is invalid", () => {
+    const compiled = compileAssessmentForm([
+      buildField({
+        fieldName: "Exudate Type",
+        columnName: "exudate_type",
+        dataType: "MultiSelectList",
+        options: ["Serous", "Purulent"],
+        isNullable: false,
+      }),
+    ]);
+
+    const fieldSpecs = new Map<string, FieldSpec>([
+      [
+        "exudate_type",
+        {
+          fieldName: "Exudate Type",
+          columnName: "exudate_type",
+          dataType: "MultiSelectList",
+          enabled: true,
+          criteria: { type: "fixed", value: "None" },
+        },
+      ],
+    ]);
+
+    const result = generateVisibleAssessmentFields({
+      compiledForm: compiled,
+      fieldSpecsByColumn: fieldSpecs,
+      progressionStyle: "Exponential",
+      assessmentIdx: 0,
+      totalAssessments: 2,
+      stage: baseStage,
+      fixedPerWoundCache: new Map(),
+    });
+
+    expect(result.generated).toHaveLength(1);
+    expect(result.generated[0].serializedValue).toBe("Serous");
+    expect(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.severity === "warning" &&
+          diagnostic.code === "invalid_generated_value"
+      )
+    ).toBe(true);
+    expect(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.severity === "error" &&
+          diagnostic.code === "missing_visible_required_field"
+      )
+    ).toBe(false);
+  });
+
   it("keeps fixed-per-wound value stable across assessments once cached", () => {
     const compiled = compileAssessmentForm([
       buildField({
