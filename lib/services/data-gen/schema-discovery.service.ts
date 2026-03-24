@@ -205,7 +205,18 @@ export interface ResolvedWoundStateCompanion {
   assessmentTypeVersionId: string;
   selectorField: FieldSchema;
   fields: FieldSchema[];
+  catalog: WoundStateCatalogEntry[];
+  openStates: WoundStateCatalogEntry[];
+  nonOpenStates: WoundStateCatalogEntry[];
   lookupByText: Map<string, { id: string; text: string }>;
+}
+
+export interface WoundStateCatalogEntry {
+  id: string;
+  text: string;
+  normalizedText: string;
+  isOpenWoundState: boolean;
+  orderIndex: number;
 }
 
 export async function getAttributeLookupMap(
@@ -231,6 +242,51 @@ export async function getAttributeLookupMap(
     });
   }
   return lookupByText;
+}
+
+export async function getWoundStateCatalog(
+  db: ConnectionPool,
+  attributeTypeId: string
+): Promise<WoundStateCatalogEntry[]> {
+  const lookupResult = await db
+    .request()
+    .input("attributeTypeId", sql.UniqueIdentifier, attributeTypeId)
+    .query(`
+      SELECT
+        al.id,
+        al.[text],
+        al.orderIndex,
+        wsd.isActive AS isOpenWoundState
+      FROM dbo.AttributeLookup al
+      LEFT JOIN dbo.WoundStateDisplay wsd
+        ON wsd.attributeLookupFk = al.id
+      WHERE al.attributeTypeFk = @attributeTypeId
+        AND al.isDeleted = 0
+      ORDER BY al.orderIndex, al.id
+    `);
+
+  const rows = lookupResult.recordset ?? [];
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const missingDisplayRows = rows
+    .filter((row) => row.isOpenWoundState == null)
+    .map((row) => String(row.text));
+  if (missingDisplayRows.length > 0) {
+    throw new Error(
+      `Wound-state selector ${attributeTypeId} is missing WoundStateDisplay rows for: ${missingDisplayRows.join(", ")}`
+    );
+  }
+
+  return rows.map((row, idx) => ({
+    id: String(row.id),
+    text: String(row.text),
+    normalizedText: String(row.text).trim().replace(/\s+/g, " ").toLowerCase(),
+    isOpenWoundState: Boolean(row.isOpenWoundState),
+    orderIndex:
+      typeof row.orderIndex === "number" ? row.orderIndex : idx,
+  }));
 }
 
 /**
@@ -427,12 +483,32 @@ export async function resolveWoundStateCompanion(
     );
   }
 
-  const lookupByText = await getAttributeLookupMap(db, selectorField.attributeTypeId);
+  const catalog = await getWoundStateCatalog(db, selectorField.attributeTypeId);
+  if (catalog.length === 0) {
+    throw new Error(
+      `Resolved wound-state companion form ${assessmentTypeVersionId} has no selector options for ${selectorField.attributeTypeId}`
+    );
+  }
+
+  const openStates = catalog.filter((entry) => entry.isOpenWoundState);
+  const nonOpenStates = catalog.filter((entry) => !entry.isOpenWoundState);
+  const lookupByText = new Map<string, { id: string; text: string }>(
+    catalog.map((entry) => [
+      entry.normalizedText,
+      {
+        id: entry.id,
+        text: entry.text,
+      },
+    ])
+  );
 
   return {
     assessmentTypeVersionId,
     selectorField,
     fields,
+    catalog,
+    openStates,
+    nonOpenStates,
     lookupByText,
   };
 }

@@ -11,6 +11,7 @@ import {
   resolveCount,
   generateWoundsAndAssessments,
   sampleFromProfile,
+  buildAssessmentSqlStatements,
 } from "../assessment.generator";
 import type { FieldSpec } from "../../generation-spec.types";
 import type { TrajectoryDistribution } from "../../generation-spec.types";
@@ -414,6 +415,48 @@ describe("Assessment Generator", () => {
         name: "Wound Assessment",
       },
       fields: [] as FieldSpec[],
+      trajectoryAssignments: ["healing"] as const,
+      fieldProfiles: [
+        {
+          trajectoryStyle: "Exponential",
+          clinicalSummary: "Fast healing",
+          phases: [
+            {
+              phase: "early" as const,
+              description: "Early",
+              fieldDistributions: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  weights: { New: 1, Improving: 1, Resolved: 1 },
+                },
+              ],
+            },
+            {
+              phase: "mid" as const,
+              description: "Mid",
+              fieldDistributions: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  weights: { New: 1, Improving: 1, Resolved: 1 },
+                },
+              ],
+            },
+            {
+              phase: "late" as const,
+              description: "Late",
+              fieldDistributions: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  weights: { New: 1, Improving: 1, Resolved: 1 },
+                },
+              ],
+            },
+          ],
+        },
+      ],
       assessmentsPerWound: [2, 2] as [number, number],
       woundsPerPatient: 1,
     };
@@ -530,9 +573,24 @@ describe("Assessment Generator", () => {
         if (q.includes("FROM dbo.AttributeLookup")) {
           return Promise.resolve({
             recordset: [
-              { id: "lookup-open", text: "Open" },
-              { id: "lookup-healed", text: "Healed" },
-              { id: "lookup-amputated", text: "Amputated" },
+              {
+                id: "lookup-new",
+                text: "New",
+                orderIndex: 1,
+                isOpenWoundState: true,
+              },
+              {
+                id: "lookup-improving",
+                text: "Improving",
+                orderIndex: 2,
+                isOpenWoundState: true,
+              },
+              {
+                id: "lookup-resolved",
+                text: "Resolved",
+                orderIndex: 3,
+                isOpenWoundState: false,
+              },
             ],
           });
         }
@@ -633,9 +691,24 @@ describe("Assessment Generator", () => {
         if (q.includes("FROM dbo.AttributeLookup")) {
           return Promise.resolve({
             recordset: [
-              { id: "lookup-open", text: "Open" },
-              { id: "lookup-healed", text: "Healed" },
-              { id: "lookup-amputated", text: "Amputated" },
+              {
+                id: "lookup-new",
+                text: "New",
+                orderIndex: 1,
+                isOpenWoundState: true,
+              },
+              {
+                id: "lookup-improving",
+                text: "Improving",
+                orderIndex: 2,
+                isOpenWoundState: true,
+              },
+              {
+                id: "lookup-resolved",
+                text: "Resolved",
+                orderIndex: 3,
+                isOpenWoundState: false,
+              },
             ],
           });
         }
@@ -683,6 +756,110 @@ describe("Assessment Generator", () => {
           }),
         ])
       );
+    });
+
+    it("builds preview SQL using tenant-configured open/non-open wound states", async () => {
+      mockRequest.query.mockImplementation((q: string) => {
+        if (q.includes("SELECT TOP 1 id FROM dbo.Patient")) {
+          return Promise.resolve({ recordset: [{ id: "patient-1" }] });
+        }
+        if (
+          q.includes("assessmentTypeFk = 'CE64FA35-9CC6-4D6A-9A7B-C97761681EFC'")
+        ) {
+          return Promise.resolve({
+            recordset: [{ id: "wound-state-atv", definitionVersion: 3 }],
+          });
+        }
+        if (q.includes("WHERE atv.id = @id")) {
+          const requestedId = mockRequest.input.mock.calls.at(-1)?.[2];
+          if (requestedId === "wound-state-atv") {
+            return Promise.resolve({
+              recordset: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  dataType: 1000,
+                  attributeTypeId: "wound-state-selector",
+                  attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                  attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                  isRequired: true,
+                  calculatedValueExpression: null,
+                  visibilityExpression: null,
+                  attributeSetOrderIndex: 1,
+                  attributeOrderIndex: 1,
+                },
+              ],
+            });
+          }
+          return Promise.resolve({
+            recordset: [
+              {
+                fieldName: "Wound State",
+                columnName: "wound_state",
+                dataType: 1000,
+                attributeTypeId: "assessment-wound-state-selector",
+                attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                isRequired: true,
+                calculatedValueExpression: null,
+                visibilityExpression: null,
+                attributeSetOrderIndex: 1,
+                attributeOrderIndex: 1,
+              },
+            ],
+          });
+        }
+        if (q.includes("FROM dbo.AttributeLookup")) {
+          return Promise.resolve({
+            recordset: [
+              {
+                id: "lookup-new",
+                text: "New",
+                orderIndex: 1,
+                isOpenWoundState: true,
+              },
+              {
+                id: "lookup-improving",
+                text: "Improving",
+                orderIndex: 2,
+                isOpenWoundState: true,
+              },
+              {
+                id: "lookup-resolved",
+                text: "Resolved",
+                orderIndex: 3,
+                isOpenWoundState: false,
+              },
+            ],
+          });
+        }
+        if (q.includes("SELECT TOP 1 id FROM dbo.Unit")) {
+          return Promise.resolve({ recordset: [{ id: "unit-1" }] });
+        }
+        if (q.includes("SELECT TOP 1 id, [text] AS name FROM dbo.Anatomy")) {
+          return Promise.resolve({ recordset: [{ id: "anatomy-1", name: "Heel" }] });
+        }
+        if (q.includes("att.dataType = 1004")) {
+          return Promise.resolve({ recordset: [{ id: "wound-images-attr" }] });
+        }
+        if (q.includes("FROM dbo.ImageFormat")) {
+          return Promise.resolve({ recordset: [{ id: "image-format-1" }] });
+        }
+        if (q.includes("FROM dbo.StaffUser")) {
+          return Promise.resolve({
+            recordset: [
+              { id: "staff-user-1", firstName: "ARANZ", lastName: "Support" },
+            ],
+          });
+        }
+        return Promise.resolve({ recordset: [] });
+      });
+
+      const preview = await buildAssessmentSqlStatements(baseSpec, mockDb);
+
+      expect(preview.statements.length).toBeGreaterThan(0);
+      expect(preview.statements.join("\n")).toContain("'lookup-new'");
+      expect(preview.diagnostics).toEqual(expect.any(Array));
     });
   });
 });

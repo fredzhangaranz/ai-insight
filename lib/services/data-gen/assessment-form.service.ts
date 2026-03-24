@@ -101,6 +101,25 @@ export function sampleFromProfile(
   totalAssessments: number,
   columnName: string
 ): string | null {
+  const weights = getProfileWeightsForField(
+    profiles,
+    trajectoryStyle,
+    assessmentIndex,
+    totalAssessments,
+    columnName
+  );
+  if (!weights || Object.keys(weights).length === 0) return null;
+
+  return weightedPick(weights as Record<string, number>);
+}
+
+export function getProfileWeightsForField(
+  profiles: FieldProfileSet,
+  trajectoryStyle: WoundProgressionStyle,
+  assessmentIndex: number,
+  totalAssessments: number,
+  columnName: string
+): Record<string, number> | null {
   if (totalAssessments <= 0) return null;
 
   const ratio = assessmentIndex / totalAssessments;
@@ -117,11 +136,7 @@ export function sampleFromProfile(
     (d) => d.columnName === columnName
   );
   if (!dist?.weights || Object.keys(dist.weights).length === 0) return null;
-
-  const total = Object.values(dist.weights).reduce((a, b) => a + b, 0);
-  if (total <= 0) return null;
-
-  return weightedPick(dist.weights as Record<string, number>);
+  return dist.weights;
 }
 
 export function generateNoteValue(

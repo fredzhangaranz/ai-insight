@@ -49,7 +49,7 @@ import {
   insertWoundStateAttributes,
   insertWoundStateRow,
   partitionAssessmentWoundStateFields,
-  resolveWoundStateLookup,
+  resolveTrajectoryWoundStateLookup,
   serializeWoundStateAttributeValue,
 } from "../wound-state.service";
 
@@ -355,10 +355,14 @@ export async function generateWoundsAndAssessments(
       woundIndex++;
       insertedWoundIds.push(woundId);
 
-      const baselineWoundStateLookup = resolveWoundStateLookup(
-        woundStateCompanion.lookupByText,
-        "Open"
-      );
+      const baselineWoundStateLookup = resolveTrajectoryWoundStateLookup({
+        partition: woundStateCompanion,
+        semantic: "Open",
+        fieldProfiles: sanitizedFieldProfiles,
+        progressionStyle,
+        assessmentIdx: 0,
+        totalAssessments: trajectoryPoints.length,
+      });
       const baselineWoundStateId = newGuid();
       await insertWoundStateRow(db, {
         id: baselineWoundStateId,
@@ -471,10 +475,14 @@ export async function generateWoundsAndAssessments(
           volume: point.area > 0 ? point.area * 0.5 : 0,
         };
 
-        const woundStateLookup = resolveWoundStateLookup(
-          assessmentWoundState.lookupByText,
-          point.woundState
-        );
+        const woundStateLookup = resolveTrajectoryWoundStateLookup({
+          partition: assessmentWoundState,
+          semantic: point.woundState,
+          fieldProfiles: sanitizedFieldProfiles,
+          progressionStyle,
+          assessmentIdx,
+          totalAssessments: trajectoryPoints.length,
+        });
         const selectorSeed = buildSelectorSeed(
           assessmentWoundState.selectorField.columnName,
           woundStateLookup.text
@@ -749,10 +757,14 @@ INSERT INTO dbo.Wound (id, patientFk, anatomyFk, auxText, baselineDate, baseline
 VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W${w + 1}', ${toSqlLiteral(baselineDateOffset)}, N'UTC', ${w + 1}, ${toSqlLiteral(now)}, 2, ${toSqlLiteral(now)}, 0);
 `.trim());
 
-    const baselineWoundStateLookup = resolveWoundStateLookup(
-      woundStateCompanion.lookupByText,
-      "Open"
-    );
+    const baselineWoundStateLookup = resolveTrajectoryWoundStateLookup({
+      partition: woundStateCompanion,
+      semantic: "Open",
+      fieldProfiles: sanitizedFieldProfiles,
+      progressionStyle,
+      assessmentIdx: 0,
+      totalAssessments: trajectoryPoints.length,
+    });
     const baselineWoundStateId = newGuid();
     blocks.push(`-- dbo.WoundState (baseline)`);
     blocks.push(`
@@ -853,10 +865,14 @@ VALUES (${pid(signatureId)}, ${pid(seriesId)}, ${pid(scaffoldingDeps.capturedByS
       perimeter: point.perimeter,
       volume: point.area > 0 ? point.area * 0.5 : 0,
     };
-    const woundStateLookup = resolveWoundStateLookup(
-      assessmentWoundState.lookupByText,
-      point.woundState
-    );
+    const woundStateLookup = resolveTrajectoryWoundStateLookup({
+      partition: assessmentWoundState,
+      semantic: point.woundState,
+      fieldProfiles: sanitizedFieldProfiles,
+      progressionStyle,
+      assessmentIdx,
+      totalAssessments: trajectoryPoints.length,
+    });
     const selectorSeed = buildSelectorSeed(
       assessmentWoundState.selectorField.columnName,
       woundStateLookup.text
