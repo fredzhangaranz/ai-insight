@@ -217,8 +217,10 @@ export function buildDefaultAssessmentSpec(
       dataType: f.dataType,
       enabled: true,
       criteria,
-      storageType: "wound_attribute",
+      storageType: f.storageType,
       attributeTypeId: f.attributeTypeId,
+      attributeTypeKey: f.attributeTypeKey,
+      attributeSetKey: f.attributeSetKey,
       systemManaged: f.systemManaged,
     };
   });

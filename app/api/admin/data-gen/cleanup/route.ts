@@ -54,7 +54,21 @@ export async function DELETE(request: NextRequest) {
     `);
     deletedCounts.measurements = measurementResult.rowsAffected[0] || 0;
 
-    // 3. Delete WoundState (references Wound and Series)
+    // 3. Delete WoundStateAttribute (references WoundState)
+    const woundStateAttributeResult = await pool.request().query(`
+      UPDATE dbo.WoundStateAttribute
+      SET isDeleted = 1
+      WHERE woundStateFk IN (
+        SELECT ws.id FROM dbo.WoundState ws
+        INNER JOIN dbo.Wound w ON ws.woundFk = w.id
+        INNER JOIN dbo.Patient p ON w.patientFk = p.id
+        WHERE p.accessCode LIKE 'IG%'
+      )
+      AND isDeleted = 0
+    `);
+    deletedCounts.woundStateAttributes = woundStateAttributeResult.rowsAffected[0] || 0;
+
+    // 4. Delete WoundState (references Wound and Series)
     const woundStateResult = await pool.request().query(`
       UPDATE dbo.WoundState
       SET isDeleted = 1
@@ -67,7 +81,7 @@ export async function DELETE(request: NextRequest) {
     `);
     deletedCounts.woundStates = woundStateResult.rowsAffected[0] || 0;
 
-    // 4. Delete Series (references Patient and Wound)
+    // 5. Delete Series (references Patient and Wound)
     const seriesResult = await pool.request().query(`
       UPDATE dbo.Series
       SET isDeleted = 1
@@ -78,7 +92,7 @@ export async function DELETE(request: NextRequest) {
     `);
     deletedCounts.series = seriesResult.rowsAffected[0] || 0;
 
-    // 5. Delete Wounds (references Patient)
+    // 6. Delete Wounds (references Patient)
     const woundResult = await pool.request().query(`
       UPDATE dbo.Wound
       SET isDeleted = 1
@@ -89,7 +103,7 @@ export async function DELETE(request: NextRequest) {
     `);
     deletedCounts.wounds = woundResult.rowsAffected[0] || 0;
 
-    // 6. Delete Patients (root)
+    // 7. Delete Patients (root)
     const patientResult = await pool.request().query(`
       UPDATE dbo.Patient
       SET isDeleted = 1

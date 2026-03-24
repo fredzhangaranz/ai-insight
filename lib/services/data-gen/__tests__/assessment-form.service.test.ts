@@ -308,6 +308,43 @@ describe("assessment-form.service", () => {
     expect(result.generated.map((field) => field.field.columnName)).toContain("contaminant");
   });
 
+  it("uses seeded context for visibility without returning the seeded selector as generated output", () => {
+    const compiled = compileAssessmentForm([
+      buildField({
+        fieldName: "Wound State",
+        columnName: "wound_state",
+        dataType: "SingleSelectList",
+        options: ["Open", "Healed"],
+        attributeOrderIndex: 1,
+      }),
+      buildField({
+        fieldName: "Recurring",
+        columnName: "recurring",
+        dataType: "Boolean",
+        visibilityExpression: "wound_state == 'Open'",
+        attributeOrderIndex: 2,
+      }),
+    ]);
+
+    const result = generateVisibleAssessmentFields({
+      compiledForm: compiled,
+      fieldSpecsByColumn: new Map(),
+      progressionStyle: "Exponential",
+      assessmentIdx: 0,
+      totalAssessments: 1,
+      stage: baseStage,
+      fixedPerWoundCache: new Map(),
+      seededContextByColumn: new Map([
+        ["wound_state", { value: "Open", serializedValue: "Open" }],
+      ]),
+      restrictToColumns: new Set(["recurring"]),
+    });
+
+    expect(result.generated.map((field) => field.field.columnName)).toEqual([
+      "recurring",
+    ]);
+  });
+
   it("reports invalid generated values against min/max constraints", () => {
     const compiled = compileAssessmentForm([
       buildField({

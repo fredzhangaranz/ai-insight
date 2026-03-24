@@ -14,6 +14,19 @@ import type {
 import { classifyFormField } from "./field-classifier.service";
 import { getPatientColumnForAttributeTypeKey } from "./patient-storage-mapping";
 
+export const WOUND_STATE_ASSESSMENT_TYPE_ID =
+  "CE64FA35-9CC6-4D6A-9A7B-C97761681EFC";
+export const WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY =
+  "56A71C1C-214E-46AD-8A74-BB735AB87B39";
+export const WOUND_STATE_ATTRIBUTE_SET_KEY =
+  "31FD9717-B264-A8D5-9B0D-1B31007BAD98";
+
+function resolveFormStorageType(attributeSetKey: string | null | undefined) {
+  return String(attributeSetKey ?? "").toUpperCase() === WOUND_STATE_ATTRIBUTE_SET_KEY
+    ? "wound_state_attribute"
+    : "wound_attribute";
+}
+
 /**
  * Get patient schema from PatientNotes AttributeTypes only.
  * Mapped (attributeTypeKey in Silhouette mapping) → storageType direct_patient, columnName = dbo.Patient column.
@@ -188,6 +201,38 @@ export async function getPublishedForms(
   }));
 }
 
+export interface ResolvedWoundStateCompanion {
+  assessmentTypeVersionId: string;
+  selectorField: FieldSchema;
+  fields: FieldSchema[];
+  lookupByText: Map<string, { id: string; text: string }>;
+}
+
+export async function getAttributeLookupMap(
+  db: ConnectionPool,
+  attributeTypeId: string
+): Promise<Map<string, { id: string; text: string }>> {
+  const lookupResult = await db
+    .request()
+    .input("attributeTypeId", sql.UniqueIdentifier, attributeTypeId)
+    .query(`
+      SELECT id, [text]
+      FROM dbo.AttributeLookup
+      WHERE attributeTypeFk = @attributeTypeId
+        AND isDeleted = 0
+      ORDER BY orderIndex
+    `);
+
+  const lookupByText = new Map<string, { id: string; text: string }>();
+  for (const row of lookupResult.recordset ?? []) {
+    lookupByText.set(String(row.text).trim().toLowerCase(), {
+      id: String(row.id),
+      text: String(row.text),
+    });
+  }
+  return lookupByText;
+}
+
 /**
  * Map dataType integer to string
  */
@@ -226,11 +271,13 @@ export async function getFormFields(
       att.variableName as columnName,
       att.dataType,
       att.id as attributeTypeId,
+      att.attributeTypeKey,
       att.minValue,
       att.maxValue,
       att.isRequired,
       att.calculatedValueExpression,
       att.visibilityExpression,
+      ats.attributeSetKey,
       asatv.orderIndex as attributeSetOrderIndex,
       att.orderIndex as attributeOrderIndex
     FROM dbo.AssessmentTypeVersion atv
@@ -265,8 +312,11 @@ export async function getFormFields(
       columnName,
       dataType: fieldType,
       isNullable: !field.isRequired,
-      storageType: "wound_attribute",
+      storageType: resolveFormStorageType(field.attributeSetKey),
       attributeTypeId: field.attributeTypeId,
+      attributeTypeKey: field.attributeTypeKey ?? undefined,
+      attributeSetKey: field.attributeSetKey ?? undefined,
+      assessmentTypeVersionId,
       systemManaged: false,
       fieldClass,
       calculatedValueExpression: field.calculatedValueExpression ?? null,
@@ -308,6 +358,83 @@ export async function getFormFields(
   }
 
   return fields;
+}
+
+export async function resolveWoundStateCompanion(
+  db: ConnectionPool
+): Promise<ResolvedWoundStateCompanion> {
+  const candidates = await db.request().query(`
+    SELECT
+      atv.id,
+      atv.definitionVersion
+    FROM dbo.AssessmentTypeVersion atv
+    WHERE atv.assessmentTypeFk = '${WOUND_STATE_ASSESSMENT_TYPE_ID}'
+      AND atv.versionType = 2
+      AND atv.isDeleted = 0
+    ORDER BY atv.definitionVersion DESC, atv.id DESC
+  `);
+
+  if ((candidates.recordset ?? []).length === 0) {
+    throw new Error(
+      `No published wound-state assessment form found for assessmentTypeFk ${WOUND_STATE_ASSESSMENT_TYPE_ID}`
+    );
+  }
+
+  const matching: Array<{ id: string; definitionVersion: number }> = [];
+  for (const candidate of candidates.recordset ?? []) {
+    const fields = await getFormFields(db, candidate.id);
+    const selectors = fields.filter(
+      (field) =>
+        String(field.attributeTypeKey ?? "").toUpperCase() ===
+        WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY
+    );
+    if (selectors.length === 1) {
+      matching.push(candidate);
+    } else if (selectors.length > 1) {
+      throw new Error(
+        `Wound-state form ${candidate.id} has ${selectors.length} wound_state selector fields; expected exactly 1`
+      );
+    }
+  }
+
+  if (matching.length === 0) {
+    throw new Error(
+      `No published wound-state assessment form exposes selector ${WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY}`
+    );
+  }
+
+  const bestVersion = matching[0].definitionVersion;
+  const bestCandidates = matching.filter(
+    (candidate) => candidate.definitionVersion === bestVersion
+  );
+  if (bestCandidates.length > 1) {
+    throw new Error(
+      `Ambiguous wound-state companion form: ${bestCandidates.length} published versions share definitionVersion ${bestVersion}`
+    );
+  }
+
+  const assessmentTypeVersionId = bestCandidates[0].id;
+  const fields = await getFormFields(db, assessmentTypeVersionId);
+  const selectorField = fields.find(
+    (field) =>
+      String(field.attributeTypeKey ?? "").toUpperCase() ===
+      WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY
+  );
+
+  if (!selectorField?.attributeTypeId) {
+    throw new Error(
+      `Resolved wound-state companion form ${assessmentTypeVersionId} is missing selector ${WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY}`
+    );
+  }
+
+  const lookupByText = await getAttributeLookupMap(db, selectorField.attributeTypeId);
+
+  return {
+    assessmentTypeVersionId,
+    selectorField,
+    fields,
+    lookupByText,
+  };
 }
 
 /**

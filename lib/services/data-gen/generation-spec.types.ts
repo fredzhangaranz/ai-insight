@@ -10,6 +10,7 @@ export type StorageType =
   | "direct_patient"
   | "patient_attribute"
   | "wound_attribute"
+  | "wound_state_attribute"
   | "encounter_attribute";
 
 export type BrowseMode = "insert" | "update" | "assessment";
@@ -110,6 +111,8 @@ export interface FieldSpec {
   criteria: FieldCriteria;
   storageType?: StorageType;
   attributeTypeId?: string;
+  attributeTypeKey?: string;
+  attributeSetKey?: string;
   assessmentTypeVersionId?: string;
   systemManaged?: boolean;
 }
@@ -187,6 +190,8 @@ export interface FieldSchema {
   isNullable: boolean;
   storageType: StorageType;
   attributeTypeId?: string;
+  attributeTypeKey?: string;
+  attributeSetKey?: string;
   assessmentTypeVersionId?: string;
   /** PatientNote name (e.g. Details, Medical History) for disambiguating duplicate fieldNames */
   patientNoteName?: string;
@@ -240,6 +245,9 @@ export interface GenerationResult {
   success: boolean;
   insertedCount: number;
   insertedIds: string[];
+  insertedWoundIds?: string[];
+  insertedSeriesIds?: string[];
+  insertedWoundStateIds?: string[];
   verification: VerificationResult[];
   error?: string;
   diagnostics?: AssessmentFormDiagnostic[];

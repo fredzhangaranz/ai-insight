@@ -144,18 +144,20 @@ describe("Schema Discovery Service", () => {
       mockRequest.query
         .mockResolvedValueOnce({
           recordset: [
-            {
-              fieldName: "Wound Location",
-              columnName: "wound_location",
-              dataType: 1000, // SingleSelectList
-              attributeTypeId: "attr-1",
-              minValue: null,
-              maxValue: null,
-              isRequired: true,
-              visibilityExpression: "HasValue(parent_field)",
-              attributeSetOrderIndex: 1,
-              attributeOrderIndex: 2,
-            },
+          {
+            fieldName: "Wound Location",
+            columnName: "wound_location",
+            dataType: 1000, // SingleSelectList
+            attributeTypeId: "attr-1",
+            attributeTypeKey: "attr-key-1",
+            minValue: null,
+            maxValue: null,
+            isRequired: true,
+            visibilityExpression: "HasValue(parent_field)",
+            attributeSetKey: "set-key-1",
+            attributeSetOrderIndex: 1,
+            attributeOrderIndex: 2,
+          },
           ],
         })
         .mockResolvedValueOnce({
@@ -173,6 +175,9 @@ describe("Schema Discovery Service", () => {
         fieldName: "Wound Location",
         dataType: "SingleSelectList",
         isNullable: false,
+        storageType: "wound_attribute",
+        attributeTypeKey: "attr-key-1",
+        attributeSetKey: "set-key-1",
         options: ["Left Heel", "Right Heel", "Sacrum"],
         visibilityExpression: "HasValue(parent_field)",
         attributeSetOrderIndex: 1,
@@ -189,10 +194,12 @@ describe("Schema Discovery Service", () => {
             columnName: "wound_area",
             dataType: 106, // Decimal
             attributeTypeId: "attr-2",
+            attributeTypeKey: "attr-key-2",
             minValue: 0,
             maxValue: 500,
             isRequired: false,
             visibilityExpression: null,
+            attributeSetKey: "set-key-2",
             attributeSetOrderIndex: 1,
             attributeOrderIndex: 3,
           },
@@ -220,10 +227,12 @@ describe("Schema Discovery Service", () => {
             columnName: "notes",
             dataType: 231, // Text
             attributeTypeId: "attr-3",
+            attributeTypeKey: "attr-key-3",
             minValue: null,
             maxValue: null,
             isRequired: false,
             visibilityExpression: null,
+            attributeSetKey: "set-key-3",
             attributeSetOrderIndex: 1,
             attributeOrderIndex: 4,
           },
@@ -240,6 +249,34 @@ describe("Schema Discovery Service", () => {
       expect(result[0].options).toBeUndefined();
       expect(result[0].min).toBeUndefined();
       expect(result[0].max).toBeUndefined();
+    });
+
+    it("marks embedded wound-state fields with wound_state_attribute storage", async () => {
+      mockRequest.query.mockResolvedValueOnce({
+        recordset: [
+          {
+            fieldName: "Recurring",
+            columnName: "recurring",
+            dataType: 104,
+            attributeTypeId: "attr-4",
+            attributeTypeKey: "attr-key-4",
+            minValue: null,
+            maxValue: null,
+            isRequired: false,
+            visibilityExpression: "wound_state == 'Open'",
+            attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+            attributeSetOrderIndex: 2,
+            attributeOrderIndex: 1,
+          },
+        ],
+      });
+
+      const result = await getFormFields(mockDb, "form-id-123");
+
+      expect(result[0]).toMatchObject({
+        columnName: "recurring",
+        storageType: "wound_state_attribute",
+      });
     });
   });
 

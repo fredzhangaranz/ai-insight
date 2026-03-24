@@ -263,5 +263,34 @@ describe("default-spec-builder", () => {
       const imageField = spec.fields.find((f) => f.dataType === "ImageCapture");
       expect(imageField).toBeUndefined();
     });
+
+    it("preserves wound_state_attribute storage for embedded wound-state fields", () => {
+      const schemaWithWoundState: FieldSchema[] = [
+        ...formSchema,
+        {
+          fieldName: "Recurring",
+          columnName: "recurring",
+          dataType: "Boolean",
+          isNullable: true,
+          storageType: "wound_state_attribute",
+          attributeTypeId: "attr-4",
+          attributeTypeKey: "attr-key-4",
+          attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+        },
+      ];
+
+      const spec = buildDefaultAssessmentSpec(
+        schemaWithWoundState,
+        trajectoryConfig,
+        { assessmentFormId: "f", assessmentFormName: "W" },
+        ["p1"],
+        undefined
+      );
+
+      expect(spec.fields.find((field) => field.columnName === "recurring")).toMatchObject({
+        storageType: "wound_state_attribute",
+        attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+      });
+    });
   });
 });

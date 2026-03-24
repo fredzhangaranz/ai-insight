@@ -95,7 +95,20 @@ export async function POST(request: NextRequest) {
     `);
     deletedCounts.measurements = measurementResult.rowsAffected[0] || 0;
 
-    // 5. WoundState (via Wound)
+    // 5. WoundStateAttribute (via WoundState)
+    const woundStateAttributeResult = await pool.request().query(`
+      UPDATE dbo.WoundStateAttribute SET isDeleted = 1
+      WHERE woundStateFk IN (
+        SELECT ws.id
+        FROM dbo.WoundState ws
+        INNER JOIN dbo.Wound w ON ws.woundFk = w.id
+        WHERE w.patientFk IN (${list}) AND ws.isDeleted = 0
+      )
+      AND isDeleted = 0
+    `);
+    deletedCounts.woundStateAttributes = woundStateAttributeResult.rowsAffected[0] || 0;
+
+    // 6. WoundState (via Wound)
     const woundStateResult = await pool.request().query(`
       UPDATE dbo.WoundState SET isDeleted = 1
       WHERE woundFk IN (
@@ -105,21 +118,21 @@ export async function POST(request: NextRequest) {
     `);
     deletedCounts.woundStates = woundStateResult.rowsAffected[0] || 0;
 
-    // 6. Series
+    // 7. Series
     const seriesResult = await pool.request().query(`
       UPDATE dbo.Series SET isDeleted = 1
       WHERE patientFk IN (${list}) AND isDeleted = 0
     `);
     deletedCounts.series = seriesResult.rowsAffected[0] || 0;
 
-    // 7. Wounds
+    // 8. Wounds
     const woundResult = await pool.request().query(`
       UPDATE dbo.Wound SET isDeleted = 1
       WHERE patientFk IN (${list}) AND isDeleted = 0
     `);
     deletedCounts.wounds = woundResult.rowsAffected[0] || 0;
 
-    // 8. Patients
+    // 9. Patients
     const patientResult = await pool.request().query(`
       UPDATE dbo.Patient SET isDeleted = 1
       WHERE id IN (${list}) AND isDeleted = 0

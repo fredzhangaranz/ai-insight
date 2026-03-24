@@ -434,36 +434,128 @@ describe("Assessment Generator", () => {
 
     it("inserts ImageCapture and Outline per assessment", async () => {
       const queries: string[] = [];
-      const responses = [
-        { recordset: [] },
-        { recordset: [{ id: "patient-1" }] },
-        {
-          recordset: [
-            {
-              fieldName: "Etiology",
-              columnName: "etiology",
-              dataType: 1000,
-              attributeTypeId: "attr-1",
-              isRequired: false,
-              calculatedValueExpression: null,
-            },
-          ],
-        },
-        { recordset: [{ text: "Pressure Ulcer" }] },
-        { recordset: [{ id: "unit-1" }] },
-        { recordset: [{ id: "anatomy-1", name: "Heel" }] },
-        { recordset: [{ id: "wound-images-attr" }] },
-        { recordset: [{ id: "image-format-1" }] },
-        { recordset: [{ id: "staff-user-1" }] },
-      ];
-      let responseIdx = 0;
       mockRequest.query.mockImplementation((q: string) => {
         queries.push(q);
-        const res =
-          responseIdx < responses.length
-            ? responses[responseIdx++]
-            : { recordset: [] };
-        return Promise.resolve(res);
+        if (q.includes("sp_set_session_context")) {
+          return Promise.resolve({ recordset: [] });
+        }
+        if (q.includes("SELECT id FROM dbo.Patient")) {
+          return Promise.resolve({ recordset: [{ id: "patient-1" }] });
+        }
+        if (
+          q.includes("assessmentTypeFk = 'CE64FA35-9CC6-4D6A-9A7B-C97761681EFC'")
+        ) {
+          return Promise.resolve({
+            recordset: [{ id: "wound-state-atv", definitionVersion: 3 }],
+          });
+        }
+        if (q.includes("WHERE atv.id = @id")) {
+          const requestedId = mockRequest.input.mock.calls.at(-1)?.[2];
+          if (requestedId === "wound-state-atv") {
+            return Promise.resolve({
+              recordset: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  dataType: 1000,
+                  attributeTypeId: "wound-state-selector",
+                  attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                  attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                  isRequired: true,
+                  calculatedValueExpression: null,
+                  visibilityExpression: null,
+                  attributeSetOrderIndex: 1,
+                  attributeOrderIndex: 1,
+                },
+                {
+                  fieldName: "Recurring",
+                  columnName: "recurring",
+                  dataType: 104,
+                  attributeTypeId: "wound-state-recurring",
+                  attributeTypeKey: "recurring-key",
+                  attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                  isRequired: false,
+                  calculatedValueExpression: null,
+                  visibilityExpression: "wound_state == 'Open'",
+                  attributeSetOrderIndex: 1,
+                  attributeOrderIndex: 2,
+                },
+              ],
+            });
+          }
+          return Promise.resolve({
+            recordset: [
+              {
+                fieldName: "Wound State",
+                columnName: "wound_state",
+                dataType: 1000,
+                attributeTypeId: "assessment-wound-state-selector",
+                attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                isRequired: true,
+                calculatedValueExpression: null,
+                visibilityExpression: null,
+                attributeSetOrderIndex: 1,
+                attributeOrderIndex: 1,
+              },
+              {
+                fieldName: "Recurring",
+                columnName: "recurring",
+                dataType: 104,
+                attributeTypeId: "assessment-recurring",
+                attributeTypeKey: "recurring-key",
+                attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                isRequired: false,
+                calculatedValueExpression: null,
+                visibilityExpression: "wound_state == 'Open'",
+                attributeSetOrderIndex: 1,
+                attributeOrderIndex: 2,
+              },
+              {
+                fieldName: "Etiology",
+                columnName: "etiology",
+                dataType: 1000,
+                attributeTypeId: "attr-1",
+                attributeTypeKey: "attr-key-1",
+                attributeSetKey: "regular-set",
+                isRequired: false,
+                calculatedValueExpression: null,
+                visibilityExpression: null,
+                attributeSetOrderIndex: 2,
+                attributeOrderIndex: 1,
+              },
+            ],
+          });
+        }
+        if (q.includes("FROM dbo.AttributeLookup")) {
+          return Promise.resolve({
+            recordset: [
+              { id: "lookup-open", text: "Open" },
+              { id: "lookup-healed", text: "Healed" },
+              { id: "lookup-amputated", text: "Amputated" },
+            ],
+          });
+        }
+        if (q.includes("SELECT id FROM dbo.Unit")) {
+          return Promise.resolve({ recordset: [{ id: "unit-1" }] });
+        }
+        if (q.includes("SELECT id, [text] AS name FROM dbo.Anatomy")) {
+          return Promise.resolve({ recordset: [{ id: "anatomy-1", name: "Heel" }] });
+        }
+        if (q.includes("att.dataType = 1004")) {
+          return Promise.resolve({ recordset: [{ id: "wound-images-attr" }] });
+        }
+        if (q.includes("FROM dbo.ImageFormat")) {
+          return Promise.resolve({ recordset: [{ id: "image-format-1" }] });
+        }
+        if (q.includes("FROM dbo.StaffUser")) {
+          return Promise.resolve({
+            recordset: [
+              { id: "staff-user-1", firstName: "ARANZ", lastName: "Support" },
+            ],
+          });
+        }
+        return Promise.resolve({ recordset: [] });
       });
 
       const result = await generateWoundsAndAssessments(baseSpec, mockDb);

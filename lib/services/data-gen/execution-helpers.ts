@@ -5,15 +5,20 @@
 
 import type { ConnectionPool } from "mssql";
 import sql from "mssql";
-import { getFormFields } from "./schema-discovery.service";
+import {
+  getFormFields,
+  resolveWoundStateCompanion,
+} from "./schema-discovery.service";
 import {
   compileAssessmentForm,
   evaluateFieldVisibility,
   getAssessmentVisibilityMode,
   parseStoredContextValue,
   validateContextValue,
+  type CompiledAssessmentField,
 } from "./assessment-form.service";
 import type { AssessmentFormDiagnostic } from "./generation-spec.types";
+import { partitionAssessmentWoundStateFields } from "./wound-state.service";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -21,6 +26,71 @@ export interface ValidationResult {
   warnings?: string[];
   rowsInserted?: number;
   diagnostics?: AssessmentFormDiagnostic[];
+}
+
+function validateStoredAssessmentFields(params: {
+  contextFields: Map<string, CompiledAssessmentField>;
+  validationFields: CompiledAssessmentField[];
+  storedValuesByColumn: Map<string, string>;
+  seededContext?: Map<string, ReturnType<typeof parseStoredContextValue>>;
+  ownerLabel: string;
+  diagnostics: AssessmentFormDiagnostic[];
+  visibilityChecksEnabled: boolean;
+}): void {
+  const context = new Map<string, ReturnType<typeof parseStoredContextValue>>();
+
+  for (const [columnName, value] of params.seededContext ?? new Map()) {
+    context.set(columnName, value);
+  }
+
+  for (const [columnName, value] of params.storedValuesByColumn) {
+    const field = params.contextFields.get(columnName);
+    if (!field) continue;
+    context.set(columnName, parseStoredContextValue(field, value));
+  }
+
+  for (const field of params.validationFields.filter((candidate) => candidate.isGeneratable)) {
+    const stored = params.storedValuesByColumn.get(field.columnName);
+    if (params.visibilityChecksEnabled) {
+      const visible = evaluateFieldVisibility(field, context);
+      if (!visible && stored != null) {
+        params.diagnostics.push({
+          severity: "error",
+          code: "hidden_field_generated",
+          message: `Inserted hidden field "${field.fieldName}" on ${params.ownerLabel}`,
+          fieldName: field.fieldName,
+          columnName: field.columnName,
+          visibilityExpression: field.visibilityExpression ?? null,
+        });
+        continue;
+      }
+      if (visible && field.isNullable === false && stored == null) {
+        params.diagnostics.push({
+          severity: "error",
+          code: "missing_visible_required_field",
+          message: `Missing visible required field "${field.fieldName}" on ${params.ownerLabel}`,
+          fieldName: field.fieldName,
+          columnName: field.columnName,
+          visibilityExpression: field.visibilityExpression ?? null,
+        });
+        continue;
+      }
+    }
+
+    if (stored == null) continue;
+    const parsed = parseStoredContextValue(field, stored);
+    const validationError = validateContextValue(field, parsed);
+    if (validationError) {
+      params.diagnostics.push({
+        severity: "error",
+        code: "invalid_generated_value",
+        message: `${validationError} on ${params.ownerLabel}`,
+        fieldName: field.fieldName,
+        columnName: field.columnName,
+        visibilityExpression: field.visibilityExpression ?? null,
+      });
+    }
+  }
 }
 
 /**
@@ -136,108 +206,306 @@ export async function validateInsertedData(
 export async function validateInsertedAssessmentAttributes(
   db: ConnectionPool,
   assessmentTypeVersionId: string,
-  insertedSeriesIds: string[]
+  insertedSeriesIds: string[],
+  insertedWoundIds: string[] = []
 ): Promise<ValidationResult> {
-  if (!insertedSeriesIds.length) {
+  if (!insertedSeriesIds.length && !insertedWoundIds.length) {
     return { isValid: true, rowsInserted: 0, diagnostics: [] };
   }
 
   try {
     const formFields = await getFormFields(db, assessmentTypeVersionId);
+    const woundStateCompanion = await resolveWoundStateCompanion(db);
+    const assessmentWoundState = await partitionAssessmentWoundStateFields(db, formFields);
     const compiledForm = compileAssessmentForm(formFields);
+    const compiledWoundStateCompanion = compileAssessmentForm(woundStateCompanion.fields);
     const mode = getAssessmentVisibilityMode();
-    if (compiledForm.blockingDiagnostics.length > 0) {
+    const blockingDiagnostics = [
+      ...compiledForm.blockingDiagnostics,
+      ...compiledWoundStateCompanion.blockingDiagnostics,
+    ];
+    if (blockingDiagnostics.length > 0) {
       if (mode === "enforce") {
         return {
           isValid: false,
-          error: compiledForm.blockingDiagnostics.map((d) => d.message).join("; "),
-          diagnostics: compiledForm.diagnostics,
+          error: blockingDiagnostics.map((d) => d.message).join("; "),
+          diagnostics: [
+            ...compiledForm.diagnostics,
+            ...compiledWoundStateCompanion.diagnostics,
+          ],
         };
       }
     }
-    const visibilityChecksEnabled = compiledForm.blockingDiagnostics.length === 0;
+    const visibilityChecksEnabled = blockingDiagnostics.length === 0;
 
-    const req = db.request();
-    const placeholders = insertedSeriesIds
-      .map((seriesId, idx) => {
-        req.input(`sid${idx}`, sql.UniqueIdentifier, seriesId);
-        return `@sid${idx}`;
-      })
-      .join(", ");
-
-    const attributes = await req.query(`
-      SELECT
-        wa.seriesFk,
-        at.id AS attributeTypeId,
-        at.variableName AS columnName,
-        wa.value
-      FROM dbo.WoundAttribute wa
-      INNER JOIN dbo.AttributeType at ON at.id = wa.attributeTypeFk
-      WHERE wa.seriesFk IN (${placeholders})
-        AND wa.isDeleted = 0
-        AND at.isDeleted = 0
-    `);
+    const diagnostics: AssessmentFormDiagnostic[] = [
+      ...compiledForm.diagnostics,
+      ...compiledWoundStateCompanion.diagnostics,
+    ];
 
     const rowsBySeries = new Map<string, Map<string, string>>();
-    for (const row of attributes.recordset ?? []) {
-      const seriesId = String(row.seriesFk);
-      if (!rowsBySeries.has(seriesId)) {
-        rowsBySeries.set(seriesId, new Map<string, string>());
+    const woundStateBySeries = new Map<
+      string,
+      { woundStateId: string; woundFk: string; woundStateText: string }
+    >();
+    const woundStateAttributeBySeries = new Map<string, Map<string, string>>();
+    const baselineWoundStateByWound = new Map<
+      string,
+      { woundStateId: string; woundStateText: string }
+    >();
+    const baselineWoundStateAttributesByWound = new Map<string, Map<string, string>>();
+
+    if (insertedSeriesIds.length > 0) {
+      const attributeReq = db.request();
+      const seriesPlaceholders = insertedSeriesIds
+        .map((seriesId, idx) => {
+          attributeReq.input(`sid${idx}`, sql.UniqueIdentifier, seriesId);
+          return `@sid${idx}`;
+        })
+        .join(", ");
+
+      const attributes = await attributeReq.query(`
+        SELECT
+          wa.seriesFk,
+          at.variableName AS columnName,
+          wa.value
+        FROM dbo.WoundAttribute wa
+        INNER JOIN dbo.AttributeType at ON at.id = wa.attributeTypeFk
+        WHERE wa.seriesFk IN (${seriesPlaceholders})
+          AND wa.isDeleted = 0
+          AND at.isDeleted = 0
+      `);
+
+      for (const row of attributes.recordset ?? []) {
+        const seriesId = String(row.seriesFk);
+        if (!rowsBySeries.has(seriesId)) {
+          rowsBySeries.set(seriesId, new Map<string, string>());
+        }
+        rowsBySeries.get(seriesId)!.set(String(row.columnName), String(row.value ?? ""));
       }
-      rowsBySeries.get(seriesId)!.set(String(row.columnName), String(row.value ?? ""));
+
+      const woundStateReq = db.request();
+      const woundStatePlaceholders = insertedSeriesIds
+        .map((seriesId, idx) => {
+          woundStateReq.input(`wsSid${idx}`, sql.UniqueIdentifier, seriesId);
+          return `@wsSid${idx}`;
+        })
+        .join(", ");
+      const woundStates = await woundStateReq.query(`
+        SELECT
+          ws.id AS woundStateId,
+          ws.seriesFk,
+          ws.woundFk,
+          al.[text] AS woundStateText
+        FROM dbo.WoundState ws
+        INNER JOIN dbo.AttributeLookup al ON al.id = ws.attributeLookupFk
+        WHERE ws.seriesFk IN (${woundStatePlaceholders})
+          AND ws.isDeleted = 0
+      `);
+
+      for (const row of woundStates.recordset ?? []) {
+        woundStateBySeries.set(String(row.seriesFk), {
+          woundStateId: String(row.woundStateId),
+          woundFk: String(row.woundFk),
+          woundStateText: String(row.woundStateText),
+        });
+      }
+
+      if (woundStates.recordset.length > 0) {
+        const wsaReq = db.request();
+        const woundStateIdPlaceholders = woundStates.recordset
+          .map((row, idx) => {
+            wsaReq.input(`wsa${idx}`, sql.UniqueIdentifier, row.woundStateId);
+            return `@wsa${idx}`;
+          })
+          .join(", ");
+        const woundStateAttributes = await wsaReq.query(`
+          SELECT
+            wsa.woundStateFk,
+            at.variableName AS columnName,
+            wsa.value
+          FROM dbo.WoundStateAttribute wsa
+          INNER JOIN dbo.AttributeType at ON at.id = wsa.attributeTypeFk
+          WHERE wsa.woundStateFk IN (${woundStateIdPlaceholders})
+            AND wsa.isDeleted = 0
+            AND at.isDeleted = 0
+        `);
+
+        for (const row of woundStateAttributes.recordset ?? []) {
+          const woundStateId = String(row.woundStateFk);
+          const seriesEntry = [...woundStateBySeries.entries()].find(
+            ([, value]) => value.woundStateId === woundStateId
+          );
+          if (!seriesEntry) continue;
+          const [seriesId] = seriesEntry;
+          if (!woundStateAttributeBySeries.has(seriesId)) {
+            woundStateAttributeBySeries.set(seriesId, new Map<string, string>());
+          }
+          woundStateAttributeBySeries
+            .get(seriesId)!
+            .set(String(row.columnName), String(row.value ?? ""));
+        }
+      }
     }
 
-    const diagnostics: AssessmentFormDiagnostic[] = [...compiledForm.diagnostics];
+    if (insertedWoundIds.length > 0) {
+      const baselineReq = db.request();
+      const woundPlaceholders = insertedWoundIds
+        .map((woundId, idx) => {
+          baselineReq.input(`wid${idx}`, sql.UniqueIdentifier, woundId);
+          return `@wid${idx}`;
+        })
+        .join(", ");
+      const baselineWoundStates = await baselineReq.query(`
+        SELECT
+          ws.id AS woundStateId,
+          ws.woundFk,
+          al.[text] AS woundStateText
+        FROM dbo.WoundState ws
+        INNER JOIN dbo.AttributeLookup al ON al.id = ws.attributeLookupFk
+        WHERE ws.woundFk IN (${woundPlaceholders})
+          AND ws.seriesFk IS NULL
+          AND ws.isDeleted = 0
+      `);
+
+      for (const row of baselineWoundStates.recordset ?? []) {
+        baselineWoundStateByWound.set(String(row.woundFk), {
+          woundStateId: String(row.woundStateId),
+          woundStateText: String(row.woundStateText),
+        });
+      }
+
+      if (baselineWoundStates.recordset.length > 0) {
+        const baselineAttrReq = db.request();
+        const baselineIds = baselineWoundStates.recordset
+          .map((row, idx) => {
+            baselineAttrReq.input(`bwsa${idx}`, sql.UniqueIdentifier, row.woundStateId);
+            return `@bwsa${idx}`;
+          })
+          .join(", ");
+        const baselineAttributes = await baselineAttrReq.query(`
+          SELECT
+            wsa.woundStateFk,
+            at.variableName AS columnName,
+            wsa.value
+          FROM dbo.WoundStateAttribute wsa
+          INNER JOIN dbo.AttributeType at ON at.id = wsa.attributeTypeFk
+          WHERE wsa.woundStateFk IN (${baselineIds})
+            AND wsa.isDeleted = 0
+            AND at.isDeleted = 0
+        `);
+
+        for (const row of baselineAttributes.recordset ?? []) {
+          const woundStateId = String(row.woundStateFk);
+          const woundEntry = [...baselineWoundStateByWound.entries()].find(
+            ([, value]) => value.woundStateId === woundStateId
+          );
+          if (!woundEntry) continue;
+          const [woundId] = woundEntry;
+          if (!baselineWoundStateAttributesByWound.has(woundId)) {
+            baselineWoundStateAttributesByWound.set(woundId, new Map<string, string>());
+          }
+          baselineWoundStateAttributesByWound
+            .get(woundId)!
+            .set(String(row.columnName), String(row.value ?? ""));
+        }
+      }
+    }
+
     for (const seriesId of insertedSeriesIds) {
-      const rowMap = rowsBySeries.get(seriesId) ?? new Map<string, string>();
-      const context = new Map<string, ReturnType<typeof parseStoredContextValue>>();
-
-      for (const field of compiledForm.fields) {
-        if (!rowMap.has(field.columnName)) continue;
-        context.set(field.columnName, parseStoredContextValue(field, rowMap.get(field.columnName)));
+      const woundRow = rowsBySeries.get(seriesId) ?? new Map<string, string>();
+      const woundStateRow = woundStateBySeries.get(seriesId);
+      if (!woundStateRow) {
+        diagnostics.push({
+          severity: "error",
+          code: "missing_visible_required_field",
+          message: `Missing wound state row for series ${seriesId}`,
+        });
+        continue;
       }
 
-      for (const field of compiledForm.fields.filter((candidate) => candidate.isGeneratable)) {
-        const stored = rowMap.get(field.columnName);
-        if (visibilityChecksEnabled) {
-          const visible = evaluateFieldVisibility(field, context);
-          if (!visible && stored != null) {
-            diagnostics.push({
-              severity: "error",
-              code: "hidden_field_generated",
-              message: `Inserted hidden field "${field.fieldName}" on series ${seriesId}`,
-              fieldName: field.fieldName,
-              columnName: field.columnName,
-              visibilityExpression: field.visibilityExpression ?? null,
-            });
-            continue;
-          }
-          if (visible && field.isNullable === false && stored == null) {
-            diagnostics.push({
-              severity: "error",
-              code: "missing_visible_required_field",
-              message: `Missing visible required field "${field.fieldName}" on series ${seriesId}`,
-              fieldName: field.fieldName,
-              columnName: field.columnName,
-              visibilityExpression: field.visibilityExpression ?? null,
-            });
-            continue;
-          }
-        }
-        if (stored == null) continue;
-        const parsed = parseStoredContextValue(field, stored);
-        const validationError = validateContextValue(field, parsed);
-        if (validationError) {
-          diagnostics.push({
-            severity: "error",
-            code: "invalid_generated_value",
-            message: `${validationError} on series ${seriesId}`,
-            fieldName: field.fieldName,
-            columnName: field.columnName,
-            visibilityExpression: field.visibilityExpression ?? null,
-          });
-        }
+      validateStoredAssessmentFields({
+        contextFields: compiledForm.fieldByColumn,
+        validationFields: compiledForm.fields.filter(
+          (field) => field.storageType === "wound_attribute"
+        ),
+        storedValuesByColumn: woundRow,
+        seededContext: new Map([
+          [
+            assessmentWoundState.selectorField.columnName,
+            parseStoredContextValue(
+              assessmentWoundState.selectorField,
+              woundStateRow.woundStateText
+            ),
+          ],
+        ]),
+        ownerLabel: `series ${seriesId}`,
+        diagnostics,
+        visibilityChecksEnabled,
+      });
+
+      const woundStateAttributes = woundStateAttributeBySeries.get(seriesId) ?? new Map<string, string>();
+      const woundStateSeed = new Map<string, ReturnType<typeof parseStoredContextValue>>([
+        [
+          assessmentWoundState.selectorField.columnName,
+          parseStoredContextValue(
+            assessmentWoundState.selectorField,
+            woundStateRow.woundStateText
+          ),
+        ],
+      ]);
+      for (const [columnName, value] of woundRow) {
+        const field = compiledForm.fieldByColumn.get(columnName);
+        if (!field) continue;
+        woundStateSeed.set(columnName, parseStoredContextValue(field, value));
       }
+
+      validateStoredAssessmentFields({
+        contextFields: compiledForm.fieldByColumn,
+        validationFields: compiledForm.fields.filter(
+          (field) =>
+            field.storageType === "wound_state_attribute" &&
+            field.columnName !== assessmentWoundState.selectorField.columnName
+        ),
+        storedValuesByColumn: woundStateAttributes,
+        seededContext: woundStateSeed,
+        ownerLabel: `wound state ${woundStateRow.woundStateId}`,
+        diagnostics,
+        visibilityChecksEnabled,
+      });
+    }
+
+    for (const woundId of insertedWoundIds) {
+      const baselineState = baselineWoundStateByWound.get(woundId);
+      if (!baselineState) {
+        diagnostics.push({
+          severity: "error",
+          code: "missing_visible_required_field",
+          message: `Missing baseline wound state row for wound ${woundId}`,
+        });
+        continue;
+      }
+
+      validateStoredAssessmentFields({
+        contextFields: compiledWoundStateCompanion.fieldByColumn,
+        validationFields: compiledWoundStateCompanion.fields.filter(
+          (field) => field.columnName !== woundStateCompanion.selectorField.columnName
+        ),
+        storedValuesByColumn:
+          baselineWoundStateAttributesByWound.get(woundId) ?? new Map<string, string>(),
+        seededContext: new Map([
+          [
+            woundStateCompanion.selectorField.columnName,
+            parseStoredContextValue(
+              woundStateCompanion.selectorField,
+              baselineState.woundStateText
+            ),
+          ],
+        ]),
+        ownerLabel: `baseline wound state ${baselineState.woundStateId}`,
+        diagnostics,
+        visibilityChecksEnabled,
+      });
     }
 
     const blocking = diagnostics.filter((diagnostic) => diagnostic.severity === "error");
@@ -248,7 +516,10 @@ export async function validateInsertedAssessmentAttributes(
           ? blocking.map((diagnostic) => diagnostic.message).join("; ")
           : undefined,
       diagnostics,
-      rowsInserted: attributes.recordset?.length ?? 0,
+      rowsInserted:
+        [...rowsBySeries.values()].reduce((sum, row) => sum + row.size, 0) +
+        [...woundStateAttributeBySeries.values()].reduce((sum, row) => sum + row.size, 0) +
+        [...baselineWoundStateAttributesByWound.values()].reduce((sum, row) => sum + row.size, 0),
     };
   } catch (error) {
     return {

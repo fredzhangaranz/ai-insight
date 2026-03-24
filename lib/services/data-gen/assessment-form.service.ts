@@ -74,6 +74,11 @@ export interface GeneratedAssessmentFieldSet {
   diagnostics: AssessmentFormDiagnostic[];
 }
 
+export interface SeededAssessmentContext {
+  value: VisibilityValue;
+  serializedValue?: string;
+}
+
 const SUPPORTED_FUNCTIONS = new Set([
   "HasValue",
   "HasNoValue",
@@ -279,11 +284,30 @@ export function generateVisibleAssessmentFields(params: {
   totalAssessments: number;
   stage: WoundStage;
   fixedPerWoundCache: Map<string, GeneratedAssessmentField>;
+  seededContextByColumn?: Map<string, SeededAssessmentContext>;
+  restrictToColumns?: Set<string>;
 }): GeneratedAssessmentFieldSet {
   const diagnostics = [...params.compiledForm.diagnostics];
   const context = new Map<string, VisibilityValue>();
   const generatedByColumn = new Map<string, GeneratedAssessmentField>();
-  const generatableFields = params.compiledForm.fields.filter((field) => field.isGeneratable);
+  const generatableFields = params.compiledForm.fields.filter((field) => {
+    if (!field.isGeneratable) return false;
+    if (!params.restrictToColumns) return true;
+    return params.restrictToColumns.has(field.columnName);
+  });
+
+  for (const [columnName, seeded] of params.seededContextByColumn ?? new Map()) {
+    const field = params.compiledForm.fieldByColumn.get(columnName);
+    if (!field) continue;
+    const serializedValue = seeded.serializedValue ?? serializeContextValue(field, seeded.value);
+    const generatedField: GeneratedAssessmentField = {
+      field,
+      contextValue: seeded.value,
+      serializedValue,
+    };
+    context.set(columnName, seeded.value);
+    generatedByColumn.set(columnName, generatedField);
+  }
 
   let changed = true;
   let pass = 0;
@@ -295,8 +319,10 @@ export function generateVisibleAssessmentFields(params: {
     for (const field of generatableFields) {
       const visible = evaluateFieldVisibility(field, context);
       if (!visible) {
-        generatedByColumn.delete(field.columnName);
-        context.delete(field.columnName);
+        if (!params.seededContextByColumn?.has(field.columnName)) {
+          generatedByColumn.delete(field.columnName);
+          context.delete(field.columnName);
+        }
         continue;
       }
       if (generatedByColumn.has(field.columnName)) continue;
@@ -358,8 +384,10 @@ export function generateVisibleAssessmentFields(params: {
     const visible = evaluateFieldVisibility(field, context);
     const generated = generatedByColumn.get(field.columnName);
     if (!visible && generated) {
-      generatedByColumn.delete(field.columnName);
-      context.delete(field.columnName);
+      if (!params.seededContextByColumn?.has(field.columnName)) {
+        generatedByColumn.delete(field.columnName);
+        context.delete(field.columnName);
+      }
       diagnostics.push({
         severity: "error",
         code: "hidden_field_generated",
@@ -383,7 +411,9 @@ export function generateVisibleAssessmentFields(params: {
   }
 
   return {
-    generated: [...generatedByColumn.values()],
+    generated: [...generatedByColumn.values()].filter(
+      (generatedField) => !params.seededContextByColumn?.has(generatedField.field.columnName)
+    ),
     diagnostics,
   };
 }
@@ -448,7 +478,7 @@ function selectRawFieldValue(params: {
     if (explicit != null) return explicit;
   }
 
-  return generateNoteValue(params.field as FieldSpec, params.field, params.stage);
+  return generateNoteValue(undefined, params.field, params.stage);
 }
 
 function normalizeGeneratedValue(

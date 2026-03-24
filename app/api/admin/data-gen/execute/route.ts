@@ -181,7 +181,8 @@ export async function POST(request: NextRequest) {
         const assessmentValidation = await validateInsertedAssessmentAttributes(
           pool,
           effectiveSpec.form.assessmentTypeVersionId,
-          result.insertedIds
+          result.insertedIds,
+          result.insertedWoundIds ?? []
         );
         if (!assessmentValidation.isValid) {
           throw new Error(
