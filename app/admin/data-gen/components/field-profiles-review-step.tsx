@@ -21,6 +21,7 @@ import type { TrajectorySelectionResult } from "@/lib/services/data-gen/trajecto
 import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types";
 import { AlertCircle, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 interface FieldProfilesReviewStepProps {
   profiles: FieldProfileSet;
@@ -133,7 +134,9 @@ export function FieldProfilesReviewStep({
 
         <p className="text-sm text-muted-foreground">
           Each trajectory style has early, mid, and late phases. Field values are sampled from these
-          distributions during generation.
+          distributions during generation. Option weights are{" "}
+          <span className="font-medium text-foreground">relative</span>: they do not need to sum to
+          100% — the generator scales them to the same proportions (like normalizing to 100%).
         </p>
         {schemaFieldMeta.size > 0 && (
           <div className="text-xs text-muted-foreground">
@@ -158,17 +161,23 @@ export function FieldProfilesReviewStep({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/50 rounded-lg"
+                    className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/50 rounded-lg"
                   >
                     {openProfile === profile.trajectoryStyle ? (
-                      <ChevronDownIcon className="h-4 w-4 shrink-0" />
+                      <ChevronDownIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                     ) : (
-                      <ChevronRightIcon className="h-4 w-4 shrink-0" />
+                      <ChevronRightIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                     )}
-                    <span className="font-medium">{profile.trajectoryStyle}</span>
-                    <span className="text-sm text-muted-foreground truncate">
-                      — {profile.clinicalSummary}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium">{profile.trajectoryStyle}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {" "}
+                        —{" "}
+                      </span>
+                      <span className="text-sm text-muted-foreground break-words">
+                        {profile.clinicalSummary}
+                      </span>
+                    </div>
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -227,6 +236,8 @@ function PhaseSection({
     value: number
   ) => void;
 }) {
+  const [phaseOpen, setPhaseOpen] = useState(true);
+
   const sortedDistributions = phase.fieldDistributions
     .map((distribution, originalIndex) => ({ distribution, originalIndex }))
     .sort((a, b) => {
@@ -239,28 +250,46 @@ function PhaseSection({
     });
 
   return (
-    <div className="space-y-2">
-      <h5 className="text-sm font-medium text-muted-foreground">
-        {phase.phase} — {phase.description}
-      </h5>
-      <div className="space-y-3 pl-4">
-        {sortedDistributions.map(({ distribution, originalIndex }) => {
-          const meta = schemaFieldMeta.get(distribution.columnName);
-          return (
-            <FieldDistributionEditor
-              key={`${distribution.columnName}-${phase.phase}`}
-              dist={distribution}
-              profileIdx={profileIdx}
-              phaseIdx={phaseIdx}
-              fieldIdx={originalIndex}
-              required={meta?.required ?? false}
-              hasVisibilityRule={meta?.hasVisibilityRule ?? false}
-              onUpdateWeight={onUpdateWeight}
-            />
-          );
-        })}
+    <Collapsible open={phaseOpen} onOpenChange={setPhaseOpen}>
+      <div className="space-y-2 rounded-md border bg-muted/20">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-start gap-2 rounded-t-md px-3 py-2.5 text-left hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            {phaseOpen ? (
+              <ChevronDownIcon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+            ) : (
+              <ChevronRightIcon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+            )}
+            <span className="text-sm font-medium text-muted-foreground">
+              <span className="text-foreground capitalize">{phase.phase}</span>
+              {" — "}
+              {phase.description}
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="space-y-3 border-t px-3 pb-3 pt-2">
+            {sortedDistributions.map(({ distribution, originalIndex }) => {
+              const meta = schemaFieldMeta.get(distribution.columnName);
+              return (
+                <FieldDistributionEditor
+                  key={`${distribution.columnName}-${phase.phase}`}
+                  dist={distribution}
+                  profileIdx={profileIdx}
+                  phaseIdx={phaseIdx}
+                  fieldIdx={originalIndex}
+                  required={meta?.required ?? false}
+                  hasVisibilityRule={meta?.hasVisibilityRule ?? false}
+                  onUpdateWeight={onUpdateWeight}
+                />
+              );
+            })}
+          </div>
+        </CollapsibleContent>
       </div>
-    </div>
+    </Collapsible>
   );
 }
 
@@ -289,6 +318,12 @@ function FieldDistributionEditor({
 }) {
   const entries = Object.entries(dist.weights);
   const sum = entries.reduce((a, [, v]) => a + v, 0);
+  const sumPct = Math.round(sum * 100);
+  /** Within ~2 percentage points of 100% — only affects UI hint, not sampling. */
+  const sumNearOne = Math.abs(sum - 1) < 0.02;
+
+  const snapWeight = (v: number) =>
+    Math.round(Math.min(1, Math.max(0, v)) * 100) / 100;
 
   return (
     <div className="border rounded p-3 space-y-2">
@@ -298,14 +333,32 @@ function FieldDistributionEditor({
           {required && <Badge variant="destructive">Required</Badge>}
           {hasVisibilityRule && <Badge variant="outline">Conditional Visibility</Badge>}
         </div>
-        <span className="text-xs text-muted-foreground">
-          Sum: {(sum * 100).toFixed(0)}%
+        <span
+          className={cn(
+            "text-xs tabular-nums",
+            sumNearOne
+              ? "text-muted-foreground"
+              : "font-semibold text-amber-700 dark:text-amber-500",
+          )}
+          title={
+            sumNearOne
+              ? undefined
+              : "Weights are relative: generation divides by this total, so proportions stay the same as if the sum were 100%. No need to fix unless you want the percentage display to read 100%."
+          }
+        >
+          Sum: {sumPct}%
+          {!sumNearOne && (
+            <span className="ml-1 font-normal text-muted-foreground">(relative)</span>
+          )}
         </span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
         {entries.map(([opt, weight]) => (
-          <div key={opt} className="flex items-center gap-2">
-            <Label htmlFor={`${dist.columnName}-${opt}`} className="text-xs truncate min-w-0">
+          <div key={opt} className="flex min-w-0 flex-col gap-1.5">
+            <Label
+              htmlFor={`${dist.columnName}-${opt}`}
+              className="text-xs leading-snug text-foreground break-words"
+            >
               {opt}
             </Label>
             <Input
@@ -314,14 +367,14 @@ function FieldDistributionEditor({
               min={0}
               max={1}
               step={0.05}
-              value={weight}
+              value={snapWeight(weight)}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
                 if (!Number.isNaN(v)) {
-                  onUpdateWeight(profileIdx, phaseIdx, fieldIdx, opt, v);
+                  onUpdateWeight(profileIdx, phaseIdx, fieldIdx, opt, snapWeight(v));
                 }
               }}
-              className="h-8 w-16 text-sm"
+              className="h-9 w-full min-w-[6.5rem] text-sm tabular-nums"
             />
           </div>
         ))}

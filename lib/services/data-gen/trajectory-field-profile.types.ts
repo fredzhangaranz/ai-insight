@@ -8,7 +8,7 @@ export type TrajectoryPhase = "early" | "mid" | "late";
 export interface PhaseFieldDistribution {
   fieldName: string;
   columnName: string;
-  /** option value → weight (0–1, sum ≈ 1) */
+  /** option value → relative weight (non-negative; proportions are normalized when sampling) */
   weights: Record<string, number>;
 }
 

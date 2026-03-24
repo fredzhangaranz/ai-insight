@@ -52,6 +52,7 @@ import { buildFallbackProfiles } from "@/lib/services/data-gen/profile-fallback"
 import type { FieldProfileSet } from "@/lib/services/data-gen/trajectory-field-profile.types";
 import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types";
 import type { TrajectorySelectionResult } from "@/lib/services/data-gen/trajectory-selector";
+import { cn } from "@/lib/utils";
 
 export default function DataGenPage() {
   const [customerId, setCustomerId] = useState<string>("");
@@ -79,6 +80,7 @@ export default function DataGenPage() {
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[]>([]);
   const [previewSql, setPreviewSql] = useState<string[]>([]);
   const [previewDiagnostics, setPreviewDiagnostics] = useState<AssessmentFormDiagnostic[]>([]);
+  const [sqlCopyHint, setSqlCopyHint] = useState<null | "success" | "error">(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
@@ -86,6 +88,10 @@ export default function DataGenPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionChecking, setConnectionChecking] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setSqlCopyHint(null);
+  }, [previewSql]);
 
   useEffect(() => {
     if (!customerId) {
@@ -739,7 +745,13 @@ export default function DataGenPage() {
                   <p className="text-sm text-muted-foreground mb-4">
                     {spec.mode === "update"
                       ? `Will update ${spec.count} patient(s).`
-                      : `Will insert ${spec.count} rows total.`}
+                      : spec.entity === "assessment_bundle"
+                        ? `Will generate wound and assessment data for ${spec.count} patient${
+                            spec.count === 1 ? "" : "s"
+                          }. That produces many related database rows per patient (wounds, visits, attributes, etc.)—not ${spec.count} rows total. See the SQL preview for scope.`
+                        : `Will insert ${spec.count} patient record${
+                            spec.count === 1 ? "" : "s"
+                          }.`}
                   </p>
                   {previewDiagnostics.length > 0 && (
                     <Alert
@@ -765,31 +777,51 @@ export default function DataGenPage() {
                   )}
                   {previewSql.length > 0 && (
                     <div className="mb-4">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between gap-3 mb-2">
                         <h4 className="text-sm font-medium">
                           SQL to be executed
                         </h4>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            navigator.clipboard.writeText(previewSql.join("\n\n"));
-                            const btn = event?.currentTarget;
-                            if (btn) {
-                              const orig = btn.textContent;
-                              btn.textContent = "Copied!";
-                              setTimeout(() => {
-                                btn.textContent = orig;
-                              }, 2000);
-                            }
-                          }}
-                        >
-                          Copy
-                        </Button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {sqlCopyHint && (
+                            <span
+                              role="status"
+                              aria-live="polite"
+                              className={cn(
+                                "rounded-md border px-2.5 py-1 text-xs font-medium shadow-sm",
+                                sqlCopyHint === "success" &&
+                                  "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-100",
+                                sqlCopyHint === "error" &&
+                                  "border-destructive/50 bg-destructive/10 text-destructive",
+                              )}
+                            >
+                              {sqlCopyHint === "success"
+                                ? "Copied to clipboard"
+                                : "Copy failed"}
+                            </span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(
+                                  previewSql.join("\n\n"),
+                                );
+                                setSqlCopyHint("success");
+                                window.setTimeout(() => setSqlCopyHint(null), 2800);
+                              } catch {
+                                setSqlCopyHint("error");
+                                window.setTimeout(() => setSqlCopyHint(null), 4500);
+                              }
+                            }}
+                          >
+                            Copy
+                          </Button>
+                        </div>
                       </div>
-                      <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-lg border border-slate-700">
-                        <pre className="bg-slate-900 text-slate-100 p-4 text-xs min-h-0">
-                          <code>{previewSql.join("\n\n")}</code>
+                      <div className="max-h-96 overflow-auto rounded-lg border border-slate-700 bg-slate-900">
+                        <pre className="m-0 min-w-full w-max bg-slate-900 p-4 font-mono text-xs text-slate-100 whitespace-pre [tab-size:2]">
+                          <code className="text-inherit">{previewSql.join("\n\n")}</code>
                         </pre>
                       </div>
                     </div>
