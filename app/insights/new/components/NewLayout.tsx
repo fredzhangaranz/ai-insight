@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useMemo, useEffect, type Dispatch, type SetStateAction } from "react";
+import React, {
+  useMemo,
+  useEffect,
+  useCallback,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import Link from "next/link";
 import { MessageSquare } from "lucide-react";
 import { CustomerSelector } from "./CustomerSelector";
@@ -25,6 +31,8 @@ export interface NewLayoutProps {
   setQuestion: Dispatch<SetStateAction<string>>;
   conversationThreadId: string | undefined;
   setConversationThreadId: Dispatch<SetStateAction<string | undefined>>;
+  /** Real DB id for first user message when thread exists (from thread/create or history). */
+  firstThreadUserMessageId: string | undefined;
   historyRefreshKey: number;
   handleNewQuestion: () => void;
   handleHistorySelect: (query: any) => Promise<void>;
@@ -51,6 +59,7 @@ export function NewLayout({
   setQuestion,
   conversationThreadId,
   setConversationThreadId,
+  firstThreadUserMessageId,
   historyRefreshKey,
   handleNewQuestion,
   handleHistorySelect,
@@ -70,7 +79,10 @@ export function NewLayout({
     sendMessageWithClarifications,
     editMessage,
     startNewConversation,
-  } = useConversation({ externalThreadId: conversationThreadId ?? undefined });
+  } = useConversation({
+    externalThreadId: conversationThreadId ?? undefined,
+    externalCustomerId: customerId || undefined,
+  });
 
   useEffect(() => {
     if (conversationThreadId && typeof window !== "undefined") {
@@ -79,60 +91,7 @@ export function NewLayout({
   }, [conversationThreadId]);
 
   const threadItems = useMemo((): ThreadItem[] => {
-    const items: ThreadItem[] = [];
     const baseTime = Date.now();
-
-    if (isQuestionSubmitted && question.trim()) {
-      items.push({
-        id: "first-user",
-        type: "user_message",
-        content: question,
-        createdAt: new Date(baseTime),
-      });
-
-      if (isLoading && !result) {
-        items.push({
-          id: "first-assistant-loading",
-          type: "assistant_loading",
-          thinking: analysis.steps.map((s) => ({
-            id: s.id,
-            message: s.message,
-            status: s.status,
-          })),
-          createdAt: new Date(baseTime + 1),
-        });
-      } else if (result) {
-        if (result.mode === "clarification" && result.clarifications) {
-          items.push({
-            id: "first-assistant-clarification",
-            type: "assistant_clarification",
-            question: result.question ?? question,
-            clarifications: result.clarifications,
-            result,
-            createdAt: new Date(baseTime + 1),
-          });
-        } else if (result.error) {
-          items.push({
-            id: "first-assistant-error",
-            type: "assistant_error",
-            error: result.error,
-            thinking: result.thinking?.map((t) => ({
-              id: t.id,
-              message: t.message,
-              status: t.status,
-            })),
-            createdAt: new Date(baseTime + 1),
-          });
-        } else {
-          items.push({
-            id: "first-assistant-result",
-            type: "assistant_result",
-            result,
-            createdAt: new Date(baseTime + 1),
-          });
-        }
-      }
-    }
 
     const followUpItems: ThreadItem[] = conversationMessages.map((msg) => {
       if (msg.role === "user") {
@@ -187,14 +146,99 @@ export function NewLayout({
       };
     });
 
-    return [...items, ...followUpItems];
+    // After Save & Re-run, PATCH inserts a real user row into the hook; avoid two identical bubbles.
+    const duplicateFirstUser =
+      isQuestionSubmitted &&
+      question.trim() &&
+      followUpItems[0]?.type === "user_message" &&
+      followUpItems[0].content.trim() === question.trim()
+        ? followUpItems[0]
+        : null;
+
+    const tailFollowUps = duplicateFirstUser
+      ? followUpItems.slice(1)
+      : followUpItems;
+
+    const items: ThreadItem[] = [];
+
+    // When the first user row exists in useConversation (e.g. after Save & Re-run), assistant UI must
+    // come from the hook — not stale useInsights `result` (e.g. history error) shown in parallel.
+    const hookOwnsFirstUserRow = duplicateFirstUser !== null;
+
+    if (isQuestionSubmitted && question.trim()) {
+      items.push({
+        id:
+          duplicateFirstUser?.id ??
+          firstThreadUserMessageId ??
+          "first-user",
+        type: "user_message",
+        content: question,
+        createdAt: new Date(baseTime),
+      });
+
+      if (!hookOwnsFirstUserRow) {
+        if (isLoading && !result) {
+          items.push({
+            id: "first-assistant-loading",
+            type: "assistant_loading",
+            thinking: analysis.steps.map((s) => ({
+              id: s.id,
+              message: s.message,
+              status: s.status,
+            })),
+            createdAt: new Date(baseTime + 1),
+          });
+        } else if (result) {
+          if (result.mode === "clarification" && result.clarifications) {
+            items.push({
+              id: "first-assistant-clarification",
+              type: "assistant_clarification",
+              question: result.question ?? question,
+              clarifications: result.clarifications,
+              result,
+              createdAt: new Date(baseTime + 1),
+            });
+          } else if (result.error) {
+            items.push({
+              id: "first-assistant-error",
+              type: "assistant_error",
+              error: result.error,
+              thinking: result.thinking?.map((t) => ({
+                id: t.id,
+                message: t.message,
+                status: t.status,
+              })),
+              createdAt: new Date(baseTime + 1),
+            });
+          } else {
+            items.push({
+              id: "first-assistant-result",
+              type: "assistant_result",
+              result,
+              createdAt: new Date(baseTime + 1),
+            });
+          }
+        }
+      } else if (isConversationLoading && tailFollowUps.length === 0) {
+        items.push({
+          id: "first-assistant-loading",
+          type: "assistant_loading",
+          thinking: [],
+          createdAt: new Date(baseTime + 1),
+        });
+      }
+    }
+
+    return [...items, ...tailFollowUps];
   }, [
     isQuestionSubmitted,
     question,
     isLoading,
+    isConversationLoading,
     result,
     analysis.steps,
     conversationMessages,
+    firstThreadUserMessageId,
   ]);
 
   const isFirstQuestion = !result && !conversationMessages.length;
@@ -234,6 +278,24 @@ export function NewLayout({
       await sendMessage(trimmed, customerId, modelId);
     }
   };
+
+  const handleEditMessage = useCallback(
+    async (messageId: string, newContent: string) => {
+      const trimmed = newContent.trim();
+      if (!trimmed) return;
+
+      // First turn is driven by useInsights until a thread user row exists; PATCH would 404 on synthetic id.
+      if (messageId === "first-user") {
+        setQuestion(trimmed);
+        await handleAsk(trimmed);
+        return;
+      }
+
+      setQuestion(trimmed);
+      await editMessage(messageId, trimmed, modelId);
+    },
+    [editMessage, handleAsk, modelId, setQuestion],
+  );
 
   const handleClarify = async (
     _messageId: string,
@@ -320,7 +382,7 @@ export function NewLayout({
             items={threadItems}
             customerId={customerId}
             onClarify={handleClarify}
-            onEditMessage={editMessage}
+            onEditMessage={handleEditMessage}
             isClarificationSubmitting={isLoading || isConversationLoading}
             lastClarificationMessageId={lastClarificationId}
           />

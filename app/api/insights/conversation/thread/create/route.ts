@@ -71,14 +71,16 @@ export async function POST(req: NextRequest) {
     );
 
     // Insert initial user message
-    await pool.query(
+    const userMsgResult = await pool.query(
       `
       INSERT INTO "ConversationMessages"
         ("threadId", "role", "content", "metadata")
       VALUES ($1, 'user', $2, $3)
+      RETURNING id
       `,
       [threadId, initialQuestion, JSON.stringify({})]
     );
+    const userMessageId = userMsgResult.rows[0].id as string;
 
     // Insert initial assistant message with the SQL
     const assistantMetadata = {
@@ -116,6 +118,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       threadId,
+      userMessageId,
       message: "Conversation thread created successfully",
     });
   } catch (error) {

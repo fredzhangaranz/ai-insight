@@ -193,7 +193,7 @@ export function ConversationPanel({
                       content: message.content,
                       createdAt: message.createdAt,
                     }}
-                    onEdit={editMessage}
+                    onEdit={(id, content) => editMessage(id, content, modelId)}
                   />
                 ) : (
                   <AssistantMessage

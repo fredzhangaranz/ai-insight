@@ -8,6 +8,8 @@ type ConversationMessageState = ConversationMessage & {
 export interface UseConversationOptions {
   /** External threadId (e.g. from first-question thread create). When provided, syncs into hook state. */
   externalThreadId?: string | null;
+  /** Customer id from parent (first-question flow never calls sendMessage, so hook would otherwise lack customerId for edit re-run). */
+  externalCustomerId?: string | null;
 }
 
 interface UseConversationReturn {
@@ -26,7 +28,7 @@ interface UseConversationReturn {
     clarificationResponses: Record<string, string>,
     modelId?: string
   ) => Promise<void>;
-  editMessage: (messageId: string, newContent: string) => Promise<void>;
+  editMessage: (messageId: string, newContent: string, modelId?: string) => Promise<void>;
   startNewConversation: () => void;
   loadConversation: (threadId: string) => Promise<void>;
 }
@@ -41,6 +43,7 @@ export function useConversation(
   options?: UseConversationOptions
 ): UseConversationReturn {
   const externalThreadId = options?.externalThreadId;
+  const externalCustomerId = options?.externalCustomerId;
 
   // Initialize threadId from localStorage to survive component remounts
   const [threadId, setThreadId] = useState<string | null>(() => {
@@ -70,6 +73,12 @@ export function useConversation(
       }
     }
   }, [externalThreadId, threadId]);
+
+  useEffect(() => {
+    if (externalCustomerId && externalCustomerId.trim() !== "") {
+      setCustomerId(externalCustomerId);
+    }
+  }, [externalCustomerId]);
 
   const sendMessageInternal = useCallback(
     async (
@@ -245,7 +254,7 @@ export function useConversation(
   );
 
   const editMessage = useCallback(
-    async (messageId: string, newContent: string) => {
+    async (messageId: string, newContent: string, modelId?: string) => {
       setIsLoading(true);
       setError(null);
 
@@ -261,7 +270,12 @@ export function useConversation(
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.details || errorData.message || "Failed to edit message");
+          const msg =
+            (typeof errorData.details === "string" && errorData.details) ||
+            (typeof errorData.message === "string" && errorData.message) ||
+            (typeof errorData.error === "string" && errorData.error) ||
+            "Failed to edit message";
+          throw new Error(msg);
         }
 
         const data = await response.json();
@@ -277,7 +291,7 @@ export function useConversation(
             throw new Error("Customer ID is required to re-run the conversation");
           }
 
-          await sendMessageInternal(newContent, customerId, undefined, {
+          await sendMessageInternal(newContent, customerId, modelId, {
             userMessageId: data.newMessage?.id,
             skipOptimistic: true,
           });
@@ -285,6 +299,7 @@ export function useConversation(
       } catch (err) {
         const nextError = err instanceof Error ? err : new Error("Unknown error");
         setError(nextError);
+        throw nextError;
       } finally {
         setIsLoading(false);
       }
