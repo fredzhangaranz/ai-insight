@@ -2,15 +2,21 @@ import type { ConnectionPool } from "mssql";
 import sql from "mssql";
 import type { FieldSchema } from "./generation-spec.types";
 import type {
+  CompiledAssessmentField,
+  FieldProfileSet,
   GeneratedAssessmentField,
   SeededAssessmentContext,
 } from "./assessment-form.service";
+import type { TrajectoryWoundStateSemantic } from "./generators/trajectory-engine";
 import {
+  getWoundStateCatalog,
+  type WoundStateCatalogEntry,
   WOUND_STATE_ATTRIBUTE_SET_KEY,
   WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY,
-  getAttributeLookupMap,
 } from "./schema-discovery.service";
-import { newGuid } from "./generators/base.generator";
+import { newGuid, weightedPick } from "./generators/base.generator";
+import type { WoundProgressionStyle } from "./generation-spec.types";
+import { getProfileWeightsForField as getProfileWeightsForFieldInternal } from "./assessment-form.service";
 
 export interface WoundStateLookupValue {
   id: string;
@@ -18,10 +24,13 @@ export interface WoundStateLookupValue {
 }
 
 export interface AssessmentWoundStatePartition {
-  selectorField: FieldSchema;
+  selectorField: CompiledAssessmentField | FieldSchema;
   woundAttributeFields: FieldSchema[];
   woundStateFields: FieldSchema[];
   woundStateMetaFields: FieldSchema[];
+  catalog: WoundStateCatalogEntry[];
+  openStates: WoundStateCatalogEntry[];
+  nonOpenStates: WoundStateCatalogEntry[];
   lookupByText: Map<string, WoundStateLookupValue>;
 }
 
@@ -29,13 +38,116 @@ export function normalizeWoundStateKey(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-export function resolveWoundStateLookup(
-  lookupByText: Map<string, WoundStateLookupValue>,
-  woundState: string
-): WoundStateLookupValue {
-  const resolved = lookupByText.get(normalizeWoundStateKey(woundState));
-  if (resolved) return resolved;
-  throw new Error(`Unable to resolve wound state lookup for "${woundState}"`);
+function buildLookupByText(
+  catalog: WoundStateCatalogEntry[]
+): Map<string, WoundStateLookupValue> {
+  return new Map(
+    catalog.map((entry) => [
+      entry.normalizedText,
+      {
+        id: entry.id,
+        text: entry.text,
+      },
+    ])
+  );
+}
+
+function describeCandidates(label: string, candidates: WoundStateCatalogEntry[]): string {
+  return `${label}: ${
+    candidates.length > 0
+      ? candidates.map((candidate) => candidate.text).join(", ")
+      : "(none)"
+  }`;
+}
+
+function getCandidatesForSemantic(
+  semantic: TrajectoryWoundStateSemantic,
+  partition: Pick<AssessmentWoundStatePartition, "openStates" | "nonOpenStates">
+): WoundStateCatalogEntry[] {
+  return semantic === "Open" ? partition.openStates : partition.nonOpenStates;
+}
+
+function buildResolutionError(params: {
+  selectorFieldName: string;
+  semantic: TrajectoryWoundStateSemantic;
+  reason: string;
+  openStates: WoundStateCatalogEntry[];
+  nonOpenStates: WoundStateCatalogEntry[];
+}): Error {
+  return new Error(
+    [
+      `Unable to resolve wound state for semantic "${params.semantic}" on selector "${params.selectorFieldName}".`,
+      params.reason,
+      describeCandidates("Open candidates", params.openStates),
+      describeCandidates("Non-open candidates", params.nonOpenStates),
+    ].join(" ")
+  );
+}
+
+export function resolveTrajectoryWoundStateLookup(params: {
+  partition: Pick<
+    AssessmentWoundStatePartition,
+    "selectorField" | "openStates" | "nonOpenStates"
+  >;
+  semantic: TrajectoryWoundStateSemantic;
+  fieldProfiles?: FieldProfileSet;
+  progressionStyle: WoundProgressionStyle;
+  assessmentIdx: number;
+  totalAssessments: number;
+}): WoundStateCatalogEntry {
+  const candidates = getCandidatesForSemantic(params.semantic, params.partition);
+  if (candidates.length === 0) {
+    throw buildResolutionError({
+      selectorFieldName: params.partition.selectorField.fieldName,
+      semantic: params.semantic,
+      reason:
+        params.semantic === "Open"
+          ? "No configured open wound states are available."
+          : "No configured non-open wound states are available.",
+      openStates: params.partition.openStates,
+      nonOpenStates: params.partition.nonOpenStates,
+    });
+  }
+
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  const profileWeights = params.fieldProfiles
+    ? getProfileWeightsForFieldInternal(
+        params.fieldProfiles,
+        params.progressionStyle,
+        params.assessmentIdx,
+        params.totalAssessments,
+        params.partition.selectorField.columnName
+      )
+    : null;
+
+  if (profileWeights) {
+    const candidateWeights = Object.fromEntries(
+      candidates
+        .map((candidate) => [
+          candidate.id,
+          Number(profileWeights[candidate.text] ?? 0),
+        ] as const)
+        .filter(([, weight]) => Number.isFinite(weight) && weight > 0)
+    );
+
+    if (Object.keys(candidateWeights).length > 0) {
+      const selectedId = weightedPick(candidateWeights);
+      const selected = candidates.find((candidate) => candidate.id === selectedId);
+      if (selected) return selected;
+    }
+  }
+
+  throw buildResolutionError({
+    selectorFieldName: params.partition.selectorField.fieldName,
+    semantic: params.semantic,
+    reason:
+      "Multiple valid wound states exist for this semantic, and no usable profile weighting selected among them.",
+    openStates: params.partition.openStates,
+    nonOpenStates: params.partition.nonOpenStates,
+  });
 }
 
 export async function partitionAssessmentWoundStateFields(
@@ -59,7 +171,16 @@ export async function partitionAssessmentWoundStateFields(
     );
   }
 
-  const lookupByText = await getAttributeLookupMap(db, selectorField.attributeTypeId);
+  const catalog = await getWoundStateCatalog(db, selectorField.attributeTypeId);
+  if (catalog.length === 0) {
+    throw new Error(
+      `Wound-state selector ${selectorField.fieldName} has no configured lookup options.`
+    );
+  }
+
+  const openStates = catalog.filter((entry) => entry.isOpenWoundState);
+  const nonOpenStates = catalog.filter((entry) => !entry.isOpenWoundState);
+  const lookupByText = buildLookupByText(catalog);
 
   return {
     selectorField,
@@ -68,6 +189,9 @@ export async function partitionAssessmentWoundStateFields(
     woundStateMetaFields: woundStateFields.filter(
       (field) => field.columnName !== selectorField.columnName
     ),
+    catalog,
+    openStates,
+    nonOpenStates,
     lookupByText,
   };
 }

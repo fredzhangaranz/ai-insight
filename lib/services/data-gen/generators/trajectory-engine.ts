@@ -119,6 +119,13 @@ export interface TrajectoryInput {
   anatomyName: string;
 }
 
+/** Labels emitted by {@link generateTrajectory}; map to tenant AttributeLookup via synonym lists */
+export type TrajectoryWoundStateSemantic =
+  | "Open"
+  | "Healed"
+  | "Amputated"
+  | "Released from follow-up";
+
 export interface TrajectoryPoint {
   dateTime: Date;
   daysSinceBaseline: number;
@@ -127,7 +134,7 @@ export interface TrajectoryPoint {
   lengthAxisLength: number;
   widthAxisLength: number;
   isBaseline: boolean;
-  woundState: "Open" | "Healed" | "Amputated" | "Released from follow-up";
+  woundState: TrajectoryWoundStateSemantic;
   treatment: string;
 }
 

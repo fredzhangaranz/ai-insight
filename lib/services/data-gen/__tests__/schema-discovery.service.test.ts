@@ -9,6 +9,8 @@ import {
   getPublishedForms,
   getFormFields,
   getDataGenStats,
+  getWoundStateCatalog,
+  resolveWoundStateCompanion,
 } from "../schema-discovery.service";
 
 // Mock mssql
@@ -277,6 +279,138 @@ describe("Schema Discovery Service", () => {
         columnName: "recurring",
         storageType: "wound_state_attribute",
       });
+    });
+  });
+
+  describe("wound-state catalog discovery", () => {
+    it("returns catalog entries with open/non-open classification", async () => {
+      mockRequest.query.mockResolvedValue({
+        recordset: [
+          {
+            id: "lookup-new",
+            text: "New",
+            orderIndex: 1,
+            isOpenWoundState: true,
+          },
+          {
+            id: "lookup-resolved",
+            text: "Resolved",
+            orderIndex: 2,
+            isOpenWoundState: false,
+          },
+        ],
+      });
+
+      const result = await getWoundStateCatalog(mockDb, "selector-1");
+
+      expect(result).toEqual([
+        {
+          id: "lookup-new",
+          text: "New",
+          normalizedText: "new",
+          isOpenWoundState: true,
+          orderIndex: 1,
+        },
+        {
+          id: "lookup-resolved",
+          text: "Resolved",
+          normalizedText: "resolved",
+          isOpenWoundState: false,
+          orderIndex: 2,
+        },
+      ]);
+    });
+
+    it("fails when lookup rows are missing WoundStateDisplay entries", async () => {
+      mockRequest.query.mockResolvedValue({
+        recordset: [
+          {
+            id: "lookup-new",
+            text: "New",
+            orderIndex: 1,
+            isOpenWoundState: null,
+          },
+        ],
+      });
+
+      await expect(getWoundStateCatalog(mockDb, "selector-1")).rejects.toThrow(
+        /missing WoundStateDisplay rows for: New/
+      );
+    });
+
+    it("resolves the wound-state companion with catalog partitions", async () => {
+      mockRequest.query
+        .mockResolvedValueOnce({
+          recordset: [{ id: "wound-state-atv", definitionVersion: 3 }],
+        })
+        .mockResolvedValueOnce({
+          recordset: [
+            {
+              fieldName: "Wound State",
+              columnName: "wound_state",
+              dataType: 1000,
+              attributeTypeId: "selector-1",
+              attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+              minValue: null,
+              maxValue: null,
+              isRequired: true,
+              calculatedValueExpression: null,
+              visibilityExpression: null,
+              attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+              attributeSetOrderIndex: 1,
+              attributeOrderIndex: 1,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          recordset: [{ text: "New" }, { text: "Resolved" }],
+        })
+        .mockResolvedValueOnce({
+          recordset: [
+            {
+              fieldName: "Wound State",
+              columnName: "wound_state",
+              dataType: 1000,
+              attributeTypeId: "selector-1",
+              attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+              minValue: null,
+              maxValue: null,
+              isRequired: true,
+              calculatedValueExpression: null,
+              visibilityExpression: null,
+              attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+              attributeSetOrderIndex: 1,
+              attributeOrderIndex: 1,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          recordset: [{ text: "New" }, { text: "Resolved" }],
+        })
+        .mockResolvedValueOnce({
+          recordset: [
+            {
+              id: "lookup-new",
+              text: "New",
+              orderIndex: 1,
+              isOpenWoundState: true,
+            },
+            {
+              id: "lookup-resolved",
+              text: "Resolved",
+              orderIndex: 2,
+              isOpenWoundState: false,
+            },
+          ],
+        });
+
+      const result = await resolveWoundStateCompanion(mockDb);
+
+      expect(result.assessmentTypeVersionId).toBe("wound-state-atv");
+      expect(result.selectorField.columnName).toBe("wound_state");
+      expect(result.catalog.map((entry) => entry.text)).toEqual(["New", "Resolved"]);
+      expect(result.openStates.map((entry) => entry.text)).toEqual(["New"]);
+      expect(result.nonOpenStates.map((entry) => entry.text)).toEqual(["Resolved"]);
     });
   });
 

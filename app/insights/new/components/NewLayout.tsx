@@ -291,7 +291,6 @@ export function NewLayout({
         return;
       }
 
-      setQuestion(trimmed);
       await editMessage(messageId, trimmed, modelId);
     },
     [editMessage, handleAsk, modelId, setQuestion],

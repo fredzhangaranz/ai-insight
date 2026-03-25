@@ -23,6 +23,9 @@ import { AlertCircle, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
+const WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY =
+  "56A71C1C-214E-46AD-8A74-BB735AB87B39";
+
 interface FieldProfilesReviewStepProps {
   profiles: FieldProfileSet;
   formSchema?: FieldSchema[];
@@ -72,6 +75,18 @@ export function FieldProfilesReviewStep({
       [...schemaFieldMeta.values()].filter((fieldMeta) => fieldMeta.required).length,
     [schemaFieldMeta]
   );
+  const hiddenProfileColumns = useMemo(() => {
+    return new Set(
+      (formSchema ?? [])
+        .filter(
+          (field) =>
+            String(field.attributeTypeKey ?? "").toUpperCase() ===
+            WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY
+        )
+        .map((field) => field.columnName)
+    );
+  }, [formSchema]);
+  const hidesTrajectoryControlledFields = hiddenProfileColumns.size > 0;
 
   const updateWeight = (
     profileIdx: number,
@@ -147,6 +162,12 @@ export function FieldProfilesReviewStep({
             . Required fields are still generated; profile weights only tune option likelihood.
           </div>
         )}
+        {hidesTrajectoryControlledFields && (
+          <div className="text-xs text-muted-foreground">
+            Wound state is hidden here because it is resolved from trajectory semantics and the
+            tenant&apos;s configured open/non-open wound-state lookup rows.
+          </div>
+        )}
 
         <div className="space-y-2">
           {profiles.map((profile, profileIdx) => (
@@ -189,6 +210,7 @@ export function FieldProfilesReviewStep({
                         profileIdx={profileIdx}
                         phaseIdx={phaseIdx}
                         schemaFieldMeta={schemaFieldMeta}
+                        hiddenColumnNames={hiddenProfileColumns}
                         onUpdateWeight={updateWeight}
                       />
                     ))}
@@ -215,6 +237,7 @@ function PhaseSection({
   profileIdx,
   phaseIdx,
   schemaFieldMeta,
+  hiddenColumnNames,
   onUpdateWeight,
 }: {
   phase: TrajectoryPhaseProfile;
@@ -228,6 +251,7 @@ function PhaseSection({
       hasVisibilityRule: boolean;
     }
   >;
+  hiddenColumnNames: Set<string>;
   onUpdateWeight: (
     profileIdx: number,
     phaseIdx: number,
@@ -240,6 +264,7 @@ function PhaseSection({
 
   const sortedDistributions = phase.fieldDistributions
     .map((distribution, originalIndex) => ({ distribution, originalIndex }))
+    .filter(({ distribution }) => !hiddenColumnNames.has(distribution.columnName))
     .sort((a, b) => {
       const aMeta = schemaFieldMeta.get(a.distribution.columnName);
       const bMeta = schemaFieldMeta.get(b.distribution.columnName);
