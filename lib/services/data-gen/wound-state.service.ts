@@ -67,6 +67,13 @@ function getCandidatesForSemantic(
   return semantic === "Open" ? partition.openStates : partition.nonOpenStates;
 }
 
+function pickFirstByOrder(candidates: WoundStateCatalogEntry[]): WoundStateCatalogEntry {
+  return [...candidates].sort((a, b) => {
+    if (a.orderIndex !== b.orderIndex) return a.orderIndex - b.orderIndex;
+    return a.text.localeCompare(b.text);
+  })[0];
+}
+
 function buildResolutionError(params: {
   selectorFieldName: string;
   semantic: TrajectoryWoundStateSemantic;
@@ -138,6 +145,12 @@ export function resolveTrajectoryWoundStateLookup(params: {
       const selected = candidates.find((candidate) => candidate.id === selectedId);
       if (selected) return selected;
     }
+  }
+
+  // "Open" is semantic-only (any active wound state is valid). If no profile
+  // weighting is usable, fallback to the first configured open option.
+  if (params.semantic === "Open") {
+    return pickFirstByOrder(candidates);
   }
 
   throw buildResolutionError({

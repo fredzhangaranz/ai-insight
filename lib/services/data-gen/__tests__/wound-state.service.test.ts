@@ -67,6 +67,42 @@ describe("wound-state.service", () => {
     expect(resolved.text).toBe("New");
   });
 
+  it("falls back to first configured open candidate when multiple open states exist without usable weights", () => {
+    const partition = createPartition([
+      {
+        id: "id-improving",
+        text: "Improving",
+        normalizedText: "improving",
+        isOpenWoundState: true,
+        orderIndex: 2,
+      },
+      {
+        id: "id-new",
+        text: "New",
+        normalizedText: "new",
+        isOpenWoundState: true,
+        orderIndex: 1,
+      },
+      {
+        id: "id-resolved",
+        text: "Resolved",
+        normalizedText: "resolved",
+        isOpenWoundState: false,
+        orderIndex: 3,
+      },
+    ]);
+
+    const resolved = resolveTrajectoryWoundStateLookup({
+      partition,
+      semantic: "Open",
+      progressionStyle: "Exponential",
+      assessmentIdx: 0,
+      totalAssessments: 8,
+    });
+
+    expect(resolved.text).toBe("New");
+  });
+
   it("resolves terminal semantics from the configured non-open wound state when there is only one", () => {
     const partition = createPartition([
       {
