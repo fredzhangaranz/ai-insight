@@ -74,6 +74,30 @@ function pickFirstByOrder(candidates: WoundStateCatalogEntry[]): WoundStateCatal
   })[0];
 }
 
+function canonicalizeWoundStateText(value: string): string {
+  return normalizeWoundStateKey(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveSemanticMatchCandidate(
+  semantic: TrajectoryWoundStateSemantic,
+  candidates: WoundStateCatalogEntry[]
+): WoundStateCatalogEntry | null {
+  if (semantic === "Open") return null;
+
+  const semanticKey = canonicalizeWoundStateText(semantic);
+  if (!semanticKey) return null;
+
+  const exactMatches = candidates.filter(
+    (candidate) => canonicalizeWoundStateText(candidate.text) === semanticKey
+  );
+  if (exactMatches.length === 0) return null;
+  if (exactMatches.length === 1) return exactMatches[0];
+  return pickFirstByOrder(exactMatches);
+}
+
 function buildResolutionError(params: {
   selectorFieldName: string;
   semantic: TrajectoryWoundStateSemantic;
@@ -118,6 +142,11 @@ export function resolveTrajectoryWoundStateLookup(params: {
 
   if (candidates.length === 1) {
     return candidates[0];
+  }
+
+  const semanticMatch = resolveSemanticMatchCandidate(params.semantic, candidates);
+  if (semanticMatch) {
+    return semanticMatch;
   }
 
   const profileWeights = params.fieldProfiles

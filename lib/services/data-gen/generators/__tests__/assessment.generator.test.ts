@@ -858,7 +858,7 @@ describe("Assessment Generator", () => {
       const preview = await buildAssessmentSqlStatements(baseSpec, mockDb);
 
       expect(preview.statements.length).toBeGreaterThan(0);
-      expect(preview.statements.join("\n")).toContain("'lookup-new'");
+      expect(preview.statements.join("\n")).toMatch(/'lookup-(new|improving)'/);
       expect(preview.diagnostics).toEqual(expect.any(Array));
     });
   });

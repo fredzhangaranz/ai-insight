@@ -715,6 +715,25 @@ export async function buildAssessmentSqlStatements(
 
   const woundsCount = resolveCount(spec.woundsPerPatient ?? 2);
   const assessmentCount = resolveCount(spec.assessmentsPerWound ?? [8, 16]);
+  const intervalDays = spec.assessmentIntervalDays ?? 7;
+  const wobbleDays = spec.assessmentTimingWobbleDays ?? 2;
+  const missedRate = spec.missedAppointmentRate ?? 0.15;
+  const assessmentsRange = spec.assessmentsPerWound ?? [8, 16];
+  const maxAssessments =
+    Array.isArray(assessmentsRange) && typeof assessmentsRange[1] === "number"
+      ? assessmentsRange[1]
+      : 16;
+
+  const window = (() => {
+    const periodDays = spec.assessmentPeriodDays;
+    const startStr = spec.assessmentStartDate;
+    if (!periodDays || !startStr) return null;
+    const windowStart = new Date(startStr + "T00:00:00.000Z");
+    const windowEnd = new Date(windowStart);
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + periodDays);
+    return { start: windowStart, end: windowEnd };
+  })();
+
   const now = new Date();
   const pid = (id: string) => `'${id.replace(/'/g, "''")}'`;
 
@@ -733,29 +752,55 @@ export async function buildAssessmentSqlStatements(
     ...compiledWoundStateCompanion.diagnostics,
   ];
 
+  let woundIndex = 0;
   for (let w = 0; w < woundsCount; w++) {
     const progressionStyle = resolveProgressionStyle(w);
-    const baselineDate = faker.date.past({ years: 1 });
+
+    let baselineDate: Date;
+    if (window) {
+      const baselineMin = new Date(window.start);
+      baselineMin.setUTCDate(
+        baselineMin.getUTCDate() - maxAssessments * intervalDays
+      );
+      baselineDate = faker.date.between({
+        from: baselineMin,
+        to: window.end,
+      });
+    } else {
+      baselineDate = faker.date.past({ years: 1 });
+    }
+
     const baselineArea = areaMin + Math.random() * (areaMax - areaMin);
-    const trajectoryPoints = generateTrajectory({
+    let trajectoryPoints = generateTrajectory({
       baselineArea,
       progressionStyle,
       assessmentCount,
-      intervalDays: spec.assessmentIntervalDays ?? 7,
-      wobbleDays: spec.assessmentTimingWobbleDays ?? 2,
-      missedAppointmentRate: spec.missedAppointmentRate ?? 0.15,
+      intervalDays,
+      wobbleDays,
+      missedAppointmentRate: missedRate,
       baselineDate,
       anatomyName,
     });
 
+    if (window) {
+      trajectoryPoints = trajectoryPoints.filter((p) => {
+        const t = p.dateTime.getTime();
+        return t >= window.start.getTime() && t < window.end.getTime();
+      });
+      if (trajectoryPoints.length === 0) continue;
+      trajectoryPoints[0] = { ...trajectoryPoints[0], isBaseline: true };
+    }
+
     const woundId = newGuid();
     const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;
+    const woundLabel = woundIndex + 1;
 
-    blocks.push(`-- dbo.Wound (Wound ${w + 1})`);
+    blocks.push(`-- dbo.Wound (Wound ${woundLabel})`);
     blocks.push(`
 INSERT INTO dbo.Wound (id, patientFk, anatomyFk, auxText, baselineDate, baselineTimeZoneId, woundIndex, lastCentralChangeDate, modSyncState, serverChangeDate, isDeleted)
-VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W${w + 1}', ${toSqlLiteral(baselineDateOffset)}, N'UTC', ${w + 1}, ${toSqlLiteral(now)}, 2, ${toSqlLiteral(now)}, 0);
+VALUES (${pid(woundId)}, ${pid(patientId)}, ${pid(anatomyFk)}, N'W${woundLabel}', ${toSqlLiteral(baselineDateOffset)}, N'UTC', ${woundLabel}, ${toSqlLiteral(now)}, 2, ${toSqlLiteral(now)}, 0);
 `.trim());
+    woundIndex++;
 
     const baselineWoundStateLookup = resolveTrajectoryWoundStateLookup({
       partition: woundStateCompanion,
