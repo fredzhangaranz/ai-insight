@@ -1,0 +1,145 @@
+<?xml version="1.0"?>
+<AssessmentType xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" assessmentTypeId="a1000000-0000-0000-0000-000000000001" name="Insight Demo Wound Assessment v2" description="Demo-focused wound assessment for AI insight generation" type="Wound" applicationRights="1" canIncludeInProgressNote="false" isAllNotesIncluded="true">
+  <attributeSets>
+    <attributeSet attributeSetKey="a2000000-0000-0000-0000-000000000001" name="Wound State">
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000001" name="Wound State" type="SingleSelectList" isRequired="true" variableName="wound_state" fieldWidth="2" export="true" exportName="Wound State">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000001" text="New" activeWoundState="true" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000002" text="Improving" activeWoundState="true" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000003" text="Declining" activeWoundState="true" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000004" text="Stable" activeWoundState="true" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000005" text="Reclassified" activeWoundState="true" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000006" text="Stalled" activeWoundState="true" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000007" text="Re-Opened" activeWoundState="true" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000008" text="Resolved" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000002" name="Wound Occurrence" type="SingleSelectList" isPersistent="true" variableName="wa_ws_occurrence" fieldWidth="2" export="true" exportName="Wound Occurrence">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000009" text="Acute" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000000a" text="Chronic" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000000b" text="Acute on Chronic" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000000c" text="Recurrent" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000003" name="Onset Date" type="Date" isPersistent="true" variableName="wa_ws_onset" fieldWidth="2" export="true" exportName="Wound Onset Date" />
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000004" name="Resolution Comments" type="Text" maxValue="255.0000" isMultiline="true" isRequired="true" isPersistent="true" variableName="wound_release_comment" fieldWidth="0" export="true" exportName="Resolution Comments" visibilityExpression="IsNull(wound_state, '') == 'Resolved'" />
+      <setValidations />
+    </attributeSet>
+
+    <attributeSet attributeSetKey="a2000000-0000-0000-0000-000000000002" name="Assessment Summary">
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000005" name="Was This Wound Present on Admission?" type="Boolean" isRequired="true" isPersistent="true" variableName="demo_poa" fieldWidth="3" export="true" exportName="POA?" />
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000006" name="Wound Classification" type="SingleSelectList" isRequired="true" isPersistent="true" variableName="demo_wc" fieldWidth="2" export="true" exportName="Wound Classification">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000000d" text="Pressure Injury" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000000e" text="Leg Ulcer" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000000f" text="Diabetic Foot Ulcer" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000010" text="Burn" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000011" text="Skin Tear" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000012" text="Traumatic Wound" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000013" text="Other" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000007" name="Pressure Injury Stage" type="SingleSelectList" isPersistent="true" variableName="demo_wc_pi" fieldWidth="2" export="true" exportName="Pressure Injury Stage" visibilityExpression="IsNull(demo_wc,'')=='Pressure Injury'">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000014" text="Stage 1" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000015" text="Stage 2" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000016" text="Stage 3" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000017" text="Stage 4" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000018" text="Unstageable" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000019" text="Suspected Deep Tissue Injury" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000008" name="Leg Ulcer Type" type="SingleSelectList" isPersistent="true" variableName="demo_wc_lu" fieldWidth="2" export="true" exportName="Leg Ulcer Type" visibilityExpression="IsNull(demo_wc,'')=='Leg Ulcer'">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000001a" text="Venous" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000001b" text="Arterial" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000001c" text="Mixed (Venous and Arterial)" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000001d" text="Unknown" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000009" name="Diabetic Foot Ulcer Type" type="SingleSelectList" isPersistent="true" variableName="demo_wc_dfu" fieldWidth="2" export="true" exportName="Diabetic Foot Ulcer Type" visibilityExpression="IsNull(demo_wc,'')=='Diabetic Foot Ulcer'">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000001e" text="Neuropathic" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000001f" text="Ischemic" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000020" text="Neuro-Ischemic" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-00000000000a" name="SilhouetteStar Image" type="ImageCapture" isRequired="true" variableName="demo_image" fieldWidth="0" export="true" exportName="Silhouette Image Capture" imageCaptureSource="ImagePortfolio" />
+      <setValidations />
+    </attributeSet>
+
+    <attributeSet attributeSetKey="a2000000-0000-0000-0000-000000000003" name="Wound Details">
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-00000000000b" name="Tissue Types" type="MultiSelectList" isRequired="true" isPersistent="true" variableName="demo_tissue" fieldWidth="2" export="true" exportName="Tissue Types">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000021" text="Granulation" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000022" text="Slough" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000023" text="Necrosis" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000024" text="Epithelium" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000025" text="Hypergranulation" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000026" text="Callous" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000027" text="Tendon" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000028" text="Bone" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000029" text="Other" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-00000000000c" name="Moisture Level" type="SingleSelectList" isRequired="true" isPersistent="true" variableName="demo_ex_amt" fieldWidth="2" export="true" exportName="Moisture Level">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000002a" text="Dry" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000002b" text="Moist" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000002c" text="Moderate" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000002d" text="High" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000002e" text="Copious" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-00000000000d" name="Exudate Type" type="MultiSelectList" isRequired="true" isPersistent="true" variableName="demo_ex_type" fieldWidth="2" export="true" exportName="Exudate Type" visibilityExpression="IsNull(demo_ex_amt,'')!='Dry' &amp;&amp; IsNull(demo_ex_amt,'')!=''">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000002f" text="Serous" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000030" text="Haemoserous" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000031" text="Sanguinous" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000032" text="Purulent" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-00000000000e" name="Periwound" type="MultiSelectList" isRequired="true" isPersistent="true" variableName="demo_pw" fieldWidth="3" export="true" exportName="Periwound">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000033" text="Healthy" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000034" text="Erythema" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000035" text="Maceration" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000036" text="Dryness" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000037" text="Oedema" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000038" text="Induration" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000039" text="Inflammation" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000003a" text="Hyperkeratosis" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-00000000000f" name="Pain Present?" type="Boolean" isRequired="true" isPersistent="true" variableName="demo_pain_present" fieldWidth="2" export="true" exportName="Pain Present?" />
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000010" name="Pain Severity" type="Integer" minValue="0.0000" maxValue="10.0000" step="1.0000" isRequired="true" isPersistent="true" variableName="demo_pain_sev" fieldWidth="2" export="true" exportName="Pain Severity" visibilityExpression="IsNull(demo_pain_present,false)==true" />
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000011" name="Infection Status" type="SingleSelectList" isRequired="true" isPersistent="true" variableName="demo_infection_status" fieldWidth="2" export="true" exportName="Infection Status">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000003b" text="No signs of infection" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000003c" text="Local infection suspected" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000003d" text="Systemic infection suspected" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000012" name="Signs of Infection" type="MultiSelectList" isRequired="true" isPersistent="true" variableName="demo_infection_signs" fieldWidth="3" export="true" exportName="Signs of Infection" visibilityExpression="IsNull(demo_infection_status,'No signs of infection')!='No signs of infection'">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000003e" text="Erythema" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000003f" text="Heat" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000040" text="Swelling" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000041" text="Increased Exudate" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000042" text="Increased Pain" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000043" text="Malodour" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000044" text="Purulent Exudate" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000045" text="Stalled Healing" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000046" text="Fever" />
+      </attributeType>
+      <setValidations />
+    </attributeSet>
+
+    <attributeSet attributeSetKey="a2000000-0000-0000-0000-000000000004" name="Plan of Care">
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000013" name="Treatment(s) Provided" type="MultiSelectList" isRequired="true" variableName="demo_tx" fieldWidth="2" export="true" exportName="Treatment(s) Provided">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000047" text="Dressing Change" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000048" text="Wound Cleansing" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000049" text="Debridement" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000004a" text="Infection Management" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000004b" text="Compression Therapy" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000004c" text="Foot Offloading" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000004d" text="Pressure Redistribution" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000004e" text="Patient Education" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-00000000004f" text="Referral" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000014" name="Treatment Review Date" type="Date" isRequired="true" isPersistent="true" variableName="demo_tx_review" fieldWidth="3" export="true" exportName="Treatment Review Date" />
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000015" name="Referral Made" type="MultiSelectList" isRequired="true" isPersistent="true" variableName="demo_referral" fieldWidth="2" export="true" exportName="Referral Made" visibilityExpression="ListContains(demo_tx,'Referral')">
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000050" text="Occupational Therapist" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000051" text="Physiotherapist" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000052" text="Dietician" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000053" text="Clinical Nurse Specialist" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000054" text="Diabetes Team" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000055" text="Podiatrist" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000056" text="District Nurse" />
+        <lookup attributeLookupKey="a4000000-0000-0000-0000-000000000057" text="Other" />
+      </attributeType>
+      <attributeType attributeTypeKey="a3000000-0000-0000-0000-000000000016" name="Overall Impressions" type="Text" isMultiline="true" variableName="demo_impressions" fieldWidth="0" export="true" exportName="Overall Impressions" />
+      <setValidations />
+    </attributeSet>
+  </attributeSets>
+  <timelineSummaries />
+  <assessmentActions />
+</AssessmentType>

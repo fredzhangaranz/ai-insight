@@ -67,6 +67,37 @@ function getCandidatesForSemantic(
   return semantic === "Open" ? partition.openStates : partition.nonOpenStates;
 }
 
+function pickFirstByOrder(candidates: WoundStateCatalogEntry[]): WoundStateCatalogEntry {
+  return [...candidates].sort((a, b) => {
+    if (a.orderIndex !== b.orderIndex) return a.orderIndex - b.orderIndex;
+    return a.text.localeCompare(b.text);
+  })[0];
+}
+
+function canonicalizeWoundStateText(value: string): string {
+  return normalizeWoundStateKey(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveSemanticMatchCandidate(
+  semantic: TrajectoryWoundStateSemantic,
+  candidates: WoundStateCatalogEntry[]
+): WoundStateCatalogEntry | null {
+  if (semantic === "Open") return null;
+
+  const semanticKey = canonicalizeWoundStateText(semantic);
+  if (!semanticKey) return null;
+
+  const exactMatches = candidates.filter(
+    (candidate) => canonicalizeWoundStateText(candidate.text) === semanticKey
+  );
+  if (exactMatches.length === 0) return null;
+  if (exactMatches.length === 1) return exactMatches[0];
+  return pickFirstByOrder(exactMatches);
+}
+
 function buildResolutionError(params: {
   selectorFieldName: string;
   semantic: TrajectoryWoundStateSemantic;
@@ -113,6 +144,11 @@ export function resolveTrajectoryWoundStateLookup(params: {
     return candidates[0];
   }
 
+  const semanticMatch = resolveSemanticMatchCandidate(params.semantic, candidates);
+  if (semanticMatch) {
+    return semanticMatch;
+  }
+
   const profileWeights = params.fieldProfiles
     ? getProfileWeightsForFieldInternal(
         params.fieldProfiles,
@@ -138,6 +174,12 @@ export function resolveTrajectoryWoundStateLookup(params: {
       const selected = candidates.find((candidate) => candidate.id === selectedId);
       if (selected) return selected;
     }
+  }
+
+  // "Open" is semantic-only (any active wound state is valid). If no profile
+  // weighting is usable, fallback to the first configured open option.
+  if (params.semantic === "Open") {
+    return pickFirstByOrder(candidates);
   }
 
   throw buildResolutionError({

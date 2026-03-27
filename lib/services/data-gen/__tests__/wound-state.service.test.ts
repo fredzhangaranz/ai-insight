@@ -67,6 +67,42 @@ describe("wound-state.service", () => {
     expect(resolved.text).toBe("New");
   });
 
+  it("falls back to first configured open candidate when multiple open states exist without usable weights", () => {
+    const partition = createPartition([
+      {
+        id: "id-improving",
+        text: "Improving",
+        normalizedText: "improving",
+        isOpenWoundState: true,
+        orderIndex: 2,
+      },
+      {
+        id: "id-new",
+        text: "New",
+        normalizedText: "new",
+        isOpenWoundState: true,
+        orderIndex: 1,
+      },
+      {
+        id: "id-resolved",
+        text: "Resolved",
+        normalizedText: "resolved",
+        isOpenWoundState: false,
+        orderIndex: 3,
+      },
+    ]);
+
+    const resolved = resolveTrajectoryWoundStateLookup({
+      partition,
+      semantic: "Open",
+      progressionStyle: "Exponential",
+      assessmentIdx: 0,
+      totalAssessments: 8,
+    });
+
+    expect(resolved.text).toBe("New");
+  });
+
   it("resolves terminal semantics from the configured non-open wound state when there is only one", () => {
     const partition = createPartition([
       {
@@ -102,6 +138,57 @@ describe("wound-state.service", () => {
 
     expect(healed.text).toBe("Resolved");
     expect(amputated.text).toBe("Resolved");
+  });
+
+  it("resolves terminal semantics by canonical text match when multiple non-open candidates exist", () => {
+    const partition = createPartition([
+      {
+        id: "id-open",
+        text: "Open",
+        normalizedText: "open",
+        isOpenWoundState: true,
+        orderIndex: 1,
+      },
+      {
+        id: "id-healed",
+        text: "Healed",
+        normalizedText: "healed",
+        isOpenWoundState: false,
+        orderIndex: 2,
+      },
+      {
+        id: "id-released",
+        text: "Released from Follow Up",
+        normalizedText: "released from follow up",
+        isOpenWoundState: false,
+        orderIndex: 3,
+      },
+      {
+        id: "id-amputated",
+        text: "Amputated",
+        normalizedText: "amputated",
+        isOpenWoundState: false,
+        orderIndex: 4,
+      },
+    ]);
+
+    const amputated = resolveTrajectoryWoundStateLookup({
+      partition,
+      semantic: "Amputated",
+      progressionStyle: "Exponential",
+      assessmentIdx: 2,
+      totalAssessments: 10,
+    });
+    const released = resolveTrajectoryWoundStateLookup({
+      partition,
+      semantic: "Released from follow-up",
+      progressionStyle: "Exponential",
+      assessmentIdx: 2,
+      totalAssessments: 10,
+    });
+
+    expect(amputated.text).toBe("Amputated");
+    expect(released.text).toBe("Released from Follow Up");
   });
 
   it("uses wound-state profile weights only within valid open candidates", () => {
@@ -194,7 +281,7 @@ describe("wound-state.service", () => {
     expect(() =>
       resolveTrajectoryWoundStateLookup({
         partition,
-        semantic: "Healed",
+        semantic: "Released from follow-up",
         progressionStyle: "Exponential",
         assessmentIdx: 5,
         totalAssessments: 6,
