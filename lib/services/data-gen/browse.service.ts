@@ -31,6 +31,14 @@ export interface BrowseResult {
   columns?: BrowseColumn[];
 }
 
+/** Hard cap for “select all matching” to protect DB and payloads. */
+export const BROWSE_SELECT_ALL_MAX_IDS = 10_000;
+
+export interface BrowsePatientIdsResult {
+  ids: string[];
+  total: number;
+}
+
 export interface BrowseStats {
   total: number;
   generated: number;
@@ -510,6 +518,70 @@ export async function browsePatients(
   }
 
   return { rows, total, page, pageSize, stats, columns: displayColumns };
+}
+
+/**
+ * All patient IDs matching the same filter/search as browse (no pagination).
+ * Used for “select all across pages”. Throws if count exceeds {@link BROWSE_SELECT_ALL_MAX_IDS}.
+ */
+export async function browsePatientIds(
+  db: ConnectionPool,
+  options: {
+    search?: string | null;
+    filter?: BrowseFilter;
+  }
+): Promise<BrowsePatientIdsResult> {
+  const filter = options.filter ?? "all";
+  const search = options.search ?? null;
+
+  const patientColumns = await getPatientColumnNames(db);
+  const hasGender = patientColumns.includes("gender");
+  const searchCols = PATIENT_SEARCH_COLUMNS.filter((c) =>
+    patientColumns.includes(c)
+  );
+
+  const { clause, params } = buildWhereClause(
+    "patient",
+    filter,
+    search,
+    hasGender,
+    searchCols
+  );
+
+  const countQuery = `SELECT COUNT(*) as total FROM dbo.Patient WHERE ${clause}`;
+  const countReq = db.request();
+  Object.entries(params).forEach(([k, v]) => countReq.input(k, v));
+  const countResult = await countReq.query(countQuery);
+  const total = Number(countResult.recordset[0]?.total ?? 0);
+
+  if (total === 0) {
+    return { ids: [], total: 0 };
+  }
+
+  if (total > BROWSE_SELECT_ALL_MAX_IDS) {
+    throw new Error(
+      `Too many matching patients (${total}). Maximum ${BROWSE_SELECT_ALL_MAX_IDS.toLocaleString()} can be selected at once — narrow search or filter.`
+    );
+  }
+
+  const orderBy =
+    patientColumns.includes("lastName") && patientColumns.includes("firstName")
+      ? "lastName, firstName"
+      : "id";
+
+  const dataQuery = `
+    SELECT id
+    FROM dbo.Patient
+    WHERE ${clause}
+    ORDER BY ${orderBy}
+  `;
+
+  const dataReq = db.request();
+  Object.entries(params).forEach(([k, v]) => dataReq.input(k, v));
+  const dataResult = await dataReq.query<{ id: string }>(dataQuery);
+  const ids = (dataResult.recordset ?? []).map((r) => String(r.id));
+
+  return { ids, total };
 }
 
 /**

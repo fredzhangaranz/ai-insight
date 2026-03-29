@@ -100,6 +100,8 @@ export function DataBrowserStep({
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllMatchingLoading, setSelectAllMatchingLoading] = useState(false);
+  const [selectAllMatchingError, setSelectAllMatchingError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!customerId) return;
@@ -157,11 +159,51 @@ export function DataBrowserStep({
     });
   };
 
+  const pageIds = rows.map((r) => String(r.id ?? "")).filter(Boolean);
+  const allPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const somePageSelected =
+    pageIds.length > 0 &&
+    pageIds.some((id) => selectedIds.has(id)) &&
+    !allPageSelected;
+
+  /** Toggle selection for the current page only (keeps selections on other pages). */
   const toggleSelectAll = () => {
-    if (selectedIds.size === rows.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(rows.map((r) => String(r.id ?? ""))));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const everyOnPage =
+        pageIds.length > 0 && pageIds.every((id) => next.has(id));
+      if (everyOnPage) {
+        for (const id of pageIds) next.delete(id);
+      } else {
+        for (const id of pageIds) next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllMatching = async () => {
+    if (!customerId || entity !== "patient") return;
+    setSelectAllMatchingError(null);
+    setSelectAllMatchingLoading(true);
+    try {
+      const params = new URLSearchParams({
+        customerId,
+        entity,
+        mode: "ids",
+        filter,
+      });
+      if (search.trim()) params.set("search", search.trim());
+      const res = await fetch(`/api/admin/data-gen/browse?${params}`);
+      const data = (await res.json()) as { ids?: string[]; error?: string; message?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? data.message ?? "Failed to load patient IDs");
+      }
+      setSelectedIds(new Set(data.ids ?? []));
+    } catch (e) {
+      setSelectAllMatchingError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSelectAllMatchingLoading(false);
     }
   };
 
@@ -353,9 +395,28 @@ export function DataBrowserStep({
           )}
 
           {selectedIds.size > 0 && (
-            <div className="text-sm text-muted-foreground">
-              Selected {selectedIds.size} patient{selectedIds.size !== 1 ? "s" : ""}
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <span>
+                Selected {selectedIds.size} patient{selectedIds.size !== 1 ? "s" : ""}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setSelectedIds(new Set());
+                  setSelectAllMatchingError(null);
+                }}
+              >
+                Clear selection
+              </Button>
             </div>
+          )}
+          {selectAllMatchingError && (
+            <Alert variant="destructive">
+              <AlertDescription>{selectAllMatchingError}</AlertDescription>
+            </Alert>
           )}
         </div>
 
@@ -366,7 +427,13 @@ export function DataBrowserStep({
                   <TableRow>
                     <TableHead className="w-10">
                       <Checkbox
-                        checked={rows.length > 0 && selectedIds.size === rows.length}
+                        checked={
+                          allPageSelected
+                            ? true
+                            : somePageSelected
+                              ? "indeterminate"
+                              : false
+                        }
                         onCheckedChange={toggleSelectAll}
                         disabled={rows.length === 0}
                       />
@@ -418,11 +485,31 @@ export function DataBrowserStep({
               </Table>
             </div>
 
-            <div className="flex items-center justify-between mt-4">
+            <div className="flex flex-col gap-3 mt-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-muted-foreground">
                 Page {page} of {totalPages} • Showing {rows.length} of {total}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {entity === "patient" && total > 0 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleSelectAllMatching}
+                    disabled={
+                      !customerId ||
+                      loading ||
+                      selectAllMatchingLoading ||
+                      !!connectionError ||
+                      connectionChecking
+                    }
+                    title="Select every patient matching the current filter and search (not only this page)."
+                  >
+                    {selectAllMatchingLoading
+                      ? "Loading…"
+                      : `Select all ${total.toLocaleString()} matching`}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
