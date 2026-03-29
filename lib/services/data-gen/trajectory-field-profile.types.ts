@@ -4,12 +4,20 @@
  */
 
 export type TrajectoryPhase = "early" | "mid" | "late";
+export type FieldValueBehavior =
+  | "per_assessment"
+  | "per_wound"
+  | "system";
 
 export interface PhaseFieldDistribution {
   fieldName: string;
   columnName: string;
   /** option value → relative weight (non-negative; proportions are normalized when sampling) */
   weights: Record<string, number>;
+  behavior?: FieldValueBehavior;
+  recommendedBehavior?: FieldValueBehavior;
+  behaviorConfidence?: number;
+  behaviorRationale?: string;
 }
 
 export interface TrajectoryPhaseProfile {

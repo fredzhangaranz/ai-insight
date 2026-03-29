@@ -78,10 +78,12 @@ export async function generateFieldProfiles(
     return buildSingleFallbackProfile(style, schema);
   });
 
-  return sanitizeFieldProfiles(
+  const sanitizedProfiles = sanitizeFieldProfiles(
     normalizeProfiles(profiles, schema, stylesToGenerate),
     schema,
   );
+
+  return applyRecommendedBehaviors(sanitizedProfiles);
 }
 
 const SYSTEM_PROMPT = `You are a clinical data generation assistant. Given a wound assessment form schema and a single wound healing trajectory, produce ONE TrajectoryFieldProfile as a JSON object.
@@ -92,7 +94,7 @@ The object must have:
 - phases: array of 3 objects (early, mid, late) with:
   - phase: "early" | "mid" | "late"
   - description: e.g. "Weeks 1-3: active wound, heavy exudate"
-  - fieldDistributions: array of { fieldName, columnName, weights } where weights is { "optionValue": 0.5, ... } summing to 1
+  - fieldDistributions: array of { fieldName, columnName, weights, behavior?, recommendedBehavior?, behaviorConfidence?, behaviorRationale? } where weights is { "optionValue": 0.5, ... } summing to 1
 
 Rules:
 1. wound_state / healing_status / wound_status fields MUST align with the trajectory at each phase
@@ -100,7 +102,11 @@ Rules:
 3. For SingleSelectList/MultiSelectList, every option must appear in weights (can be 0)
 4. For Text/Decimal/Integer, omit from fieldDistributions
 5. early = first 33% of assessments, mid = 33-66%, late = 66-100%
-6. Output ONLY valid JSON. No markdown, no explanation.`;
+6. behavior and recommendedBehavior, when provided, must be one of "per_assessment", "per_wound", or "system"
+7. Use per_wound for fields that should stay fixed for the life of the wound (for example wound classification, onset date, present on admission, wound occurrence)
+8. Use per_assessment for findings or treatments that should evolve over time
+9. Use system only for fields driven by wound trajectory semantics rather than generic form sampling
+10. Output ONLY valid JSON. No markdown, no explanation.`;
 
 async function generateSingleProfile(
   style: WoundProgressionStyle,
@@ -176,4 +182,22 @@ function normalizeProfiles(
   }
 
   return result;
+}
+
+function applyRecommendedBehaviors(
+  profiles: FieldProfileSet
+): FieldProfileSet {
+  return profiles.map((profile) => ({
+    ...profile,
+    phases: profile.phases.map((phase) => ({
+      ...phase,
+      fieldDistributions: phase.fieldDistributions.map((distribution) => ({
+        ...distribution,
+        behavior:
+          distribution.recommendedBehavior ??
+          distribution.behavior ??
+          "per_assessment",
+      })),
+    })),
+  }));
 }

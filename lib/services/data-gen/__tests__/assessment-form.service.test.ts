@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FieldSpec, FieldSchema } from "../generation-spec.types";
+import type { FieldProfileSet } from "../trajectory-field-profile.types";
 import {
   compileAssessmentForm,
   evaluateFieldVisibility,
@@ -538,5 +539,255 @@ describe("assessment-form.service", () => {
 
     expect(first.generated[0]?.serializedValue).toBe("Pressure");
     expect(second.generated[0]?.serializedValue).toBe("Pressure");
+  });
+
+  it("reuses per-wound profile values across later assessments", () => {
+    const compiled = compileAssessmentForm([
+      buildField({
+        fieldName: "Wound Classification",
+        columnName: "wound_classification",
+        dataType: "SingleSelectList",
+        options: ["Pressure Injury", "Burn"],
+      }),
+    ]);
+
+    const fieldProfiles: FieldProfileSet = [
+      {
+        trajectoryStyle: "Exponential",
+        clinicalSummary: "Fast healing",
+        phases: [
+          {
+            phase: "early",
+            description: "Early",
+            fieldDistributions: [
+              {
+                fieldName: "Wound Classification",
+                columnName: "wound_classification",
+                behavior: "per_wound",
+                weights: {
+                  "Pressure Injury": 1,
+                  Burn: 0,
+                },
+              },
+            ],
+          },
+          {
+            phase: "mid",
+            description: "Mid",
+            fieldDistributions: [
+              {
+                fieldName: "Wound Classification",
+                columnName: "wound_classification",
+                behavior: "per_wound",
+                weights: {
+                  "Pressure Injury": 0,
+                  Burn: 1,
+                },
+              },
+            ],
+          },
+          {
+            phase: "late",
+            description: "Late",
+            fieldDistributions: [
+              {
+                fieldName: "Wound Classification",
+                columnName: "wound_classification",
+                behavior: "per_wound",
+                weights: {
+                  "Pressure Injury": 0,
+                  Burn: 1,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const cache = new Map<string, ReturnType<typeof generateVisibleAssessmentFields>["generated"][number]>();
+    const first = generateVisibleAssessmentFields({
+      compiledForm: compiled,
+      fieldSpecsByColumn: new Map(),
+      fieldProfiles,
+      progressionStyle: "Exponential",
+      assessmentIdx: 0,
+      totalAssessments: 3,
+      stage: baseStage,
+      fixedPerWoundCache: cache,
+    });
+    const second = generateVisibleAssessmentFields({
+      compiledForm: compiled,
+      fieldSpecsByColumn: new Map(),
+      fieldProfiles,
+      progressionStyle: "Exponential",
+      assessmentIdx: 1,
+      totalAssessments: 3,
+      stage: baseStage,
+      fixedPerWoundCache: cache,
+    });
+
+    expect(first.generated[0]?.serializedValue).toBe("Pressure Injury");
+    expect(second.generated[0]?.serializedValue).toBe("Pressure Injury");
+  });
+
+  it("keeps per-assessment profile values phase-specific", () => {
+    const compiled = compileAssessmentForm([
+      buildField({
+        fieldName: "Infection Status",
+        columnName: "infection_status",
+        dataType: "SingleSelectList",
+        options: ["No signs", "Local infection suspected"],
+      }),
+    ]);
+
+    const fieldProfiles: FieldProfileSet = [
+      {
+        trajectoryStyle: "Exponential",
+        clinicalSummary: "Fast healing",
+        phases: [
+          {
+            phase: "early",
+            description: "Early",
+            fieldDistributions: [
+              {
+                fieldName: "Infection Status",
+                columnName: "infection_status",
+                behavior: "per_assessment",
+                weights: {
+                  "No signs": 1,
+                  "Local infection suspected": 0,
+                },
+              },
+            ],
+          },
+          {
+            phase: "mid",
+            description: "Mid",
+            fieldDistributions: [
+              {
+                fieldName: "Infection Status",
+                columnName: "infection_status",
+                behavior: "per_assessment",
+                weights: {
+                  "No signs": 0,
+                  "Local infection suspected": 1,
+                },
+              },
+            ],
+          },
+          {
+            phase: "late",
+            description: "Late",
+            fieldDistributions: [
+              {
+                fieldName: "Infection Status",
+                columnName: "infection_status",
+                behavior: "per_assessment",
+                weights: {
+                  "No signs": 0,
+                  "Local infection suspected": 1,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const first = generateVisibleAssessmentFields({
+      compiledForm: compiled,
+      fieldSpecsByColumn: new Map(),
+      fieldProfiles,
+      progressionStyle: "Exponential",
+      assessmentIdx: 0,
+      totalAssessments: 3,
+      stage: baseStage,
+      fixedPerWoundCache: new Map(),
+    });
+    const second = generateVisibleAssessmentFields({
+      compiledForm: compiled,
+      fieldSpecsByColumn: new Map(),
+      fieldProfiles,
+      progressionStyle: "Exponential",
+      assessmentIdx: 1,
+      totalAssessments: 3,
+      stage: baseStage,
+      fixedPerWoundCache: new Map(),
+    });
+
+    expect(first.generated[0]?.serializedValue).toBe("No signs");
+    expect(second.generated[0]?.serializedValue).toBe("Local infection suspected");
+  });
+
+  it("skips generic profile sampling for system-controlled fields", () => {
+    const compiled = compileAssessmentForm([
+      buildField({
+        fieldName: "Wound State",
+        columnName: "wound_state",
+        dataType: "SingleSelectList",
+        options: ["Open", "Healed"],
+      }),
+    ]);
+
+    const fieldProfiles: FieldProfileSet = [
+      {
+        trajectoryStyle: "Exponential",
+        clinicalSummary: "Fast healing",
+        phases: [
+          {
+            phase: "early",
+            description: "Early",
+            fieldDistributions: [
+              {
+                fieldName: "Wound State",
+                columnName: "wound_state",
+                behavior: "system",
+                weights: {
+                  Open: 0,
+                  Healed: 1,
+                },
+              },
+            ],
+          },
+          {
+            phase: "mid",
+            description: "Mid",
+            fieldDistributions: [],
+          },
+          {
+            phase: "late",
+            description: "Late",
+            fieldDistributions: [],
+          },
+        ],
+      },
+    ];
+
+    const fieldSpecs = new Map<string, FieldSpec>([
+      [
+        "wound_state",
+        {
+          fieldName: "Wound State",
+          columnName: "wound_state",
+          dataType: "SingleSelectList",
+          enabled: true,
+          criteria: { type: "fixed", value: "Open" },
+        },
+      ],
+    ]);
+
+    const result = generateVisibleAssessmentFields({
+      compiledForm: compiled,
+      fieldSpecsByColumn: fieldSpecs,
+      fieldProfiles,
+      progressionStyle: "Exponential",
+      assessmentIdx: 0,
+      totalAssessments: 3,
+      stage: baseStage,
+      fixedPerWoundCache: new Map(),
+    });
+
+    expect(result.generated[0]?.serializedValue).toBe("Open");
   });
 });

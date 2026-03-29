@@ -7,9 +7,41 @@ import { generateFieldProfiles } from "../profile-generator.service";
 import { buildFallbackProfiles } from "../profile-fallback";
 import type { FieldSchema } from "../generation-spec.types";
 
+const { mockComplete } = vi.hoisted(() => ({
+  mockComplete: vi.fn(),
+}));
+
 vi.mock("@/lib/ai/get-provider", () => ({
   getAIProvider: vi.fn().mockResolvedValue({
-    complete: vi.fn().mockResolvedValue(`
+    complete: mockComplete,
+  }),
+}));
+
+const formSchema: FieldSchema[] = [
+  {
+    fieldName: "Wound Status",
+    columnName: "wound_status",
+    dataType: "SingleSelectList",
+    isNullable: true,
+    storageType: "wound_attribute",
+    attributeTypeId: "attr-1",
+    options: ["Active", "Healing", "Healed"],
+  },
+  {
+    fieldName: "Wound Classification",
+    columnName: "wound_classification",
+    dataType: "SingleSelectList",
+    isNullable: true,
+    storageType: "wound_attribute",
+    attributeTypeId: "attr-2",
+    options: ["Pressure Injury", "Burn"],
+  },
+];
+
+describe("profile-generator.service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockComplete.mockResolvedValue(`
       [
         {
           "trajectoryStyle": "Exponential",
@@ -29,25 +61,7 @@ vi.mock("@/lib/ai/get-provider", () => ({
           ]
         }
       ]
-    `),
-  }),
-}));
-
-const formSchema: FieldSchema[] = [
-  {
-    fieldName: "Wound Status",
-    columnName: "wound_status",
-    dataType: "SingleSelectList",
-    isNullable: true,
-    storageType: "wound_attribute",
-    attributeTypeId: "attr-1",
-    options: ["Active", "Healing", "Healed"],
-  },
-];
-
-describe("profile-generator.service", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+    `);
   });
 
   describe("buildFallbackProfiles", () => {
@@ -158,6 +172,45 @@ describe("profile-generator.service", () => {
         "JaggedFlat",
         "NPTraditionalDisposable",
       ]);
+    });
+
+    it("aligns the active behavior with the suggested default when AI returns both", async () => {
+      mockComplete.mockResolvedValue(`
+        {
+          "trajectoryStyle": "Exponential",
+          "clinicalSummary": "Fast healing",
+          "phases": [
+            {
+              "phase": "early",
+              "description": "Weeks 1-3",
+              "fieldDistributions": [
+                {
+                  "fieldName": "Wound Classification",
+                  "columnName": "wound_classification",
+                  "behavior": "per_wound",
+                  "recommendedBehavior": "per_assessment",
+                  "behaviorConfidence": 0.9,
+                  "behaviorRationale": "This should vary over time.",
+                  "weights": { "Pressure Injury": 0.8, "Burn": 0.2 }
+                }
+              ]
+            }
+          ]
+        }
+      `);
+
+      const profiles = await generateFieldProfiles({
+        formSchema,
+        modelId: "test",
+        selectedStyles: ["Exponential"],
+      });
+
+      const distribution = profiles[0].phases[0].fieldDistributions.find(
+        (item) => item.columnName === "wound_classification"
+      );
+
+      expect(distribution?.recommendedBehavior).toBe("per_assessment");
+      expect(distribution?.behavior).toBe("per_assessment");
     });
   });
 });
