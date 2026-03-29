@@ -29,6 +29,8 @@ import {
   pickProgressionStyle,
   trajectoryTypeToStyle,
   UNIFORM_TRAJECTORY_DIST,
+  type TrajectoryInput,
+  type TrajectoryPoint,
 } from "./trajectory-engine";
 import {
   loadScaffoldingDeps,
@@ -109,6 +111,13 @@ interface WoundStage {
   volume: number;
 }
 
+interface AssessmentWindow {
+  start: Date;
+  end: Date;
+}
+
+const MAX_WINDOWED_TRAJECTORY_ATTEMPTS = 8;
+
 /** Re-export for tests */
 export { pickProgressionStyle } from "./trajectory-engine";
 
@@ -143,6 +152,66 @@ export function generateProgressionTimeline(
 }
 
 export { generateNoteValue, sampleFromProfile } from "../assessment-form.service";
+
+function createBaselineDateFactory(params: {
+  window: AssessmentWindow | null;
+  maxAssessments: number;
+  intervalDays: number;
+}): () => Date {
+  if (!params.window) {
+    return () => faker.date.past({ years: 1 });
+  }
+
+  const baselineMin = new Date(params.window.start);
+  baselineMin.setUTCDate(
+    baselineMin.getUTCDate() - params.maxAssessments * params.intervalDays
+  );
+
+  return () =>
+    faker.date.between({
+      from: baselineMin,
+      to: params.window!.end,
+    });
+}
+
+function filterTrajectoryToWindow(
+  points: TrajectoryPoint[],
+  window: AssessmentWindow | null
+): TrajectoryPoint[] {
+  if (!window) return points;
+
+  return points.filter((point) => {
+    const time = point.dateTime.getTime();
+    return time >= window.start.getTime() && time < window.end.getTime();
+  });
+}
+
+function buildTrajectoryWithinWindow(params: {
+  window: AssessmentWindow | null;
+  baselineDateFactory: () => Date;
+  trajectoryInput: Omit<TrajectoryInput, "baselineDate">;
+}): { baselineDate: Date; trajectoryPoints: TrajectoryPoint[] } | null {
+  const attempts = params.window ? MAX_WINDOWED_TRAJECTORY_ATTEMPTS : 1;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const baselineDate = params.baselineDateFactory();
+    let trajectoryPoints = generateTrajectory({
+      ...params.trajectoryInput,
+      baselineDate,
+    });
+
+    trajectoryPoints = filterTrajectoryToWindow(trajectoryPoints, params.window);
+    if (trajectoryPoints.length === 0) continue;
+
+    if (params.window) {
+      trajectoryPoints[0] = { ...trajectoryPoints[0], isBaseline: true };
+    }
+
+    return { baselineDate, trajectoryPoints };
+  }
+
+  return null;
+}
 
 /**
  * Generate wounds and assessments for target patients
@@ -285,6 +354,11 @@ export async function generateWoundsAndAssessments(
     windowEnd.setUTCDate(windowEnd.getUTCDate() + periodDays);
     return { start: windowStart, end: windowEnd };
   })();
+  const baselineDateFactory = createBaselineDateFactory({
+    window,
+    maxAssessments,
+    intervalDays,
+  });
 
   for (const patient of patients) {
     const woundsPerPatient = resolveCount(spec.woundsPerPatient ?? 2);
@@ -297,44 +371,25 @@ export async function generateWoundsAndAssessments(
       const anatomyName = anatomyRow.name ?? "";
       const auxText = `W${woundIndex + 1}`;
 
-      let baselineDate: Date;
-      if (window) {
-        const baselineMin = new Date(window.start);
-        baselineMin.setUTCDate(
-          baselineMin.getUTCDate() - maxAssessments * intervalDays
-        );
-        baselineDate = faker.date.between({
-          from: baselineMin,
-          to: window.end,
-        });
-      } else {
-        baselineDate = faker.date.past({ years: 1 });
-      }
-
       const baselineArea = areaMin + Math.random() * (areaMax - areaMin);
-      const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;
-
       const progressionStyle = resolveProgressionStyle(w);
-
-      let trajectoryPoints = generateTrajectory({
-        baselineArea,
-        progressionStyle,
-        assessmentCount,
-        intervalDays,
-        wobbleDays,
-        missedAppointmentRate: missedRate,
-        baselineDate,
-        anatomyName,
+      const trajectory = buildTrajectoryWithinWindow({
+        window,
+        baselineDateFactory,
+        trajectoryInput: {
+          baselineArea,
+          progressionStyle,
+          assessmentCount,
+          intervalDays,
+          wobbleDays,
+          missedAppointmentRate: missedRate,
+          anatomyName,
+        },
       });
+      if (!trajectory) continue;
 
-      if (window) {
-        trajectoryPoints = trajectoryPoints.filter((p) => {
-          const t = p.dateTime.getTime();
-          return t >= window.start.getTime() && t < window.end.getTime();
-        });
-        if (trajectoryPoints.length === 0) continue;
-        trajectoryPoints[0] = { ...trajectoryPoints[0], isBaseline: true };
-      }
+      const { baselineDate, trajectoryPoints } = trajectory;
+      const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;
 
       const woundRow = {
         id: woundId,
@@ -733,6 +788,11 @@ export async function buildAssessmentSqlStatements(
     windowEnd.setUTCDate(windowEnd.getUTCDate() + periodDays);
     return { start: windowStart, end: windowEnd };
   })();
+  const baselineDateFactory = createBaselineDateFactory({
+    window,
+    maxAssessments,
+    intervalDays,
+  });
 
   const now = new Date();
   const pid = (id: string) => `'${id.replace(/'/g, "''")}'`;
@@ -756,40 +816,23 @@ export async function buildAssessmentSqlStatements(
   for (let w = 0; w < woundsCount; w++) {
     const progressionStyle = resolveProgressionStyle(w);
 
-    let baselineDate: Date;
-    if (window) {
-      const baselineMin = new Date(window.start);
-      baselineMin.setUTCDate(
-        baselineMin.getUTCDate() - maxAssessments * intervalDays
-      );
-      baselineDate = faker.date.between({
-        from: baselineMin,
-        to: window.end,
-      });
-    } else {
-      baselineDate = faker.date.past({ years: 1 });
-    }
-
     const baselineArea = areaMin + Math.random() * (areaMax - areaMin);
-    let trajectoryPoints = generateTrajectory({
-      baselineArea,
-      progressionStyle,
-      assessmentCount,
-      intervalDays,
-      wobbleDays,
-      missedAppointmentRate: missedRate,
-      baselineDate,
-      anatomyName,
+    const trajectory = buildTrajectoryWithinWindow({
+      window,
+      baselineDateFactory,
+      trajectoryInput: {
+        baselineArea,
+        progressionStyle,
+        assessmentCount,
+        intervalDays,
+        wobbleDays,
+        missedAppointmentRate: missedRate,
+        anatomyName,
+      },
     });
+    if (!trajectory) continue;
 
-    if (window) {
-      trajectoryPoints = trajectoryPoints.filter((p) => {
-        const t = p.dateTime.getTime();
-        return t >= window.start.getTime() && t < window.end.getTime();
-      });
-      if (trajectoryPoints.length === 0) continue;
-      trajectoryPoints[0] = { ...trajectoryPoints[0], isBaseline: true };
-    }
+    const { baselineDate, trajectoryPoints } = trajectory;
 
     const woundId = newGuid();
     const baselineDateOffset = `${baselineDate.toISOString().slice(0, 23)}+00:00`;

@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ConnectionPool } from "mssql";
+import { faker } from "@faker-js/faker";
 import {
   generateProgressionTimeline,
   generateNoteValue,
@@ -758,6 +759,109 @@ describe("Assessment Generator", () => {
       );
     });
 
+    it("retries baseline sampling when the first windowed trajectory would create zero assessments", async () => {
+      const betweenSpy = vi.spyOn(faker.date, "between");
+      betweenSpy
+        .mockReturnValueOnce(new Date("2024-05-01T00:00:00.000Z"))
+        .mockReturnValueOnce(new Date("2024-07-01T00:00:00.000Z"));
+
+      mockRequest.query.mockImplementation((q: string) => {
+        if (q.includes("sp_set_session_context")) {
+          return Promise.resolve({ recordset: [] });
+        }
+        if (q.includes("SELECT id FROM dbo.Patient")) {
+          return Promise.resolve({ recordset: [{ id: "patient-1" }] });
+        }
+        if (
+          q.includes("assessmentTypeFk = 'CE64FA35-9CC6-4D6A-9A7B-C97761681EFC'")
+        ) {
+          return Promise.resolve({
+            recordset: [{ id: "wound-state-atv", definitionVersion: 3 }],
+          });
+        }
+        if (q.includes("WHERE atv.id = @id")) {
+          const requestedId = mockRequest.input.mock.calls.at(-1)?.[2];
+          if (requestedId === "wound-state-atv") {
+            return Promise.resolve({
+              recordset: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  dataType: 1000,
+                  attributeTypeId: "wound-state-selector",
+                  attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                  attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                  isRequired: true,
+                  calculatedValueExpression: null,
+                  visibilityExpression: null,
+                  attributeSetOrderIndex: 1,
+                  attributeOrderIndex: 1,
+                },
+              ],
+            });
+          }
+          return Promise.resolve({
+            recordset: [
+              {
+                fieldName: "Wound State",
+                columnName: "wound_state",
+                dataType: 1000,
+                attributeTypeId: "assessment-wound-state-selector",
+                attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                isRequired: true,
+                calculatedValueExpression: null,
+                visibilityExpression: null,
+                attributeSetOrderIndex: 1,
+                attributeOrderIndex: 1,
+              },
+            ],
+          });
+        }
+        if (q.includes("FROM dbo.AttributeLookup")) {
+          return Promise.resolve({
+            recordset: [
+              { id: "lookup-new", text: "New", orderIndex: 1, isOpenWoundState: true },
+              { id: "lookup-improving", text: "Improving", orderIndex: 2, isOpenWoundState: true },
+              { id: "lookup-resolved", text: "Resolved", orderIndex: 3, isOpenWoundState: false },
+            ],
+          });
+        }
+        if (q.includes("SELECT id FROM dbo.Unit")) {
+          return Promise.resolve({ recordset: [{ id: "unit-1" }] });
+        }
+        if (q.includes("SELECT id, [text] AS name FROM dbo.Anatomy")) {
+          return Promise.resolve({ recordset: [{ id: "anatomy-1", name: "Heel" }] });
+        }
+        if (q.includes("att.dataType = 1004")) {
+          return Promise.resolve({ recordset: [{ id: "wound-images-attr" }] });
+        }
+        if (q.includes("FROM dbo.ImageFormat")) {
+          return Promise.resolve({ recordset: [{ id: "image-format-1" }] });
+        }
+        if (q.includes("FROM dbo.StaffUser")) {
+          return Promise.resolve({
+            recordset: [{ id: "staff-user-1", firstName: "ARANZ", lastName: "Support" }],
+          });
+        }
+        return Promise.resolve({ recordset: [] });
+      });
+
+      const result = await generateWoundsAndAssessments(
+        {
+          ...baseSpec,
+          assessmentStartDate: "2024-07-01",
+          assessmentPeriodDays: 84,
+        },
+        mockDb
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.insertedWoundIds).toHaveLength(1);
+      expect(result.insertedIds.length).toBeGreaterThan(0);
+      expect(betweenSpy).toHaveBeenCalledTimes(2);
+    });
+
     it("builds preview SQL using tenant-configured open/non-open wound states", async () => {
       mockRequest.query.mockImplementation((q: string) => {
         if (q.includes("SELECT TOP 1 id FROM dbo.Patient")) {
@@ -860,6 +964,105 @@ describe("Assessment Generator", () => {
       expect(preview.statements.length).toBeGreaterThan(0);
       expect(preview.statements.join("\n")).toMatch(/'lookup-(new|improving)'/);
       expect(preview.diagnostics).toEqual(expect.any(Array));
+    });
+
+    it("retries preview baseline sampling when the first windowed trajectory would be empty", async () => {
+      const betweenSpy = vi.spyOn(faker.date, "between");
+      betweenSpy
+        .mockReturnValueOnce(new Date("2024-05-01T00:00:00.000Z"))
+        .mockReturnValueOnce(new Date("2024-07-01T00:00:00.000Z"));
+
+      mockRequest.query.mockImplementation((q: string) => {
+        if (q.includes("SELECT TOP 1 id FROM dbo.Patient")) {
+          return Promise.resolve({ recordset: [{ id: "patient-1" }] });
+        }
+        if (
+          q.includes("assessmentTypeFk = 'CE64FA35-9CC6-4D6A-9A7B-C97761681EFC'")
+        ) {
+          return Promise.resolve({
+            recordset: [{ id: "wound-state-atv", definitionVersion: 3 }],
+          });
+        }
+        if (q.includes("WHERE atv.id = @id")) {
+          const requestedId = mockRequest.input.mock.calls.at(-1)?.[2];
+          if (requestedId === "wound-state-atv") {
+            return Promise.resolve({
+              recordset: [
+                {
+                  fieldName: "Wound State",
+                  columnName: "wound_state",
+                  dataType: 1000,
+                  attributeTypeId: "wound-state-selector",
+                  attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                  attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                  isRequired: true,
+                  calculatedValueExpression: null,
+                  visibilityExpression: null,
+                  attributeSetOrderIndex: 1,
+                  attributeOrderIndex: 1,
+                },
+              ],
+            });
+          }
+          return Promise.resolve({
+            recordset: [
+              {
+                fieldName: "Wound State",
+                columnName: "wound_state",
+                dataType: 1000,
+                attributeTypeId: "assessment-wound-state-selector",
+                attributeTypeKey: "56A71C1C-214E-46AD-8A74-BB735AB87B39",
+                attributeSetKey: "31FD9717-B264-A8D5-9B0D-1B31007BAD98",
+                isRequired: true,
+                calculatedValueExpression: null,
+                visibilityExpression: null,
+                attributeSetOrderIndex: 1,
+                attributeOrderIndex: 1,
+              },
+            ],
+          });
+        }
+        if (q.includes("FROM dbo.AttributeLookup")) {
+          return Promise.resolve({
+            recordset: [
+              { id: "lookup-new", text: "New", orderIndex: 1, isOpenWoundState: true },
+              { id: "lookup-improving", text: "Improving", orderIndex: 2, isOpenWoundState: true },
+              { id: "lookup-resolved", text: "Resolved", orderIndex: 3, isOpenWoundState: false },
+            ],
+          });
+        }
+        if (q.includes("SELECT TOP 1 id FROM dbo.Unit")) {
+          return Promise.resolve({ recordset: [{ id: "unit-1" }] });
+        }
+        if (q.includes("SELECT TOP 1 id, [text] AS name FROM dbo.Anatomy")) {
+          return Promise.resolve({ recordset: [{ id: "anatomy-1", name: "Heel" }] });
+        }
+        if (q.includes("att.dataType = 1004")) {
+          return Promise.resolve({ recordset: [{ id: "wound-images-attr" }] });
+        }
+        if (q.includes("FROM dbo.ImageFormat")) {
+          return Promise.resolve({ recordset: [{ id: "image-format-1" }] });
+        }
+        if (q.includes("FROM dbo.StaffUser")) {
+          return Promise.resolve({
+            recordset: [{ id: "staff-user-1", firstName: "ARANZ", lastName: "Support" }],
+          });
+        }
+        return Promise.resolve({ recordset: [] });
+      });
+
+      const preview = await buildAssessmentSqlStatements(
+        {
+          ...baseSpec,
+          assessmentStartDate: "2024-07-01",
+          assessmentPeriodDays: 84,
+        },
+        mockDb
+      );
+
+      expect(preview.statements.length).toBeGreaterThan(0);
+      expect(preview.statements.join("\n")).toContain("INSERT INTO dbo.Wound");
+      expect(betweenSpy).toHaveBeenCalledTimes(2);
     });
   });
 });
