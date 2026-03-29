@@ -1,11 +1,105 @@
 "use client"
 
 import * as React from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker } from "react-day-picker"
+import * as SelectPrimitive from "@radix-ui/react-select"
+import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { DayPicker, useDayPicker } from "react-day-picker"
+import type { DropdownProps } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+
+function parseDropdownOptions(
+  children: DropdownProps["children"]
+): { value: string; label: React.ReactNode }[] {
+  return React.Children.toArray(children).flatMap((child) => {
+    if (!React.isValidElement<{ value?: string | number; children?: React.ReactNode }>(child)) {
+      return []
+    }
+    if (child.type !== "option") return []
+    const v = child.props.value
+    if (v === undefined) return []
+    return [{ value: String(v), label: child.props.children }]
+  })
+}
+
+/**
+ * Radix Select with a bounded, scrollable list. Native <select> lists are OS-sized
+ * and can span the full screen for long year ranges.
+ */
+function CalendarSelectDropdown(props: DropdownProps) {
+  const {
+    className,
+    style,
+    children,
+    value,
+    onChange,
+    name,
+    "aria-label": ariaLabel,
+  } = props
+  const { classNames } = useDayPicker()
+  const options = React.useMemo(() => parseDropdownOptions(children), [children])
+  const strValue = String(value ?? "")
+
+  return (
+    <div className={className} style={style}>
+      <span className={classNames.vhidden}>{ariaLabel}</span>
+      <SelectPrimitive.Root
+        value={strValue}
+        onValueChange={(v) => {
+          onChange?.({ target: { value: v } } as React.ChangeEvent<HTMLSelectElement>)
+        }}
+      >
+        <SelectPrimitive.Trigger
+          aria-label={ariaLabel}
+          className={cn(
+            classNames.caption_label,
+            "flex h-8 shrink-0 items-center gap-1 border-0 bg-transparent px-1 shadow-none",
+            "hover:bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          )}
+        >
+          <SelectPrimitive.Value />
+          <SelectPrimitive.Icon asChild>
+            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+          </SelectPrimitive.Icon>
+        </SelectPrimitive.Trigger>
+        <SelectPrimitive.Portal>
+          <SelectPrimitive.Content
+            position="popper"
+            sideOffset={4}
+            collisionPadding={12}
+            className={cn(
+              "z-[200] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
+              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+            )}
+          >
+            <SelectPrimitive.Viewport className="max-h-60 w-full min-w-[var(--radix-select-trigger-width)] overflow-y-auto p-1">
+              {options.map((opt) => (
+                <SelectPrimitive.Item
+                  key={`${name}-${opt.value}`}
+                  value={opt.value}
+                  className={cn(
+                    "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-7 pr-2 text-sm outline-none",
+                    "focus:bg-accent focus:text-accent-foreground",
+                    "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                  )}
+                >
+                  <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                    <SelectPrimitive.ItemIndicator>
+                      <Check className="h-3.5 w-3.5" />
+                    </SelectPrimitive.ItemIndicator>
+                  </span>
+                  <SelectPrimitive.ItemText>{opt.label}</SelectPrimitive.ItemText>
+                </SelectPrimitive.Item>
+              ))}
+            </SelectPrimitive.Viewport>
+          </SelectPrimitive.Content>
+        </SelectPrimitive.Portal>
+      </SelectPrimitive.Root>
+    </div>
+  )
+}
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
@@ -13,17 +107,34 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
+  fixedWeeks = true,
+  captionLayout = "dropdown-buttons",
+  fromYear = 1920,
+  toYear = 2100,
   ...props
 }: CalendarProps) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
+      fixedWeeks={fixedWeeks}
+      captionLayout={captionLayout}
+      fromYear={fromYear}
+      toYear={toYear}
+      className={cn(
+        "min-h-[320px] w-fit p-3",
+        className
+      )}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-        month: "space-y-4",
+        month: "flex flex-col space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
+        caption_label:
+          "relative z-[1] inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-transparent px-1 text-sm font-medium",
+        caption_dropdowns:
+          "flex items-center justify-center gap-1 text-sm font-medium",
+        dropdown_month: "relative inline-flex h-8 items-center",
+        dropdown_year: "relative inline-flex h-8 items-center",
+        vhidden: "sr-only",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
@@ -54,6 +165,7 @@ function Calendar({
         ...classNames,
       }}
       components={{
+        Dropdown: CalendarSelectDropdown,
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
       }}

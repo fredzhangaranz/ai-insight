@@ -317,7 +317,7 @@ export function WoundTrajectoryStep({
                     {startDate ? format(startDate, "PPP") : "Pick date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto min-w-[288px] p-0" align="start">
                   <Calendar
                     mode="single"
                     selected={startDate}
