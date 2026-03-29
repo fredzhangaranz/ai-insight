@@ -99,7 +99,8 @@ Rules:
 3. If a term has no match in the list, add it to "unmatched" with userTerm only (suggestions will be added automatically).
 4. If a term matches multiple fields (same fieldName, different patientNoteName), add to "ambiguous" with candidates as the full display names from the list.
 5. If a term refers to wounds, assessments, or forms (not patient fields), add to "outOfScope" with a brief reason.
-6. Output ONLY valid JSON. No markdown, no explanation.
+6. Statistical splits or percentages for patient fields (e.g. "50% male / 50% female", "mostly female patients") refer to the corresponding patient field such as gender — put the field in "matched", not "outOfScope". Do not mark gender distribution as out of scope.
+7. Output ONLY valid JSON. No markdown, no explanation.
 
 Output format:
 {
@@ -107,7 +108,9 @@ Output format:
   "unmatched": [{ "userTerm": "..." }],
   "ambiguous": [{ "userTerm": "...", "candidates": ["Field [Note]", "Field [Other]"] }],
   "outOfScope": [{ "userTerm": "...", "reason": "..." }]
-}`;
+}
+
+Note: Rule 6 overrides rule 5 when the user is describing how to populate a patient field (including gender mix).`;
 
 export async function resolveFieldsFromText(
   description: string,
