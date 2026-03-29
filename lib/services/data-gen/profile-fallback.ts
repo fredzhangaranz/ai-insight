@@ -36,6 +36,33 @@ const TRAJECTORY_DESCRIPTIONS: Record<WoundProgressionStyle, string> = {
     "Treatment change variant — similar to NPTraditionalDisposable",
 };
 
+export function getProfileFieldOptions(field: FieldSchema): string[] | null {
+  if (field.dataType === "Boolean") {
+    return ["true", "false"];
+  }
+
+  if (
+    (field.dataType === "SingleSelectList" || field.dataType === "MultiSelectList") &&
+    field.options &&
+    field.options.length > 0
+  ) {
+    return field.options;
+  }
+
+  return null;
+}
+
+function buildUniformWeights(options: string[]): Record<string, number> {
+  const weights: Record<string, number> = {};
+  const weight = 1 / options.length;
+
+  for (const option of options) {
+    weights[option] = weight;
+  }
+
+  return weights;
+}
+
 /**
  * Deterministic fallback when AI fails. Equal weights over all options.
  */
@@ -68,27 +95,19 @@ export function buildFallbackPhase(
   const fieldDistributions: PhaseFieldDistribution[] = [];
 
   for (const f of schema) {
-    if (
-      (f.dataType === "SingleSelectList" || f.dataType === "MultiSelectList") &&
-      f.options &&
-      f.options.length > 0
-    ) {
-      const weights: Record<string, number> = {};
-      const w = 1 / f.options.length;
-      for (const opt of f.options) {
-        weights[opt] = w;
-      }
-      const suggestion = suggestFieldBehavior(f);
-      fieldDistributions.push({
-        fieldName: f.fieldName,
-        columnName: f.columnName,
-        weights,
-        behavior: suggestion.behavior,
-        recommendedBehavior: suggestion.behavior,
-        behaviorConfidence: suggestion.confidence,
-        behaviorRationale: suggestion.rationale,
-      });
-    }
+    const options = getProfileFieldOptions(f);
+    if (!options?.length) continue;
+
+    const suggestion = suggestFieldBehavior(f);
+    fieldDistributions.push({
+      fieldName: f.fieldName,
+      columnName: f.columnName,
+      weights: buildUniformWeights(options),
+      behavior: suggestion.behavior,
+      recommendedBehavior: suggestion.behavior,
+      behaviorConfidence: suggestion.confidence,
+      behaviorRationale: suggestion.rationale,
+    });
   }
 
   return {
@@ -102,26 +121,20 @@ export function sanitizeFieldProfiles(
   profiles: FieldProfileSet,
   schema: FieldSchema[]
 ): FieldProfileSet {
-  const selectableFields = new Map(
+  const profiledFields = new Map(
     schema
-      .filter(
-        (field) =>
-          (field.dataType === "SingleSelectList" ||
-            field.dataType === "MultiSelectList") &&
-          field.options &&
-          field.options.length > 0
-      )
+      .filter((field) => getProfileFieldOptions(field)?.length)
       .map((field) => [field.columnName, field])
   );
 
   return profiles.map((profile) =>
-    sanitizeProfile(profile, selectableFields)
+    sanitizeProfile(profile, profiledFields)
   );
 }
 
 function sanitizeProfile(
   profile: TrajectoryFieldProfile,
-  selectableFields: Map<string, FieldSchema>
+  profiledFields: Map<string, FieldSchema>
 ): TrajectoryFieldProfile {
   const canonical = new Map<
     string,
@@ -137,12 +150,13 @@ function sanitizeProfile(
 
   for (const phase of profile.phases) {
     for (const distribution of phase.fieldDistributions) {
-      const field = selectableFields.get(distribution.columnName);
-      if (!field?.options?.length) continue;
+      const field = profiledFields.get(distribution.columnName);
+      const options = field ? getProfileFieldOptions(field) : null;
+      if (!field || !options?.length) continue;
 
       const suggestion = suggestFieldBehavior(field);
       const current = canonical.get(field.columnName);
-      const weights = sanitizeDistributionWeights(distribution.weights, field.options);
+      const weights = sanitizeDistributionWeights(distribution.weights, options);
       const behavior = sanitizeBehavior(distribution.behavior);
       const recommendedBehavior =
         sanitizeBehavior(distribution.recommendedBehavior) ?? suggestion.behavior;
@@ -167,6 +181,29 @@ function sanitizeProfile(
 
       current.weightsByPhase.set(phase.phase, weights);
     }
+  }
+
+  for (const field of profiledFields.values()) {
+    if (canonical.has(field.columnName)) continue;
+
+    const options = getProfileFieldOptions(field);
+    if (!options?.length) continue;
+
+    const suggestion = suggestFieldBehavior(field);
+    const fallbackWeights = buildUniformWeights(options);
+
+    canonical.set(field.columnName, {
+      field,
+      behavior: suggestion.behavior,
+      recommendedBehavior: suggestion.behavior,
+      behaviorConfidence: suggestion.confidence,
+      behaviorRationale: suggestion.rationale,
+      weightsByPhase: new Map([
+        ["early", { ...fallbackWeights }],
+        ["mid", { ...fallbackWeights }],
+        ["late", { ...fallbackWeights }],
+      ]),
+    });
   }
 
   return {

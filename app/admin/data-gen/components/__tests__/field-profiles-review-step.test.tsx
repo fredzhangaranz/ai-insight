@@ -19,6 +19,16 @@ const formSchema: FieldSchema[] = [
     attributeOrderIndex: 1,
   },
   {
+    fieldName: "Present on Admission",
+    columnName: "ai_ass_poa",
+    dataType: "Boolean",
+    isNullable: false,
+    storageType: "encounter_attribute",
+    attributeTypeId: "poa-attr",
+    attributeSetOrderIndex: 1,
+    attributeOrderIndex: 2,
+  },
+  {
     fieldName: "Wound State",
     columnName: "wound_state",
     dataType: "SingleSelectList",
@@ -28,7 +38,7 @@ const formSchema: FieldSchema[] = [
     attributeTypeKey: WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY,
     options: ["Open", "Healed"],
     attributeSetOrderIndex: 1,
-    attributeOrderIndex: 2,
+    attributeOrderIndex: 3,
   },
 ];
 
@@ -51,6 +61,18 @@ const initialProfiles: FieldProfileSet = [
             weights: {
               "Pressure Injury": 0.6,
               Burn: 0.4,
+            },
+          },
+          {
+            fieldName: "Present on Admission",
+            columnName: "ai_ass_poa",
+            behavior: "per_wound",
+            recommendedBehavior: "per_wound",
+            behaviorRationale:
+              "This field usually represents wound identity or episode context and should stay stable across assessments.",
+            weights: {
+              true: 0.7,
+              false: 0.3,
             },
           },
           {
@@ -78,6 +100,16 @@ const initialProfiles: FieldProfileSet = [
               Burn: 0.5,
             },
           },
+          {
+            fieldName: "Present on Admission",
+            columnName: "ai_ass_poa",
+            behavior: "per_wound",
+            recommendedBehavior: "per_wound",
+            weights: {
+              true: 0.7,
+              false: 0.3,
+            },
+          },
         ],
       },
       {
@@ -92,6 +124,16 @@ const initialProfiles: FieldProfileSet = [
             weights: {
               "Pressure Injury": 0.4,
               Burn: 0.6,
+            },
+          },
+          {
+            fieldName: "Present on Admission",
+            columnName: "ai_ass_poa",
+            behavior: "per_wound",
+            recommendedBehavior: "per_wound",
+            weights: {
+              true: 0.7,
+              false: 0.3,
             },
           },
         ],
@@ -112,6 +154,7 @@ describe("FieldProfilesReviewStep", () => {
     );
 
     expect(screen.queryByText("Wound State")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Present on Admission").length).toBeGreaterThan(0);
     expect(
       screen.getAllByRole("button", { name: "Changes over time" }).length
     ).toBeGreaterThan(0);
@@ -139,7 +182,7 @@ describe("FieldProfilesReviewStep", () => {
     expect(screen.getAllByText(/Initial value distribution/i).length).toBeGreaterThan(0);
     expect(
       screen.getAllByText(/reuses the initial value distribution from the early phase/i)
-    ).toHaveLength(2);
+    ).toHaveLength(4);
 
     fireEvent.change(screen.getByLabelText("Pressure Injury"), {
       target: { value: "0.75" },

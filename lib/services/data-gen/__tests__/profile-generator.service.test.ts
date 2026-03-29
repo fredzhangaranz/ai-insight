@@ -36,6 +36,14 @@ const formSchema: FieldSchema[] = [
     attributeTypeId: "attr-2",
     options: ["Pressure Injury", "Burn"],
   },
+  {
+    fieldName: "Present on Admission",
+    columnName: "ai_ass_poa",
+    dataType: "Boolean",
+    isNullable: true,
+    storageType: "encounter_attribute",
+    attributeTypeId: "attr-3",
+  },
 ];
 
 describe("profile-generator.service", () => {
@@ -128,6 +136,25 @@ describe("profile-generator.service", () => {
         modelId: "test",
       });
       expect(profiles.length).toBeGreaterThan(0);
+    });
+
+    it("backfills Boolean profile fields when AI omits them", async () => {
+      const profiles = await generateFieldProfiles({
+        formSchema,
+        modelId: "test",
+        selectedStyles: ["Exponential"],
+      });
+
+      const poaDistribution = profiles[0].phases[0].fieldDistributions.find(
+        (distribution) => distribution.columnName === "ai_ass_poa"
+      );
+
+      expect(poaDistribution).toBeDefined();
+      expect(poaDistribution?.behavior).toBe("per_wound");
+      expect(poaDistribution?.weights).toEqual({
+        true: 0.5,
+        false: 0.5,
+      });
     });
 
     it("returns fallback when form schema is empty", async () => {

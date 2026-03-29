@@ -24,6 +24,14 @@ const schema: FieldSchema[] = [
     attributeTypeId: "attr-2",
     options: ["No signs", "Local infection suspected"],
   },
+  {
+    fieldName: "Present on Admission",
+    columnName: "ai_ass_poa",
+    dataType: "Boolean",
+    isNullable: true,
+    storageType: "encounter_attribute",
+    attributeTypeId: "attr-3",
+  },
 ];
 
 describe("profile-fallback", () => {
@@ -35,10 +43,18 @@ describe("profile-fallback", () => {
     const infection = profiles[0].phases[0].fieldDistributions.find(
       (distribution) => distribution.columnName === "infection_status"
     );
+    const poa = profiles[0].phases[0].fieldDistributions.find(
+      (distribution) => distribution.columnName === "ai_ass_poa"
+    );
 
     expect(classification?.behavior).toBe("per_wound");
     expect(classification?.recommendedBehavior).toBe("per_wound");
     expect(infection?.behavior).toBe("per_assessment");
+    expect(poa?.behavior).toBe("per_wound");
+    expect(poa?.weights).toEqual({
+      true: 0.5,
+      false: 0.5,
+    });
   });
 
   it("normalizes per-wound weights across all phases", () => {

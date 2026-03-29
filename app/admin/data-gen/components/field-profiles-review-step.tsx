@@ -21,6 +21,7 @@ import type {
 import type { TrajectorySelectionResult } from "@/lib/services/data-gen/trajectory-selector";
 import type { FieldSchema } from "@/lib/services/data-gen/generation-spec.types";
 import { WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY } from "@/lib/services/data-gen/field-classifier.service";
+import { getProfileFieldOptions } from "@/lib/services/data-gen/profile-fallback";
 import { AlertCircle, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -53,12 +54,10 @@ export function FieldProfilesReviewStep({
         hasVisibilityRule: boolean;
       }
     >();
-    const selectableFields = (formSchema ?? []).filter(
-      (field) =>
-        (field.dataType === "SingleSelectList" || field.dataType === "MultiSelectList") &&
-        (field.options?.length ?? 0) > 0
+    const profiledFields = (formSchema ?? []).filter(
+      (field) => (getProfileFieldOptions(field)?.length ?? 0) > 0
     );
-    selectableFields.forEach((field, idx) => {
+    profiledFields.forEach((field, idx) => {
       const setOrder = field.attributeSetOrderIndex ?? 999;
       const attributeOrder = field.attributeOrderIndex ?? idx;
       meta.set(field.columnName, {
@@ -199,7 +198,7 @@ export function FieldProfilesReviewStep({
         </p>
         {schemaFieldMeta.size > 0 && (
           <div className="text-xs text-muted-foreground">
-            Required selectable fields:{" "}
+            Required profiled fields:{" "}
             <span className="font-medium">
               {schemaRequiredSelectableCount}/{schemaFieldMeta.size}
             </span>
@@ -498,7 +497,7 @@ function FieldDistributionEditor({
                   htmlFor={`${dist.columnName}-${opt}`}
                   className="text-xs leading-snug text-foreground break-words"
                 >
-                  {opt}
+                  {formatOptionLabel(opt)}
                 </Label>
                 <Input
                   id={`${dist.columnName}-${opt}`}
@@ -550,6 +549,12 @@ function labelForBehavior(behavior: FieldValueBehavior): string {
   if (behavior === "per_wound") return "Carry through this wound";
   if (behavior === "system") return "System-controlled";
   return "Changes over time";
+}
+
+function formatOptionLabel(option: string): string {
+  if (option === "true") return "Yes";
+  if (option === "false") return "No";
+  return option;
 }
 
 function getCanonicalWeights(
