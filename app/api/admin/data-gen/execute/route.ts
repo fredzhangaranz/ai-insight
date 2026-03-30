@@ -25,8 +25,10 @@ import {
   validateInsertedData,
   validateInsertedAssessmentAttributes,
   clonePatientDataToRpt,
+  summarizeRptCloneVerification,
   syncChangeTrackingVersion,
   updateLastExportedVersion,
+  verifyRptCloneSync,
 } from "@/lib/services/data-gen/execution-helpers";
 import type {
   GenerationSpec,
@@ -46,6 +48,25 @@ interface ExecutionStepResult {
   error?: string;
   startedAt?: number;
   completedAt?: number;
+}
+
+function getRptVerificationTargets(
+  spec: GenerationSpec,
+  result: GenerationResult
+) {
+  if (spec.entity === "assessment_bundle") {
+    return {
+      patientIds: result.insertedPatientIds ?? [],
+      woundIds: result.insertedWoundIds ?? [],
+      assessmentIds: result.insertedSeriesIds ?? result.insertedIds ?? [],
+    };
+  }
+
+  return {
+    patientIds: result.insertedIds ?? [],
+    woundIds: [],
+    assessmentIds: [],
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -235,11 +256,13 @@ export async function POST(request: NextRequest) {
       "Cloning data to reporting schema..."
     );
     try {
-      await clonePatientDataToRpt(pool);
+      const cloneResult = await clonePatientDataToRpt(pool);
       addStep(
         "clone_to_rpt",
         "complete",
-        "Data cloned to rpt schema for reporting"
+        cloneResult.attempts > 1
+          ? `Data cloned to rpt schema for reporting after ${cloneResult.attempts} attempts`
+          : "Data cloned to rpt schema for reporting"
       );
 
       // After successful clone, update the last exported version marker
@@ -253,13 +276,43 @@ export async function POST(request: NextRequest) {
         );
       }
     } catch (cloneError) {
-      // Clone failure is non-fatal; log and continue
-      addStep(
-        "clone_to_rpt",
-        "failed",
-        "Clone warning: data inserted but rpt not synced",
-        cloneError instanceof Error ? cloneError.message : String(cloneError)
-      );
+      try {
+        const verification = await verifyRptCloneSync(
+          pool,
+          getRptVerificationTargets(effectiveSpec, result)
+        );
+
+        if (verification.isSynced) {
+          addStep(
+            "clone_to_rpt",
+            "complete",
+            "Clone reported an error, but rpt verification passed"
+          );
+          try {
+            await updateLastExportedVersion(pool, currentVersion);
+          } catch (updateError) {
+            console.warn(
+              "Warning: Clone verification passed but failed to update version marker:",
+              updateError
+            );
+          }
+        } else {
+          addStep(
+            "clone_to_rpt",
+            "failed",
+            "Clone warning: data inserted but rpt not fully synced",
+            `${cloneError instanceof Error ? cloneError.message : String(cloneError)} | ${summarizeRptCloneVerification(verification)}`
+          );
+        }
+      } catch (verificationError) {
+        // Clone failure is non-fatal; log and continue
+        addStep(
+          "clone_to_rpt",
+          "failed",
+          "Clone warning: data inserted but rpt sync could not be verified",
+          `${cloneError instanceof Error ? cloneError.message : String(cloneError)} | Verification failed: ${verificationError instanceof Error ? verificationError.message : String(verificationError)}`
+        );
+      }
     }
 
     return NextResponse.json({

@@ -7,12 +7,15 @@ vi.mock("@/lib/services/customer-service", () => ({
   getConnectionStringForCustomer: vi.fn().mockResolvedValue("Server=.;Database=test;"),
 }));
 vi.mock("@/lib/services/sqlserver/client", () => ({ getSqlServerPool: vi.fn() }));
-vi.mock("@/lib/services/data-gen/browse.service", () => ({ browse: vi.fn() }));
+vi.mock("@/lib/services/data-gen/browse.service", () => ({
+  browse: vi.fn(),
+  browsePatientIds: vi.fn(),
+}));
 
 import { getServerSession } from "next-auth";
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 import { getConnectionStringForCustomer } from "@/lib/services/customer-service";
-import { browse } from "@/lib/services/data-gen/browse.service";
+import { browse, browsePatientIds } from "@/lib/services/data-gen/browse.service";
 
 describe("Browse API", () => {
   const mockPool = {};
@@ -22,6 +25,7 @@ describe("Browse API", () => {
     (getServerSession as any).mockResolvedValue({ user: {} });
     (getSqlServerPool as any).mockResolvedValue(mockPool);
     (getConnectionStringForCustomer as any).mockResolvedValue("Server=.;Database=test;");
+    (browsePatientIds as any).mockResolvedValue({ ids: [], total: 0 });
     (browse as any).mockResolvedValue({
       rows: [{ id: "p1", name: "John Doe", woundCount: 2, assessmentCount: 5 }],
       total: 1,
@@ -95,6 +99,48 @@ describe("Browse API", () => {
         filter: "no_assessments",
       })
     );
+  });
+
+  it("returns ids when mode=ids and entity=patient", async () => {
+    (browsePatientIds as any).mockResolvedValue({
+      ids: ["a", "b"],
+      total: 2,
+    });
+    const req = new NextRequest(
+      "http://localhost/api/admin/data-gen/browse?customerId=c1&entity=patient&mode=ids&filter=all"
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ids).toEqual(["a", "b"]);
+    expect(data.total).toBe(2);
+    expect(browsePatientIds).toHaveBeenCalledWith(
+      mockPool,
+      expect.objectContaining({ filter: "all" })
+    );
+    expect(browse).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when mode=ids with non-patient entity", async () => {
+    const req = new NextRequest(
+      "http://localhost/api/admin/data-gen/browse?customerId=c1&entity=wound&mode=ids"
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(400);
+    expect(browsePatientIds).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when mode=ids and browsePatientIds throws cap error", async () => {
+    (browsePatientIds as any).mockRejectedValue(
+      new Error("Too many matching patients (50000). Maximum 10,000 can be selected at once — narrow search or filter.")
+    );
+    const req = new NextRequest(
+      "http://localhost/api/admin/data-gen/browse?customerId=c1&entity=patient&mode=ids"
+    );
+    const res = await GET(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("Too many matching");
   });
 
   it("returns 400 when filter is invalid", async () => {

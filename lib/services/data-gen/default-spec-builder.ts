@@ -43,6 +43,157 @@ export interface AgeConfigInput {
   sd?: number;
 }
 
+/** Gender mix from Describe step UI (percentages, must sum to 100) */
+export interface GenderConfigInput {
+  femalePercent: number;
+  malePercent: number;
+}
+
+const FEMALE_GENDER_TOKENS = new Set([
+  "female",
+  "f",
+  "woman",
+  "women",
+  "girl",
+  "girls",
+  "cisfemale",
+  "transfemale",
+]);
+
+const MALE_GENDER_TOKENS = new Set([
+  "male",
+  "m",
+  "man",
+  "men",
+  "boy",
+  "boys",
+  "cismale",
+  "transmale",
+]);
+
+function classifyGenderOption(option: string): "female" | "male" | null {
+  const normalized = option.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const compact = normalized.replace(/[^a-z0-9]/g, "");
+  if (compact === "f") return "female";
+  if (compact === "m") return "male";
+
+  const tokens = normalized.split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.some((token) => FEMALE_GENDER_TOKENS.has(token))) return "female";
+  if (tokens.some((token) => MALE_GENDER_TOKENS.has(token))) return "male";
+  return null;
+}
+
+/** At least one option maps to Female and one maps to Male. */
+function hasMaleFemaleOptions(options: string[]): boolean {
+  let hasFemale = false;
+  let hasMale = false;
+  for (const opt of options) {
+    const role = classifyGenderOption(opt);
+    if (role === "female") hasFemale = true;
+    else if (role === "male") hasMale = true;
+  }
+  return hasFemale && hasMale;
+}
+
+/**
+ * Locate the patient field that represents sex/gender for generation.
+ * Silhouette often exposes this as dbo.Patient.gender (select), isFemale (bit), or an EAV
+ * Boolean like details_is_female — not always columnName "gender".
+ */
+export function findGenderSchemaField(
+  schema: FieldSchema[]
+): FieldSchema | undefined {
+  const genderColumn = schema.find(
+    (f) =>
+      f.columnName.toLowerCase() === "gender" &&
+      f.dataType === "SingleSelectList" &&
+      (f.options?.length ?? 0) >= 2
+  );
+  if (genderColumn && hasMaleFemaleOptions(genderColumn.options ?? [])) {
+    return genderColumn;
+  }
+
+  const genderByLabel = schema.find(
+    (f) =>
+      f.dataType === "SingleSelectList" &&
+      /\bgender\b/i.test(f.fieldName) &&
+      hasMaleFemaleOptions(f.options ?? [])
+  );
+  if (genderByLabel) return genderByLabel;
+
+  const isFemaleDirect = schema.find(
+    (f) =>
+      f.columnName.toLowerCase() === "isfemale" && f.dataType === "Boolean"
+  );
+  if (isFemaleDirect) return isFemaleDirect;
+
+  return schema.find(
+    (f) =>
+      f.dataType === "Boolean" &&
+      (/\bgender\b/i.test(f.fieldName) ||
+        /is_female|isfemale/i.test(f.columnName))
+  );
+}
+
+function buildBooleanGenderWeights(
+  config: GenderConfigInput
+): Record<string, number> {
+  return {
+    "1": config.femalePercent / 100,
+    "0": config.malePercent / 100,
+  };
+}
+
+/**
+ * Map dropdown option labels to female vs male weights.
+ * Returns null if options cannot be mapped (e.g. missing Male/Female).
+ */
+export function buildGenderWeightsForOptions(
+  options: string[],
+  config: GenderConfigInput
+): Record<string, number> | null {
+  if (options.length < 1) return null;
+  const fW = config.femalePercent / 100;
+  const mW = config.malePercent / 100;
+
+  const roleByOption = new Map<string, "female" | "male" | null>();
+  const femaleOptions: string[] = [];
+  const maleOptions: string[] = [];
+  const unmappedOptions: string[] = [];
+
+  for (const opt of options) {
+    const role = classifyGenderOption(opt);
+    roleByOption.set(opt, role);
+    if (role === "female") femaleOptions.push(opt);
+    else if (role === "male") maleOptions.push(opt);
+    else unmappedOptions.push(opt);
+  }
+
+  if (femaleOptions.length === 0 || maleOptions.length === 0) return null;
+
+  const weights: Record<string, number> = {};
+  const femaleShare = fW / femaleOptions.length;
+  const maleShare = mW / maleOptions.length;
+
+  for (const opt of options) {
+    const role = roleByOption.get(opt);
+    if (role === "female") weights[opt] = femaleShare;
+    else if (role === "male") weights[opt] = maleShare;
+  }
+
+  if (unmappedOptions.length > 0) {
+    const assignedWeight = femaleShare * femaleOptions.length + maleShare * maleOptions.length;
+    const share = Math.max(0, 1 - assignedWeight) / unmappedOptions.length;
+    for (const opt of unmappedOptions) {
+      weights[opt] = share;
+    }
+  }
+
+  return weights;
+}
+
 const FAKER_BY_COLUMN: Record<string, string> = {
   firstName: "person.firstName",
   lastName: "person.lastName",
@@ -86,14 +237,21 @@ export function buildDefaultPatientSpec(
   schema: FieldSchema[],
   count: number,
   mode: "insert" | "update",
-  ageConfig?: AgeConfigInput
+  ageConfig?: AgeConfigInput,
+  genderConfig?: GenderConfigInput
 ): GenerationSpec {
   const fields: FieldSpec[] = [];
+  const genderTarget = findGenderSchemaField(schema);
 
   for (const f of schema) {
     if (f.fieldClass === "source-of-truth" || f.systemManaged) continue;
 
-    const criteria = buildCriteriaForField(f, ageConfig);
+    const criteria = buildCriteriaForField(
+      f,
+      ageConfig,
+      genderConfig,
+      genderTarget
+    );
     if (!criteria) continue;
 
     fields.push({
@@ -135,12 +293,29 @@ export function buildDefaultPatientSpec(
 
 function buildCriteriaForField(
   f: FieldSchema,
-  ageConfig?: AgeConfigInput
+  ageConfig?: AgeConfigInput,
+  genderConfig?: GenderConfigInput,
+  genderTarget?: FieldSchema
 ): FieldSpec["criteria"] | null {
+  const isGenderTarget =
+    !!genderConfig &&
+    !!genderTarget &&
+    f.columnName === genderTarget.columnName;
+
   switch (f.dataType) {
     case "SingleSelectList":
     case "MultiSelectList":
       if (f.options && f.options.length > 0) {
+        if (
+          isGenderTarget &&
+          f.dataType === "SingleSelectList" &&
+          genderConfig
+        ) {
+          const custom = buildGenderWeightsForOptions(f.options, genderConfig);
+          if (custom) {
+            return { type: "distribution", weights: custom };
+          }
+        }
         const weights: Record<string, number> = {};
         const w = 1 / f.options.length;
         for (const opt of f.options) {
@@ -183,6 +358,12 @@ function buildCriteriaForField(
     }
 
     case "Boolean":
+      if (isGenderTarget && !f.options?.length && genderConfig) {
+        return {
+          type: "distribution",
+          weights: buildBooleanGenderWeights(genderConfig),
+        };
+      }
       if (f.options && f.options.length > 0) {
         const weights: Record<string, number> = {};
         const w = 1 / f.options.length;
@@ -306,4 +487,57 @@ export function applyAgeConfigToSpec(
       f === dobField ? { ...f, criteria } : f
     ),
   };
+}
+
+/**
+ * Apply gender mix from Describe step UI to the gender field (overrides AI/spec defaults).
+ */
+export function applyGenderConfigToSpec(
+  spec: GenerationSpec,
+  genderConfig: GenderConfigInput,
+  schema: FieldSchema[]
+): GenerationSpec {
+  if (spec.entity !== "patient") return spec;
+
+  const genderSchema = findGenderSchemaField(schema);
+  if (!genderSchema) return spec;
+
+  const genderField = spec.fields.find(
+    (f) => f.enabled && f.columnName === genderSchema.columnName
+  );
+  if (!genderField) return spec;
+
+  if (
+    genderSchema.dataType === "SingleSelectList" &&
+    genderSchema.options?.length
+  ) {
+    const weights = buildGenderWeightsForOptions(
+      genderSchema.options,
+      genderConfig
+    );
+    if (!weights) return spec;
+    return {
+      ...spec,
+      fields: spec.fields.map((f) =>
+        f === genderField
+          ? { ...f, criteria: { type: "distribution", weights } }
+          : f
+      ),
+    };
+  }
+
+  if (genderSchema.dataType === "Boolean") {
+    const criteria = {
+      type: "distribution" as const,
+      weights: buildBooleanGenderWeights(genderConfig),
+    };
+    return {
+      ...spec,
+      fields: spec.fields.map((f) =>
+        f === genderField ? { ...f, criteria } : f
+      ),
+    };
+  }
+
+  return spec;
 }

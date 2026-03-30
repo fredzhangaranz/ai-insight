@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   classifyPhysicalColumn,
   classifyFormField,
+  suggestFieldBehavior,
 } from "../field-classifier.service";
 
 describe("field-classifier.service", () => {
@@ -55,6 +56,26 @@ describe("field-classifier.service", () => {
     it("returns pure-data for normal fields without expression", () => {
       expect(classifyFormField("firstName", null)).toBe("pure-data");
       expect(classifyFormField("etiology", undefined)).toBe("pure-data");
+    });
+  });
+
+  describe("suggestFieldBehavior", () => {
+    it("marks wound classification fields as per_wound", () => {
+      expect(
+        suggestFieldBehavior({
+          fieldName: "Wound Classification",
+          columnName: "wound_classification",
+        }).behavior
+      ).toBe("per_wound");
+    });
+
+    it("marks wound state fields as system", () => {
+      expect(
+        suggestFieldBehavior({
+          fieldName: "Wound State",
+          columnName: "wound_state",
+        }).behavior
+      ).toBe("system");
     });
   });
 });

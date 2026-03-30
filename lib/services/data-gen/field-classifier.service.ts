@@ -4,6 +4,8 @@
  */
 
 import type { FieldClass } from "./generation-spec.types";
+import type { FieldSchema } from "./generation-spec.types";
+import type { FieldValueBehavior } from "./trajectory-field-profile.types";
 
 const PHYSICAL_COLUMN_CLASSES: Record<string, Record<string, FieldClass>> = {
   Outline: {
@@ -102,6 +104,42 @@ const FIXED_PER_WOUND_PATTERNS = [
   "wound_type_id",
 ];
 
+const SYSTEM_CONTROLLED_PATTERNS = [
+  "woundstate",
+  "wound_state",
+  "healingstatus",
+  "healing_status",
+  "woundstatus",
+  "wound_status",
+];
+
+const PER_WOUND_PATTERNS = [
+  ...FIXED_PER_WOUND_PATTERNS,
+  "wound occurrence",
+  "wound_occurrence",
+  "woundoccurrence",
+  "present on admission",
+  "present_on_admission",
+  "presentonadmission",
+  "poa",
+  "hospital acquired",
+  "hospital_acquired",
+  "onset date",
+  "onset_date",
+  "onsetdate",
+  "leg ulcer type",
+  "leg_ulcer_type",
+  "legulcertype",
+  "diabetic foot ulcer type",
+  "diabetic_foot_ulcer_type",
+  "diabeticfootulcertype",
+  "dfu type",
+  "dfu_type",
+];
+
+export const WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY =
+  "56A71C1C-214E-46AD-8A74-BB735AB87B39";
+
 /**
  * Returns true if this field should have the same value across all assessments of a wound.
  * Wound type / etiology rarely changes during a healing trajectory.
@@ -112,4 +150,48 @@ export function isFixedPerWoundField(
 ): boolean {
   const combined = `${(fieldName ?? "").toLowerCase()} ${(columnName ?? "").toLowerCase()}`;
   return FIXED_PER_WOUND_PATTERNS.some((p) => combined.includes(p));
+}
+
+export interface FieldBehaviorSuggestion {
+  behavior: FieldValueBehavior;
+  confidence: number;
+  rationale: string;
+}
+
+export function suggestFieldBehavior(
+  field: Pick<
+    FieldSchema,
+    "fieldName" | "columnName" | "attributeTypeKey" | "systemManaged"
+  >
+): FieldBehaviorSuggestion {
+  const combined = `${field.fieldName ?? ""} ${field.columnName ?? ""}`.toLowerCase();
+  const attributeTypeKey = String(field.attributeTypeKey ?? "").toUpperCase();
+
+  if (
+    field.systemManaged ||
+    attributeTypeKey === WOUND_STATE_SELECTOR_ATTRIBUTE_TYPE_KEY ||
+    SYSTEM_CONTROLLED_PATTERNS.some((pattern) => combined.includes(pattern))
+  ) {
+    return {
+      behavior: "system",
+      confidence: 0.98,
+      rationale: "This field is controlled by wound-state or other system-managed semantics.",
+    };
+  }
+
+  if (PER_WOUND_PATTERNS.some((pattern) => combined.includes(pattern))) {
+    return {
+      behavior: "per_wound",
+      confidence: 0.92,
+      rationale:
+        "This field usually represents wound identity or episode context and should stay stable across assessments.",
+    };
+  }
+
+  return {
+    behavior: "per_assessment",
+    confidence: 0.7,
+    rationale:
+      "This field is expected to vary with wound progression, assessment findings, or treatment over time.",
+  };
 }

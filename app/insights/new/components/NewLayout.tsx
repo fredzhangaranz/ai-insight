@@ -18,7 +18,6 @@ import {
   type ComposerState,
 } from "./FixedBottomComposer";
 import { SmartSuggestions } from "./SmartSuggestions";
-import { LayoutToggle, type LayoutMode } from "./LayoutToggle";
 import { useConversation } from "@/lib/hooks/useConversation";
 import type { InsightResult } from "@/lib/hooks/useInsights";
 
@@ -30,10 +29,8 @@ export interface NewLayoutProps {
   question: string;
   setQuestion: Dispatch<SetStateAction<string>>;
   conversationThreadId: string | undefined;
-  setConversationThreadId: Dispatch<SetStateAction<string | undefined>>;
   /** Real DB id for first user message when thread exists (from thread/create or history). */
   firstThreadUserMessageId: string | undefined;
-  historyRefreshKey: number;
   handleNewQuestion: () => void;
   handleHistorySelect: (query: any) => Promise<void>;
   // First question flow (from useInsights)
@@ -46,8 +43,6 @@ export interface NewLayoutProps {
     clarificationAuditIds?: number[],
   ) => Promise<void>;
   analysis: { steps: Array<{ id: string; message: string; status?: string }> };
-  layoutMode: LayoutMode;
-  onLayoutModeChange: (mode: LayoutMode) => void;
 }
 
 export function NewLayout({
@@ -58,9 +53,7 @@ export function NewLayout({
   question,
   setQuestion,
   conversationThreadId,
-  setConversationThreadId,
   firstThreadUserMessageId,
-  historyRefreshKey,
   handleNewQuestion,
   handleHistorySelect,
   result,
@@ -69,8 +62,6 @@ export function NewLayout({
   handleAsk,
   handleClarificationSubmit,
   analysis,
-  layoutMode,
-  onLayoutModeChange,
 }: NewLayoutProps) {
   const {
     messages: conversationMessages,
@@ -347,7 +338,6 @@ export function NewLayout({
                 </p>
               </div>
               <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto sm:justify-start">
-                <LayoutToggle value={layoutMode} onChange={onLayoutModeChange} />
                 <button
                   type="button"
                   onClick={() => {
@@ -426,4 +416,3 @@ export function NewLayout({
     </div>
   );
 }
-

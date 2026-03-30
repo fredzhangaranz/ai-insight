@@ -7,7 +7,11 @@ import type {
 } from "./generation-spec.types";
 import { generateFieldValue, pickRandom, weightedPick } from "./generators/base.generator";
 import { isFixedPerWoundField } from "./field-classifier.service";
-import type { FieldProfileSet } from "./trajectory-field-profile.types";
+import type {
+  FieldProfileSet,
+  FieldValueBehavior,
+  TrajectoryFieldProfile,
+} from "./trajectory-field-profile.types";
 
 type VisibilityValue = string | number | boolean | Date | string[] | null;
 
@@ -122,16 +126,21 @@ export function getProfileWeightsForField(
 ): Record<string, number> | null {
   if (totalAssessments <= 0) return null;
 
-  const ratio = assessmentIndex / totalAssessments;
-  const phase: "early" | "mid" | "late" =
-    ratio < 0.33 ? "early" : ratio < 0.66 ? "mid" : "late";
-
   const profile = profiles.find((p) => p.trajectoryStyle === trajectoryStyle);
   if (!profile?.phases) return null;
 
+  const behavior = getExplicitProfileFieldBehavior(profile, columnName);
+  if (behavior === "system") return null;
+
+  if (behavior === "per_wound") {
+    const canonicalDistribution = getCanonicalProfileDistribution(profile, columnName);
+    if (!canonicalDistribution?.weights) return null;
+    return canonicalDistribution.weights;
+  }
+
+  const phase = resolveTrajectoryPhase(assessmentIndex, totalAssessments);
   const phaseData = profile.phases.find((p) => p.phase === phase);
   if (!phaseData?.fieldDistributions) return null;
-
   const dist = phaseData.fieldDistributions.find(
     (d) => d.columnName === columnName
   );
@@ -332,6 +341,11 @@ export function generateVisibleAssessmentFields(params: {
     pass++;
 
     for (const field of generatableFields) {
+      const shouldCarryThrough = shouldCarryThroughField(
+        field,
+        params.fieldProfiles,
+        params.progressionStyle
+      );
       const visible = evaluateFieldVisibility(field, context);
       if (!visible) {
         if (!params.seededContextByColumn?.has(field.columnName)) {
@@ -372,7 +386,7 @@ export function generateVisibleAssessmentFields(params: {
           const generatedField = requiredFallback;
           generatedByColumn.set(field.columnName, generatedField);
           context.set(field.columnName, generatedField.contextValue);
-          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+          if (shouldCarryThrough) {
             params.fixedPerWoundCache.set(field.columnName, generatedField);
           }
           changed = true;
@@ -403,7 +417,7 @@ export function generateVisibleAssessmentFields(params: {
           const generatedField = requiredFallback;
           generatedByColumn.set(field.columnName, generatedField);
           context.set(field.columnName, generatedField.contextValue);
-          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+          if (shouldCarryThrough) {
             params.fixedPerWoundCache.set(field.columnName, generatedField);
           }
           changed = true;
@@ -425,7 +439,7 @@ export function generateVisibleAssessmentFields(params: {
           const generatedField = requiredFallback;
           generatedByColumn.set(field.columnName, generatedField);
           context.set(field.columnName, generatedField.contextValue);
-          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+          if (shouldCarryThrough) {
             params.fixedPerWoundCache.set(field.columnName, generatedField);
           }
           changed = true;
@@ -457,7 +471,7 @@ export function generateVisibleAssessmentFields(params: {
           const generatedField = requiredFallback;
           generatedByColumn.set(field.columnName, generatedField);
           context.set(field.columnName, generatedField.contextValue);
-          if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+          if (shouldCarryThrough) {
             params.fixedPerWoundCache.set(field.columnName, generatedField);
           }
           changed = true;
@@ -482,7 +496,7 @@ export function generateVisibleAssessmentFields(params: {
       };
       generatedByColumn.set(field.columnName, generatedField);
       context.set(field.columnName, sanitizedValue);
-      if (isFixedPerWoundField(field.fieldName, field.columnName)) {
+      if (shouldCarryThrough) {
         params.fixedPerWoundCache.set(field.columnName, generatedField);
       }
       changed = true;
@@ -566,12 +580,18 @@ function selectRawFieldValue(params: {
   stage: WoundStage;
   fixedPerWoundCache: Map<string, GeneratedAssessmentField>;
 }): unknown {
-  if (isFixedPerWoundField(params.field.fieldName, params.field.columnName)) {
+  const behavior = resolveFieldBehavior(
+    params.field,
+    params.fieldProfiles,
+    params.progressionStyle
+  );
+
+  if (behavior === "per_wound") {
     const cached = params.fixedPerWoundCache.get(params.field.columnName);
     if (cached) return cached.contextValue;
   }
 
-  if (params.fieldProfiles) {
+  if (params.fieldProfiles && behavior !== "system") {
     const profiled = sampleFromProfile(
       params.fieldProfiles,
       params.progressionStyle,
@@ -588,6 +608,78 @@ function selectRawFieldValue(params: {
   }
 
   return generateNoteValue(undefined, params.field, params.stage);
+}
+
+function resolveTrajectoryPhase(
+  assessmentIndex: number,
+  totalAssessments: number
+): "early" | "mid" | "late" {
+  const ratio = assessmentIndex / totalAssessments;
+  return ratio < 0.33 ? "early" : ratio < 0.66 ? "mid" : "late";
+}
+
+function shouldCarryThroughField(
+  field: Pick<FieldSchema, "fieldName" | "columnName">,
+  fieldProfiles: FieldProfileSet | undefined,
+  progressionStyle: WoundProgressionStyle
+): boolean {
+  return (
+    resolveFieldBehavior(field, fieldProfiles, progressionStyle) === "per_wound"
+  );
+}
+
+function resolveFieldBehavior(
+  field: Pick<FieldSchema, "fieldName" | "columnName">,
+  fieldProfiles: FieldProfileSet | undefined,
+  progressionStyle: WoundProgressionStyle
+): FieldValueBehavior {
+  const profile = fieldProfiles?.find(
+    (candidate) => candidate.trajectoryStyle === progressionStyle
+  );
+  const explicitBehavior = profile
+    ? getExplicitProfileFieldBehavior(profile, field.columnName)
+    : null;
+
+  if (explicitBehavior) return explicitBehavior;
+
+  return isFixedPerWoundField(field.fieldName, field.columnName)
+    ? "per_wound"
+    : "per_assessment";
+}
+
+function getExplicitProfileFieldBehavior(
+  profile: TrajectoryFieldProfile,
+  columnName: string
+): FieldValueBehavior | null {
+  for (const phase of profile.phases ?? []) {
+    const distribution = phase.fieldDistributions.find(
+      (candidate) => candidate.columnName === columnName
+    );
+    if (distribution?.behavior) return distribution.behavior;
+  }
+
+  return null;
+}
+
+function getCanonicalProfileDistribution(
+  profile: TrajectoryFieldProfile,
+  columnName: string
+) {
+  const orderedPhases: Array<"early" | "mid" | "late"> = [
+    "early",
+    "mid",
+    "late",
+  ];
+
+  for (const phaseName of orderedPhases) {
+    const phase = profile.phases.find((candidate) => candidate.phase === phaseName);
+    const distribution = phase?.fieldDistributions.find(
+      (candidate) => candidate.columnName === columnName
+    );
+    if (distribution) return distribution;
+  }
+
+  return null;
 }
 
 function buildRequiredFallbackGeneratedField(

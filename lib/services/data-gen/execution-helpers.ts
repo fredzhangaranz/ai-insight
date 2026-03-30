@@ -28,6 +28,31 @@ export interface ValidationResult {
   diagnostics?: AssessmentFormDiagnostic[];
 }
 
+export interface CloneToRptResult {
+  cloned: number;
+  attempts: number;
+}
+
+export interface RptCloneVerificationTargets {
+  patientIds?: string[];
+  woundIds?: string[];
+  assessmentIds?: string[];
+}
+
+export interface RptCloneVerificationResult {
+  isSynced: boolean;
+  checked: {
+    patients: number;
+    wounds: number;
+    assessments: number;
+  };
+  missing: {
+    patientIds: string[];
+    woundIds: string[];
+    assessmentIds: string[];
+  };
+}
+
 function validateStoredAssessmentFields(params: {
   contextFields: Map<string, CompiledAssessmentField>;
   validationFields: CompiledAssessmentField[];
@@ -629,6 +654,140 @@ export async function updateLastExportedVersion(
   }
 }
 
+const SNAPSHOT_CONFLICT_NUMBER = 3960;
+const SNAPSHOT_CONFLICT_MESSAGE =
+  "Snapshot isolation transaction aborted due to update conflict";
+const DEFAULT_CLONE_RETRY_ATTEMPTS = 3;
+const DEFAULT_CLONE_RETRY_DELAY_MS = 250;
+
+export function isRetryableCloneError(error: unknown): boolean {
+  if (!error) return false;
+
+  const number =
+    typeof error === "object" && error !== null && "number" in error
+      ? Number((error as { number?: unknown }).number)
+      : Number.NaN;
+  if (number === SNAPSHOT_CONFLICT_NUMBER) return true;
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : String(error);
+  return message.includes(SNAPSHOT_CONFLICT_MESSAGE);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function executeCloneProcedure(
+  db: ConnectionPool
+): Promise<{ cloned: number }> {
+  await db.request().query(`
+      EXEC sp_set_session_context @key = 'all_access', @value = 1;
+    `);
+
+  const withParams = `
+      EXEC sp_clonePatients @woundLabelFormat = 0, @ignoreIslands = 0, @ignorePerimeter = 0;
+    `;
+  const noParams = `EXEC sp_clonePatients;`;
+
+  let result: { recordset?: { cloned_count?: number }[] };
+  try {
+    result = await db.request().query(withParams);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("too many arguments")) {
+      result = await db.request().query(noParams);
+    } else {
+      throw err;
+    }
+  }
+
+  return { cloned: result.recordset?.[0]?.cloned_count ?? 0 };
+}
+
+async function queryMissingRptIds(
+  db: ConnectionPool,
+  tableName: "rpt.Patient" | "rpt.Wound" | "rpt.Assessment",
+  ids: string[]
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+
+  const request = db.request();
+  const placeholders = ids
+    .map((id, index) => {
+      request.input(`id${index}`, sql.UniqueIdentifier, id);
+      return `@id${index}`;
+    })
+    .join(", ");
+
+  const result = await request.query(`
+    SELECT id
+    FROM ${tableName}
+    WHERE id IN (${placeholders})
+  `);
+
+  const found = new Set(
+    (result.recordset ?? []).map((row: { id: string }) => String(row.id).toLowerCase())
+  );
+
+  return ids.filter((id) => !found.has(String(id).toLowerCase()));
+}
+
+export async function verifyRptCloneSync(
+  db: ConnectionPool,
+  targets: RptCloneVerificationTargets
+): Promise<RptCloneVerificationResult> {
+  const patientIds = [...new Set(targets.patientIds ?? [])];
+  const woundIds = [...new Set(targets.woundIds ?? [])];
+  const assessmentIds = [...new Set(targets.assessmentIds ?? [])];
+
+  const [missingPatientIds, missingWoundIds, missingAssessmentIds] =
+    await Promise.all([
+      queryMissingRptIds(db, "rpt.Patient", patientIds),
+      queryMissingRptIds(db, "rpt.Wound", woundIds),
+      queryMissingRptIds(db, "rpt.Assessment", assessmentIds),
+    ]);
+
+  return {
+    isSynced:
+      missingPatientIds.length === 0 &&
+      missingWoundIds.length === 0 &&
+      missingAssessmentIds.length === 0,
+    checked: {
+      patients: patientIds.length,
+      wounds: woundIds.length,
+      assessments: assessmentIds.length,
+    },
+    missing: {
+      patientIds: missingPatientIds,
+      woundIds: missingWoundIds,
+      assessmentIds: missingAssessmentIds,
+    },
+  };
+}
+
+export function summarizeRptCloneVerification(
+  verification: RptCloneVerificationResult
+): string {
+  const parts: string[] = [];
+
+  if (verification.missing.patientIds.length > 0) {
+    parts.push(`patients missing: ${verification.missing.patientIds.length}`);
+  }
+  if (verification.missing.woundIds.length > 0) {
+    parts.push(`wounds missing: ${verification.missing.woundIds.length}`);
+  }
+  if (verification.missing.assessmentIds.length > 0) {
+    parts.push(`assessments missing: ${verification.missing.assessmentIds.length}`);
+  }
+
+  return parts.length > 0 ? parts.join(", ") : "all checked rows present in rpt";
+}
+
 /**
  * Clone patients to reporting schema
  * Mirrors dbo.Patient, dbo.Wound, dbo.Series data to rpt schema
@@ -640,34 +799,40 @@ export async function updateLastExportedVersion(
  * the stored procedure detects all recent changes.
  */
 export async function clonePatientDataToRpt(
-  db: ConnectionPool
-): Promise<{ cloned: number }> {
+  db: ConnectionPool,
+  options?: {
+    maxAttempts?: number;
+    retryDelayMs?: number;
+  }
+): Promise<CloneToRptResult> {
+  let attempt = 0;
+  const maxAttempts = options?.maxAttempts ?? DEFAULT_CLONE_RETRY_ATTEMPTS;
+  const retryDelayMs = options?.retryDelayMs ?? DEFAULT_CLONE_RETRY_DELAY_MS;
+
   try {
-    await db.request().query(`
-      EXEC sp_set_session_context @key = 'all_access', @value = 1;
-    `);
-
-    const withParams = `
-      EXEC sp_clonePatients @woundLabelFormat = 0, @ignoreIslands = 0, @ignorePerimeter = 0;
-    `;
-    const noParams = `EXEC sp_clonePatients;`;
-
-    let result: { recordset?: { cloned_count?: number }[] };
-    try {
-      result = await db.request().query(withParams);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("too many arguments")) {
-        result = await db.request().query(noParams);
-      } else {
-        throw err;
+    while (attempt < maxAttempts) {
+      attempt += 1;
+      try {
+        const result = await executeCloneProcedure(db);
+        return {
+          cloned: result.cloned,
+          attempts: attempt,
+        };
+      } catch (error) {
+        if (
+          attempt >= maxAttempts ||
+          !isRetryableCloneError(error)
+        ) {
+          throw error;
+        }
+        await sleep(retryDelayMs * attempt);
       }
     }
-
-    return { cloned: result.recordset?.[0]?.cloned_count ?? 0 };
   } catch (error) {
     throw new Error(
       `Failed to clone patients to rpt schema: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+
+  throw new Error("Failed to clone patients to rpt schema: clone retry loop exhausted");
 }

@@ -16,6 +16,7 @@ import {
   buildFallbackProfiles,
   buildSingleFallbackProfile,
   buildFallbackPhase,
+  getProfileFieldOptions,
   sanitizeFieldProfiles,
 } from "./profile-fallback";
 
@@ -78,10 +79,12 @@ export async function generateFieldProfiles(
     return buildSingleFallbackProfile(style, schema);
   });
 
-  return sanitizeFieldProfiles(
+  const sanitizedProfiles = sanitizeFieldProfiles(
     normalizeProfiles(profiles, schema, stylesToGenerate),
     schema,
   );
+
+  return applyRecommendedBehaviors(sanitizedProfiles);
 }
 
 const SYSTEM_PROMPT = `You are a clinical data generation assistant. Given a wound assessment form schema and a single wound healing trajectory, produce ONE TrajectoryFieldProfile as a JSON object.
@@ -92,15 +95,19 @@ The object must have:
 - phases: array of 3 objects (early, mid, late) with:
   - phase: "early" | "mid" | "late"
   - description: e.g. "Weeks 1-3: active wound, heavy exudate"
-  - fieldDistributions: array of { fieldName, columnName, weights } where weights is { "optionValue": 0.5, ... } summing to 1
+  - fieldDistributions: array of { fieldName, columnName, weights, behavior?, recommendedBehavior?, behaviorConfidence?, behaviorRationale? } where weights is { "optionValue": 0.5, ... } summing to 1
 
 Rules:
 1. wound_state / healing_status / wound_status fields MUST align with the trajectory at each phase
 2. ONLY use option values from the schema options array
-3. For SingleSelectList/MultiSelectList, every option must appear in weights (can be 0)
-4. For Text/Decimal/Integer, omit from fieldDistributions
+3. For SingleSelectList/MultiSelectList/Boolean, every option must appear in weights (can be 0)
+4. For Text/Decimal/Integer/Date/DateTime, omit from fieldDistributions
 5. early = first 33% of assessments, mid = 33-66%, late = 66-100%
-6. Output ONLY valid JSON. No markdown, no explanation.`;
+6. behavior and recommendedBehavior, when provided, must be one of "per_assessment", "per_wound", or "system"
+7. Use per_wound for fields that should stay fixed for the life of the wound (for example wound classification, onset date, present on admission, wound occurrence)
+8. Use per_assessment for findings or treatments that should evolve over time
+9. Use system only for fields driven by wound trajectory semantics rather than generic form sampling
+10. Output ONLY valid JSON. No markdown, no explanation.`;
 
 async function generateSingleProfile(
   style: WoundProgressionStyle,
@@ -113,7 +120,7 @@ async function generateSingleProfile(
       fieldName: f.fieldName,
       columnName: f.columnName,
       dataType: f.dataType,
-      options: f.options,
+      options: getProfileFieldOptions(f) ?? f.options,
     })),
     null,
     2,
@@ -126,7 +133,7 @@ Trajectory style: ${style}
 Description: ${TRAJECTORY_DESCRIPTIONS[style]}
 Baseline area range: ${areaRange[0]}-${areaRange[1]} cm²
 
-Produce a single TrajectoryFieldProfile JSON object for the "${style}" trajectory. Include 3 phases (early, mid, late) with fieldDistributions for each dropdown/select field.`;
+Produce a single TrajectoryFieldProfile JSON object for the "${style}" trajectory. Include 3 phases (early, mid, late) with fieldDistributions for each profiled field (SingleSelectList, MultiSelectList, and Boolean).`;
 
   const raw = await provider.complete({
     system: SYSTEM_PROMPT,
@@ -168,7 +175,25 @@ function normalizeProfiles(
     const phases: TrajectoryPhaseProfile[] = (["early", "mid", "late"] as const).map(
       (phase) => {
         const phaseData = profile.phases?.find((p) => p.phase === phase);
-        return phaseData ?? buildFallbackPhase(phase, schema);
+        const fallbackPhase = buildFallbackPhase(phase, schema);
+        if (!phaseData) return fallbackPhase;
+
+        const mergedDistributions = new Map(
+          fallbackPhase.fieldDistributions.map((distribution) => [
+            distribution.columnName,
+            distribution,
+          ])
+        );
+
+        for (const distribution of phaseData.fieldDistributions ?? []) {
+          mergedDistributions.set(distribution.columnName, distribution);
+        }
+
+        return {
+          ...fallbackPhase,
+          ...phaseData,
+          fieldDistributions: [...mergedDistributions.values()],
+        };
       },
     );
     profile.phases = phases;
@@ -176,4 +201,22 @@ function normalizeProfiles(
   }
 
   return result;
+}
+
+function applyRecommendedBehaviors(
+  profiles: FieldProfileSet
+): FieldProfileSet {
+  return profiles.map((profile) => ({
+    ...profile,
+    phases: profile.phases.map((phase) => ({
+      ...phase,
+      fieldDistributions: phase.fieldDistributions.map((distribution) => ({
+        ...distribution,
+        behavior:
+          distribution.recommendedBehavior ??
+          distribution.behavior ??
+          "per_assessment",
+      })),
+    })),
+  }));
 }

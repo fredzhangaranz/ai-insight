@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +24,10 @@ import type { FieldResolution } from "@/lib/services/data-gen/field-resolver.ser
 import type { SelectedForm } from "./form-selector-step";
 import {
   buildDefaultPatientSpec,
-  applyAgeConfigToSpec,
+  applyGenderConfigToSpec,
+  findGenderSchemaField,
   type AgeConfigInput,
+  type GenderConfigInput,
 } from "@/lib/services/data-gen/default-spec-builder";
 
 interface DescribeStepProps {
@@ -113,6 +115,32 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
     maxAge: ageMax,
     ...(ageMode === "normal" && { mean: ageMean, sd: ageSd }),
   };
+
+  const hasGenderField = useMemo(
+    () => !!findGenderSchemaField(patientSchema),
+    [patientSchema]
+  );
+
+  const [femalePctRaw, setFemalePctRaw] = useState("50");
+  const [malePctRaw, setMalePctRaw] = useState("50");
+
+  const femalePct = parseInt(femalePctRaw, 10);
+  const malePct = parseInt(malePctRaw, 10);
+  const genderSumOk =
+    !Number.isNaN(femalePct) &&
+    !Number.isNaN(malePct) &&
+    femalePct >= 0 &&
+    femalePct <= 100 &&
+    malePct >= 0 &&
+    malePct <= 100 &&
+    femalePct + malePct === 100;
+  const genderConfigInvalid =
+    isInsertPatient && hasGenderField && !genderSumOk;
+
+  const genderConfig: GenderConfigInput | undefined =
+    isInsertPatient && hasGenderField && genderSumOk
+      ? { femalePercent: femalePct, malePercent: malePct }
+      : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -257,7 +285,8 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
           patientSchema,
           effectiveCount,
           "insert",
-          ageConfig
+          ageConfig,
+          genderConfig
         );
         
         // Build a map of AI-specified field column names for quick lookup
@@ -279,6 +308,13 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
           presetId: selectedPresetId !== "none" ? selectedPresetId : undefined,
           fields: mergedFields,
         };
+        if (genderConfig) {
+          mergedSpec = applyGenderConfigToSpec(
+            mergedSpec,
+            genderConfig,
+            patientSchema
+          );
+        }
       } else {
         mergedSpec = {
           ...spec,
@@ -307,6 +343,10 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
       setError("Age: min must be less than max; for Normal mode, mean must be within range.");
       return;
     }
+    if (genderConfigInvalid) {
+      setError("Gender: Female % and Male % must be whole numbers from 0–100 that add up to 100.");
+      return;
+    }
 
     if (
       entity === "patient" &&
@@ -317,7 +357,8 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
         patientSchema,
         effectiveCount,
         "insert",
-        ageConfig
+        ageConfig,
+        genderConfig
       );
       onInterpreted(
         {
@@ -499,6 +540,70 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
               )}
             </div>
 
+            {hasGenderField && (
+              <div className="space-y-2">
+                <h4 className="font-medium">Gender mix</h4>
+                <p className="text-sm text-muted-foreground">
+                  Percentages apply to the generated cohort. Changing one value updates the other so the total stays 100%.
+                </p>
+                <div className="flex flex-wrap items-end gap-4">
+                  <div>
+                    <Label htmlFor="gender-female-pct">Female %</Label>
+                    <Input
+                      id="gender-female-pct"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={femalePctRaw}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setFemalePctRaw("");
+                          setMalePctRaw("");
+                          return;
+                        }
+                        const n = Math.min(100, Math.max(0, parseInt(raw, 10) || 0));
+                        setFemalePctRaw(String(n));
+                        setMalePctRaw(String(100 - n));
+                      }}
+                      className="w-20"
+                      aria-invalid={genderConfigInvalid}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gender-male-pct">Male %</Label>
+                    <Input
+                      id="gender-male-pct"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={malePctRaw}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setFemalePctRaw("");
+                          setMalePctRaw("");
+                          return;
+                        }
+                        const n = Math.min(100, Math.max(0, parseInt(raw, 10) || 0));
+                        setMalePctRaw(String(n));
+                        setFemalePctRaw(String(100 - n));
+                      }}
+                      className="w-20"
+                      aria-invalid={genderConfigInvalid}
+                    />
+                  </div>
+                </div>
+                {genderConfigInvalid && (
+                  <p className="text-sm text-destructive">
+                    Enter two whole numbers from 0–100 that sum to 100.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="patient-preset">Default patient preset</Label>
               <Select value={selectedPresetId} onValueChange={setSelectedPresetId}>
@@ -529,7 +634,7 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
               placeholder={
                 selection.mode === "update"
                   ? "e.g. Set gender to 50% Male and 50% Female, fill missing dateOfBirth with ages 60-80"
-                  : "e.g. Generate 20 patients with 50% male and 50% female, ages 60-80, all with type 2 diabetes"
+                  : "e.g. Generate 20 patients with type 2 diabetes, ages 60–80 (gender mix is set above when inserting)"
               }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -561,7 +666,8 @@ export function DescribeStep({ customerId, modelId, selection, selectedForm, onI
                     selection?.mode === "update" &&
                     !description.trim()) ||
                   (isInsertPatient && insertCountInvalid) ||
-                  (isInsertPatient && ageConfigInvalid)
+                  (isInsertPatient && ageConfigInvalid) ||
+                  (isInsertPatient && genderConfigInvalid)
                 }
               >
                 {loading ? "Interpreting..." : "Interpret with AI →"}

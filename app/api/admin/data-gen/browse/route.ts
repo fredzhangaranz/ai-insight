@@ -10,6 +10,7 @@ import { getConnectionStringForCustomer } from "@/lib/services/customer-service"
 import { getSqlServerPool } from "@/lib/services/sqlserver/client";
 import {
   browse,
+  browsePatientIds,
   type BrowseEntity,
   type BrowseFilter,
 } from "@/lib/services/data-gen/browse.service";
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get("pageSize") ?? "20", 10);
     const search = searchParams.get("search");
     const filter = (searchParams.get("filter") as BrowseFilter) ?? "all";
+    const mode = searchParams.get("mode");
 
     if (!entity || !VALID_ENTITIES.includes(entity)) {
       return NextResponse.json(
@@ -65,6 +67,29 @@ export async function GET(request: NextRequest) {
 
     const connectionString = await getConnectionStringForCustomer(customerId);
     const pool = await getSqlServerPool(connectionString);
+
+    if (mode === "ids") {
+      if (entity !== "patient") {
+        return NextResponse.json(
+          { error: "mode=ids is only supported for entity=patient" },
+          { status: 400 }
+        );
+      }
+      try {
+        const { ids, total } = await browsePatientIds(pool, {
+          search: search ?? null,
+          filter,
+        });
+        return NextResponse.json({ ids, total });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message.startsWith("Too many matching")) {
+          return NextResponse.json({ error: message }, { status: 400 });
+        }
+        throw e;
+      }
+    }
+
     const result = await browse(pool, entity, {
       page,
       pageSize,

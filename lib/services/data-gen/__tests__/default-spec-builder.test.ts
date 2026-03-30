@@ -7,6 +7,9 @@ import {
   buildDefaultPatientSpec,
   buildDefaultAssessmentSpec,
   applyAgeConfigToSpec,
+  applyGenderConfigToSpec,
+  buildGenderWeightsForOptions,
+  findGenderSchemaField,
 } from "../default-spec-builder";
 import type { FieldSchema, GenerationSpec } from "../generation-spec.types";
 
@@ -117,6 +120,19 @@ describe("default-spec-builder", () => {
         Female: 0.5,
       });
 
+      const spec3070 = buildDefaultPatientSpec(
+        patientSchema,
+        20,
+        "insert",
+        undefined,
+        { femalePercent: 30, malePercent: 70 }
+      );
+      const g3070 = spec3070.fields.find((f) => f.columnName === "gender");
+      expect((g3070?.criteria as { weights: Record<string, number> }).weights).toEqual({
+        Male: 0.7,
+        Female: 0.3,
+      });
+
       const dob = spec.fields.find((f) => f.columnName === "dateOfBirth");
       expect(dob?.criteria.type).toBe("range");
     });
@@ -157,6 +173,35 @@ describe("default-spec-builder", () => {
       });
     });
 
+    it("applyGenderConfigToSpec sets gender distribution weights", () => {
+      const spec: GenerationSpec = {
+        entity: "patient",
+        count: 5,
+        fields: [
+          {
+            fieldName: "Gender",
+            columnName: "gender",
+            dataType: "SingleSelectList",
+            enabled: true,
+            criteria: {
+              type: "distribution",
+              weights: { Male: 0.5, Female: 0.5 },
+            },
+          },
+        ],
+      };
+      const merged = applyGenderConfigToSpec(
+        spec,
+        { femalePercent: 40, malePercent: 60 },
+        patientSchema
+      );
+      const g = merged.fields.find((f) => f.columnName === "gender");
+      expect((g?.criteria as { weights: Record<string, number> }).weights).toEqual({
+        Male: 0.6,
+        Female: 0.4,
+      });
+    });
+
     it("applyAgeConfigToSpec merges ageConfig into spec dateOfBirth", () => {
       const spec: GenerationSpec = {
         entity: "patient",
@@ -181,6 +226,81 @@ describe("default-spec-builder", () => {
         maxAge: 85,
         mean: 75,
         sd: 6,
+      });
+    });
+
+    it("applies gender mix to Boolean is_female-style EAV (not column gender)", () => {
+      const eavFemaleSchema: FieldSchema[] = [
+        ...patientSchema.filter((f) => f.columnName !== "gender"),
+        {
+          fieldName: "Gender",
+          columnName: "details_is_female",
+          dataType: "Boolean",
+          isNullable: true,
+          storageType: "patient_attribute",
+          attributeTypeId: "attr-g",
+          fieldClass: "pure-data",
+        },
+      ];
+      expect(findGenderSchemaField(eavFemaleSchema)?.columnName).toBe(
+        "details_is_female"
+      );
+      const spec = buildDefaultPatientSpec(
+        eavFemaleSchema,
+        10,
+        "insert",
+        undefined,
+        { femalePercent: 25, malePercent: 75 }
+      );
+      const g = spec.fields.find((f) => f.columnName === "details_is_female");
+      expect(g?.criteria).toEqual({
+        type: "distribution",
+        weights: { "1": 0.25, "0": 0.75 },
+      });
+    });
+
+    it("detects M/F options as gender and applies configured mix", () => {
+      const shortLabelSchema: FieldSchema[] = [
+        ...patientSchema.filter((f) => f.columnName !== "gender"),
+        {
+          fieldName: "Gender",
+          columnName: "gender",
+          dataType: "SingleSelectList",
+          isNullable: true,
+          storageType: "direct_patient",
+          fieldClass: "pure-data",
+          options: ["M", "F"],
+        },
+      ];
+
+      expect(findGenderSchemaField(shortLabelSchema)?.columnName).toBe("gender");
+
+      const spec = buildDefaultPatientSpec(
+        shortLabelSchema,
+        10,
+        "insert",
+        undefined,
+        { femalePercent: 30, malePercent: 70 }
+      );
+      const gender = spec.fields.find((f) => f.columnName === "gender");
+      expect(gender?.criteria).toEqual({
+        type: "distribution",
+        weights: { M: 0.7, F: 0.3 },
+      });
+    });
+
+    it("splits male/female mix across all matching options", () => {
+      const weights = buildGenderWeightsForOptions(
+        ["Male", "Trans Male", "Female", "Trans Female", "Unknown"],
+        { femalePercent: 40, malePercent: 60 }
+      );
+
+      expect(weights).toEqual({
+        Male: 0.3,
+        "Trans Male": 0.3,
+        Female: 0.2,
+        "Trans Female": 0.2,
+        Unknown: 0,
       });
     });
 
