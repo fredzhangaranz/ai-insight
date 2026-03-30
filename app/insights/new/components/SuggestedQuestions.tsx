@@ -11,10 +11,10 @@ interface SuggestedQuestionsProps {
 }
 
 const defaultSuggestions = [
-  "What is the average healing rate for diabetic wounds?",
-  "Show infection trends by wound type",
-  "Compare patient outcomes across clinics",
-  "List patients with >5 assessments in the last month"
+  "Which wounds are not healing as expected?",
+  "Show wound healing trends over time.",
+  "How many wound assessments were completed each month?",
+  "Which pressure injuries were hospital-acquired?"
 ];
 
 export function SuggestedQuestions({
