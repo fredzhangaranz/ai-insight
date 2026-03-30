@@ -4,14 +4,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import React from "react";
-import { LAYOUT_STORAGE_KEY, type LayoutMode } from "./components/LayoutToggle";
-import { ClassicLayout, type ClassicLayoutProps } from "./components/ClassicLayout";
 import { NewLayout } from "./components/NewLayout";
 import { useInsights } from "@/lib/hooks/useInsights";
 import { useSetQueryHistorySidebar } from "@/lib/context/QueryHistorySidebarContext";
 
 export default function NewInsightPage() {
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("classic");
   const [customerId, setCustomerId] = useState<string>("");
   const [question, setQuestion] = useState<string>("");
   const [modelId, setModelId] = useState<string>("");
@@ -25,19 +22,11 @@ export default function NewInsightPage() {
   const [isQuestionSubmitted, setIsQuestionSubmitted] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = localStorage.getItem(LAYOUT_STORAGE_KEY) as LayoutMode | null;
-    if (stored === "classic" || stored === "new") setLayoutMode(stored);
-  }, []);
-
   const {
     result,
     isLoading,
-    error,
     ask,
     askWithClarifications,
-    cancelAnalysis,
     analysis,
     loadCachedResult,
     reset,
@@ -290,29 +279,6 @@ export default function NewInsightPage() {
       : null,
   );
 
-  const classicProps: ClassicLayoutProps = {
-    customerId,
-    setCustomerId,
-    modelId,
-    setModelId,
-    question,
-    setQuestion,
-    conversationThreadId,
-    setConversationThreadId,
-    isQuestionSubmitted,
-    historyRefreshKey,
-    result,
-    isLoading,
-    error,
-    analysis,
-    handleAsk,
-    handleNewQuestion,
-    handleClarificationSubmit,
-    handleHistorySelect,
-    cancelAnalysis,
-    loadCachedResult,
-  };
-
   const handleAskWithQuestion = async (q: string) => {
     if (!customerId || !q.trim()) return;
     setQuestion(q);
@@ -328,9 +294,7 @@ export default function NewInsightPage() {
     question,
     setQuestion,
     conversationThreadId,
-    setConversationThreadId,
     firstThreadUserMessageId,
-    historyRefreshKey,
     handleNewQuestion,
     handleHistorySelect,
     result,
@@ -341,21 +305,5 @@ export default function NewInsightPage() {
     analysis,
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 overflow-x-hidden">
-      {layoutMode === "classic" ? (
-        <ClassicLayout
-          {...classicProps}
-          layoutMode={layoutMode}
-          onLayoutModeChange={setLayoutMode}
-        />
-      ) : (
-        <NewLayout
-          {...newProps}
-          layoutMode={layoutMode}
-          onLayoutModeChange={setLayoutMode}
-        />
-      )}
-    </div>
-  );
+  return <NewLayout {...newProps} />;
 }
