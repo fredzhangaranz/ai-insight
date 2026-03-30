@@ -20,6 +20,7 @@ import {
 import { SmartSuggestions } from "./SmartSuggestions";
 import { useConversation } from "@/lib/hooks/useConversation";
 import type { InsightResult } from "@/lib/hooks/useInsights";
+import type { CustomersMeta } from "./CustomerSelector";
 
 export interface NewLayoutProps {
   customerId: string;
@@ -258,6 +259,17 @@ export function NewLayout({
   }, [threadItems]);
 
   const [composerDraft, setComposerDraft] = React.useState("");
+  const [customersMeta, setCustomersMeta] = React.useState<CustomersMeta>({
+    loading: true,
+    count: 0,
+  });
+
+  const handleCustomersMetaChange = useCallback((meta: CustomersMeta) => {
+    setCustomersMeta(meta);
+  }, []);
+
+  const needsCustomerChoice =
+    !customersMeta.loading && customersMeta.count > 1 && !customerId;
 
   const handleComposerSubmit = async (text: string) => {
     const trimmed = text.trim();
@@ -317,7 +329,7 @@ export function NewLayout({
   };
 
   return (
-    <div className="h-[100svh] bg-slate-50 overflow-x-hidden overflow-hidden flex flex-col">
+    <div className="h-[100dvh] bg-slate-50 overflow-x-hidden overflow-hidden flex flex-col">
       <div className="w-full pl-3 pr-3 sm:pl-4 sm:pr-4 lg:pr-6 py-3 sm:py-4 overflow-x-hidden flex-shrink-0">
         <div className="mb-4">
           <div className="border-b border-slate-200 pb-4">
@@ -357,7 +369,11 @@ export function NewLayout({
 
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div className="flex-1 min-w-[12rem] max-w-md">
-            <CustomerSelector value={customerId} onChange={setCustomerId} />
+            <CustomerSelector
+              value={customerId}
+              onChange={setCustomerId}
+              onCustomersMetaChange={handleCustomersMetaChange}
+            />
           </div>
           <div className="flex-1 min-w-[12rem] max-w-md">
             <ModelSelector value={modelId} onChange={setModelId} />
@@ -366,29 +382,41 @@ export function NewLayout({
       </div>
 
       <div className="flex-1 flex flex-col min-h-0 pl-3 pr-3 sm:pl-4 sm:pr-4 lg:pr-6">
-        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col space-y-4 py-4">
-          <UnifiedThread
-            items={threadItems}
-            customerId={customerId}
-            onClarify={handleClarify}
-            onEditMessage={handleEditMessage}
-            isClarificationSubmitting={isLoading || isConversationLoading}
-            lastClarificationMessageId={lastClarificationId}
-          />
-
-          {threadItems.length === 0 && customerId && (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-slate-600">Ask anything about your patients</p>
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col py-4">
+          {needsCustomerChoice ? (
+            <div className="flex flex-1 flex-col items-center justify-center min-h-[12rem] px-4">
+              <p className="text-center text-slate-600">
+                Please select a customer database before asking question
+              </p>
             </div>
-          )}
-
-          {lastAssistantResult && !isWaitingForResponse && (
-            <div className="mb-4">
-              <SmartSuggestions
-                result={lastAssistantResult}
-                onSuggestionClick={(text) => setComposerDraft(text)}
-                showRefinements={true}
+          ) : (
+            <div className="flex flex-col flex-1 min-h-0 space-y-4">
+              <UnifiedThread
+                items={threadItems}
+                customerId={customerId}
+                onClarify={handleClarify}
+                onEditMessage={handleEditMessage}
+                isClarificationSubmitting={isLoading || isConversationLoading}
+                lastClarificationMessageId={lastClarificationId}
               />
+
+              {threadItems.length === 0 && customerId && (
+                <div className="flex flex-1 items-center justify-center">
+                  <p className="text-slate-600">
+                    Ask anything about your patients
+                  </p>
+                </div>
+              )}
+
+              {lastAssistantResult && !isWaitingForResponse && (
+                <div className="mb-4">
+                  <SmartSuggestions
+                    result={lastAssistantResult}
+                    onSuggestionClick={(text) => setComposerDraft(text)}
+                    showRefinements={true}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

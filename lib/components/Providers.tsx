@@ -27,7 +27,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     return (
       <div
         className={`${
-          isInsightsNew ? "h-[100svh] overflow-hidden" : "min-h-screen"
+          isInsightsNew ? "h-[100dvh] overflow-hidden" : "min-h-screen"
         } bg-slate-50 overflow-x-hidden`}
       >
         <main
@@ -43,7 +43,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
             <SidebarInset
               className={
                 isInsightsNew
-                  ? "overflow-x-hidden md:!m-0 md:min-h-svh md:rounded-none md:shadow-none"
+                  ? "overflow-x-hidden md:!m-0 md:!min-h-[100dvh] md:rounded-none md:shadow-none"
                   : "overflow-x-hidden"
               }
             >
