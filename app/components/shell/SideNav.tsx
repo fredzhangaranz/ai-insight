@@ -123,7 +123,7 @@ export function SideNav() {
                 </svg>
               </div>
               <span className="text-sm font-semibold text-slate-900">
-                InsightGen
+                AI Analyst
               </span>
             </>
           )}

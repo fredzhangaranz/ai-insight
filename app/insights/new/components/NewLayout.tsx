@@ -264,6 +264,38 @@ export function NewLayout({
     count: 0,
   });
 
+  // CustomerSelector now lives inside a popover (not mounted by default), but we still
+  // need the "auto-select the only active customer" behavior on initial page load.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function preloadCustomers() {
+      try {
+        const response = await fetch("/api/customers");
+        const data = await response.json();
+        const active = Array.isArray(data)
+          ? data.filter((c: any) => c?.is_active)
+          : [];
+
+        if (cancelled) return;
+
+        setCustomersMeta({ loading: false, count: active.length });
+
+        if (active.length === 1 && !customerId) {
+          setCustomerId(active[0].id);
+        }
+      } catch {
+        if (cancelled) return;
+        setCustomersMeta({ loading: false, count: 0 });
+      }
+    }
+
+    preloadCustomers();
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, setCustomerId]);
+
   const handleCustomersMetaChange = useCallback((meta: CustomersMeta) => {
     setCustomersMeta(meta);
   }, []);
@@ -346,7 +378,7 @@ export function NewLayout({
                   Insights
                 </h1>
                 <p className="text-slate-600 mt-2">
-                  Ask questions about your data in natural language
+                  Ask questions about your wound data
                 </p>
               </div>
               <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto sm:justify-start">
@@ -364,19 +396,6 @@ export function NewLayout({
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-4 items-end mb-3">
-          <div className="flex-1 min-w-[12rem] max-w-md">
-            <CustomerSelector
-              value={customerId}
-              onChange={setCustomerId}
-              onCustomersMetaChange={handleCustomersMetaChange}
-            />
-          </div>
-          <div className="flex-1 min-w-[12rem] max-w-md">
-            <ModelSelector value={modelId} onChange={setModelId} />
           </div>
         </div>
       </div>
@@ -438,6 +457,16 @@ export function NewLayout({
             }}
             draft={composerDraft}
             onDraftChange={setComposerDraft}
+            settingsPanel={
+              <>
+                <CustomerSelector
+                  value={customerId}
+                  onChange={setCustomerId}
+                  onCustomersMetaChange={handleCustomersMetaChange}
+                />
+                <ModelSelector value={modelId} onChange={setModelId} />
+              </>
+            }
           />
         </div>
       </div>

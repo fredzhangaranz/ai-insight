@@ -13,6 +13,7 @@ import type { ChartType } from "@/lib/chart-contracts";
 import type { ChartArtifact } from "@/lib/types/insight-artifacts";
 import { ResultsTable } from "./ResultsTable";
 import { getChartConfigForSave } from "@/lib/insight-save-chart-config";
+import { formatResultValue } from "./result-value-format";
 
 interface ResultBlockProps {
   result: InsightResult;
@@ -130,14 +131,15 @@ export function ResultBlock({
                   {columns.map((col) => {
                     const value = rows[0][col];
                     const isNumeric = typeof value === "number";
+                    const formattedValue = formatResultValue(value, col);
                     return (
                       <div key={col} className={isNumeric ? "" : "text-xs text-slate-500"}>
                         {isNumeric ? (
                           <div className="text-4xl font-bold text-slate-900">
-                            {value}
+                            {formattedValue}
                           </div>
                         ) : (
-                          <div className="text-sm text-slate-600">{value}</div>
+                          <div className="text-sm text-slate-600">{formattedValue}</div>
                         )}
                         <div className="text-xs text-slate-500 mt-1">{col}</div>
                       </div>
@@ -200,11 +202,6 @@ export function ResultBlock({
           ) : !isKpiResult && displayArtifacts.length === 0 ? (
             <div className="overflow-x-auto">
               <ResultsTable columns={columns} rows={rows} maxRows={10} />
-              {recordCount > 10 && (
-                <div className="text-sm text-gray-500 mt-4 text-center">
-                  Showing first 10 of {recordCount} rows
-                </div>
-              )}
             </div>
           ) : null}
         </div>

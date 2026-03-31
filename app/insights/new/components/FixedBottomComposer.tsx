@@ -1,6 +1,12 @@
 "use client";
 
 import React from "react";
+import { Settings } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { SuggestedQuestions } from "./SuggestedQuestions";
 
 export type ComposerState =
@@ -19,6 +25,8 @@ interface FixedBottomComposerProps {
   /** Controlled draft - when set from parent (e.g. suggestion click), populates input. */
   draft?: string;
   onDraftChange?: (draft: string) => void;
+  /** Shown in a popover next to the keyboard hint (e.g. customer + AI model). */
+  settingsPanel?: React.ReactNode;
 }
 
 export function FixedBottomComposer({
@@ -30,6 +38,7 @@ export function FixedBottomComposer({
   onPillSelect,
   draft: controlledDraft,
   onDraftChange,
+  settingsPanel,
 }: FixedBottomComposerProps) {
   const [internalInput, setInternalInput] = React.useState("");
   const input =
@@ -86,7 +95,36 @@ export function FixedBottomComposer({
           Send
         </button>
       </div>
-      <p className="text-xs text-slate-500">{hintText}</p>
+      {settingsPanel ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">{hintText}</p>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="shrink-0 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+                title="Customer and AI model"
+                aria-label="Open customer and AI model settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              side="top"
+              sideOffset={8}
+              className="w-[min(28rem,calc(100vw-2rem))] overflow-visible p-4"
+            >
+              <p className="mb-3 text-sm font-medium text-slate-900">
+                Chat settings
+              </p>
+              <div className="space-y-4">{settingsPanel}</div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">{hintText}</p>
+      )}
     </div>
   );
 }
