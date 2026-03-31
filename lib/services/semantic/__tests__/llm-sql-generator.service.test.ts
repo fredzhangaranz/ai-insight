@@ -183,6 +183,53 @@ describe("generateSQLWithLLM", () => {
     ).rejects.toThrowError(/valid JSON/);
   });
 
+  it("rejects clarification responses in compile-only mode", async () => {
+    const simpleContext: ContextBundle = {
+      ...baseContext,
+      question: "how many patients",
+      intent: {
+        ...baseContext.intent,
+        filters: [],
+        metrics: ["patient_count"],
+      },
+    };
+
+    mocks.mockComplete.mockResolvedValueOnce(
+      JSON.stringify({
+        responseType: "clarification",
+        reasoning: "Need more information",
+        clarifications: [
+          {
+            id: "clarify_test",
+            ambiguousTerm: "recent",
+            question: "What time window?",
+            options: [
+              {
+                id: "days_30",
+                label: "Last 30 days",
+                sqlConstraint: "date >= DATEADD(day, -30, GETDATE())",
+              },
+            ],
+            allowCustom: true,
+          },
+        ],
+      })
+    );
+
+    await expect(
+      generateSQLWithLLM(
+        simpleContext,
+        "customer-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { allowClarificationRequests: false }
+      )
+    ).rejects.toThrow(/compile-only mode/);
+  });
+
   it("formats resolved vs unresolved filters using merged filter state", async () => {
     const contextWithMerged: ContextBundle & {
       mergedFilterState: any[];

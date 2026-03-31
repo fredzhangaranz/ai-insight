@@ -42,6 +42,8 @@ export interface ClarificationOption {
   submissionValue?: string;
   kind?: "sql" | "semantic";
   isDefault?: boolean;
+  selectionMapping?: Record<string, unknown>;
+  evidence?: Record<string, unknown>;
 }
 
 /**
@@ -56,6 +58,16 @@ export interface ClarificationRequest {
   slot?: string;
   target?: string;
   reason?: string;
+  reasonCode?: string;
+  targetType?: string;
+  evidence?: Record<string, unknown>;
+  freeformPolicy?: {
+    allowed: boolean;
+    placeholder?: string;
+    hint?: string;
+    minChars?: number;
+    maxChars?: number;
+  };
 }
 
 /**

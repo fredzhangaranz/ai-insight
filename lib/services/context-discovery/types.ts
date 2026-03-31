@@ -86,6 +86,8 @@ export type ClarificationSlot =
   | "measure"
   | "grain"
   | "groupBy"
+  | "timeRange"
+  | "assessmentType"
   | "aggregatePredicate"
   | "entityRef"
   | "valueFilter";

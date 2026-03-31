@@ -9,6 +9,7 @@ import { PatientEntityResolver } from "../../patient-entity-resolver.service";
 import { buildUnresolvedFilterClarificationId } from "../filter-validator.service";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import { shouldResolvePatientLiterally } from "../../patient-resolution-gate.service";
+import { encodeFilterSelection } from "../clarification-orchestrator.service";
 
 // Mock dependencies
 vi.mock("../template-matcher.service", () => ({
@@ -378,7 +379,10 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
         clarifications,
         undefined, // templateReferences
         expect.anything(), // signal (AbortSignal)
-        expect.anything() // trusted context
+        expect.anything(), // trusted context
+        expect.objectContaining({
+          allowClarificationRequests: true,
+        })
       );
     });
 
@@ -720,6 +724,100 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
       if (result.filterMetrics) {
         expect(result.filterMetrics.unresolvedWarnings).toBe(0);
       }
+    });
+
+    it("should apply structured filter selections before SQL generation", async () => {
+      const structuredFilter = {
+        operator: "equals",
+        userPhrase: "diabetic wounds",
+        field: undefined,
+        value: null,
+        resolutionStatus: "ambiguous" as const,
+        needsClarification: true,
+        clarificationReasonCode: "ambiguous_field" as const,
+        candidateMatches: [
+          {
+            field: "Wound Classification",
+            value: "Diabetic Foot Ulcer",
+            confidence: 0.96,
+            formName: "Wound Assessment",
+            semanticConcept: "wound_type",
+          },
+        ],
+      };
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "patients with diabetic wounds",
+        intent: {
+          type: "query",
+          confidence: 0.9,
+          scope: "patient",
+          metrics: ["count"],
+          filters: [structuredFilter],
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const clarificationId = buildUnresolvedFilterClarificationId(
+        structuredFilter as any,
+        0
+      );
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "sql",
+          generatedSql: "SELECT COUNT(*) FROM rpt.Patient",
+          explanation: "test",
+          confidence: 0.95,
+        })
+      );
+
+      const result = await orchestrator.askWithClarifications(
+        "patients with diabetic wounds",
+        "cust-1",
+        {
+          [clarificationId]: encodeFilterSelection({
+            kind: "filter_value",
+            clarificationId,
+            filterIndex: 0,
+            field: "Wound Classification",
+            value: "Diabetic Foot Ulcer",
+            formName: "Wound Assessment",
+            semanticConcept: "wound_type",
+          }),
+        }
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+      const contextPassed = mockGenerateSQLWithLLM.mock.calls[0][0];
+      expect(contextPassed.intent.filters).toEqual([
+        expect.objectContaining({
+          field: "Wound Classification",
+          value: "Diabetic Foot Ulcer",
+          resolutionStatus: "resolved",
+          needsClarification: false,
+        }),
+      ]);
+      expect(mockGenerateSQLWithLLM.mock.calls[0][3]).toBeUndefined();
     });
   });
 

@@ -32,11 +32,12 @@ import {
   collectUnresolvedFilters,
   buildUnresolvedFilterClarificationId,
   buildFilterMetricsSummary,
+  getFilterValidatorService,
+  type ValidationError,
   type UnresolvedFilterInfo,
 } from "./filter-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
-import { generateAIClarification } from "./ai-ambiguity-detector.service";
 import { matchSnippets } from "./template-matcher.service";
 import { selectExecutionMode } from "../snippet/execution-mode-selector.service";
 import { extractResidualFiltersWithLLM } from "../snippet/residual-filter-extractor.service";
@@ -73,6 +74,12 @@ import type {
 import { validateTrustedSql } from "../trusted-sql-guard.service";
 import { normalizeSemanticQueryFrame } from "../context-discovery/semantic-query-frame.service";
 import { shouldResolvePatientLiterally } from "../patient-resolution-gate.service";
+import {
+  applyStructuredFilterSelections,
+  decodeAssessmentTypeSelection,
+  decodeFilterSelection,
+  getDirectQueryClarificationService,
+} from "./clarification-orchestrator.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -1407,9 +1414,15 @@ export class ThreeModeOrchestrator {
       if (
         featureFlags.clarificationPipelineV2 &&
         semanticFrame &&
-        semanticFrame.clarificationNeeds.length > 0 &&
         (!clarifications || Object.keys(clarifications).length === 0)
       ) {
+        const frameClarifications = this.buildFrameClarificationRequests(
+          semanticFrame,
+          context
+        );
+        if (frameClarifications.length === 0) {
+          // Continue to filter/SQL flow when structural clarification is not needed.
+        } else {
         contextDiscoveryStep.message =
           "Discovering semantic context... (frame clarification needed)";
         return {
@@ -1417,10 +1430,7 @@ export class ThreeModeOrchestrator {
           question,
           thinking,
           requiresClarification: true,
-          clarifications: this.buildFrameClarificationRequests(
-            semanticFrame,
-            context
-          ),
+          clarifications: frameClarifications,
           clarificationReasoning:
             "I need one or two details about how to structure this query before I run it.",
           partialContext: {
@@ -1432,12 +1442,40 @@ export class ThreeModeOrchestrator {
             ].filter(Boolean),
           },
         };
+        }
       }
 
-      const mappedFilters = (context.intent.filters || []) as MappedFilter[];
+      if (clarifications && Object.keys(clarifications).length > 0) {
+        context = this.applyAssessmentTypeClarifications(context, clarifications);
+      }
+
+      let mappedFilters = ((context.intent.filters || []) as MappedFilter[]).map(
+        (filter) => ({ ...filter })
+      );
+
+      if (
+        clarificationType === "template_extracted" &&
+        clarifications &&
+        mappedFilters.length > 0
+      ) {
+        mappedFilters = this.applyTemplateClarificationsToFilters(
+          mappedFilters,
+          clarifications,
+          context
+        );
+      }
+
+      const structuredFilterResult = applyStructuredFilterSelections(
+        mappedFilters,
+        clarifications
+      );
+      mappedFilters = structuredFilterResult.filters;
+      (context.intent as any).filters = mappedFilters;
+
       const unresolvedInfos = collectUnresolvedFilters(mappedFilters);
       const handledFilterIndexes = new Set<number>();
       const removalClarificationIds = new Set<string>();
+      const handledStructuredIds = structuredFilterResult.handledIds;
 
       if (clarifications && Object.keys(clarifications).length > 0) {
         unresolvedInfos.forEach((info) => {
@@ -1446,7 +1484,7 @@ export class ThreeModeOrchestrator {
             info.index
           );
           const userSelection = clarifications[clarId];
-          if (userSelection) {
+          if (userSelection && !handledStructuredIds.has(clarId)) {
             handledFilterIndexes.add(info.index);
             if (userSelection === "__REMOVE_FILTER__") {
               removalClarificationIds.add(clarId);
@@ -1466,7 +1504,10 @@ export class ThreeModeOrchestrator {
           info.filter,
           info.index
         );
-        return !clarifications || !clarifications[clarId];
+        return (
+          !clarifications ||
+          (!clarifications[clarId] && !handledStructuredIds.has(clarId))
+        );
       });
 
       contextDiscoveryStep.status = "complete";
@@ -1479,22 +1520,6 @@ export class ThreeModeOrchestrator {
         unresolvedFilters: unresolvedInfos.length,
       };
 
-      // Only request clarification for unresolved filters if clarifications were NOT already provided
-      // If clarifications were provided by user, we should proceed to SQL generation
-      // and let the LLM use the clarifications to resolve the filters
-      // EXCEPTION: If clarifications came from template extraction, they don't map to filter IDs,
-      // so we still need to check for unresolved filters and ask for NEW ones discovered by semantic search
-      if (
-        clarificationType === "template_extracted" &&
-        clarifications &&
-        context.intent.filters?.length
-      ) {
-        (context.intent as any).filters = this.applyTemplateClarificationsToFilters(
-          context.intent.filters as MappedFilter[],
-          clarifications,
-          context
-        );
-      }
       if (unresolvedNeedingClarification.length > 0 && !clarifications) {
         contextDiscoveryStep.message =
           "Discovering semantic context... (filters unresolved)";
@@ -1512,7 +1537,8 @@ export class ThreeModeOrchestrator {
           unresolvedNeedingClarification,
           question,
           customerId,
-          modelId
+          modelId,
+          context
         );
 
         return {
@@ -1524,6 +1550,36 @@ export class ThreeModeOrchestrator {
           clarificationReasoning: this.buildUnresolvedClarificationReasoning(
             unresolvedNeedingClarification
           ),
+          partialContext: {
+            intent: context.intent.type || "query",
+            formsIdentified: context.forms?.map((f) => f.formName) || [],
+            termsUnderstood: [],
+          },
+          filterMetrics: unresolvedSummary,
+        };
+      }
+
+      const validationClarifications = await this.buildValidationClarificationRequests(
+        mappedFilters,
+        customerId,
+        context
+      );
+
+      if (validationClarifications.length > 0 && !clarifications) {
+        contextDiscoveryStep.message =
+          "Discovering semantic context... (validation clarification needed)";
+
+        const unresolvedSummary = buildFilterMetricsSummary(mappedFilters);
+        (context.metadata as ContextBundleMetadata).filterMetrics = unresolvedSummary;
+
+        return {
+          mode: "clarification",
+          question,
+          thinking,
+          requiresClarification: true,
+          clarifications: validationClarifications,
+          clarificationReasoning:
+            "I found one or more filter values that need to be clarified before I can run the query.",
           partialContext: {
             intent: context.intent.type || "query",
             formsIdentified: context.forms?.map((f) => f.formName) || [],
@@ -1632,6 +1688,9 @@ export class ThreeModeOrchestrator {
           sanitizedQuestion,
           promptLines: trustedPromptLines,
           resolvedEntities,
+        },
+        {
+          allowClarificationRequests: !featureFlags.clarificationPipelineV2,
         }
       );
 
@@ -2170,6 +2229,14 @@ export class ThreeModeOrchestrator {
           confidence: 0.98,
           source: "clarification",
         };
+      } else if (id === "frame_slot_timeRange") {
+        const parsedDays = Number.parseInt(value, 10);
+        if (Number.isFinite(parsedDays) && parsedDays > 0) {
+          nextFrame.timeRange = {
+            unit: "days",
+            value: parsedDays,
+          };
+        }
       }
     });
 
@@ -2177,6 +2244,32 @@ export class ThreeModeOrchestrator {
       (need) => !clarifications[`frame_slot_${need.slot}`]
     );
     return nextFrame;
+  }
+
+  private applyAssessmentTypeClarifications(
+    context: ContextBundle,
+    clarifications: Record<string, string>
+  ): ContextBundle {
+    const selectedAssessmentTypeId = decodeAssessmentTypeSelection(
+      clarifications.frame_slot_assessment_type
+    );
+
+    if (!selectedAssessmentTypeId || !context.assessmentTypes?.length) {
+      return context;
+    }
+
+    const selected = context.assessmentTypes.filter(
+      (assessment) => assessment.assessmentTypeId === selectedAssessmentTypeId
+    );
+
+    if (selected.length === 0) {
+      return context;
+    }
+
+    return {
+      ...context,
+      assessmentTypes: selected,
+    };
   }
 
   private groupByFromGrain(grain: string): string[] {
@@ -2202,143 +2295,12 @@ export class ThreeModeOrchestrator {
 
   private buildFrameClarificationRequests(
     frame: SemanticQueryFrame,
-    _context: ContextBundle
+    context: ContextBundle
   ): ClarificationRequest[] {
-    return frame.clarificationNeeds.map((need) => {
-      if (need.slot === "measure") {
-        return {
-          id: "frame_slot_measure",
-          ambiguousTerm: frame.measure.value || "measure",
-          question: need.question,
-          slot: need.slot,
-          reason: need.reason,
-          options: [
-            {
-              id: "measure_patient_count",
-              label: "Patient count",
-              description: "Return how many patients match the criteria",
-              submissionValue: "patient_count",
-              sqlConstraint: "",
-              kind: "semantic",
-              isDefault: true,
-            },
-            {
-              id: "measure_wound_count",
-              label: "Wound count",
-              description: "Return how many wounds match the criteria",
-              submissionValue: "wound_count",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-            {
-              id: "measure_assessment_count",
-              label: "Assessment count",
-              description: "Return how many assessments match the criteria",
-              submissionValue: "assessment_count",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-          ],
-          allowCustom: false,
-        };
-      }
-
-      if (need.slot === "grain" || need.slot === "groupBy") {
-        return {
-          id: "frame_slot_grain",
-          ambiguousTerm: frame.grain.value || "grouping",
-          question: need.question,
-          slot: "grain",
-          reason: need.reason,
-          options: [
-            {
-              id: "grain_patient",
-              label: "Group by patient",
-              description: "One row or bar per patient",
-              submissionValue: "per_patient",
-              sqlConstraint: "",
-              kind: "semantic",
-              isDefault: true,
-            },
-            {
-              id: "grain_wound",
-              label: "Group by wound",
-              description: "One row or bar per wound",
-              submissionValue: "per_wound",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-            {
-              id: "grain_unit",
-              label: "Group by unit",
-              description: "One row or bar per unit/clinic",
-              submissionValue: "per_unit",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-          ],
-          allowCustom: false,
-        };
-      }
-
-      if (need.slot === "scope") {
-        return {
-          id: "frame_slot_scope",
-          ambiguousTerm: frame.scope.value || "scope",
-          question: need.question,
-          slot: need.slot,
-          reason: need.reason,
-          options: [
-            {
-              id: "scope_aggregate",
-              label: "All matching records",
-              description: "Run the query across the whole system",
-              submissionValue: "aggregate",
-              sqlConstraint: "",
-              kind: "semantic",
-              isDefault: true,
-            },
-            {
-              id: "scope_cohort",
-              label: "A cohort of patients",
-              description: "Return a patient cohort, not one patient",
-              submissionValue: "patient_cohort",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-            {
-              id: "scope_individual",
-              label: "One specific patient",
-              description: "Resolve and filter to one patient",
-              submissionValue: "individual_patient",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-          ],
-          allowCustom: false,
-        };
-      }
-
-      return {
-        id: `frame_slot_${need.slot}`,
-        ambiguousTerm: need.target || need.slot,
-        question: need.question,
-        slot: need.slot,
-        reason: need.reason,
-        options: [
-          {
-            id: "continue",
-            label: "Continue",
-            description: "Proceed using the default interpretation",
-            submissionValue: "__CONTINUE__",
-            sqlConstraint: "",
-            kind: "semantic",
-            isDefault: true,
-          },
-        ],
-        allowCustom: false,
-      };
-    });
+    return getDirectQueryClarificationService().buildFrameClarifications(
+      frame,
+      context
+    );
   }
 
   /**
@@ -2356,83 +2318,91 @@ export class ThreeModeOrchestrator {
     unresolved: UnresolvedFilterInfo[],
     originalQuestion: string,
     customerId: string,
-    modelId?: string
+    modelId: string | undefined,
+    context: ContextBundle
   ): Promise<ClarificationRequest[]> {
-    const clarifications: ClarificationRequest[] = [];
+    void originalQuestion;
+    void customerId;
+    void modelId;
+    return getDirectQueryClarificationService().buildFilterClarifications({
+      unresolved,
+      context,
+    });
+  }
 
-    // Process each unresolved filter
-    for (const info of unresolved) {
-      const phrase =
-        info.filter.userPhrase ||
-        info.filter.field ||
-        `Filter ${info.index + 1}`;
+  private async buildValidationClarificationRequests(
+    filters: MappedFilter[],
+    customerId: string,
+    context: ContextBundle
+  ): Promise<ClarificationRequest[]> {
+    const candidateFilters = filters.filter(
+      (filter) =>
+        !filter.needsClarification &&
+        filter.resolutionStatus !== "ambiguous" &&
+        filter.resolutionStatus !== "invalid" &&
+        Boolean(filter.field) &&
+        filter.value !== null &&
+        filter.value !== undefined
+    );
 
-      console.log(`[Orchestrator] 🔍 Resolving ambiguous filter: "${phrase}"`);
-
-      try {
-        // Try AI-powered clarification generation
-        const aiClarification = await generateAIClarification({
-          ambiguousTerm: phrase,
-          originalQuestion,
-          customerId,
-          modelId, // Pass user's selected model for ModelRouter
-          // Pass ambiguous matches if available (for field disambiguation)
-          ambiguousMatches: (info.filter as any).ambiguousMatches,
-        });
-
-        if (aiClarification && aiClarification.options.length > 0) {
-          console.log(
-            `[Orchestrator] ✅ AI generated ${
-              aiClarification.options.length - 1
-            } options for "${phrase}"`
-          );
-          clarifications.push(aiClarification);
-          continue;
-        }
-
-        console.log(
-          `[Orchestrator] ⚠️ AI returned no options for "${phrase}", using generic fallback`
-        );
-      } catch (error) {
-        console.error(
-          `[Orchestrator] ❌ AI clarification failed for "${phrase}":`,
-          error
-        );
-      }
-
-      // Fallback to generic "Remove or Custom" clarification
-      const clarId = buildUnresolvedFilterClarificationId(
-        info.filter,
-        info.index
-      );
-
-      clarifications.push({
-        id: clarId,
-        ambiguousTerm: phrase,
-        question: `What did you mean by "${phrase}" in this query?`,
-        slot: "valueFilter",
-        reason:
-          "I understood the overall question, but this value did not match a known filter value.",
-        options: [
-          {
-            id: `${clarId}_remove`,
-            label: "Remove this filter",
-            description: "Proceed without applying this constraint",
-            submissionValue: "__REMOVE_FILTER__",
-            sqlConstraint: "__REMOVE_FILTER__",
-            kind: "semantic",
-            isDefault: false,
-          },
-        ],
-        allowCustom: true,
-      });
-
-      console.log(
-        `[Orchestrator] 📋 Using generic clarification for "${phrase}"`
-      );
+    if (candidateFilters.length === 0) {
+      return [];
     }
 
-    return clarifications;
+    let validationErrors: ValidationError[];
+    try {
+      const validator = getFilterValidatorService();
+      validationErrors = await validator.generateClarificationSuggestions(
+        candidateFilters,
+        customerId
+      );
+    } catch (error) {
+      console.warn(
+        "[Orchestrator] Validation clarification generation failed; continuing without it",
+        error
+      );
+      return [];
+    }
+
+    if (validationErrors.length === 0) {
+      return [];
+    }
+
+    const unresolvedInfos = validationErrors.reduce<UnresolvedFilterInfo[]>(
+      (items, error) => {
+        const filterIndex = filters.findIndex(
+          (filter) =>
+            filter.field?.toLowerCase() === error.field.toLowerCase() &&
+            filter.value !== null &&
+            filter.value !== undefined
+        );
+        if (filterIndex < 0) {
+          return items;
+        }
+        items.push({
+          filter: {
+            ...filters[filterIndex],
+            needsClarification: true,
+            resolutionStatus: "invalid" as const,
+            clarificationReasonCode: "invalid_value" as const,
+          },
+          index: filterIndex,
+          reason: error.code || "invalid_value",
+        });
+        return items;
+      },
+      []
+    );
+
+    if (unresolvedInfos.length === 0) {
+      return [];
+    }
+
+    return getDirectQueryClarificationService().buildFilterClarifications({
+      unresolved: unresolvedInfos,
+      context,
+      validationErrors,
+    });
   }
 
   private buildUnresolvedClarificationReasoning(
@@ -2582,7 +2552,19 @@ export class ThreeModeOrchestrator {
       }
       // Handle both string and numeric values (from template placeholders)
       const stringValue = String(value ?? "");
-      return stringValue.trim() !== "";
+      if (stringValue.trim() === "") {
+        return false;
+      }
+      if (id.startsWith("frame_slot_")) {
+        return false;
+      }
+      if (decodeFilterSelection(stringValue)) {
+        return false;
+      }
+      if (decodeAssessmentTypeSelection(stringValue)) {
+        return false;
+      }
+      return true;
     });
 
     if (entries.length === 0) {

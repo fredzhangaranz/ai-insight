@@ -270,6 +270,28 @@ function buildClarificationNeeds(frame: SemanticQueryFrame): ClarificationNeed[]
     });
   }
 
+  if (
+    !frame.timeRange &&
+    /\b(recent|latest|current|new|old|stale)\b/i.test(
+      [
+        frame.measure.value,
+        frame.subject.value,
+        frame.groupBy.value.join(" "),
+        frame.filters.map((filter) => filter.userPhrase).join(" "),
+      ]
+        .filter(Boolean)
+        .join(" ")
+    )
+  ) {
+    needs.push({
+      slot: "timeRange",
+      reason:
+        "The query uses a vague temporal term but does not define the time window.",
+      question: "What time window should I use?",
+      confidence: 0.74,
+    });
+  }
+
   return needs;
 }
 

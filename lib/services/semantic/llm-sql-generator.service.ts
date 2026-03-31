@@ -53,6 +53,9 @@ export async function generateSQLWithLLM(
     sanitizedQuestion?: string;
     promptLines?: string[];
     resolvedEntities?: ResolvedEntitySummary[];
+  },
+  options?: {
+    allowClarificationRequests?: boolean;
   }
 ): Promise<LLMResponse> {
   // Check if already aborted before starting expensive operation
@@ -80,6 +83,8 @@ export async function generateSQLWithLLM(
   }
 
   const startTime = Date.now();
+  const allowClarificationRequests =
+    options?.allowClarificationRequests ?? true;
 
   let latestValidation: ValidationResult | undefined;
 
@@ -141,7 +146,7 @@ export async function generateSQLWithLLM(
             allowCustom: true,
           }));
 
-        if (clarifications.length > 0) {
+        if (clarifications.length > 0 && allowClarificationRequests) {
           // Return clarification response
           const clarificationResponse: LLMClarificationResponse = {
             responseType: "clarification",
@@ -217,7 +222,8 @@ export async function generateSQLWithLLM(
     customerId,
     clarifications,
     templateReferences,
-    trustedContext
+    trustedContext,
+    { allowClarificationRequests }
   );
 
   // DEBUG: Log formatted filters section
@@ -255,6 +261,12 @@ export async function generateSQLWithLLM(
   );
 
   const llmResponse = parseAndValidateLLMResponse(response);
+
+  if (!allowClarificationRequests && llmResponse.responseType === "clarification") {
+    throw new Error(
+      "[LLM-SQL-Generator] Clarification response received in compile-only mode"
+    );
+  }
 
   const totalDuration = Date.now() - startTime;
 
@@ -306,6 +318,9 @@ async function buildUserPrompt(
     sanitizedQuestion?: string;
     promptLines?: string[];
     resolvedEntities?: ResolvedEntitySummary[];
+  },
+  options?: {
+    allowClarificationRequests?: boolean;
   }
 ): Promise<string> {
   let prompt = "";
@@ -377,7 +392,12 @@ async function buildUserPrompt(
 
   prompt += `# Instructions\n\n`;
   prompt += `Analyze the question and context above.\n`;
-  prompt += `Decide if you need clarification or can generate SQL directly.\n`;
+  if (options?.allowClarificationRequests === false) {
+    prompt += `All required clarifications have already been handled upstream.\n`;
+    prompt += `You MUST generate SQL only and MUST NOT ask for clarification.\n`;
+  } else {
+    prompt += `Decide if you need clarification or can generate SQL directly.\n`;
+  }
   prompt += `Use the rpt.* reporting schema for all tables.\n`;
   prompt += `Return ONLY a valid JSON object matching the format defined in the system prompt.\n`;
 
@@ -482,11 +502,28 @@ function mapFiltersToMerged(
       filter.userPhrase || (filter as any).userTerm || filter.field || "filter";
     const valueResolved = filter.value !== null && filter.value !== undefined;
     const confidence =
-      typeof (filter as any).confidence === "number"
+      typeof (filter as any).resolutionConfidence === "number"
+        ? (filter as any).resolutionConfidence
+        : typeof (filter as any).mappingConfidence === "number"
+        ? (filter as any).mappingConfidence
+        : typeof (filter as any).confidence === "number"
         ? (filter as any).confidence
         : valueResolved
         ? 0.8
         : 0.5;
+    const resolutionStatus = (filter as any).resolutionStatus;
+    const resolved =
+      resolutionStatus === "resolved" ||
+      (!resolutionStatus &&
+        !(filter as any).needsClarification &&
+        valueResolved);
+    const warnings: string[] = [];
+    if ((filter as any).validationWarning) {
+      warnings.push((filter as any).validationWarning);
+    }
+    if ((filter as any).mappingError) {
+      warnings.push((filter as any).mappingError);
+    }
 
     return {
       originalText,
@@ -494,9 +531,9 @@ function mapFiltersToMerged(
       field: filter.field,
       operator: filter.operator,
       value: filter.value,
-      resolved: valueResolved,
+      resolved,
       confidence,
-      resolvedVia: valueResolved ? ["semantic_mapping"] : [],
+      resolvedVia: resolved ? ["semantic_mapping"] : [],
       allSources: [
         {
           source: "semantic_mapping",
@@ -507,7 +544,7 @@ function mapFiltersToMerged(
           originalText,
         },
       ],
-      warnings: [],
+      warnings,
       conflicts: [],
     };
   });

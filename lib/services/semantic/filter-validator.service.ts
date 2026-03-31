@@ -63,7 +63,14 @@ export function buildFilterMetricsSummary(
   const unresolvedWarnings =
     unresolvedOverride ??
     validation?.unresolvedWarnings ??
-    filters.filter((f) => !f.field || f.value === null || f.value === undefined).length;
+    filters.filter(
+      (f) =>
+        f.needsClarification ||
+        f.resolutionStatus === "ambiguous" ||
+        !f.field ||
+        f.value === null ||
+        f.value === undefined
+    ).length;
 
   return {
     totalFilters,
@@ -99,7 +106,14 @@ export class FilterValidatorService {
 
     for (const filter of filters) {
       // Skip unresolved filters (missing field/value) - clarification should handle them
-      if (!filter.field || filter.value === null || filter.value === undefined) {
+      if (
+        filter.needsClarification ||
+        filter.resolutionStatus === "ambiguous" ||
+        filter.resolutionStatus === "invalid" ||
+        !filter.field ||
+        filter.value === null ||
+        filter.value === undefined
+      ) {
         validationErrors.push({
           field: filter.field || filter.userPhrase || "unknown",
           severity: "warning",
@@ -387,6 +401,9 @@ export function collectUnresolvedFilters(
   filters.forEach((filter, index) => {
     if (
       !filter ||
+      filter.needsClarification ||
+      filter.resolutionStatus === "ambiguous" ||
+      filter.resolutionStatus === "invalid" ||
       !filter.field ||
       filter.value === null ||
       filter.value === undefined ||
@@ -397,6 +414,7 @@ export function collectUnresolvedFilters(
         index,
         reason:
           filter?.mappingError ||
+          filter?.clarificationReasonCode ||
           (!filter?.field
             ? "field_not_assigned"
             : filter?.value === null || filter?.value === undefined

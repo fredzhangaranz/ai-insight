@@ -52,16 +52,36 @@ interface CandidateMapping extends CachedMapping {
   comparisonValue: string;
 }
 
+export interface FilterCandidateMatch {
+  field: string;
+  value: string;
+  confidence: number;
+  formName?: string;
+  semanticConcept?: string;
+  optionCode?: string | null;
+}
+
 /**
  * Mapped filter with populated value from semantic database
  */
 export interface MappedFilter extends IntentFilter {
   value: string | null; // Populated from SemanticIndexOption
   mappingConfidence?: number; // Confidence of the mapping (0-1)
+  resolutionConfidence?: number; // Canonical confidence used by clarification/runtime
   overridden?: boolean; // True if LLM value was replaced
   autoCorrected?: boolean; // True if validation auto-corrected the value
   mappingError?: string; // Error message if mapping failed
   validationWarning?: string; // Warning from validation
+  resolutionStatus?: "resolved" | "ambiguous" | "invalid" | "unresolved";
+  needsClarification?: boolean;
+  clarificationReasonCode?:
+    | "ambiguous_field"
+    | "ambiguous_value"
+    | "invalid_value"
+    | "missing_value"
+    | "missing_field";
+  candidateMatches?: FilterCandidateMatch[];
+  ambiguousMatches?: FilterCandidateMatch[];
 
   // Ontology mapping metadata (Phase 1, Task 1.4)
   mappingPath?: {
@@ -210,6 +230,10 @@ export class TerminologyMapperService {
               ...filter,
               value: null,
               mappingConfidence: 0.0,
+              resolutionConfidence: 0.0,
+              resolutionStatus: "unresolved",
+              needsClarification: true,
+              clarificationReasonCode: "missing_value",
               mappingError: `No matching value in semantic index for field "${filter.field}"`,
             });
             continue;
@@ -223,6 +247,9 @@ export class TerminologyMapperService {
             field: filter.field,
             value: mapping.value,
             mappingConfidence: mapping.confidence,
+            resolutionConfidence: mapping.confidence,
+            resolutionStatus: "resolved",
+            needsClarification: false,
             overridden: wasOverridden,
           });
           continue;
@@ -293,6 +320,18 @@ export class TerminologyMapperService {
                   field: selectedMatch.field,
                   value: selectedMatch.value,
                   mappingConfidence: selectedMatch.confidence * 0.85, // Reduce confidence for synonym match
+                  resolutionConfidence: selectedMatch.confidence * 0.85,
+                  resolutionStatus:
+                    selectedMatch.confidence * 0.85 >= 0.7
+                      ? "resolved"
+                      : "ambiguous",
+                  needsClarification: selectedMatch.confidence * 0.85 < 0.7,
+                  clarificationReasonCode:
+                    selectedMatch.confidence * 0.85 < 0.7
+                      ? "ambiguous_value"
+                      : undefined,
+                  candidateMatches: synonymMatches.slice(0, 5),
+                  ambiguousMatches: synonymMatches.slice(0, 3),
                   mappingPath: {
                     originalTerm: filter.userPhrase,
                     synonymsUsed: [synonym],
@@ -320,6 +359,10 @@ export class TerminologyMapperService {
               ...filter,
               value: null,
               mappingConfidence: 0.0,
+              resolutionConfidence: 0.0,
+              resolutionStatus: "unresolved",
+              needsClarification: true,
+              clarificationReasonCode: "missing_value",
               mappingError: `No matching value found in semantic index or ontology`,
               mappingPath: {
                 originalTerm: filter.userPhrase,
@@ -360,6 +403,10 @@ export class TerminologyMapperService {
             field: bestMatch.field,
             value: bestMatch.value,
             mappingConfidence: bestMatch.confidence,
+            resolutionConfidence: bestMatch.confidence,
+            resolutionStatus: "resolved",
+            needsClarification: false,
+            candidateMatches: allMatches.slice(0, 5),
             mappingPath: {
               originalTerm: filter.userPhrase,
               levelsTraversed: 0, // Direct match
@@ -376,6 +423,12 @@ export class TerminologyMapperService {
             field: bestMatch.field,
             value: bestMatch.value,
             mappingConfidence: bestMatch.confidence,
+            resolutionConfidence: bestMatch.confidence,
+            resolutionStatus: "ambiguous",
+            needsClarification: true,
+            clarificationReasonCode: "ambiguous_value",
+            candidateMatches: allMatches.slice(0, 5),
+            ambiguousMatches: allMatches.slice(0, 3),
             validationWarning: `Low confidence match - may need clarification`,
             mappingPath: {
               originalTerm: filter.userPhrase,
@@ -393,6 +446,12 @@ export class TerminologyMapperService {
             field: bestMatch.field,
             value: bestMatch.value,
             mappingConfidence: bestMatch.confidence,
+            resolutionConfidence: bestMatch.confidence,
+            resolutionStatus: "ambiguous",
+            needsClarification: true,
+            clarificationReasonCode: "ambiguous_field",
+            candidateMatches: allMatches.slice(0, 5),
+            ambiguousMatches: allMatches.slice(0, 3),
             validationWarning: `Ambiguous match - found in multiple fields (${allMatches.slice(0, 3).map(m => m.field).join(", ")})`,
             mappingPath: {
               originalTerm: filter.userPhrase,
@@ -412,6 +471,10 @@ export class TerminologyMapperService {
           mappingError:
             error instanceof Error ? error.message : "Unknown error",
           mappingConfidence: 0.0,
+          resolutionConfidence: 0.0,
+          resolutionStatus: "unresolved",
+          needsClarification: true,
+          clarificationReasonCode: "missing_value",
         });
       }
     }
@@ -450,7 +513,7 @@ export class TerminologyMapperService {
     userPhrase: string,
     customer: string,
     pool: Pool
-  ): Promise<Array<{ field: string; value: string; confidence: number; formName?: string }>> {
+  ): Promise<FilterCandidateMatch[]> {
     // Normalize the user phrase for matching
     const normalized = this.normalizeTerm(userPhrase);
     if (!normalized) {
@@ -474,7 +537,8 @@ export class TerminologyMapperService {
         opt.semantic_category,
         opt.confidence AS db_confidence,
         field.field_name,
-        idx.form_name
+        idx.form_name,
+        field.semantic_concept
       FROM "SemanticIndexOption" opt
       JOIN "SemanticIndexField" field ON opt.semantic_index_field_id = field.id
       JOIN "SemanticIndex" idx ON field.semantic_index_id = idx.id
@@ -497,7 +561,7 @@ export class TerminologyMapperService {
       }
 
       // Find matches using fuzzy matching
-      const matches: Array<{ field: string; value: string; confidence: number; formName?: string }> = [];
+      const matches: FilterCandidateMatch[] = [];
       const normalizedPhrase = normalized.toLowerCase().trim();
 
       console.log(`[TerminologyMapper] 🔍 Normalized user phrase: "${normalizedPhrase}"`);
@@ -564,6 +628,8 @@ export class TerminologyMapperService {
             value: optionValue,
             confidence: matchConfidence,
             formName: row.form_name?.trim() || undefined,
+            semanticConcept: row.semantic_concept?.trim() || undefined,
+            optionCode: row.option_code ?? null,
           });
         }
       }
