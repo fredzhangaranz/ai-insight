@@ -1489,6 +1489,7 @@ export class ThreeModeOrchestrator {
         clarifications
       );
       mappedFilters = structuredFilterResult.filters;
+      mappedFilters = this.autoResolveStrongSingleCandidateFilters(mappedFilters);
       (context.intent as any).filters = mappedFilters;
 
       const unresolvedInfos = collectUnresolvedFilters(mappedFilters);
@@ -2454,6 +2455,19 @@ export class ThreeModeOrchestrator {
         if (filterIndex < 0) {
           return items;
         }
+        if (error.suggestion) {
+          filters[filterIndex] = {
+            ...filters[filterIndex],
+            value: error.suggestion,
+            autoCorrected: true,
+            needsClarification: false,
+            resolutionStatus: "resolved",
+            clarificationReasonCode: undefined,
+            validationWarning: undefined,
+            mappingError: undefined,
+          };
+          return items;
+        }
         items.push({
           filter: {
             ...filters[filterIndex],
@@ -2477,6 +2491,61 @@ export class ThreeModeOrchestrator {
       unresolved: unresolvedInfos,
       context,
       validationErrors,
+    });
+  }
+
+  private autoResolveStrongSingleCandidateFilters(
+    filters: MappedFilter[]
+  ): MappedFilter[] {
+    return filters.map((filter) => {
+      if (
+        !filter ||
+        (!filter.needsClarification &&
+          filter.resolutionStatus !== "ambiguous" &&
+          filter.resolutionStatus !== "invalid")
+      ) {
+        return filter;
+      }
+
+      const uniqueMatches = new Map<string, NonNullable<typeof filter.candidateMatches>[number]>();
+      (filter.candidateMatches || []).forEach((match) => {
+        const key = `${match.field}::${match.value}::${match.formName || ""}`;
+        if (!uniqueMatches.has(key)) {
+          uniqueMatches.set(key, match);
+        }
+      });
+
+      const rankedMatches = Array.from(uniqueMatches.values()).sort(
+        (left, right) => right.confidence - left.confidence
+      );
+
+      if (rankedMatches.length !== 1) {
+        return filter;
+      }
+
+      const [match] = rankedMatches;
+      if (!match || match.confidence < 0.85) {
+        return filter;
+      }
+
+      return {
+        ...filter,
+        field: match.field,
+        value: match.value,
+        mappingConfidence:
+          typeof filter.mappingConfidence === "number"
+            ? Math.max(filter.mappingConfidence, match.confidence)
+            : match.confidence,
+        resolutionConfidence:
+          typeof filter.resolutionConfidence === "number"
+            ? Math.max(filter.resolutionConfidence, match.confidence)
+            : match.confidence,
+        resolutionStatus: "resolved",
+        needsClarification: false,
+        clarificationReasonCode: undefined,
+        validationWarning: undefined,
+        mappingError: undefined,
+      };
     });
   }
 

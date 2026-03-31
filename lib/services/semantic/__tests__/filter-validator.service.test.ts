@@ -328,6 +328,40 @@ describe("FilterValidatorService", () => {
       expect(corrected[1].autoCorrected).toBeUndefined();
     });
   });
+
+  describe("generateClarificationSuggestions", () => {
+    it("should mark a dominant semantic-index candidate as an auto-correct suggestion", async () => {
+      mockPool.query.mockResolvedValue({
+        rows: [
+          { option_value: "Female", option_code: "F", db_confidence: 0.99 },
+          { option_value: "Male", option_code: "M", db_confidence: 0.98 },
+        ],
+      });
+
+      const result = await service.generateClarificationSuggestions(
+        [
+          {
+            field: "Gender",
+            operator: "equals",
+            userPhrase: "female patients",
+            value: "female patients",
+          },
+        ],
+        "test-customer"
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].suggestion).toBe("Female");
+      expect(result[0].clarificationSuggestions?.[0]).toEqual(
+        expect.objectContaining({
+          label: "Female",
+          evidence: expect.objectContaining({
+            matchScore: expect.any(Number),
+          }),
+        })
+      );
+    });
+  });
 });
 
 describe("collectUnresolvedFilters helper", () => {

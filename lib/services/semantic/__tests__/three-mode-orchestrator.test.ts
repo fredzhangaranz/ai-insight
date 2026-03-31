@@ -7,6 +7,7 @@ import type {
 import { ContextDiscoveryService } from "../../context-discovery/context-discovery.service";
 import { PatientEntityResolver } from "../../patient-entity-resolver.service";
 import { buildUnresolvedFilterClarificationId } from "../filter-validator.service";
+import { getFilterValidatorService } from "../filter-validator.service";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import { shouldResolvePatientLiterally } from "../../patient-resolution-gate.service";
 import { encodeFilterSelection } from "../clarification-orchestrator.service";
@@ -930,6 +931,176 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
       ]);
       expect(mockGenerateSQLWithLLM.mock.calls[0][3]).toBeUndefined();
       expect(validationSpy).not.toHaveBeenCalled();
+    });
+
+    it("should auto-apply dominant validation suggestions without asking for clarification", async () => {
+      const contextFilter = {
+        operator: "equals",
+        userPhrase: "female patients",
+        field: "Gender",
+        value: "female patients",
+        resolutionStatus: "resolved" as const,
+        needsClarification: false,
+      };
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "how many female patients",
+        intent: {
+          type: "query",
+          confidence: 0.93,
+          scope: "patient",
+          metrics: ["count"],
+          filters: [contextFilter],
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      vi.spyOn(getFilterValidatorService(), "generateClarificationSuggestions").mockResolvedValue([
+        {
+          field: "Gender",
+          severity: "error",
+          message:
+            'Could not find "female patients" in field "Gender". Did you mean one of these?',
+          code: "VALUE_NOT_FOUND",
+          suggestion: "Female",
+          clarificationSuggestions: [
+            {
+              id: "suggestion_0",
+              label: "Female",
+              sqlConstraint: "Gender = 'Female'",
+              isDefault: true,
+            },
+            {
+              id: "suggestion_1",
+              label: "Male",
+              sqlConstraint: "Gender = 'Male'",
+            },
+          ],
+        },
+      ]);
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "sql",
+          generatedSql: "SELECT COUNT(*) FROM rpt.Patient WHERE gender = 'Female'",
+          explanation: "Count female patients",
+          confidence: 0.95,
+        })
+      );
+
+      const result = await orchestrator.ask(
+        "how many female patients",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.clarifications).toBeUndefined();
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+      const contextPassed = mockGenerateSQLWithLLM.mock.calls[0][0];
+      expect(contextPassed.intent.filters).toEqual([
+        expect.objectContaining({
+          field: "Gender",
+          value: "Female",
+          autoCorrected: true,
+          needsClarification: false,
+        }),
+      ]);
+    });
+
+    it("should auto-resolve a single strong unresolved semantic candidate without clarification", async () => {
+      const contextFilter = {
+        operator: "equals",
+        userPhrase: "female patients",
+        field: "Gender",
+        value: "Female",
+        resolutionStatus: "ambiguous" as const,
+        needsClarification: true,
+        clarificationReasonCode: "ambiguous_value" as const,
+        candidateMatches: [
+          {
+            field: "Gender",
+            value: "Female",
+            confidence: 0.96,
+            formName: "Details",
+            semanticConcept: "patient_gender",
+          },
+        ],
+      };
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "how many female patients",
+        intent: {
+          type: "query",
+          confidence: 0.93,
+          scope: "patient",
+          metrics: ["count"],
+          filters: [contextFilter],
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "sql",
+          generatedSql: "SELECT COUNT(*) FROM rpt.Patient WHERE gender = 'Female'",
+          explanation: "Count female patients",
+          confidence: 0.95,
+        })
+      );
+
+      const result = await orchestrator.ask(
+        "how many female patients",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.clarifications).toBeUndefined();
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+      const contextPassed = mockGenerateSQLWithLLM.mock.calls[0][0];
+      expect(contextPassed.intent.filters).toEqual([
+        expect.objectContaining({
+          field: "Gender",
+          value: "Female",
+          resolutionStatus: "resolved",
+          needsClarification: false,
+        }),
+      ]);
     });
   });
 

@@ -314,6 +314,14 @@ function uniqueCandidateMatches(
   return unique;
 }
 
+function countSemanticChoices(options: ClarificationOption[]): number {
+  return options.filter(
+    (option) =>
+      option.submissionValue !== "__REMOVE_FILTER__" &&
+      option.id !== "custom"
+  ).length;
+}
+
 function buildFilterOptionDescription(match: FilterCandidateMatch): string {
   const details: string[] = [];
   if (match.field) details.push(`Field: ${match.field}`);
@@ -359,7 +367,7 @@ function buildFilterOptions(
 }
 
 function buildTimeRangeOptions(profile: StructuralContextProfile, question: string): ClarificationOption[] {
-  const options = [
+  const options: ClarificationOption[] = [
     {
       id: "time_30_days",
       label: "Last 30 days",
@@ -1130,10 +1138,22 @@ export class DirectQueryClarificationService {
       const decision: ClarificationDecision = {
         id: clarificationId,
         ambiguousTerm: phrase,
-        question:
-          options.length > 1
-            ? `Which option did you mean by "${phrase}"?`
-            : `What did you mean by "${phrase}" in this query?`,
+        question: (() => {
+          const semanticChoiceCount = countSemanticChoices(options);
+          const primaryOption = options.find(
+            (option) => option.submissionValue !== "__REMOVE_FILTER__"
+          );
+
+          if (semanticChoiceCount <= 0) {
+            return `What did you mean by "${phrase}" in this query?`;
+          }
+
+          if (semanticChoiceCount === 1 && primaryOption?.label) {
+            return `Should I use "${primaryOption.label}" for "${phrase}"?`;
+          }
+
+          return `Which option did you mean by "${phrase}"?`;
+        })(),
         options,
         allowCustom: true,
         reasonCode,

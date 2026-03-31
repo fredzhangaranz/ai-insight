@@ -165,7 +165,7 @@ describe("TerminologyMapperService", () => {
         },
       ];
 
-      const mapped = await service.mapFilters(filters, "test-customer");
+      const mapped = await service.mapFilters(filters as any, "test-customer");
 
       expect(mapped).toHaveLength(1);
       expect(mapped[0].value).toBe("Simple Bandage"); // Exact database value
@@ -194,7 +194,7 @@ describe("TerminologyMapperService", () => {
         },
       ];
 
-      const mapped = await service.mapFilters(filters, "test-customer");
+      const mapped = await service.mapFilters(filters as any, "test-customer");
 
       expect(mapped).toHaveLength(1);
       expect(mapped[0].value).toBe("Simple Bandage"); // Corrected
@@ -326,6 +326,51 @@ describe("TerminologyMapperService", () => {
       expect(mapped).toHaveLength(1);
       expect(mapped[0].value).toBe("Simple Bandage"); // Singular form from database
       expect(mapped[0].mappingConfidence).toBeGreaterThan(0.5);
+    });
+
+    it("should resolve dominant enum matches from longer user phrases", async () => {
+      mockPool.query.mockResolvedValue({
+        rows: [
+          {
+            option_value: "Female",
+            option_code: "F",
+            semantic_category: "gender",
+            confidence: 0.99,
+            field_name: "Gender",
+            form_name: "Details",
+            semantic_concept: "patient_gender",
+          },
+          {
+            option_value: "Male",
+            option_code: "M",
+            semantic_category: "gender",
+            confidence: 0.98,
+            field_name: "Gender",
+            form_name: "Details",
+            semantic_concept: "patient_gender",
+          },
+        ],
+      });
+
+      const mapped = await service.mapFilters(
+        [
+          {
+            operator: "equals",
+            userPhrase: "female patients",
+            value: null,
+          },
+        ],
+        "test-customer"
+      );
+
+      expect(mapped).toHaveLength(1);
+      expect(mapped[0]).toMatchObject({
+        field: "Gender",
+        value: "Female",
+        resolutionStatus: "resolved",
+        needsClarification: false,
+      });
+      expect(mapped[0].mappingConfidence).toBeGreaterThan(0.9);
     });
 
     it("should handle empty filter array", async () => {

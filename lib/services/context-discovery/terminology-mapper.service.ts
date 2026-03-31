@@ -578,48 +578,10 @@ export class TerminologyMapperService {
           console.log(`[TerminologyMapper] 🔬 DB option: "${optionValue}" → normalized: "${normalizedValue}"`);
         }
 
-        let matchConfidence = 0;
-
-        // Exact match (case-insensitive)
-        if (normalizedValue === normalizedPhrase) {
-          console.log(`[TerminologyMapper] ✅ EXACT MATCH: "${optionValue}" (normalized: "${normalizedValue}") === "${normalizedPhrase}"`);
-          matchConfidence = 1.0;
-        }
-        // Contains match
-        else if (
-          normalizedValue.includes(normalizedPhrase) ||
-          normalizedPhrase.includes(normalizedValue)
-        ) {
-          matchConfidence = Math.max(
-            normalizedPhrase.length / normalizedValue.length,
-            normalizedValue.length / normalizedPhrase.length
-          );
-        }
-        // Word match (e.g., "simple bandages" matches "Simple Bandage")
-        else {
-          const phraseWords = normalizedPhrase.split(/\s+/);
-          const valueWords = normalizedValue.split(/\s+/);
-          const matchingWords = phraseWords.filter((w) =>
-            valueWords.includes(w)
-          ).length;
-
-          if (matchingWords > 0) {
-            matchConfidence =
-              (matchingWords / Math.max(phraseWords.length, valueWords.length)) *
-              0.9; // Slightly lower confidence than exact match
-          }
-        }
-
-        // Fuzzy match using Levenshtein distance (if no other match)
-        if (matchConfidence === 0) {
-          const similarity = this.calculateSimilarity(
-            normalizedPhrase,
-            normalizedValue
-          );
-          if (similarity > 0.75) {
-            matchConfidence = similarity * 0.85; // Reduce confidence for fuzzy
-          }
-        }
+        const matchConfidence = this.scoreNormalizedOptionMatch(
+          normalizedPhrase,
+          normalizedValue
+        );
 
         // Only include matches with confidence > 0.3
         if (matchConfidence > 0.3) {
@@ -719,52 +681,15 @@ export class TerminologyMapperService {
         if (!optionValue) continue;
 
         const normalizedValue = this.normalizeTerm(optionValue).toLowerCase();
-
-        // Exact match (case-insensitive)
-        if (normalizedValue === normalizedPhrase) {
-          return { value: optionValue, confidence: 1.0 };
-        }
-
-        // Contains match
-        if (
-          normalizedValue.includes(normalizedPhrase) ||
-          normalizedPhrase.includes(normalizedValue)
-        ) {
-          const confidence = Math.max(
-            normalizedPhrase.length / normalizedValue.length,
-            normalizedValue.length / normalizedPhrase.length
-          );
-          if (!bestMatch || confidence > bestMatch.confidence) {
-            bestMatch = { value: optionValue, confidence };
-          }
-        }
-
-        // Word match (e.g., "simple bandages" matches "Simple Bandage")
-        const phraseWords = normalizedPhrase.split(/\s+/);
-        const valueWords = normalizedValue.split(/\s+/);
-        const matchingWords = phraseWords.filter((w) =>
-          valueWords.includes(w)
-        ).length;
-
-        if (matchingWords > 0) {
-          const wordMatchConfidence =
-            (matchingWords / Math.max(phraseWords.length, valueWords.length)) *
-            0.9; // Slightly lower confidence than exact match
-          if (!bestMatch || wordMatchConfidence > bestMatch.confidence) {
-            bestMatch = { value: optionValue, confidence: wordMatchConfidence };
-          }
-        }
-
-        // Fuzzy match using Levenshtein distance
-        const similarity = this.calculateSimilarity(
+        const confidence = this.scoreNormalizedOptionMatch(
           normalizedPhrase,
           normalizedValue
         );
-        if (similarity > 0.75) {
-          // Threshold for fuzzy match
-          if (!bestMatch || similarity > bestMatch.confidence) {
-            bestMatch = { value: optionValue, confidence: similarity * 0.85 }; // Reduce confidence for fuzzy
-          }
+        if (confidence === 1.0) {
+          return { value: optionValue, confidence };
+        }
+        if (!bestMatch || confidence > bestMatch.confidence) {
+          bestMatch = { value: optionValue, confidence };
         }
       }
 
@@ -1210,6 +1135,53 @@ export class TerminologyMapperService {
       if (ratio >= 0.75) return true;
     }
     return false;
+  }
+
+  private scoreNormalizedOptionMatch(
+    normalizedPhrase: string,
+    normalizedValue: string
+  ): number {
+    if (!normalizedPhrase || !normalizedValue) return 0;
+    if (normalizedPhrase === normalizedValue) {
+      return 1.0;
+    }
+
+    const phraseTokens = normalizedPhrase.split(/\s+/).filter(Boolean);
+    const valueTokens = normalizedValue.split(/\s+/).filter(Boolean);
+    const matchingWords = phraseTokens.filter((token) =>
+      valueTokens.includes(token)
+    ).length;
+
+    let score = 0;
+
+    if (
+      normalizedValue.includes(normalizedPhrase) ||
+      normalizedPhrase.includes(normalizedValue)
+    ) {
+      score = Math.max(
+        score,
+        Math.min(normalizedPhrase.length, normalizedValue.length) /
+          Math.max(normalizedPhrase.length, normalizedValue.length)
+      );
+    }
+
+    if (matchingWords > 0) {
+      score = Math.max(
+        score,
+        (matchingWords / Math.max(phraseTokens.length, valueTokens.length)) * 0.9
+      );
+      score = Math.max(score, (matchingWords / valueTokens.length) * 0.96);
+    }
+
+    const similarity = this.calculateSimilarity(
+      normalizedPhrase,
+      normalizedValue
+    );
+    if (similarity > 0.75) {
+      score = Math.max(score, similarity * 0.85);
+    }
+
+    return this.clampConfidence(score);
   }
 
   private levenshteinDistance(a: string, b: string): number {

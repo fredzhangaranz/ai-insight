@@ -284,6 +284,46 @@ describe("DirectQueryClarificationService", () => {
     );
   });
 
+  it("uses confirmation wording when there is only one semantic choice", () => {
+    const service = new DirectQueryClarificationService();
+    const context = buildContext({
+      question: "how many female patients",
+    });
+
+    const clarifications = service.buildFilterClarifications({
+      unresolved: [
+        {
+          index: 0,
+          reason: "ambiguous_value",
+          filter: {
+            operator: "equals",
+            userPhrase: "female patients",
+            field: "Gender",
+            value: "Female",
+            resolutionStatus: "ambiguous",
+            needsClarification: true,
+            clarificationReasonCode: "ambiguous_value",
+            candidateMatches: [
+              {
+                field: "Gender",
+                value: "Female",
+                confidence: 0.96,
+                formName: "Details",
+                semanticConcept: "patient_gender",
+              },
+            ],
+          },
+        },
+      ],
+      context,
+    });
+
+    expect(clarifications).toHaveLength(1);
+    expect(clarifications[0].question).toBe(
+      'Should I use "Female" for "female patients"?'
+    );
+  });
+
   it("applies structured filter selections back to mapped filters", () => {
     const clarificationId = "clarify_filter_0";
     const result = applyStructuredFilterSelections(

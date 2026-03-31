@@ -159,8 +159,9 @@ export type IntentType =
  * - Field assignment happens AFTER semantic search based on confidence
  * - This prevents the LLM from making assumptions about database schema
  *
- * IMPORTANT: The 'value' field is ALWAYS null after intent classification.
- * The terminology mapper will populate actual database values after discovery.
+ * IMPORTANT: The 'value' field should be null immediately after intent
+ * classification. The terminology mapper populates actual database values
+ * later in the pipeline, so downstream code must accept string | null.
  */
 export interface IntentFilter {
   field?: string; // Optional: Assigned AFTER semantic search (NOT by LLM)
@@ -170,7 +171,7 @@ export interface IntentFilter {
    * Legacy alias preserved for backward compatibility with older payloads.
    */
   userTerm?: string;
-  value: null; // ALWAYS null - terminology mapper populates from semantic database
+  value: string | null;
 }
 
 /**
