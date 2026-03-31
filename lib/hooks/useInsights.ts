@@ -96,6 +96,12 @@ export interface InsightResult {
   question?: string;
   thinking: ThinkingStep[];
   filterMetrics?: FilterMetricsSummary;
+  clarificationTelemetry?: {
+    requestedCount: number;
+    bySource: Record<string, number>;
+    byReasonCode: Record<string, number>;
+    byTargetType: Record<string, number>;
+  };
 
   // SQL execution fields (when mode is NOT clarification)
   sql?: string;

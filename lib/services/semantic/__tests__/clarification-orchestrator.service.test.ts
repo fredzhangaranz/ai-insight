@@ -4,6 +4,7 @@ import {
   applyStructuredFilterSelections,
   DirectQueryClarificationService,
   encodeFilterSelection,
+  summarizeClarificationRequests,
 } from "../clarification-orchestrator.service";
 
 function buildContext(overrides: Partial<ContextBundle> = {}): ContextBundle {
@@ -110,6 +111,119 @@ describe("DirectQueryClarificationService", () => {
         assessmentTypeId: "a1",
       })
     );
+    expect(assessmentClarification?.evidence).toEqual(
+      expect.objectContaining({
+        clarificationSource: "assessment_type",
+      })
+    );
+  });
+
+  it("limits grain options to structurally compatible grains", () => {
+    const service = new DirectQueryClarificationService();
+    const context = buildContext({
+      question: "show wound counts by something",
+      forms: [
+        {
+          formId: "form-1",
+          formName: "Wound Assessment",
+          reason: "matched",
+          confidence: 0.9,
+          fields: [
+            {
+              fieldId: "f1",
+              fieldName: "Wound Area",
+              semanticConcept: "wound_area",
+              dataType: "number",
+              confidence: 0.9,
+            },
+          ],
+        },
+      ],
+      joinPaths: [
+        {
+          path: ["Patient", "Wound"],
+          tables: ["rpt.Patient", "rpt.Wound"],
+          joins: [],
+          confidence: 0.9,
+        },
+      ],
+    });
+    const frame = buildFrame({
+      subject: { value: "wound", confidence: 0.9, source: "llm" },
+      clarificationNeeds: [
+        {
+          slot: "grain",
+          reason: "grouping unclear",
+          question: "How should I group the results?",
+          confidence: 0.8,
+        },
+      ],
+    });
+
+    const clarifications = service.buildFrameClarifications(frame, context);
+    const grainClarification = clarifications.find(
+      (item) => item.id === "frame_slot_grain"
+    );
+
+    expect(grainClarification).toBeDefined();
+    expect(
+      grainClarification?.options.map((option) => option.submissionValue)
+    ).toEqual(expect.arrayContaining(["total", "per_patient", "per_wound"]));
+    expect(
+      grainClarification?.options.map((option) => option.submissionValue)
+    ).not.toContain("per_assessment");
+  });
+
+  it("builds threshold clarifications for vague size terms using discovered fields", () => {
+    const service = new DirectQueryClarificationService();
+    const context = buildContext({
+      question: "show me patients with large wounds",
+      forms: [
+        {
+          formId: "form-1",
+          formName: "Wound Assessment",
+          reason: "matched",
+          confidence: 0.9,
+          fields: [
+            {
+              fieldId: "f1",
+              fieldName: "Wound Area",
+              semanticConcept: "wound_area",
+              dataType: "number",
+              confidence: 0.9,
+            },
+          ],
+        },
+      ],
+      joinPaths: [
+        {
+          path: ["Patient", "Wound"],
+          tables: ["rpt.Patient", "rpt.Wound"],
+          joins: [],
+          confidence: 0.9,
+        },
+      ],
+    });
+    const frame = buildFrame({
+      subject: { value: "wound", confidence: 0.9, source: "llm" },
+    });
+
+    const clarifications = service.buildFrameClarifications(frame, context);
+    const thresholdClarification = clarifications.find(
+      (item) => item.id === "frame_slot_threshold_size"
+    );
+
+    expect(thresholdClarification).toBeDefined();
+    expect(thresholdClarification?.reasonCode).toBe("computable_vague_term");
+    expect(thresholdClarification?.options.map((option) => option.label)).toEqual(
+      expect.arrayContaining([
+        "Area greater than 10 cm²",
+        "Area greater than 25 cm²",
+      ])
+    );
+    expect(
+      String(thresholdClarification?.options[1].submissionValue || "")
+    ).toContain("__FILTER_SELECTION__:");
   });
 
   it("builds schema-grounded filter clarification options from candidate matches", () => {
@@ -204,5 +318,77 @@ describe("DirectQueryClarificationService", () => {
         needsClarification: false,
       }),
     ]);
+  });
+
+  it("appends policy-based filter selections when no original filter exists", () => {
+    const clarificationId = "frame_slot_threshold_size";
+    const result = applyStructuredFilterSelections([], {
+      [clarificationId]: encodeFilterSelection({
+        kind: "policy_filter",
+        clarificationId,
+        filterIndex: -1,
+        field: "Wound Area",
+        value: "25",
+        operator: "greater_than",
+        userPhrase: "large wounds",
+        formName: "Wound Assessment",
+        semanticConcept: "wound_area",
+      }),
+    });
+
+    expect(result.filters).toEqual([
+      expect.objectContaining({
+        field: "Wound Area",
+        value: "25",
+        operator: "greater_than",
+        userPhrase: "large wounds",
+        resolutionStatus: "resolved",
+      }),
+    ]);
+  });
+
+  it("summarizes clarification telemetry by source and reason code", () => {
+    const summary = summarizeClarificationRequests([
+      {
+        id: "c1",
+        ambiguousTerm: "recent",
+        question: "What time window?",
+        options: [],
+        allowCustom: true,
+        reasonCode: "missing_time_window",
+        targetType: "time_window",
+        evidence: {
+          clarificationSource: "time_policy",
+        },
+      },
+      {
+        id: "c2",
+        ambiguousTerm: "large",
+        question: "How should I define large?",
+        options: [],
+        allowCustom: true,
+        reasonCode: "computable_vague_term",
+        targetType: "threshold",
+        evidence: {
+          clarificationSource: "threshold_policy",
+        },
+      },
+    ]);
+
+    expect(summary).toEqual({
+      requestedCount: 2,
+      bySource: {
+        time_policy: 1,
+        threshold_policy: 1,
+      },
+      byReasonCode: {
+        missing_time_window: 1,
+        computable_vague_term: 1,
+      },
+      byTargetType: {
+        time_window: 1,
+        threshold: 1,
+      },
+    });
   });
 });

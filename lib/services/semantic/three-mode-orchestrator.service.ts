@@ -76,9 +76,11 @@ import { normalizeSemanticQueryFrame } from "../context-discovery/semantic-query
 import { shouldResolvePatientLiterally } from "../patient-resolution-gate.service";
 import {
   applyStructuredFilterSelections,
+  type ClarificationTelemetrySummary,
   decodeAssessmentTypeSelection,
   decodeFilterSelection,
   getDirectQueryClarificationService,
+  summarizeClarificationRequests,
 } from "./clarification-orchestrator.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
@@ -120,6 +122,7 @@ export interface OrchestrationResult {
   question: string;
   thinking: ThinkingStep[];
   filterMetrics?: FilterMetricsSummary;
+  clarificationTelemetry?: ClarificationTelemetrySummary;
 
   // SQL execution fields (when mode is NOT clarification)
   sql?: string;
@@ -454,6 +457,10 @@ export class ThreeModeOrchestrator {
           clarifications: clarifications as any,
           clarificationReasoning:
             "Template placeholders require additional details",
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            clarifications as any,
+            "template_placeholder"
+          ),
         };
       }
 
@@ -595,6 +602,10 @@ export class ThreeModeOrchestrator {
                 requiresClarification: true,
                 clarifications,
                 clarificationReasoning: `${validationResult.statistics.failed} residual filter(s) could not be validated`,
+                clarificationTelemetry: this.buildClarificationTelemetry(
+                  clarifications as any,
+                  "validation"
+                ),
               };
             }
 
@@ -1433,6 +1444,10 @@ export class ThreeModeOrchestrator {
           clarifications: frameClarifications,
           clarificationReasoning:
             "I need one or two details about how to structure this query before I run it.",
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            frameClarifications,
+            "semantic_frame"
+          ),
           partialContext: {
             intent: context.intent.type || "query",
             formsIdentified: context.forms?.map((f) => f.formName) || [],
@@ -1550,6 +1565,10 @@ export class ThreeModeOrchestrator {
           clarificationReasoning: this.buildUnresolvedClarificationReasoning(
             unresolvedNeedingClarification
           ),
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            clarifications as any,
+            "unresolved_filter"
+          ),
           partialContext: {
             intent: context.intent.type || "query",
             formsIdentified: context.forms?.map((f) => f.formName) || [],
@@ -1580,6 +1599,10 @@ export class ThreeModeOrchestrator {
           clarifications: validationClarifications,
           clarificationReasoning:
             "I found one or more filter values that need to be clarified before I can run the query.",
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            validationClarifications,
+            "validation"
+          ),
           partialContext: {
             intent: context.intent.type || "query",
             formsIdentified: context.forms?.map((f) => f.formName) || [],
@@ -1723,6 +1746,10 @@ export class ThreeModeOrchestrator {
           requiresClarification: true,
           clarifications: llmResponse.clarifications,
           clarificationReasoning: llmResponse.reasoning,
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            llmResponse.clarifications,
+            "sql_llm"
+          ),
           partialContext: llmResponse.partialContext,
           filterMetrics: context.metadata?.filterMetrics,
         };
@@ -2419,6 +2446,25 @@ export class ThreeModeOrchestrator {
     )}. Please clarify or remove them.`;
   }
 
+  private buildClarificationTelemetry(
+    clarifications?: ClarificationRequest[],
+    fallbackSource?: string
+  ): ClarificationTelemetrySummary | undefined {
+    const summary = summarizeClarificationRequests(clarifications);
+    if (!summary) {
+      return undefined;
+    }
+
+    if (
+      fallbackSource &&
+      Object.keys(summary.bySource).length === 0
+    ) {
+      summary.bySource[fallbackSource] = summary.requestedCount;
+    }
+
+    return summary;
+  }
+
   private buildPatientClarificationResult(
     question: string,
     thinking: ThinkingStep[],
@@ -2426,51 +2472,61 @@ export class ThreeModeOrchestrator {
     frame?: SemanticQueryFrame
   ): OrchestrationResult {
     if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
+      const clarifications = [
+        {
+          id: "patient_resolution_confirm",
+          placeholder: "patient_resolution_confirm",
+          prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
+          slot: "entityRef",
+          target: "patient",
+          reason:
+            frame?.clarificationNeeds.find((need) => need.slot === "entityRef")
+              ?.reason ||
+            "A specific patient must be confirmed before running this query.",
+          options: [
+            {
+              id: "patient_resolution_confirm_use",
+              label: `Use ${resolution.selectedMatch.patientName}`,
+              submissionValue: resolution.opaqueRef!,
+              sqlConstraint: "",
+              kind: "semantic",
+              value: resolution.opaqueRef!,
+            },
+            {
+              id: "patient_resolution_confirm_change",
+              label: "Choose a different patient",
+              submissionValue: "__CHANGE_PATIENT__",
+              sqlConstraint: "",
+              kind: "semantic",
+              value: "__CHANGE_PATIENT__",
+            },
+          ],
+          freeformAllowed: {
+            allowed: true,
+            placeholder: "Enter an exact patient name or ID",
+            hint: "Use an exact full name, patient ID, or domain ID",
+            minChars: 3,
+            maxChars: 100,
+          },
+          reasonCode: "missing_entity",
+          targetType: "entity",
+          evidence: {
+            clarificationSource: "patient_resolution",
+          },
+        } as any,
+      ];
       return {
         mode: "clarification",
         question,
         thinking,
         requiresClarification: true,
-        clarifications: [
-          {
-            id: "patient_resolution_confirm",
-            placeholder: "patient_resolution_confirm",
-            prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
-            slot: "entityRef",
-            target: "patient",
-            reason:
-              frame?.clarificationNeeds.find((need) => need.slot === "entityRef")
-                ?.reason ||
-              "A specific patient must be confirmed before running this query.",
-            options: [
-              {
-                id: "patient_resolution_confirm_use",
-                label: `Use ${resolution.selectedMatch.patientName}`,
-                submissionValue: resolution.opaqueRef!,
-                sqlConstraint: "",
-                kind: "semantic",
-                value: resolution.opaqueRef!,
-              },
-              {
-                id: "patient_resolution_confirm_change",
-                label: "Choose a different patient",
-                submissionValue: "__CHANGE_PATIENT__",
-                sqlConstraint: "",
-                kind: "semantic",
-                value: "__CHANGE_PATIENT__",
-              },
-            ],
-            freeformAllowed: {
-              allowed: true,
-              placeholder: "Enter an exact patient name or ID",
-              hint: "Use an exact full name, patient ID, or domain ID",
-              minChars: 3,
-              maxChars: 100,
-            },
-          } as any,
-        ],
+        clarifications,
         clarificationReasoning:
           "I found one exact full-name match and need a quick confirmation before running the query.",
+        clarificationTelemetry: this.buildClarificationTelemetry(
+          clarifications as any,
+          "patient_resolution"
+        ),
       };
     }
 
@@ -2479,62 +2535,82 @@ export class ThreeModeOrchestrator {
       Array.isArray(resolution.matches) &&
       resolution.matches.length > 0
     ) {
+      const clarifications = [
+        {
+          id: "patient_resolution_select",
+          placeholder: "patient_resolution_select",
+          prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
+          slot: "entityRef",
+          target: "patient",
+          reason: "This query needs a specific patient before it can run.",
+          options: resolution.matches.map((match) => ({
+            id: toPatientOpaqueRef(match.patientId),
+            label: match.unitName
+              ? `${match.patientName} (${match.unitName})`
+              : match.patientName,
+            submissionValue: toPatientOpaqueRef(match.patientId),
+            sqlConstraint: "",
+            kind: "semantic" as const,
+            value: toPatientOpaqueRef(match.patientId),
+          })),
+          reasonCode: "missing_entity",
+          targetType: "entity",
+          evidence: {
+            clarificationSource: "patient_resolution",
+          },
+        } as any,
+      ];
       return {
         mode: "clarification",
         question,
         thinking,
         requiresClarification: true,
-        clarifications: [
-          {
-            id: "patient_resolution_select",
-            placeholder: "patient_resolution_select",
-            prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
-            slot: "entityRef",
-            target: "patient",
-            reason: "This query needs a specific patient before it can run.",
-            options: resolution.matches.map((match) => ({
-              id: toPatientOpaqueRef(match.patientId),
-              label: match.unitName
-                ? `${match.patientName} (${match.unitName})`
-                : match.patientName,
-              submissionValue: toPatientOpaqueRef(match.patientId),
-              sqlConstraint: "",
-              kind: "semantic" as const,
-              value: toPatientOpaqueRef(match.patientId),
-            })),
-          } as any,
-        ],
+        clarifications,
         clarificationReasoning:
           "I found multiple exact full-name matches and need you to choose the correct patient.",
+        clarificationTelemetry: this.buildClarificationTelemetry(
+          clarifications as any,
+          "patient_resolution"
+        ),
       };
     }
 
+    const clarifications = [
+      {
+        id: "patient_lookup_input",
+        placeholder: "patient_lookup_input",
+        prompt: resolution.candidateText
+          ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
+          : "Please enter an exact full name or patient ID.",
+        slot: "entityRef",
+        target: "patient",
+        reason: "This query targets one patient and needs an exact patient reference.",
+        freeformAllowed: {
+          allowed: true,
+          placeholder: "e.g. Fred Smith or 12345",
+          hint: "Use an exact full name, patient ID, or domain ID",
+          minChars: 3,
+          maxChars: 100,
+        },
+        reasonCode: "missing_entity",
+        targetType: "entity",
+        evidence: {
+          clarificationSource: "patient_resolution",
+        },
+      } as any,
+    ];
     return {
       mode: "clarification",
       question,
       thinking,
       requiresClarification: true,
-      clarifications: [
-        {
-          id: "patient_lookup_input",
-          placeholder: "patient_lookup_input",
-          prompt: resolution.candidateText
-            ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
-            : "Please enter an exact full name or patient ID.",
-          slot: "entityRef",
-          target: "patient",
-          reason: "This query targets one patient and needs an exact patient reference.",
-          freeformAllowed: {
-            allowed: true,
-            placeholder: "e.g. Fred Smith or 12345",
-            hint: "Use an exact full name, patient ID, or domain ID",
-            minChars: 3,
-            maxChars: 100,
-          },
-        } as any,
-      ],
+      clarifications,
       clarificationReasoning:
         "I couldn't resolve the patient reference securely. Please provide an exact patient name or ID.",
+      clarificationTelemetry: this.buildClarificationTelemetry(
+        clarifications as any,
+        "patient_resolution"
+      ),
     };
   }
 

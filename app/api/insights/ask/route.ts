@@ -150,6 +150,14 @@ export async function POST(req: NextRequest) {
       clarificationRequested: result.mode === "clarification",
     });
 
+    if (result.clarificationTelemetry) {
+      console.log("[/api/insights/ask] Clarification telemetry", {
+        question,
+        customerId,
+        telemetry: result.clarificationTelemetry,
+      });
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";

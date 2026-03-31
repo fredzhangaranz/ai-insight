@@ -822,6 +822,82 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
   });
 
   describe("Clarification Pipeline V2", () => {
+    it("returns clarification telemetry for structural clarifications", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "show me recent assessments",
+        intent: {
+          type: "operational_metrics",
+          confidence: 0.93,
+          scope: "aggregate",
+          metrics: ["assessment_count"],
+          filters: [],
+          reasoning: "Assessment activity query",
+        },
+        forms: [
+          {
+            formId: "form-1",
+            formName: "Assessment Review",
+            reason: "matched",
+            confidence: 0.9,
+            fields: [
+              {
+                fieldId: "f1",
+                fieldName: "Assessment Date",
+                semanticConcept: "assessment_date",
+                dataType: "date",
+                confidence: 0.95,
+              },
+            ],
+          },
+        ],
+        fields: [],
+        joinPaths: [
+          {
+            path: ["Assessment"],
+            tables: ["rpt.Assessment"],
+            joins: [],
+            confidence: 0.9,
+          },
+        ],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const result = await orchestrator.ask(
+        "show me recent assessments",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("clarification");
+      expect(result.clarificationTelemetry).toEqual(
+        expect.objectContaining({
+          requestedCount: 1,
+          bySource: expect.objectContaining({
+            time_policy: 1,
+          }),
+          byReasonCode: expect.objectContaining({
+            missing_time_window: 1,
+          }),
+        })
+      );
+    });
+
     it("should not run patient resolution for aggregate per-patient queries", async () => {
       process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
       process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";

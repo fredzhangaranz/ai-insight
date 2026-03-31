@@ -61,6 +61,14 @@ export async function POST(req: NextRequest) {
       clarificationRequested: result.mode === "clarification",
     });
 
+    if (result.clarificationTelemetry) {
+      console.log("[/api/insights/ask-with-clarifications] Clarification telemetry", {
+        question: originalQuestion,
+        customerId,
+        telemetry: result.clarificationTelemetry,
+      });
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     console.error("[/api/insights/ask-with-clarifications] Error:", error);
