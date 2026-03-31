@@ -16,7 +16,7 @@
  * All results are logged to database for audit trail and debugging.
  */
 
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import type { Pool } from "pg";
 import { getInsightGenDbPool } from "@/lib/db";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
@@ -57,6 +57,89 @@ interface PipelineMetrics {
 
 const expandedConceptBuilder = new ExpandedConceptBuilder();
 
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+  lastAccessed: number;
+}
+
+class ContextDiscoveryCache {
+  private cache = new Map<string, CacheEntry<ContextBundle>>();
+  private readonly ttlMs = 15 * 60 * 1000;
+  private readonly maxEntries = 100;
+
+  private key(request: ContextDiscoveryRequest): string {
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          customerId: request.customerId,
+          question: request.question.trim(),
+          modelId: request.modelId ?? "",
+        })
+      )
+      .digest("hex");
+  }
+
+  get(request: ContextDiscoveryRequest): ContextBundle | null {
+    const key = this.key(request);
+    const entry = this.cache.get(key);
+    if (!entry) {
+      return null;
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    entry.lastAccessed = Date.now();
+    return cloneContextBundle(entry.value);
+  }
+
+  set(request: ContextDiscoveryRequest, bundle: ContextBundle): void {
+    const key = this.key(request);
+    if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
+      this.evictLeastRecentlyUsed();
+    }
+
+    this.cache.set(key, {
+      value: cloneContextBundle(bundle),
+      expiresAt: Date.now() + this.ttlMs,
+      lastAccessed: Date.now(),
+    });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  private evictLeastRecentlyUsed(): void {
+    let victimKey: string | null = null;
+    let victimTime = Infinity;
+
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.lastAccessed < victimTime) {
+        victimKey = key;
+        victimTime = entry.lastAccessed;
+      }
+    }
+
+    if (victimKey) {
+      this.cache.delete(victimKey);
+    }
+  }
+}
+
+function cloneContextBundle(bundle: ContextBundle): ContextBundle {
+  if (typeof structuredClone === "function") {
+    return structuredClone(bundle);
+  }
+
+  return JSON.parse(JSON.stringify(bundle)) as ContextBundle;
+}
+
+const contextDiscoveryCache = new ContextDiscoveryCache();
+
 export class ContextDiscoveryService {
   async discoverContext(
     request: ContextDiscoveryRequest
@@ -66,6 +149,15 @@ export class ContextDiscoveryService {
     }
     if (!request?.question || !request.question.trim()) {
       throw new Error("[ContextDiscovery] question is required");
+    }
+
+    const cachedBundle = contextDiscoveryCache.get(request);
+    if (cachedBundle) {
+      console.log("[ContextDiscovery] ✅ Cache hit", {
+        customerId: request.customerId,
+        question: request.question,
+      });
+      return cachedBundle;
     }
 
     const discoveryRunId = randomUUID();
@@ -330,6 +422,8 @@ export class ContextDiscoveryService {
         "orchestrator",
         `Audit record persisted: ${discoveryRunId}`
       );
+
+      contextDiscoveryCache.set(request, bundle);
 
       return bundle;
     } catch (error) {
@@ -883,6 +977,10 @@ export class ContextDiscoveryService {
 }
 
 let instance: ContextDiscoveryService | null = null;
+
+export function clearContextDiscoveryCache(): void {
+  contextDiscoveryCache.clear();
+}
 
 export function getContextDiscoveryService(): ContextDiscoveryService {
   if (!instance) {

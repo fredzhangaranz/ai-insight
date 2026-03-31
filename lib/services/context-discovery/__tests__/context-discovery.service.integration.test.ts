@@ -11,7 +11,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ContextDiscoveryService } from "../context-discovery.service";
+import {
+  ContextDiscoveryService,
+  clearContextDiscoveryCache,
+} from "../context-discovery.service";
 import type { ContextDiscoveryRequest, ContextBundle } from "../types";
 
 vi.mock("@/lib/db", () => ({
@@ -134,6 +137,7 @@ describe("ContextDiscoveryService Integration", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearContextDiscoveryCache();
     service = new ContextDiscoveryService();
     mockPool = {
       query: vi.fn().mockResolvedValue({ rows: [] }),
@@ -147,6 +151,7 @@ describe("ContextDiscoveryService Integration", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    clearContextDiscoveryCache();
   });
 
   it("executes complete pipeline successfully", async () => {
@@ -393,6 +398,62 @@ describe("ContextDiscoveryService Integration", () => {
     expect(result.forms[0].formName).toBe("Wound Assessment");
     expect(result.forms[0].fields).toHaveLength(2);
     expect(result.forms[0].fields[0].fieldName).toBe("Etiology");
+  });
+
+  it("reuses cached context bundle for identical requests", async () => {
+    const mockIntentClassifier = {
+      classifyIntent: vi.fn().mockResolvedValue(MOCK_INTENT),
+    };
+    const mockSemanticSearcher = {
+      searchFormFields: vi.fn().mockResolvedValue(MOCK_SEMANTIC_RESULTS),
+    };
+    const mockTerminologyMapper = {
+      mapUserTerms: vi.fn().mockResolvedValue([]),
+      mapFilters: vi.fn().mockResolvedValue(MOCK_INTENT.filters),
+    };
+    const mockJoinPathPlanner = {
+      planJoinPath: vi.fn().mockResolvedValue(MOCK_JOIN_PATHS),
+    };
+    const mockContextAssembler = {
+      assembleContextBundle: vi.fn().mockReturnValue({
+        customerId: "STMARYS",
+        question: BASE_REQUEST.question,
+        intent: MOCK_INTENT,
+        forms: [],
+        terminology: [],
+        joinPaths: [],
+        overallConfidence: 0.92,
+        metadata: {
+          discoveryRunId: "run-123",
+          timestamp: new Date().toISOString(),
+          durationMs: 500,
+          version: "1.0",
+        },
+      }),
+    };
+
+    vi.mocked(getIntentClassifierService).mockReturnValue(
+      mockIntentClassifier as any
+    );
+    vi.mocked(getSemanticSearcherService).mockReturnValue(
+      mockSemanticSearcher as any
+    );
+    vi.mocked(getTerminologyMapperService).mockReturnValue(
+      mockTerminologyMapper as any
+    );
+    vi.mocked(getJoinPathPlannerService).mockReturnValue(
+      mockJoinPathPlanner as any
+    );
+    vi.mocked(getContextAssemblerService).mockReturnValue(
+      mockContextAssembler as any
+    );
+
+    await service.discoverContext(BASE_REQUEST);
+    await service.discoverContext(BASE_REQUEST);
+
+    expect(mockIntentClassifier.classifyIntent).toHaveBeenCalledTimes(1);
+    expect(mockSemanticSearcher.searchFormFields).toHaveBeenCalledTimes(1);
+    expect(mockContextAssembler.assembleContextBundle).toHaveBeenCalledTimes(1);
   });
 
   it("handles intent classification failure gracefully", async () => {

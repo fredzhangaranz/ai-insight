@@ -7,6 +7,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ThreeModeOrchestrator } from "@/lib/services/semantic/three-mode-orchestrator.service";
 import { MetricsMonitor } from "@/lib/monitoring";
+import {
+  getSessionCacheService,
+  type ClarificationSelection,
+} from "@/lib/services/cache/session-cache.service";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -40,6 +44,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const sessionCache = getSessionCacheService();
+    const clarificationSelections: ClarificationSelection[] = Object.entries(
+      clarifications
+    ).map(([id, customValue]) => ({
+      id,
+      customValue: typeof customValue === "string" ? customValue : undefined,
+    }));
+
+    const cached = sessionCache.get({
+      customerId,
+      question: originalQuestion,
+      modelId,
+      clarifications: clarificationSelections,
+    });
+
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
     // Initialize orchestrator and execute with clarifications
     const orchestrator = new ThreeModeOrchestrator();
     const startTime = Date.now();
@@ -67,6 +90,18 @@ export async function POST(req: NextRequest) {
         customerId,
         telemetry: result.clarificationTelemetry,
       });
+    }
+
+    if (!result.error && (result.mode === "clarification" || result.sql)) {
+      sessionCache.set(
+        {
+          customerId,
+          question: originalQuestion,
+          modelId,
+          clarifications: clarificationSelections,
+        },
+        result
+      );
     }
 
     return NextResponse.json(result);

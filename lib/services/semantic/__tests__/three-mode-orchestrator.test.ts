@@ -72,6 +72,17 @@ vi.mock("../llm-sql-generator.service", () => ({
   generateSQLWithLLM: (...args: any[]) => mockGenerateSQLWithLLM(...args),
 }));
 
+const mockAnalyzeSemanticExecution = vi.fn(async () => ({
+  checkedAt: new Date().toISOString(),
+  preExecutionIssues: [],
+})) as any;
+
+vi.mock("../semantic-execution-diagnostics.service", () => ({
+  getSemanticExecutionDiagnosticsService: () => ({
+    analyze: mockAnalyzeSemanticExecution,
+  }),
+}));
+
 vi.mock("../customer-query.service", () => ({
   executeCustomerQuery: vi.fn(() =>
     Promise.resolve({
@@ -152,6 +163,11 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
       warnings: [],
       analyzedAt: new Date().toISOString(),
     }));
+    mockAnalyzeSemanticExecution.mockReset();
+    mockAnalyzeSemanticExecution.mockResolvedValue({
+      checkedAt: new Date().toISOString(),
+      preExecutionIssues: [],
+    });
 
     orchestrator = new ThreeModeOrchestrator();
   });
@@ -314,6 +330,96 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
       expect(result.clarifications).toHaveLength(2);
       expect(result.clarifications![0].ambiguousTerm).toBe("recent");
       expect(result.clarifications![1].ambiguousTerm).toBe("serious");
+    });
+  });
+
+  describe("direct execution diagnostics", () => {
+    it("attaches semantic diagnostics when execution succeeds with zero rows", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: vi.fn(async () => ({
+            customerId: "test-customer-id",
+            question: "How many assessments do we have?",
+            intent: {
+              type: "operational_metrics",
+              confidence: 0.9,
+              scope: "aggregate",
+              metrics: ["assessment_count"],
+              filters: [],
+              reasoning: "test",
+              semanticFrame: {
+                scope: { value: "aggregate", confidence: 0.9 },
+                subject: { value: "assessment", confidence: 0.9 },
+                measure: { value: "assessment_count", confidence: 0.9 },
+                grain: { value: "total", confidence: 0.9 },
+                groupBy: { value: [], confidence: 0.9 },
+                filters: [],
+                aggregatePredicates: [],
+                presentation: { value: "table", confidence: 0.9 },
+                preferredVisualization: { value: "table", confidence: 0.9 },
+                entityRefs: [],
+                clarificationNeeds: [],
+                confidence: 0.9,
+              },
+            },
+            forms: [],
+            terminology: [],
+            joinPaths: [],
+            overallConfidence: 0.9,
+            metadata: {
+              discoveryRunId: "test-run",
+              timestamp: new Date().toISOString(),
+              durationMs: 100,
+              version: "1.0",
+            },
+          })),
+        } as any,
+      });
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "sql",
+          explanation: "Count assessments",
+          generatedSql: "SELECT COUNT(*) AS total FROM rpt.Assessment",
+          confidence: 0.9,
+          assumptions: [],
+        } as unknown as LLMSQLResponse)
+      );
+
+      const { executeCustomerQuery } = await import("../customer-query.service");
+      vi.mocked(executeCustomerQuery).mockResolvedValueOnce({
+        rows: [],
+        columns: ["total"],
+      });
+
+      mockAnalyzeSemanticExecution.mockResolvedValueOnce({
+        checkedAt: new Date().toISOString(),
+        preExecutionIssues: [],
+        zeroResultDiagnosis: {
+          checkedAt: new Date().toISOString(),
+          issues: [
+            {
+              code: "query_shape_mismatch",
+              severity: "info",
+              message: "Likely query shape mismatch",
+            },
+          ],
+          checkedFilters: [],
+        },
+      });
+
+      const result = await orchestrator.ask(
+        "How many assessments do we have?",
+        "test-customer-id",
+        "test-model-id"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.semanticDiagnostics?.zeroResultDiagnosis?.issues).toHaveLength(
+        1
+      );
+      expect(result.context?.executionDiagnostics).toBeDefined();
     });
   });
 

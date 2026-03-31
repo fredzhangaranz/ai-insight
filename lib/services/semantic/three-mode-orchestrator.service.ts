@@ -82,6 +82,10 @@ import {
   getDirectQueryClarificationService,
   summarizeClarificationRequests,
 } from "./clarification-orchestrator.service";
+import {
+  getSemanticExecutionDiagnosticsService,
+  type SemanticExecutionDiagnostics,
+} from "./semantic-execution-diagnostics.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -123,6 +127,7 @@ export interface OrchestrationResult {
   thinking: ThinkingStep[];
   filterMetrics?: FilterMetricsSummary;
   clarificationTelemetry?: ClarificationTelemetrySummary;
+  semanticDiagnostics?: SemanticExecutionDiagnostics;
 
   // SQL execution fields (when mode is NOT clarification)
   sql?: string;
@@ -1814,6 +1819,7 @@ export class ThreeModeOrchestrator {
       let results: { columns: any[]; rows: any[] };
       let sqlValidation: SQLValidationResult | undefined;
       let validationError: RuntimeSQLValidationError | null = null;
+      let semanticDiagnostics: SemanticExecutionDiagnostics | undefined;
       try {
         const execution = await this.executeSQL(sql, customerId, {
           source: "direct",
@@ -1870,6 +1876,44 @@ export class ThreeModeOrchestrator {
         };
       }
 
+      if (!validationError && semanticFrame) {
+        try {
+          semanticDiagnostics =
+            await getSemanticExecutionDiagnosticsService().analyze({
+              customerId,
+              sql,
+              context,
+              frame: semanticFrame,
+              rowCount,
+            });
+
+          if (sqlValidation && semanticDiagnostics.preExecutionIssues.length > 0) {
+            const mergedWarnings = new Set(sqlValidation.warnings);
+            semanticDiagnostics.preExecutionIssues.forEach((issue) => {
+              mergedWarnings.add(issue.message);
+            });
+            sqlValidation = {
+              ...sqlValidation,
+              warnings: Array.from(mergedWarnings),
+            };
+          }
+
+          thinking[thinking.length - 1].details = {
+            ...(thinking[thinking.length - 1].details || {}),
+            semanticWarnings: semanticDiagnostics.preExecutionIssues.length,
+            zeroResultDiagnosis:
+              semanticDiagnostics.zeroResultDiagnosis?.issues.map(
+                (issue) => issue.message
+              ) || [],
+          };
+        } catch (diagnosticError) {
+          console.warn(
+            "[Orchestrator] Semantic diagnostics failed; continuing without diagnostics",
+            diagnosticError
+          );
+        }
+      }
+
       const orchestrationResult: OrchestrationResult = {
         mode: "direct",
         question,
@@ -1877,11 +1921,13 @@ export class ThreeModeOrchestrator {
         sql,
         results,
         sqlValidation,
+        semanticDiagnostics,
         context: {
           intent: context.intent,
           forms: context.forms?.map((f: any) => f.formName) || [],
           fields: context.forms?.flatMap((f: any) => f.fields?.map((field: any) => field.fieldName) || []) || [],
           joinPaths: context.joinPaths || [],
+          executionDiagnostics: semanticDiagnostics || null,
           // Phase 7D: Include clarification history and assumptions for query history caching
           clarificationsProvided: clarifications || null,
           assumptions: assumptions || null,

@@ -115,10 +115,10 @@ export async function POST(req: NextRequest) {
       console.error("[/api/insights/ask] Orchestration error:", result.error);
     }
 
-    // CACHE STORAGE (Task 1.3.3)
-    // Only cache successful SQL results (NOT clarification requests)
-    // Clarification requests should not be cached because they need user input
-    if (result.mode !== "clarification" && result.sql && !result.error) {
+    // CACHE STORAGE
+    // Cache successful results, including clarification requests, because
+    // repeated asks for the same question should reuse the same context/options.
+    if (!result.error && (result.mode === "clarification" || result.sql)) {
       sessionCache.set(
         {
           customerId,
@@ -134,8 +134,6 @@ export async function POST(req: NextRequest) {
       console.log(`[/api/insights/ask] 💾 Cached result for future requests`, {
         cache_stats: sessionCache.getStats(),
       });
-    } else if (result.mode === "clarification") {
-      console.log(`[/api/insights/ask] ⏭️ Skipping cache storage (clarification request)`);
     } else if (result.error) {
       console.log(`[/api/insights/ask] ⏭️ Skipping cache storage (query failed)`);
     }
