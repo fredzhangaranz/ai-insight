@@ -106,14 +106,22 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("[/api/insights/ask-with-clarifications] Error:", error);
 
     return NextResponse.json(
       {
-        error: "Failed to process clarifications",
-        message: error instanceof Error ? error.message : "Unknown error",
+        mode: "error",
+        question: "unknown",
+        error: {
+          message: errorMessage,
+          step: "ask_with_clarifications",
+        },
+        sql: `-- Query failed: ${errorMessage}`,
+        results: null,
+        thinking: [],
       },
-      { status: 500 }
+      { status: 200 }
     );
   }
 }

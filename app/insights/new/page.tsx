@@ -22,6 +22,34 @@ export default function NewInsightPage() {
   const [isQuestionSubmitted, setIsQuestionSubmitted] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
+  // ModelSelector is rendered inside a Radix Popover; content is not mounted while closed,
+  // so its fetch/onChange never runs and modelId stays "". The orchestrator then falls back
+  // to a hardcoded Claude id (Anthropic). Resolve the server default here on first load.
+  useEffect(() => {
+    let cancelled = false;
+    async function initDefaultModel() {
+      try {
+        const response = await fetch("/api/insights/models");
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled || !data.models?.length) return;
+        setModelId((prev) => {
+          const stillValid = data.models.some(
+            (m: { id: string }) => m.id === prev,
+          );
+          if (prev && stillValid) return prev;
+          return data.defaultModelId ?? data.models[0]?.id ?? "";
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+    initDefaultModel();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const {
     result,
     isLoading,

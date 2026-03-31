@@ -106,6 +106,7 @@ describe("SemanticExecutionDiagnosticsService", () => {
             fieldName: "Wound Classification",
             formName: "Wound Assessment",
             attributeTypeId: "attr-1",
+            dataType: "SingleSelect",
             optionValue: "Diabetic Foot Ulcer",
           },
         ],
@@ -116,6 +117,7 @@ describe("SemanticExecutionDiagnosticsService", () => {
             fieldName: "Treatment(s) Provided",
             formName: "Wound Assessment",
             attributeTypeId: "attr-2",
+            dataType: "SingleSelect",
             optionValue: "Compression",
           },
         ],
@@ -161,5 +163,64 @@ describe("SemanticExecutionDiagnosticsService", () => {
     expect(
       diagnostics.zeroResultDiagnosis!.issues.map((issue) => issue.code)
     ).toContain("value_has_no_live_data");
+  });
+
+  it("does not report missing live value when the field is typed and the filter value cannot be parsed", async () => {
+    const typedContext: ContextBundle = {
+      ...baseContext,
+      intent: {
+        ...baseContext.intent,
+        filters: [
+          {
+            operator: "equals",
+            userPhrase: "recent score",
+            field: "Pain Score",
+            value: "not-a-number",
+          },
+        ] as any,
+      },
+    };
+
+    mockInsightPoolQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          fieldName: "Pain Score",
+          formName: "Wound Assessment",
+          attributeTypeId: "attr-3",
+          dataType: "Integer",
+          optionValue: null,
+        },
+      ],
+    });
+
+    mockWithCustomerPool.mockImplementationOnce(
+      async (_customerId: string, fn: (pool: any) => Promise<unknown>) => {
+        const pool = {
+          request: () => ({
+            input: vi.fn().mockReturnThis(),
+            query: vi.fn(async (sql: string) => {
+              if (sql.includes("AssessmentTypeVersion")) {
+                return { recordset: [{ count: 4 }] };
+              }
+              return { recordset: [{ count: 12 }] };
+            }),
+          }),
+        };
+        return fn(pool);
+      }
+    );
+
+    const diagnostics = await service.analyze({
+      customerId: "cust-1",
+      sql: "SELECT COUNT(*) FROM rpt.Assessment",
+      context: typedContext,
+      frame: baseContext.intent.semanticFrame!,
+      rowCount: 0,
+    });
+
+    expect(
+      diagnostics.zeroResultDiagnosis!.issues.map((issue) => issue.code)
+    ).not.toContain("value_has_no_live_data");
+    expect(diagnostics.zeroResultDiagnosis!.checkedFilters[0].liveValueCount).toBeNull();
   });
 });

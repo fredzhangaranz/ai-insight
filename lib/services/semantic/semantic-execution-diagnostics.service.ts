@@ -46,8 +46,17 @@ interface IndexedFieldMatch {
   fieldName: string;
   formName: string;
   attributeTypeId: string | null;
+  dataType: string | null;
   optionValue: string | null;
 }
+
+type ParsedDiagnosticValue =
+  | { kind: "string"; value: string }
+  | { kind: "integer"; value: number }
+  | { kind: "decimal"; value: number }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "date"; value: Date }
+  | null;
 
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -252,10 +261,11 @@ export class SemanticExecutionDiagnosticsService {
         const matches = indexedMatches.filter(
           (match) =>
             match.fieldName.toLowerCase() === filter.field!.toLowerCase() &&
-            (match.optionValue?.toLowerCase() ?? null) ===
-              (typeof filter.value === "string"
-                ? filter.value.toLowerCase()
-                : null)
+            (match.optionValue === null ||
+              (match.optionValue?.toLowerCase() ?? null) ===
+                (typeof filter.value === "string"
+                  ? filter.value.toLowerCase()
+                  : null))
         );
 
         if (matches.length === 0) {
@@ -378,6 +388,7 @@ export class SemanticExecutionDiagnosticsService {
         fieldName: string;
         formName: string;
         attributeTypeId: string | null;
+        dataType: string | null;
         optionValue: string | null;
       }>(
         `
@@ -385,6 +396,7 @@ export class SemanticExecutionDiagnosticsService {
             field.field_name AS "fieldName",
             idx.form_name AS "formName",
             field.attribute_type_id::text AS "attributeTypeId",
+            field.data_type AS "dataType",
             opt.option_value AS "optionValue"
           FROM "SemanticIndexField" field
           JOIN "SemanticIndex" idx ON idx.id = field.semantic_index_id
@@ -410,9 +422,9 @@ export class SemanticExecutionDiagnosticsService {
     customerId: string,
     match: IndexedFieldMatch,
     value: string | null
-  ): Promise<{ fieldCount: number; valueCount: number }> {
+  ): Promise<{ fieldCount: number; valueCount: number | null }> {
     if (!match.attributeTypeId) {
-      return { fieldCount: 0, valueCount: 0 };
+      return { fieldCount: 0, valueCount: null };
     }
 
     return withCustomerPool(customerId, async (pool) => {
@@ -425,22 +437,133 @@ export class SemanticExecutionDiagnosticsService {
         WHERE at.id = @attributeTypeId
       `);
 
+      const parsedValue = this.parseDiagnosticValue(match.dataType, value);
+      if (!parsedValue) {
+        return {
+          fieldCount: Number(fieldResult.recordset?.[0]?.count ?? 0),
+          valueCount: null,
+        };
+      }
+
       const valueRequest = pool.request();
       valueRequest.input("attributeTypeId", match.attributeTypeId);
-      valueRequest.input("optionValue", value ?? "");
-      const valueResult = await valueRequest.query(`
-        SELECT COUNT_BIG(*) AS count
-        FROM rpt.Note n
-        JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id
-        WHERE at.id = @attributeTypeId
-          AND n.value = @optionValue
-      `);
+
+      let valueQuery = "";
+      switch (parsedValue.kind) {
+        case "string":
+          valueRequest.input("optionValue", parsedValue.value);
+          valueQuery = `
+            SELECT COUNT_BIG(*) AS count
+            FROM rpt.Note n
+            JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id
+            WHERE at.id = @attributeTypeId
+              AND n.value = @optionValue
+          `;
+          break;
+        case "integer":
+          valueRequest.input("optionValue", parsedValue.value);
+          valueQuery = `
+            SELECT COUNT_BIG(*) AS count
+            FROM rpt.Note n
+            JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id
+            WHERE at.id = @attributeTypeId
+              AND n.valueInt = @optionValue
+          `;
+          break;
+        case "decimal":
+          valueRequest.input("optionValue", parsedValue.value);
+          valueQuery = `
+            SELECT COUNT_BIG(*) AS count
+            FROM rpt.Note n
+            JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id
+            WHERE at.id = @attributeTypeId
+              AND n.valueDecimal = @optionValue
+          `;
+          break;
+        case "boolean":
+          valueRequest.input("optionValue", parsedValue.value);
+          valueQuery = `
+            SELECT COUNT_BIG(*) AS count
+            FROM rpt.Note n
+            JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id
+            WHERE at.id = @attributeTypeId
+              AND n.valueBoolean = @optionValue
+          `;
+          break;
+        case "date":
+          valueRequest.input("optionValue", parsedValue.value);
+          valueQuery = `
+            SELECT COUNT_BIG(*) AS count
+            FROM rpt.Note n
+            JOIN rpt.AttributeType at ON n.attributeTypeFk = at.id
+            WHERE at.id = @attributeTypeId
+              AND n.valueDate = @optionValue
+          `;
+          break;
+      }
+
+      const valueResult = await valueRequest.query(valueQuery);
 
       return {
         fieldCount: Number(fieldResult.recordset?.[0]?.count ?? 0),
         valueCount: Number(valueResult.recordset?.[0]?.count ?? 0),
       };
     });
+  }
+
+  private parseDiagnosticValue(
+    dataType: string | null,
+    rawValue: string | null
+  ): ParsedDiagnosticValue {
+    if (rawValue === null || rawValue === undefined) {
+      return null;
+    }
+
+    const value = rawValue.trim();
+    if (!value) {
+      return null;
+    }
+
+    switch ((dataType ?? "").toLowerCase()) {
+      case "":
+      case "singleselect":
+      case "multiselect":
+      case "text":
+      case "file":
+      case "information":
+      case "sourcelist":
+      case "userlist":
+      case "unknown":
+        return { kind: "string", value };
+      case "integer": {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) ? { kind: "integer", value: parsed } : null;
+      }
+      case "decimal":
+      case "calculatedvalue": {
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? { kind: "decimal", value: parsed } : null;
+      }
+      case "boolean": {
+        const normalized = value.toLowerCase();
+        if (["true", "1", "yes", "y"].includes(normalized)) {
+          return { kind: "boolean", value: true };
+        }
+        if (["false", "0", "no", "n"].includes(normalized)) {
+          return { kind: "boolean", value: false };
+        }
+        return null;
+      }
+      case "date":
+      case "datetime": {
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime())
+          ? null
+          : { kind: "date", value: parsed };
+      }
+      default:
+        return { kind: "string", value };
+    }
   }
 
   private async lookupAssessmentCount(

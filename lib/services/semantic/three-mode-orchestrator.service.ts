@@ -625,7 +625,6 @@ export class ThreeModeOrchestrator {
         }
       }
 
-      let usageId: number | null = null;
       if (template.templateVersionId) {
         usageId = await this.templateUsageLogger.logUsageStart({
           templateVersionId: template.templateVersionId,
@@ -1583,11 +1582,14 @@ export class ThreeModeOrchestrator {
         };
       }
 
-      const validationClarifications = await this.buildValidationClarificationRequests(
-        mappedFilters,
-        customerId,
-        context
-      );
+      const validationClarifications =
+        clarifications && Object.keys(clarifications).length > 0
+          ? []
+          : await this.buildValidationClarificationRequests(
+              mappedFilters,
+              customerId,
+              context
+            );
 
       if (validationClarifications.length > 0 && !clarifications) {
         contextDiscoveryStep.message =

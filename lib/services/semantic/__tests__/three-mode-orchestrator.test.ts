@@ -896,6 +896,11 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
         })
       );
 
+      const validationSpy = vi.spyOn(
+        orchestrator as any,
+        "buildValidationClarificationRequests"
+      );
+
       const result = await orchestrator.askWithClarifications(
         "patients with diabetic wounds",
         "cust-1",
@@ -924,6 +929,7 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
         }),
       ]);
       expect(mockGenerateSQLWithLLM.mock.calls[0][3]).toBeUndefined();
+      expect(validationSpy).not.toHaveBeenCalled();
     });
   });
 
