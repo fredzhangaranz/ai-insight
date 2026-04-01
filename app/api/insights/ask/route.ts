@@ -13,6 +13,16 @@ import { authOptions } from "@/lib/auth";
 import { ThreeModeOrchestrator } from "@/lib/services/semantic/three-mode-orchestrator.service";
 import { getSessionCacheService, type ClarificationSelection } from "@/lib/services/cache/session-cache.service";
 import { MetricsMonitor } from "@/lib/monitoring";
+import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
+import { CANONICAL_QUERY_SEMANTICS_VERSION } from "@/lib/services/context-discovery/types";
+
+const featureFlags = getInsightsFeatureFlags();
+const INSIGHTS_CACHE_VERSION =
+  process.env.INSIGHTS_CACHE_VERSION ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  (featureFlags.canonicalQuerySemanticsV1
+    ? `2026-04-01-canonical-semantics-${CANONICAL_QUERY_SEMANTICS_VERSION}`
+    : "2026-04-01-trusted-patient-key-v2");
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -27,6 +37,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     question = body.question;
     const { customerId, modelId, clarifications, schemaVersion, promptVersion } = body;
+    const effectivePromptVersion = promptVersion || INSIGHTS_CACHE_VERSION;
 
     // Validate inputs
     if (!question || !question.trim()) {
@@ -72,7 +83,7 @@ export async function POST(req: NextRequest) {
       question,
       modelId,
       schemaVersion,
-      promptVersion,
+      promptVersion: effectivePromptVersion,
       clarifications: clarificationsArray,
     });
 
@@ -125,7 +136,7 @@ export async function POST(req: NextRequest) {
           question,
           modelId,
           schemaVersion,
-          promptVersion,
+          promptVersion: effectivePromptVersion,
           clarifications: clarificationsArray,
         },
         result

@@ -11,6 +11,7 @@ import {
   type ClarificationRequest,
 } from "@/lib/prompts/generate-query.prompt";
 import type {
+  CanonicalQuerySemantics,
   ContextBundle,
   FormInContext,
   JoinPath,
@@ -53,6 +54,7 @@ export async function generateSQLWithLLM(
     sanitizedQuestion?: string;
     promptLines?: string[];
     resolvedEntities?: ResolvedEntitySummary[];
+    canonicalSemantics?: CanonicalQuerySemantics;
   },
   options?: {
     allowClarificationRequests?: boolean;
@@ -318,6 +320,7 @@ async function buildUserPrompt(
     sanitizedQuestion?: string;
     promptLines?: string[];
     resolvedEntities?: ResolvedEntitySummary[];
+    canonicalSemantics?: CanonicalQuerySemantics;
   },
   options?: {
     allowClarificationRequests?: boolean;
@@ -338,14 +341,42 @@ async function buildUserPrompt(
 
   if (trustedContext?.resolvedEntities?.length) {
     prompt += `# Trusted Entity Context\n\n`;
+    prompt += `- One or more entities were resolved securely outside the LLM.\n`;
     for (const entity of trustedContext.resolvedEntities) {
-      prompt += `- Resolved ${entity.kind}: ${entity.opaqueRef} (${entity.matchType})\n`;
+      prompt += `- Resolved ${entity.kind} via secure binding (${entity.matchType})\n`;
     }
     for (const line of trustedContext.promptLines || []) {
       prompt += `- ${line}\n`;
     }
     prompt +=
-      "IMPORTANT: These entities were resolved outside the LLM. You MUST use the provided parameter placeholders and MUST NOT omit them.\n\n";
+      "IMPORTANT: These entities were resolved outside the LLM. You MUST use the provided parameter placeholders, compare them only against patient primary key columns or patient foreign keys, and MUST NOT use domainId or any other identifier column for secure patient binding.\n\n";
+  }
+
+  if (trustedContext?.canonicalSemantics) {
+    const semantics = trustedContext.canonicalSemantics;
+    prompt += `# Canonical Query Semantics\n\n`;
+    prompt += `- Query shape: ${semantics.queryShape}\n`;
+    prompt += `- Analytic intent: ${semantics.analyticIntent}\n`;
+    prompt += `- Metrics: ${semantics.measureSpec.metrics.join(", ") || "None"}\n`;
+    prompt += `- Grain: ${semantics.measureSpec.grain || "None"}\n`;
+    prompt += `- Group by: ${semantics.measureSpec.groupBy.join(", ") || "None"}\n`;
+    prompt += `- Patient resolution required: ${
+      semantics.executionRequirements.requiresPatientResolution ? "yes" : "no"
+    }\n`;
+    if (semantics.subjectRefs.length > 0) {
+      prompt += `- Subject refs: ${semantics.subjectRefs
+        .map((ref) => `${ref.entityType}:${ref.mentionText}:${ref.status}`)
+        .join("; ")}\n`;
+    }
+    if (semantics.temporalSpec.kind !== "none") {
+      prompt += `- Temporal semantics: ${JSON.stringify(semantics.temporalSpec)}\n`;
+    }
+    if (semantics.executionRequirements.requiredBindings.length > 0) {
+      prompt += `- Required bindings: ${semantics.executionRequirements.requiredBindings.join(
+        ", "
+      )}\n`;
+    }
+    prompt += "\n";
   }
 
   prompt += formatSemanticFrameSection(intent.semanticFrame);

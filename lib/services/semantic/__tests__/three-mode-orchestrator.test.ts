@@ -138,6 +138,7 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...originalEnv };
+    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "false";
 
     vi.mocked(getAIProvider).mockResolvedValue({
       complete: vi.fn(),
@@ -696,6 +697,136 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
       expect(mockGenerateSQLWithLLM).not.toHaveBeenCalled();
       expect(result.filterMetrics?.unresolvedWarnings).toBe(1);
       expect(result.filterMetrics?.totalFilters).toBe(1);
+    });
+
+    it("should not ask clarification for explicit month-year range endpoints", async () => {
+      const temporalRangeFilters = [
+        {
+          operator: "equals",
+          userPhrase: "July 2025",
+          field: undefined,
+          value: null,
+        },
+        {
+          operator: "equals",
+          userPhrase: "February 2026",
+          field: undefined,
+          value: null,
+        },
+      ];
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question:
+          "how many patients have wound between July 2025 and February 2026",
+        intent: {
+          type: "query",
+          confidence: 0.9,
+          scope: "patient",
+          metrics: ["count"],
+          filters: temporalRangeFilters,
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql: "SELECT COUNT(*) AS patient_count FROM rpt.Patient",
+        explanation: "Count patients in explicit date range",
+        confidence: 0.9,
+      };
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.ask(
+        "how many patients have wound between July 2025 and February 2026",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.clarifications).toBeUndefined();
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+      if (result.filterMetrics) {
+        expect(result.filterMetrics.unresolvedWarnings).toBe(0);
+      }
+    });
+
+    it("should not ask clarification for an explicit month-year range phrase", async () => {
+      const temporalRangeFilters = [
+        {
+          operator: "equals",
+          userPhrase: "between July 2025 and February 2026",
+          field: undefined,
+          value: null,
+        },
+      ];
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question:
+          "how many patients have wound between July 2025 and February 2026",
+        intent: {
+          type: "query",
+          confidence: 0.9,
+          scope: "patient",
+          metrics: ["count"],
+          filters: temporalRangeFilters,
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql: "SELECT COUNT(*) AS patient_count FROM rpt.Patient",
+        explanation: "Count patients in explicit date range",
+        confidence: 0.9,
+      };
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.ask(
+        "how many patients have wound between July 2025 and February 2026",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.clarifications).toBeUndefined();
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalled();
+      if (result.filterMetrics) {
+        expect(result.filterMetrics.unresolvedWarnings).toBe(0);
+      }
     });
 
     it("should respect user removal selection for unresolved filters", async () => {
@@ -1374,7 +1505,7 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
 
       const mockSQLResponse: LLMSQLResponse = {
         responseType: "sql",
-        generatedSql: "SELECT * FROM rpt.Wound WHERE patient_id = @patientId1",
+        generatedSql: "SELECT * FROM rpt.Wound WHERE patientFk = @patientId1",
         explanation: "Wounds for John Smith",
         confidence: 0.95,
       };
@@ -1388,6 +1519,216 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
       expect(result.mode).toBe("direct");
       expect(patientResolveSpy).toHaveBeenCalledTimes(1);
       expect(result.boundParameters).toEqual({ patientId1: "patient-123" });
+    });
+
+    it("should resolve a named patient in V2 when the question uses does First Last even if scope is aggregate", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+      process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+
+      const patientResolveSpy = vi
+        .spyOn(PatientEntityResolver.prototype, "resolve")
+        .mockResolvedValue({
+          status: "resolved",
+          selectedMatch: {
+            patientName: "Melody Crist",
+            unitName: "Unit A",
+          },
+          resolvedId: "4f2b2468-1111-2222-3333-444444444444",
+          opaqueRef: "opaque-melody",
+          matchType: "name",
+          matchedText: "Melody Crist",
+        } as any);
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "how many wounds does Melody Crist have",
+        intent: {
+          type: "operational_metrics",
+          confidence: 0.92,
+          scope: "aggregate",
+          metrics: ["wound_count"],
+          filters: [],
+          reasoning: "Count wounds for one named patient",
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      const mockSQLResponse: LLMSQLResponse = {
+        responseType: "sql",
+        generatedSql:
+          "SELECT COUNT(*) AS n FROM rpt.Wound WHERE patientFk = @patientId1",
+        explanation: "Wound count for resolved patient",
+        confidence: 0.94,
+      };
+      mockGenerateSQLWithLLM = vi.fn(() => Promise.resolve(mockSQLResponse));
+
+      const result = await orchestrator.ask(
+        "how many wounds does Melody Crist have",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(patientResolveSpy).toHaveBeenCalled();
+      expect(patientResolveSpy.mock.calls[0][2]).toMatchObject({
+        candidateText: "Melody Crist",
+        allowQuestionInference: false,
+      });
+      expect(result.boundParameters).toEqual({
+        patientId1: "4f2b2468-1111-2222-3333-444444444444",
+      });
+    });
+
+    it("should reject SQL that embeds a patient opaque reference literal in V2", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+      process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+      process.env.INSIGHTS_PROMPT_PHI_SANITIZATION = "true";
+
+      vi.spyOn(PatientEntityResolver.prototype, "resolve").mockResolvedValue({
+        status: "resolved",
+        selectedMatch: {
+          patientName: "Melody Crist",
+          unitName: "Unit A",
+        },
+        resolvedId: "4f2b2468-1111-2222-3333-444444444444",
+        opaqueRef: "38a5ca28eb328731",
+        matchType: "name",
+        matchedText: "Melody Crist",
+      } as any);
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "show wounds for patient Melody Crist",
+        intent: {
+          type: "outcome_analysis",
+          confidence: 0.94,
+          scope: "individual_patient",
+          metrics: ["wound_count"],
+          filters: [],
+          reasoning: "Wounds for one patient",
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "sql",
+          generatedSql:
+            "SELECT COUNT(*) AS NumberOfWounds FROM rpt.Wound WHERE patientFk = '38a5ca28eb328731'",
+          explanation: "Count wounds for Melody Crist",
+          confidence: 0.94,
+        } satisfies LLMSQLResponse)
+      );
+
+      const result = await orchestrator.ask(
+        "show wounds for patient Melody Crist",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.error?.step).toBe("sql_generation");
+      expect(result.error?.message).toContain("opaque reference");
+    });
+
+    it("should reject SQL that binds a trusted patient parameter through domainId in V2", async () => {
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";
+      process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+      process.env.INSIGHTS_PROMPT_PHI_SANITIZATION = "true";
+
+      vi.spyOn(PatientEntityResolver.prototype, "resolve").mockResolvedValue({
+        status: "resolved",
+        selectedMatch: {
+          patientName: "Melody Crist",
+          unitName: "Unit A",
+        },
+        resolvedId: "4f2b2468-1111-2222-3333-444444444444",
+        opaqueRef: "38a5ca28eb328731",
+        matchType: "name",
+        matchedText: "Melody Crist",
+      } as any);
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "show wounds for patient Melody Crist",
+        intent: {
+          type: "outcome_analysis",
+          confidence: 0.94,
+          scope: "individual_patient",
+          metrics: ["wound_count"],
+          filters: [],
+          reasoning: "Wounds for one patient",
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "sql",
+          generatedSql:
+            "SELECT COUNT(W.id) AS NumberOfWounds FROM rpt.Wound W JOIN rpt.Patient P ON W.patientFk = P.id WHERE P.domainId = @patientId1",
+          explanation: "Count wounds for Melody Crist",
+          confidence: 0.94,
+        } satisfies LLMSQLResponse)
+      );
+
+      const result = await orchestrator.ask(
+        "show wounds for patient Melody Crist",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.error?.step).toBe("sql_generation");
+      expect(result.error?.message).toContain("domainId");
     });
   });
 });

@@ -171,6 +171,29 @@ function extractFullName(question: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Best-effort patient name span for secure resolution when the semantic frame
+ * missed a reference (e.g. "how many wounds does Melody Crist have").
+ */
+export function extractPatientNameCandidateFromQuestion(
+  question: string
+): string | undefined {
+  const fromFullName = extractFullName(question);
+  if (fromFullName) return fromFullName;
+
+  const doesMatch = question.match(
+    /\bdoes\s+([A-Za-z][a-zA-Z'-]+\s+[A-Za-z][a-zA-Z'-]+(?:\s+[A-Za-z][a-zA-Z'-]+)*)\s+(?:have|has|had|is|was|were|get|need|own)\b/i
+  );
+  if (doesMatch?.[1]) {
+    const candidate = doesMatch[1].trim().replace(/[.,!?;:]+$/, "");
+    if (isLikelyPatientNameCandidate(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
 async function queryPatients<T>(
   customerId: string,
   fn: (pool: ConnectionPool) => Promise<T>

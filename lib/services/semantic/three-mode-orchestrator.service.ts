@@ -6,6 +6,7 @@ import { matchTemplate } from "./template-matcher.service";
 import { analyzeComplexity } from "./complexity-detector.service";
 import { ContextDiscoveryService } from "../context-discovery/context-discovery.service";
 import type {
+  CanonicalQuerySemantics,
   ContextBundle,
   ContextBundleMetadata,
   SemanticQueryFrame,
@@ -72,8 +73,12 @@ import type {
   ResolvedEntitySummary,
 } from "@/lib/types/insight-artifacts";
 import { validateTrustedSql } from "../trusted-sql-guard.service";
-import { normalizeSemanticQueryFrame } from "../context-discovery/semantic-query-frame.service";
+import {
+  normalizeSemanticQueryFrame,
+  projectSemanticQueryFrameFromCanonicalSemantics,
+} from "../context-discovery/semantic-query-frame.service";
 import { shouldResolvePatientLiterally } from "../patient-resolution-gate.service";
+import { extractPatientNameCandidateFromQuestion } from "../patient-entity-resolver.service";
 import {
   applyStructuredFilterSelections,
   type ClarificationTelemetrySummary,
@@ -170,6 +175,7 @@ export interface OrchestrationResult {
   artifacts?: InsightArtifact[];
   resolvedEntities?: ResolvedEntitySummary[];
   boundParameters?: Record<string, string | number | boolean | null>;
+  canonicalSemantics?: CanonicalQuerySemantics;
 }
 
 const TEMPLATE_ENABLED_INTENTS = [
@@ -184,6 +190,131 @@ const TEMPLATE_ENABLED_INTENTS = [
 // Snippet templates use 0.30 threshold (more flexible, can be composed)
 const TEMPLATE_CONFIDENCE_THRESHOLD = 0.35;
 const SNIPPET_TEMPLATE_THRESHOLD = 0.3;
+const ABSOLUTE_TEMPORAL_LITERAL_SOURCE = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{4}|\d{4}[-/](?:0?[1-9]|1[0-2])(?:[-/](?:0?[1-9]|[12]\d|3[01]))?|(?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\d|3[01])[/-]\d{2,4}`;
+const ABSOLUTE_TEMPORAL_LITERAL_PATTERN = new RegExp(
+  String.raw`\b(?:${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\b`,
+  "i"
+);
+const EXPLICIT_ABSOLUTE_TEMPORAL_RANGE_PATTERNS = [
+  new RegExp(
+    String.raw`\bbetween\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\s+and\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\b`,
+    "i"
+  ),
+  new RegExp(
+    String.raw`\bfrom\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\s+to\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\b`,
+    "i"
+  ),
+];
+
+type ExplicitAbsoluteTemporalRange = {
+  fullPhrase: string;
+  start: string;
+  end: string;
+};
+
+function extractFilterPhrase(filter: Pick<MappedFilter, "userPhrase" | "value">): string | null {
+  if (typeof filter.userPhrase === "string" && filter.userPhrase.trim().length > 0) {
+    return filter.userPhrase.trim();
+  }
+  if (typeof filter.value === "string" && filter.value.trim().length > 0) {
+    return filter.value.trim();
+  }
+  return null;
+}
+
+function isAbsoluteTemporalLiteral(phrase: string): boolean {
+  return ABSOLUTE_TEMPORAL_LITERAL_PATTERN.test(phrase);
+}
+
+function normalizeComparableText(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function extractExplicitAbsoluteTemporalRange(
+  question: string
+): ExplicitAbsoluteTemporalRange | null {
+  for (const pattern of EXPLICIT_ABSOLUTE_TEMPORAL_RANGE_PATTERNS) {
+    const match = question.match(pattern);
+    if (!match?.[0] || !match[1] || !match[2]) {
+      continue;
+    }
+    return {
+      fullPhrase: match[0],
+      start: match[1],
+      end: match[2],
+    };
+  }
+
+  return null;
+}
+
+function isExplicitAbsoluteTemporalRangePhrase(
+  phrase: string,
+  range: ExplicitAbsoluteTemporalRange
+): boolean {
+  const normalizedPhrase = normalizeComparableText(phrase);
+  const normalizedFullPhrase = normalizeComparableText(range.fullPhrase);
+  const normalizedStart = normalizeComparableText(range.start);
+  const normalizedEnd = normalizeComparableText(range.end);
+
+  if (normalizedPhrase === normalizedFullPhrase) {
+    return true;
+  }
+
+  if (
+    isAbsoluteTemporalLiteral(phrase) &&
+    (normalizedPhrase === normalizedStart || normalizedPhrase === normalizedEnd)
+  ) {
+    return true;
+  }
+
+  return (
+    normalizedPhrase.includes(normalizedStart) &&
+    normalizedPhrase.includes(normalizedEnd) &&
+    /\bbetween\b|\bfrom\b|\bto\b|\band\b/i.test(phrase)
+  );
+}
+
+function shouldDeferTemporalLiteralClarification(
+  question: string,
+  info: UnresolvedFilterInfo,
+  canonicalSemantics?: CanonicalQuerySemantics
+): boolean {
+  const explicitRange =
+    canonicalSemantics?.temporalSpec.kind === "absolute_range"
+      ? {
+          fullPhrase:
+            canonicalSemantics.temporalSpec.rawText ||
+            `${canonicalSemantics.temporalSpec.start} to ${canonicalSemantics.temporalSpec.end}`,
+          start: canonicalSemantics.temporalSpec.start,
+          end: canonicalSemantics.temporalSpec.end,
+        }
+      : extractExplicitAbsoluteTemporalRange(question);
+  if (!explicitRange) {
+    return false;
+  }
+
+  const phrase = extractFilterPhrase(info.filter);
+  if (!phrase) {
+    return false;
+  }
+
+  return isExplicitAbsoluteTemporalRangePhrase(phrase, explicitRange);
+}
+
+function getCanonicalPatientSubjectRef(
+  canonicalSemantics?: CanonicalQuerySemantics
+) {
+  if (!canonicalSemantics) {
+    return undefined;
+  }
+
+  return canonicalSemantics.subjectRefs.find(
+    (ref) =>
+      ref.entityType === "patient" &&
+      (ref.status === "requires_resolution" || ref.status === "candidate")
+  );
+}
 
 export class ThreeModeOrchestrator {
   private contextDiscovery: ContextDiscoveryService;
@@ -1013,6 +1144,7 @@ export class ThreeModeOrchestrator {
   ): Promise<OrchestrationResult> {
     const startTime = Date.now();
     const featureFlags = getInsightsFeatureFlags();
+    const useCanonicalSemantics = featureFlags.canonicalQuerySemanticsV1;
     const useClarificationV2 =
       featureFlags.clarificationPipelineV2 ||
       featureFlags.clarificationPipelineV2Shadow;
@@ -1021,7 +1153,11 @@ export class ThreeModeOrchestrator {
     let sanitizedQuestion = question;
     let trustedPromptLines: string[] | undefined;
 
-    if (featureFlags.patientEntityResolution && !useClarificationV2) {
+    if (
+      featureFlags.patientEntityResolution &&
+      !useClarificationV2 &&
+      !useCanonicalSemantics
+    ) {
       const patientStep: ThinkingStep = {
         id: "resolve_patient",
         status: "running",
@@ -1314,6 +1450,30 @@ export class ThreeModeOrchestrator {
           ? this.resolveSemanticFrame(context, question)
           : undefined;
 
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        semanticFrame &&
+        featureFlags.patientEntityResolution
+      ) {
+        const legacyDecision = this.shouldUsePatientResolutionForFrame(semanticFrame);
+        const canonicalDecision = this.shouldUseCanonicalPatientResolution(
+          context.canonicalSemantics
+        );
+        if (legacyDecision !== canonicalDecision) {
+          console.log("[Orchestrator] Canonical semantics disagreed with legacy patient resolution decision", {
+            legacyDecision,
+            canonicalDecision,
+            queryShape: context.canonicalSemantics.queryShape,
+            subjectRefs: context.canonicalSemantics.subjectRefs.map((ref) => ({
+              entityType: ref.entityType,
+              status: ref.status,
+              mentionText: ref.mentionText,
+            })),
+          });
+        }
+      }
+
       if (semanticFrame && clarifications && Object.keys(clarifications).length > 0) {
         semanticFrame = this.applyFrameClarifications(semanticFrame, clarifications);
       }
@@ -1338,9 +1498,119 @@ export class ThreeModeOrchestrator {
       }
 
       if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        !clarifications
+      ) {
+        contextDiscoveryStep.status = "complete";
+        contextDiscoveryStep.duration = Date.now() - discoveryStart;
+        contextDiscoveryStep.message = "Semantic clarification required";
+        return this.buildCanonicalClarificationResult(
+          question,
+          thinking,
+          context.canonicalSemantics
+        );
+      }
+
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        featureFlags.patientEntityResolution &&
+        resolvedEntities.length === 0 &&
+        this.shouldUseCanonicalPatientResolution(context.canonicalSemantics)
+      ) {
+        const patientStep: ThinkingStep = {
+          id: "resolve_patient",
+          status: "running",
+          message: "Resolving patient references...",
+        };
+        thinking.push(patientStep);
+
+        const patientRef = getCanonicalPatientSubjectRef(context.canonicalSemantics);
+        const patientResolution = await this.patientResolver.resolve(
+          question,
+          customerId,
+          {
+            selectionOpaqueRef: clarifications?.patient_resolution_select,
+            confirmedOpaqueRef:
+              clarifications?.patient_resolution_confirm === "__CHANGE_PATIENT__"
+                ? undefined
+                : clarifications?.patient_resolution_confirm,
+            overrideLookup: clarifications?.patient_lookup_input,
+            candidateText: patientRef?.mentionText,
+            allowQuestionInference: false,
+          }
+        );
+
+        patientStep.status = "complete";
+        patientStep.details = {
+          status: patientResolution.status,
+        };
+
+        if (
+          patientResolution.status === "confirmation_required" ||
+          patientResolution.status === "disambiguation_required" ||
+          patientResolution.status === "not_found"
+        ) {
+          patientStep.message = "Patient clarification required";
+        return this.buildPatientClarificationResult(
+          question,
+          thinking,
+          patientResolution,
+          semanticFrame,
+          context.canonicalSemantics
+        );
+        }
+
+        if (
+          patientResolution.status === "resolved" &&
+          patientResolution.selectedMatch &&
+          patientResolution.resolvedId &&
+          patientResolution.opaqueRef &&
+          patientResolution.matchType
+        ) {
+          const resolvedEntity: ResolvedEntitySummary = {
+            kind: "patient",
+            opaqueRef: patientResolution.opaqueRef,
+            displayLabel: patientResolution.selectedMatch.patientName,
+            matchType: patientResolution.matchType,
+            requiresConfirmation: false,
+            unitName: patientResolution.selectedMatch.unitName,
+          };
+          resolvedEntities = [resolvedEntity];
+          boundParameters = {
+            patientId1: patientResolution.resolvedId,
+          };
+          patientStep.message = "Resolved patient securely";
+
+          if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+            const sanitization = this.promptSanitizer.sanitize({
+              question,
+              patientMentions: [
+                {
+                  matchedText: patientResolution.matchedText,
+                  opaqueRef: patientResolution.opaqueRef,
+                },
+              ],
+            });
+            sanitizedQuestion = sanitization.sanitizedQuestion;
+            trustedPromptLines = sanitization.trustedContextLines;
+            patientStep.details = {
+              ...patientStep.details,
+              sanitized: true,
+              opaqueRef: patientResolution.opaqueRef,
+            };
+          }
+        } else {
+          patientStep.message = "No patient reference required";
+        }
+      } else if (
         semanticFrame &&
         featureFlags.patientEntityResolution &&
-        this.shouldUsePatientResolutionForFrame(semanticFrame)
+        resolvedEntities.length === 0 &&
+        !useCanonicalSemantics &&
+        this.shouldResolvePatientForSemantics(semanticFrame, question)
       ) {
         const patientStep: ThinkingStep = {
           id: "resolve_patient",
@@ -1350,8 +1620,12 @@ export class ThreeModeOrchestrator {
         thinking.push(patientStep);
 
         const patientRef = semanticFrame.entityRefs.find(
-          (ref) => ref.type === "patient"
+          (ref) => ref.type === "patient" && ref.confidence >= 0.7
         );
+        const extractedName = extractPatientNameCandidateFromQuestion(question);
+        const resolutionCandidateText =
+          patientRef?.text ?? extractedName ?? undefined;
+
         const patientResolution = await this.patientResolver.resolve(question, customerId, {
           selectionOpaqueRef: clarifications?.patient_resolution_select,
           confirmedOpaqueRef:
@@ -1359,8 +1633,8 @@ export class ThreeModeOrchestrator {
               ? undefined
               : clarifications?.patient_resolution_confirm,
           overrideLookup: clarifications?.patient_lookup_input,
-          candidateText: patientRef?.text,
-          allowQuestionInference: false,
+          candidateText: resolutionCandidateText,
+          allowQuestionInference: !resolutionCandidateText,
         });
 
         patientStep.status = "complete";
@@ -1492,7 +1766,31 @@ export class ThreeModeOrchestrator {
       mappedFilters = this.autoResolveStrongSingleCandidateFilters(mappedFilters);
       (context.intent as any).filters = mappedFilters;
 
-      const unresolvedInfos = collectUnresolvedFilters(mappedFilters);
+      let unresolvedInfos = collectUnresolvedFilters(mappedFilters);
+      const deferredTemporalRangeFilterIndexes = new Set<number>();
+
+      unresolvedInfos.forEach((info) => {
+        if (
+          shouldDeferTemporalLiteralClarification(
+            question,
+            info,
+            context.canonicalSemantics
+          )
+        ) {
+          deferredTemporalRangeFilterIndexes.add(info.index);
+        }
+      });
+
+      if (deferredTemporalRangeFilterIndexes.size > 0) {
+        mappedFilters = mappedFilters
+          .filter((_, idx) => !deferredTemporalRangeFilterIndexes.has(idx))
+          .map((filter) => ({ ...filter }));
+        (context.intent as any).filters = mappedFilters;
+        unresolvedInfos = unresolvedInfos.filter(
+          (info) => !deferredTemporalRangeFilterIndexes.has(info.index)
+        );
+      }
+
       const handledFilterIndexes = new Set<number>();
       const removalClarificationIds = new Set<string>();
       const handledStructuredIds = structuredFilterResult.handledIds;
@@ -1579,6 +1877,13 @@ export class ThreeModeOrchestrator {
             formsIdentified: context.forms?.map((f) => f.formName) || [],
             termsUnderstood: [],
           },
+          context: {
+            intent: context.intent,
+            canonicalSemantics: context.canonicalSemantics || null,
+            canonicalSemanticsVersion:
+              context.canonicalSemantics?.version || null,
+          },
+          canonicalSemantics: context.canonicalSemantics,
           filterMetrics: unresolvedSummary,
         };
       }
@@ -1616,6 +1921,13 @@ export class ThreeModeOrchestrator {
             formsIdentified: context.forms?.map((f) => f.formName) || [],
             termsUnderstood: [],
           },
+          context: {
+            intent: context.intent,
+            canonicalSemantics: context.canonicalSemantics || null,
+            canonicalSemanticsVersion:
+              context.canonicalSemantics?.version || null,
+          },
+          canonicalSemantics: context.canonicalSemantics,
           filterMetrics: unresolvedSummary,
         };
       }
@@ -1719,6 +2031,7 @@ export class ThreeModeOrchestrator {
           sanitizedQuestion,
           promptLines: trustedPromptLines,
           resolvedEntities,
+          canonicalSemantics: context.canonicalSemantics,
         },
         {
           allowClarificationRequests: !featureFlags.clarificationPipelineV2,
@@ -1759,6 +2072,13 @@ export class ThreeModeOrchestrator {
             "sql_llm"
           ),
           partialContext: llmResponse.partialContext,
+          context: {
+            intent: context.intent,
+            canonicalSemantics: context.canonicalSemantics || null,
+            canonicalSemanticsVersion:
+              context.canonicalSemantics?.version || null,
+          },
+          canonicalSemantics: context.canonicalSemantics,
           filterMetrics: context.metadata?.filterMetrics,
         };
       }
@@ -1769,11 +2089,17 @@ export class ThreeModeOrchestrator {
       const trustedSqlValidation = validateTrustedSql({
         sql,
         patientParamNames: boundParameters ? Object.keys(boundParameters) : [],
+        requiredPatientBindings:
+          context.canonicalSemantics?.executionRequirements.requiredBindings || [],
         resolvedPatientIds: boundParameters
           ? Object.values(boundParameters)
               .map((value) => (typeof value === "string" ? value : undefined))
               .filter((value): value is string => Boolean(value))
           : [],
+        resolvedPatientOpaqueRefs: resolvedEntities
+          .filter((entity) => entity.kind === "patient")
+          .map((entity) => entity.opaqueRef)
+          .filter(Boolean),
       });
 
       if (!trustedSqlValidation.valid) {
@@ -1792,6 +2118,7 @@ export class ThreeModeOrchestrator {
           },
           resolvedEntities,
           boundParameters,
+          canonicalSemantics: context.canonicalSemantics,
           filterMetrics: context.metadata?.filterMetrics,
         };
       }
@@ -1927,6 +2254,9 @@ export class ThreeModeOrchestrator {
         semanticDiagnostics,
         context: {
           intent: context.intent,
+          canonicalSemantics: context.canonicalSemantics || null,
+          canonicalSemanticsVersion:
+            context.canonicalSemantics?.version || null,
           forms: context.forms?.map((f: any) => f.formName) || [],
           fields: context.forms?.flatMap((f: any) => f.fields?.map((field: any) => field.fieldName) || []) || [],
           joinPaths: context.joinPaths || [],
@@ -1949,6 +2279,7 @@ export class ThreeModeOrchestrator {
         filterMetrics: context.metadata?.filterMetrics,
         resolvedEntities,
         boundParameters,
+        canonicalSemantics: context.canonicalSemantics,
       };
       orchestrationResult.artifacts = featureFlags.chartFirstResults
         ? this.artifactPlanner.plan({
@@ -2212,10 +2543,62 @@ export class ThreeModeOrchestrator {
     context: ContextBundle,
     question: string
   ): SemanticQueryFrame {
+    if (context.canonicalSemantics) {
+      return projectSemanticQueryFrameFromCanonicalSemantics(
+        context.canonicalSemantics,
+        context.intent
+      );
+    }
+
     return normalizeSemanticQueryFrame(
       question,
       context.intent,
       context.intent.semanticFrame
+    );
+  }
+
+  private buildCanonicalClarificationResult(
+    question: string,
+    thinking: ThinkingStep[],
+    canonicalSemantics: CanonicalQuerySemantics
+  ): OrchestrationResult {
+    return {
+      mode: "clarification",
+      question,
+      thinking,
+      requiresClarification: true,
+      clarifications: canonicalSemantics.clarificationPlan
+        .filter((item) => item.blocking)
+        .map((item, index) => ({
+          id: `canonical_${item.slot}_${index}`,
+          ambiguousTerm: item.target || item.slot,
+          question: item.question,
+          options: [],
+          allowCustom: true,
+          slot: item.slot,
+          target: item.target,
+          reason: item.reason,
+        })),
+      clarificationReasoning:
+        canonicalSemantics.executionRequirements.blockReason ||
+        canonicalSemantics.clarificationPlan
+          .filter((item) => item.blocking)
+          .map((item) => item.reason)
+          .join(" "),
+      context: {
+        canonicalSemantics,
+        canonicalSemanticsVersion: canonicalSemantics.version,
+      },
+      canonicalSemantics,
+    };
+  }
+
+  private shouldUseCanonicalPatientResolution(
+    canonicalSemantics?: CanonicalQuerySemantics
+  ): boolean {
+    return Boolean(
+      canonicalSemantics?.executionRequirements.requiresPatientResolution &&
+        getCanonicalPatientSubjectRef(canonicalSemantics)
     );
   }
 
@@ -2226,6 +2609,21 @@ export class ThreeModeOrchestrator {
         (ref) => ref.type === "patient" && ref.confidence >= 0.7
       )
     );
+  }
+
+  /**
+   * Run secure patient resolution when the frame shows an individual patient, or when
+   * the question clearly names a person even if scope was misclassified as aggregate
+   * (e.g. "how many wounds does Jane Doe have").
+   */
+  private shouldResolvePatientForSemantics(
+    frame: SemanticQueryFrame,
+    question: string
+  ): boolean {
+    if (this.shouldUsePatientResolutionForFrame(frame)) {
+      return true;
+    }
+    return Boolean(extractPatientNameCandidateFromQuestion(question));
   }
 
   private hasExplicitPatientResolverInput(options: {
@@ -2586,7 +2984,8 @@ export class ThreeModeOrchestrator {
     question: string,
     thinking: ThinkingStep[],
     resolution: PatientResolutionResult,
-    frame?: SemanticQueryFrame
+    frame?: SemanticQueryFrame,
+    canonicalSemantics?: CanonicalQuerySemantics
   ): OrchestrationResult {
     if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
       const clarifications = [
@@ -2644,6 +3043,11 @@ export class ThreeModeOrchestrator {
           clarifications as any,
           "patient_resolution"
         ),
+        context: {
+          canonicalSemantics: canonicalSemantics || null,
+          canonicalSemanticsVersion: canonicalSemantics?.version || null,
+        },
+        canonicalSemantics,
       };
     }
 
@@ -2689,6 +3093,11 @@ export class ThreeModeOrchestrator {
           clarifications as any,
           "patient_resolution"
         ),
+        context: {
+          canonicalSemantics: canonicalSemantics || null,
+          canonicalSemanticsVersion: canonicalSemantics?.version || null,
+        },
+        canonicalSemantics,
       };
     }
 
@@ -2728,6 +3137,11 @@ export class ThreeModeOrchestrator {
         clarifications as any,
         "patient_resolution"
       ),
+      context: {
+        canonicalSemantics: canonicalSemantics || null,
+        canonicalSemanticsVersion: canonicalSemantics?.version || null,
+      },
+      canonicalSemantics,
     };
   }
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type {
+  CanonicalQuerySemantics,
   ContextBundle,
   ContextBundleMetadata,
   FieldInContext,
@@ -16,6 +17,7 @@ export interface ContextAssemblyParams {
   customerId: string;
   question: string;
   intent: IntentClassificationResult;
+  canonicalSemantics?: CanonicalQuerySemantics;
   forms?: FormInContext[];
   assessmentTypes?: AssessmentTypeInContext[]; // Phase 5A
   terminology?: TerminologyMapping[];
@@ -32,6 +34,7 @@ export class ContextAssemblerService {
       customerId,
       question,
       intent,
+      canonicalSemantics,
       metadataOverrides,
       durationMs,
       discoveryRunId,
@@ -71,6 +74,7 @@ export class ContextAssemblerService {
       customerId,
       question: question.trim(),
       intent,
+      canonicalSemantics,
       forms,
       assessmentTypes, // Phase 5A: Include assessment types if found
       terminology,
@@ -158,6 +162,7 @@ export class ContextAssemblerService {
       timestamp: overrides?.timestamp ?? new Date().toISOString(),
       durationMs: overrides?.durationMs ?? resolvedDuration,
       version: overrides?.version ?? version ?? DEFAULT_VERSION,
+      canonicalSemanticsVersion: overrides?.canonicalSemanticsVersion,
     };
   }
 }

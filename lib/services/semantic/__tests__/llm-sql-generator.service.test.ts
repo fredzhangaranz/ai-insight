@@ -287,6 +287,51 @@ describe("generateSQLWithLLM", () => {
     expect(userMessage).toContain("gender");
   });
 
+  it("does not leak patient opaque refs into the model prompt", async () => {
+    mocks.mockComplete.mockResolvedValueOnce(
+      JSON.stringify({
+        responseType: "sql",
+        explanation: "Count wounds for one patient.",
+        generatedSql:
+          "SELECT COUNT(*) AS NumberOfWounds FROM rpt.Wound WHERE patientFk = @patientId1;",
+        confidence: 0.95,
+        assumptions: [],
+      })
+    );
+
+    await generateSQLWithLLM(
+      {
+        ...baseContext,
+        question: "how many wounds does PATIENT_REF_1 have",
+      },
+      "customer-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        sanitizedQuestion: "how many wounds does PATIENT_REF_1 have",
+        promptLines: [
+          "Resolved patient placeholder PATIENT_REF_1. This placeholder is NOT a database value and MUST NEVER appear in SQL. Use only bind parameter @patientId1, and compare it only to patient primary key columns (rpt.Patient.id) or patient foreign keys (*.patientFk). Never use domainId for secure patient binding.",
+        ],
+        resolvedEntities: [
+          {
+            kind: "patient",
+            opaqueRef: "38a5ca28eb328731",
+            matchType: "full_name",
+          },
+        ],
+      }
+    );
+
+    const userMessage =
+      (mocks.mockComplete.mock.calls[0][0] as any).userMessage || "";
+    expect(userMessage).toContain("PATIENT_REF_1");
+    expect(userMessage).toContain("@patientId1");
+    expect(userMessage).toContain("Never use domainId");
+    expect(userMessage).not.toContain("38a5ca28eb328731");
+  });
+
   // ========================================
   // Fix 3: Simple Query Test Coverage
   // Tests for simple queries with empty semantic context

@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useEffect,
   useCallback,
+  useRef,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -20,7 +21,12 @@ import {
 import { SmartSuggestions } from "./SmartSuggestions";
 import { useConversation } from "@/lib/hooks/useConversation";
 import type { InsightResult } from "@/lib/hooks/useInsights";
+import type { ConversationMessage } from "@/lib/types/conversation";
 import type { CustomersMeta } from "./CustomerSelector";
+
+function normalizeThreadQuestion(s: string): string {
+  return s.trim().replace(/\s+/g, " ").toLowerCase();
+}
 
 export interface NewLayoutProps {
   customerId: string;
@@ -32,6 +38,9 @@ export interface NewLayoutProps {
   conversationThreadId: string | undefined;
   /** Real DB id for first user message when thread exists (from thread/create or history). */
   firstThreadUserMessageId: string | undefined;
+  /** When set with conversationThreadId, hydrates useConversation from this GET payload (query history). */
+  historyThreadSnapshot: { threadId: string; messages: ConversationMessage[] } | null;
+  onHistoryThreadSnapshotConsumed: () => void;
   handleNewQuestion: () => void;
   handleHistorySelect: (query: any) => Promise<void>;
   // First question flow (from useInsights)
@@ -55,6 +64,8 @@ export function NewLayout({
   setQuestion,
   conversationThreadId,
   firstThreadUserMessageId,
+  historyThreadSnapshot,
+  onHistoryThreadSnapshotConsumed,
   handleNewQuestion,
   handleHistorySelect,
   result,
@@ -71,16 +82,51 @@ export function NewLayout({
     sendMessageWithClarifications,
     editMessage,
     startNewConversation,
+    loadConversation,
+    hydrateThread,
   } = useConversation({
     externalThreadId: conversationThreadId ?? undefined,
     externalCustomerId: customerId || undefined,
   });
+
+  const hydratedFromHistoryThreadRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (conversationThreadId && typeof window !== "undefined") {
       localStorage.setItem("conversation_threadId", conversationThreadId);
     }
   }, [conversationThreadId]);
+
+  // Query history: one GET in page.tsx supplies messages — hydrate here and skip a second fetch.
+  // Thread/create: no snapshot — load from API once.
+  useEffect(() => {
+    if (!conversationThreadId) {
+      hydratedFromHistoryThreadRef.current = null;
+      return;
+    }
+
+    if (
+      historyThreadSnapshot &&
+      historyThreadSnapshot.threadId === conversationThreadId
+    ) {
+      hydrateThread(conversationThreadId, historyThreadSnapshot.messages);
+      hydratedFromHistoryThreadRef.current = conversationThreadId;
+      onHistoryThreadSnapshotConsumed();
+      return;
+    }
+
+    if (hydratedFromHistoryThreadRef.current === conversationThreadId) {
+      return;
+    }
+
+    void loadConversation(conversationThreadId);
+  }, [
+    conversationThreadId,
+    historyThreadSnapshot,
+    hydrateThread,
+    loadConversation,
+    onHistoryThreadSnapshotConsumed,
+  ]);
 
   const threadItems = useMemo((): ThreadItem[] => {
     const baseTime = Date.now();
@@ -138,12 +184,21 @@ export function NewLayout({
       };
     });
 
+    const firstUserMsg = conversationMessages.find((m) => m.role === "user");
+    const firstUserLabelForMatch =
+      firstUserMsg &&
+      (typeof firstUserMsg.metadata?.originalQuestion === "string"
+        ? firstUserMsg.metadata.originalQuestion
+        : firstUserMsg.content);
+
     // After Save & Re-run, PATCH inserts a real user row into the hook; avoid two identical bubbles.
     const duplicateFirstUser =
       isQuestionSubmitted &&
       question.trim() &&
       followUpItems[0]?.type === "user_message" &&
-      followUpItems[0].content.trim() === question.trim()
+      firstUserMsg &&
+      normalizeThreadQuestion(firstUserLabelForMatch || "") ===
+        normalizeThreadQuestion(question)
         ? followUpItems[0]
         : null;
 
@@ -319,16 +374,24 @@ export function NewLayout({
       const trimmed = newContent.trim();
       if (!trimmed) return;
 
+      const isFirstTurnUserMessage =
+        messageId === "first-user" ||
+        (firstThreadUserMessageId !== undefined &&
+          messageId === firstThreadUserMessageId);
+
+      if (isFirstTurnUserMessage) {
+        setQuestion(trimmed);
+      }
+
       // First turn is driven by useInsights until a thread user row exists; PATCH would 404 on synthetic id.
       if (messageId === "first-user") {
-        setQuestion(trimmed);
         await handleAsk(trimmed);
         return;
       }
 
       await editMessage(messageId, trimmed, modelId);
     },
-    [editMessage, handleAsk, modelId, setQuestion],
+    [editMessage, firstThreadUserMessageId, handleAsk, modelId, setQuestion],
   );
 
   const handleClarify = async (

@@ -8,6 +8,63 @@ import { decryptConnectionString } from "../security/connection-encryption.servi
 import { parseSqlServerConnectionString } from "@/lib/utils/sqlserver";
 import { normalizeSqlForValidation } from "@/lib/utils/sql-cleaning";
 
+type SqlRecordset = Array<any> & { columns?: Record<string, unknown> };
+type SqlQueryResultLike = {
+  recordset?: SqlRecordset;
+  recordsets?: SqlRecordset[];
+  columns?: Record<string, unknown>;
+};
+
+export function extractQueryRowsAndColumns(result: unknown): {
+  rows: any[];
+  columns: string[];
+} {
+  const anyResult = (result || {}) as SqlQueryResultLike;
+  const recordsets = Array.isArray(anyResult.recordsets)
+    ? anyResult.recordsets
+    : [];
+
+  let selectedRecordset: SqlRecordset | undefined = anyResult.recordset;
+
+  // Batch queries can emit an initial empty resultset (e.g. session-context setup).
+  // Prefer the latest non-empty recordset, otherwise the last available one.
+  if ((!selectedRecordset || selectedRecordset.length === 0) && recordsets.length > 0) {
+    selectedRecordset =
+      [...recordsets].reverse().find((set) => Array.isArray(set) && set.length > 0) ||
+      recordsets[recordsets.length - 1];
+  }
+
+  const rows = Array.isArray(selectedRecordset)
+    ? selectedRecordset.map((row) => row)
+    : [];
+
+  if (rows.length > 0) {
+    return {
+      rows,
+      columns: Object.keys(rows[0]),
+    };
+  }
+
+  const selectedColumns = selectedRecordset?.columns
+    ? Object.keys(selectedRecordset.columns)
+    : [];
+  const batchColumns = anyResult.columns ? Object.keys(anyResult.columns) : [];
+  const lastRecordsetColumns =
+    recordsets.length > 0 && recordsets[recordsets.length - 1]?.columns
+      ? Object.keys(recordsets[recordsets.length - 1].columns as Record<string, unknown>)
+      : [];
+
+  return {
+    rows,
+    columns:
+      selectedColumns.length > 0
+        ? selectedColumns
+        : batchColumns.length > 0
+          ? batchColumns
+          : lastRecordsetColumns,
+  };
+}
+
 /**
  * Run a callback with a customer's database pool. Pool is created, used, and closed.
  */
@@ -100,6 +157,10 @@ export async function executeCustomerQuery(
 
   try {
     await pool.connect();
+    console.log("[CustomerQuery] Connected target", {
+      customerId,
+      database: parsedConfig.database || "unknown",
+    });
 
     // Validate query is read-only (ignore leading comments/whitespace)
     const normalized = normalizeSqlForValidation(sqlQuery);
@@ -120,7 +181,7 @@ export async function executeCustomerQuery(
     }
 
     // Set session context for rpt schema / row-level security (same connection as query)
-    const allAccessBatch = `EXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${sqlQuery}`;
+    const allAccessBatch = `SET NOCOUNT ON;\nEXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${sqlQuery}`;
 
     const request = pool.request();
     for (const [key, value] of Object.entries(boundParameters || {})) {
@@ -134,28 +195,7 @@ export async function executeCustomerQuery(
     const executionTime = Date.now() - startExecution;
     
     // Transform result to standard format
-    const rows = result.recordset || [];
-    // If we have rows, infer columns from the first row.
-    // If we have zero rows, fall back to metadata so the UI can still render headers.
-    let columns: string[] = [];
-    if (rows.length > 0) {
-      columns = Object.keys(rows[0]);
-    } else {
-      const anyResult = result as unknown as {
-        columns?: Record<string, unknown>;
-        recordset?: Array<any> & { columns?: Record<string, unknown> };
-      };
-
-      const metaColumns = anyResult.columns
-        ? Object.keys(anyResult.columns)
-        : [];
-      const recordsetColumns =
-        anyResult.recordset?.columns
-          ? Object.keys(anyResult.recordset.columns)
-          : [];
-
-      columns = metaColumns.length > 0 ? metaColumns : recordsetColumns;
-    }
+    const { rows, columns } = extractQueryRowsAndColumns(result);
     
     console.log(`[CustomerQuery] ✅ Query completed in ${executionTime}ms, returned ${rows.length} rows`);
 

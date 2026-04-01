@@ -47,11 +47,19 @@ import {
 import { shouldResolvePatientLiterally } from "@/lib/services/patient-resolution-gate.service";
 import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
+import { getIntentClassifierService } from "@/lib/services/context-discovery/intent-classifier.service";
+import { getQuerySemanticsExtractorService } from "@/lib/services/context-discovery/query-semantics-extractor.service";
+import type { CanonicalQuerySemantics } from "@/lib/services/context-discovery/types";
 import type {
   InsightArtifact,
   ResolvedEntitySummary,
 } from "@/lib/types/insight-artifacts";
 import { validateTrustedSql } from "@/lib/services/trusted-sql-guard.service";
+import { serializeResolvedEntitiesForPersistence } from "@/lib/utils/resolved-entities-persistence";
+import {
+  isAnaphoricPatientReferenceQuestion,
+  mergeInheritedThreadPatientIntoCanonicalSemantics,
+} from "@/lib/utils/canonical-thread-patient-merge";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -89,20 +97,104 @@ export async function POST(req: NextRequest) {
     const patientResolver = new PatientEntityResolver();
     const promptSanitizer = new PromptSanitizationService();
     const artifactPlanner = new ArtifactPlannerService();
+    const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
     let sanitizedQuestion = normalizedQuestion;
     let trustedSqlInstructions: string | undefined;
     let boundParameters: Record<string, string | number | boolean | null> | undefined;
     let resolvedEntities: ResolvedEntitySummary[] | undefined;
     let patientResolution: PatientResolutionResult | null = null;
+    let canonicalSemantics: CanonicalQuerySemantics | undefined;
+
+    let inheritedThreadPatient:
+      | {
+          resolvedId: string;
+          displayLabel?: string;
+          opaqueRef?: string;
+        }
+      | null = null;
+    if (threadId && featureFlags.canonicalQuerySemanticsV1) {
+      inheritedThreadPatient =
+        await loadLatestThreadSecurePatientFromQueryHistory(threadId);
+    }
+
+    if (featureFlags.canonicalQuerySemanticsV1) {
+      const intent = await getIntentClassifierService().classifyIntent({
+        customerId: normalizedCustomerId,
+        question: normalizedQuestion,
+        modelId: resolvedModelId,
+      });
+      canonicalSemantics = await getQuerySemanticsExtractorService().extract({
+        customerId: normalizedCustomerId,
+        question: normalizedQuestion,
+        intent,
+        modelId: resolvedModelId,
+      });
+
+      if (
+        canonicalSemantics &&
+        inheritedThreadPatient &&
+        isAnaphoricPatientReferenceQuestion(normalizedQuestion)
+      ) {
+        canonicalSemantics = mergeInheritedThreadPatientIntoCanonicalSemantics(
+          canonicalSemantics,
+          inheritedThreadPatient
+        );
+      }
+    }
 
     if (featureFlags.patientEntityResolution) {
-      const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
-      const provider = await getAIProvider(resolvedModelId);
       const patientResolverOptions = buildPatientResolverOptions(
         clarificationResponses
       );
 
-      if (!patientResolverOptions) {
+      if (
+        featureFlags.canonicalQuerySemanticsV1 &&
+        inheritedThreadPatient &&
+        isAnaphoricPatientReferenceQuestion(normalizedQuestion) &&
+        !patientResolverOptions
+      ) {
+        const inh = inheritedThreadPatient;
+        patientResolution = {
+          status: "resolved",
+          selectedMatch: {
+            patientName: inh.displayLabel?.trim() || "Patient",
+            unitName: null,
+          },
+          resolvedId: inh.resolvedId,
+          opaqueRef: inh.opaqueRef || toPatientOpaqueRef(inh.resolvedId),
+          matchType: "full_name",
+          matchedText: inh.displayLabel?.trim() || "",
+        };
+      } else if (
+        featureFlags.canonicalQuerySemanticsV1 &&
+        canonicalSemantics?.executionRequirements.allowSqlGeneration === false &&
+        canonicalSemantics.clarificationPlan.some((item) => item.blocking)
+      ) {
+        patientResolution = { status: "no_candidate" };
+      } else if (
+        featureFlags.canonicalQuerySemanticsV1 &&
+        canonicalSemantics?.executionRequirements.requiresPatientResolution
+      ) {
+        const patientSubjectRef = getCanonicalPatientSubjectRef(
+          canonicalSemantics
+        );
+        if (!patientSubjectRef?.mentionText?.trim()) {
+          patientResolution = { status: "not_found" };
+        } else {
+          patientResolution = await patientResolver.resolve(
+            normalizedQuestion,
+            normalizedCustomerId,
+            {
+              selectionOpaqueRef: patientResolverOptions?.selectionOpaqueRef,
+              confirmedOpaqueRef: patientResolverOptions?.confirmedOpaqueRef,
+              overrideLookup: patientResolverOptions?.overrideLookup,
+              candidateText: patientSubjectRef.mentionText,
+              allowQuestionInference: false,
+            }
+          );
+        }
+      } else if (!featureFlags.canonicalQuerySemanticsV1 && !patientResolverOptions) {
+        const provider = await getAIProvider(resolvedModelId);
         try {
           const gate = await shouldResolvePatientLiterally(
             normalizedQuestion,
@@ -279,11 +371,8 @@ export async function POST(req: NextRequest) {
                 : {}),
               ...(resolvedEntities?.length
                 ? {
-                    resolvedEntities: resolvedEntities.map((entity) => ({
-                      kind: entity.kind,
-                      opaqueRef: entity.opaqueRef,
-                      matchType: entity.matchType,
-                    })),
+                    resolvedEntities:
+                      serializeResolvedEntitiesForPersistence(resolvedEntities),
                   }
                 : {}),
             }
@@ -294,26 +383,25 @@ export async function POST(req: NextRequest) {
       userMessageId = userMsgResult.rows[0].id;
     }
 
-    if (
-      patientResolution &&
-      (patientResolution.status === "confirmation_required" ||
-        patientResolution.status === "disambiguation_required" ||
-        patientResolution.status === "not_found")
-    ) {
+      if (
+        patientResolution &&
+        (patientResolution.status === "confirmation_required" ||
+          patientResolution.status === "disambiguation_required" ||
+          patientResolution.status === "not_found")
+      ) {
       const clarificationResult = buildPatientClarificationResult(
         normalizedQuestion,
         patientResolution,
-        resolvedEntities
+        resolvedEntities,
+        canonicalSemantics
       );
       const assistantMetadata: MessageMetadata = {
         modelUsed: String(modelId || "").trim() || DEFAULT_AI_MODEL_ID,
         mode: "clarification",
         executionTimeMs: Date.now() - startTime,
-        resolvedEntities: (resolvedEntities || []).map((entity) => ({
-          kind: entity.kind,
-          opaqueRef: entity.opaqueRef,
-          matchType: entity.matchType,
-        })),
+        resolvedEntities: serializeResolvedEntitiesForPersistence(
+          resolvedEntities || []
+        ),
       };
 
       const phiProtection = new PHIProtectionService();
@@ -353,6 +441,56 @@ export async function POST(req: NextRequest) {
       throw new Error("User message could not be established");
     }
 
+    if (
+      canonicalSemantics?.executionRequirements.allowSqlGeneration === false &&
+      canonicalSemantics.clarificationPlan.some((item) => item.blocking)
+    ) {
+      const clarificationResult = buildCanonicalClarificationResult(
+        normalizedQuestion,
+        canonicalSemantics
+      );
+      const assistantMetadata: MessageMetadata = {
+        modelUsed: resolvedModelId,
+        mode: "clarification",
+        executionTimeMs: Date.now() - startTime,
+        resolvedEntities: serializeResolvedEntitiesForPersistence(
+          resolvedEntities || []
+        ),
+      };
+
+      const phiProtection = new PHIProtectionService();
+      phiProtection.validateNoPHI(assistantMetadata);
+
+      const assistantMsgResult = await pool.query(
+        `
+        INSERT INTO "ConversationMessages"
+          ("threadId", "role", "content", "metadata")
+        VALUES ($1, 'assistant', $2, $3)
+        RETURNING id, "createdAt"
+        `,
+        [
+          ensuredThreadId,
+          generateResponseText(clarificationResult),
+          JSON.stringify(assistantMetadata),
+        ]
+      );
+
+      return NextResponse.json({
+        threadId: ensuredThreadId,
+        userMessageId,
+        message: {
+          id: assistantMsgResult.rows[0].id,
+          role: "assistant",
+          content: generateResponseText(clarificationResult),
+          result: clarificationResult,
+          metadata: assistantMetadata,
+          createdAt: assistantMsgResult.rows[0].createdAt,
+        },
+        compositionStrategy: COMPOSITION_STRATEGIES.FRESH,
+        executionTimeMs: Date.now() - startTime,
+      });
+    }
+
     const conversationHistory = await loadConversationHistory(
       ensuredThreadId,
       userMessageId
@@ -374,7 +512,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
     const provider = await getAIProvider(resolvedModelId);
 
     const {
@@ -448,9 +585,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const effectiveTrustedInstructions =
+    const effectiveTrustedInstructions = joinTrustedInstructions(
       trustedSqlInstructions ||
-      buildInheritedParameterInstructions(effectiveBoundParameters);
+        buildInheritedParameterInstructions(effectiveBoundParameters),
+      buildCanonicalSemanticsInstructions(canonicalSemantics)
+    );
 
     const generatedSql = await provider.completeWithConversation({
       conversationHistory,
@@ -486,6 +625,7 @@ export async function POST(req: NextRequest) {
     const execution = await executeSql(cleanedSql, normalizedCustomerId, {
       boundParameters: effectiveBoundParameters,
       resolvedEntities,
+      canonicalSemantics,
     });
     const executionTimeMs = Date.now() - startTime;
 
@@ -499,6 +639,12 @@ export async function POST(req: NextRequest) {
       error: execution.error,
       boundParameters: effectiveBoundParameters,
       resolvedEntities,
+      canonicalSemantics,
+      context: {
+        originalQuestion: normalizedQuestion,
+        canonicalSemantics: canonicalSemantics || null,
+        canonicalSemanticsVersion: canonicalSemantics?.version || null,
+      },
     };
 
     if (
@@ -542,11 +688,8 @@ export async function POST(req: NextRequest) {
       artifactSummary,
       compositionDecision,
       executionTimeMs,
-      resolvedEntities: resolvedEntities?.map((entity) => ({
-        kind: entity.kind,
-        opaqueRef: entity.opaqueRef,
-        matchType: entity.matchType,
-      })),
+      resolvedEntities:
+        serializeResolvedEntitiesForPersistence(resolvedEntities),
     };
 
     phiProtection.validateNoPHI(assistantMetadata);
@@ -610,16 +753,21 @@ export async function POST(req: NextRequest) {
     const historySql =
       result.sql ||
       (result.error ? `-- Query failed: ${result.error.message}` : "");
-    const parentQueryHistoryId =
-      compositionStrategy !== COMPOSITION_STRATEGIES.FRESH &&
-      lastAssistant?.metadata?.queryHistoryId
-        ? Number(lastAssistant.metadata.queryHistoryId)
-        : undefined;
+    // Follow-ups must chain under the latest QueryHistory row for this thread so GET /history
+    // (parentQueryId IS NULL) lists one entry per conversation. Composition is often FRESH while
+    // still being a semantic follow-up — parent cannot depend on composition strategy alone.
+    const latestInThread = await getLatestQueryHistoryIdForThread(
+      pool,
+      ensuredThreadId,
+      userId,
+      normalizedCustomerId
+    );
     const normalizedParentQueryHistoryId =
-      typeof parentQueryHistoryId === "number" &&
-      Number.isFinite(parentQueryHistoryId)
-        ? parentQueryHistoryId
+      typeof latestInThread === "number" && Number.isFinite(latestInThread)
+        ? latestInThread
         : undefined;
+    const persistedResolvedEntities =
+      serializeResolvedEntitiesForPersistence(resolvedEntities);
     const queryHistoryId = await logQueryHistory({
       question: sanitizedQuestion,
       customerId: customerId,
@@ -629,16 +777,17 @@ export async function POST(req: NextRequest) {
       resultCount: result.results?.rows.length || 0,
       sqlValidation: result.sqlValidation,
       semanticContext: {
+        originalQuestion: normalizedQuestion,
         compositionStrategy,
         compositionDecisionType: compositionDecision?.decisionType || null,
         compositionDecisionStatus: compositionDecision?.status || null,
         compositionFallbackReason: compositionDecision?.fallbackReason || null,
+        canonicalSemantics: canonicalSemantics || null,
+        canonicalSemanticsVersion: canonicalSemantics?.version || null,
         resolvedEntities:
-          resolvedEntities?.map((entity) => ({
-            kind: entity.kind,
-            opaqueRef: entity.opaqueRef,
-            matchType: entity.matchType,
-          })) || null,
+          persistedResolvedEntities.length > 0
+            ? persistedResolvedEntities
+            : null,
         boundParameters: effectiveBoundParameters || null,
         boundParameterNames: Object.keys(effectiveBoundParameters || {}),
       },
@@ -799,6 +948,29 @@ function parseQueryHistoryId(value: unknown): number | undefined {
   return undefined;
 }
 
+/** Most recent QueryHistory row for this thread (parent for the next follow-up). */
+async function getLatestQueryHistoryIdForThread(
+  pool: Pool,
+  threadId: string,
+  userId: number,
+  customerId: string
+): Promise<number | undefined> {
+  const result = await pool.query(
+    `
+    SELECT id FROM "QueryHistory"
+    WHERE "conversationThreadId" = $1::uuid
+      AND "userId" = $2
+      AND "customerId" = $3::uuid
+    ORDER BY "createdAt" DESC
+    LIMIT 1
+    `,
+    [threadId, userId, customerId]
+  );
+  const raw = result.rows[0]?.id;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 async function loadBoundParametersFromQueryHistory(
   queryHistoryId: number
 ): Promise<Record<string, string | number | boolean | null> | undefined> {
@@ -862,6 +1034,47 @@ async function loadLatestBoundParametersFromThread(
   }
 
   return undefined;
+}
+
+/** Latest secure patient binding from this thread's QueryHistory (for anaphoric follow-ups). */
+async function loadLatestThreadSecurePatientFromQueryHistory(
+  threadId: string
+): Promise<{
+  resolvedId: string;
+  displayLabel?: string;
+  opaqueRef?: string;
+} | null> {
+  const pool = await getInsightGenDbPool();
+  const result = await queryHistoryByThreadId(pool, threadId);
+  for (const row of result.rows) {
+    const semanticContext = normalizeJson(row.semanticContext || {});
+    const normalized = normalizeBoundParameters(semanticContext?.boundParameters);
+    const pid = normalized?.patientId1;
+    if (typeof pid !== "string" || !pid.trim()) {
+      continue;
+    }
+    const entities = semanticContext?.resolvedEntities;
+    let displayLabel: string | undefined;
+    let opaqueRef: string | undefined;
+    if (Array.isArray(entities)) {
+      const patient = entities.find((e: { kind?: string }) => e?.kind === "patient");
+      if (patient && typeof patient === "object") {
+        const p = patient as Record<string, unknown>;
+        if (typeof p.displayLabel === "string") {
+          displayLabel = p.displayLabel;
+        }
+        if (typeof p.opaqueRef === "string") {
+          opaqueRef = p.opaqueRef;
+        }
+      }
+    }
+    return {
+      resolvedId: pid.trim(),
+      displayLabel,
+      opaqueRef,
+    };
+  }
+  return null;
 }
 
 function isMissingColumnError(error: unknown): boolean {
@@ -1109,6 +1322,7 @@ async function executeSql(
   options?: {
     boundParameters?: Record<string, string | number | boolean | null>;
     resolvedEntities?: ResolvedEntitySummary[];
+    canonicalSemantics?: Record<string, any>;
   }
 ): Promise<{
   executedSql: string;
@@ -1119,9 +1333,18 @@ async function executeSql(
   const trustedValidation = validateTrustedSql({
     sql: sqlText,
     patientParamNames: Object.keys(options?.boundParameters || {}),
+    requiredPatientBindings: Array.isArray(
+      options?.canonicalSemantics?.executionRequirements?.requiredBindings
+    )
+      ? options?.canonicalSemantics.executionRequirements.requiredBindings
+      : [],
     resolvedPatientIds: Object.values(options?.boundParameters || {})
       .map((value) => (typeof value === "string" ? value : undefined))
       .filter((value): value is string => Boolean(value)),
+    resolvedPatientOpaqueRefs: (options?.resolvedEntities || [])
+      .filter((entity) => entity.kind === "patient")
+      .map((entity) => entity.opaqueRef)
+      .filter(Boolean),
   });
 
   if (!trustedValidation.valid) {
@@ -1498,10 +1721,111 @@ function buildPatientResolverOptions(
   return undefined;
 }
 
+function getCanonicalPatientSubjectRef(
+  canonicalSemantics?: CanonicalQuerySemantics
+) {
+  return canonicalSemantics?.subjectRefs.find(
+    (ref) =>
+      ref.entityType === "patient" &&
+      ["candidate", "ambiguous", "requires_resolution"].includes(ref.status)
+  );
+}
+
+function buildCanonicalSemanticsInstructions(
+  canonicalSemantics?: CanonicalQuerySemantics
+): string | undefined {
+  if (!canonicalSemantics) {
+    return undefined;
+  }
+
+  const lines = [
+    "Canonical query semantics:",
+    `- Query shape: ${canonicalSemantics.queryShape}`,
+    `- Analytic intent: ${canonicalSemantics.analyticIntent}`,
+    `- Patient resolution required: ${canonicalSemantics.executionRequirements.requiresPatientResolution ? "yes" : "no"}`,
+  ];
+
+  const patientRef = getCanonicalPatientSubjectRef(canonicalSemantics);
+  if (patientRef?.mentionText) {
+    lines.push(`- Patient reference: ${patientRef.mentionText}`);
+  }
+
+  if (canonicalSemantics.temporalSpec.kind === "absolute_range") {
+    lines.push(
+      `- Absolute date range: ${canonicalSemantics.temporalSpec.start} to ${canonicalSemantics.temporalSpec.end}`
+    );
+  }
+
+  if (canonicalSemantics.temporalSpec.kind === "relative_range") {
+    lines.push(
+      `- Relative date range: last ${canonicalSemantics.temporalSpec.value} ${canonicalSemantics.temporalSpec.unit}`
+    );
+  }
+
+  if (canonicalSemantics.executionRequirements.requiredBindings.length > 0) {
+    lines.push(
+      `- Required bind parameters: ${canonicalSemantics.executionRequirements.requiredBindings
+        .map((name) => `@${name}`)
+        .join(", ")}`
+    );
+  }
+
+  lines.push(
+    "Use this canonical contract as authoritative. Do not invent identifier columns or bypass required bindings."
+  );
+
+  return lines.join("\n");
+}
+
+function joinTrustedInstructions(
+  ...parts: Array<string | undefined>
+): string | undefined {
+  const joined = parts.filter(Boolean).join("\n\n").trim();
+  return joined || undefined;
+}
+
+function buildCanonicalClarificationResult(
+  question: string,
+  canonicalSemantics: CanonicalQuerySemantics
+): InsightResult {
+  return {
+    mode: "clarification",
+    question,
+    thinking: [],
+    requiresClarification: true,
+    clarifications: canonicalSemantics.clarificationPlan
+      .filter((item) => item.blocking)
+      .map((item, index) => ({
+        placeholder: `canonical_${item.slot}_${index + 1}`,
+        prompt: item.question,
+        freeformAllowed: {
+          allowed: true,
+          placeholder: "Other input",
+          hint: item.reason,
+          minChars: 1,
+          maxChars: 200,
+        },
+      })),
+    clarificationReasoning:
+      canonicalSemantics.executionRequirements.blockReason ||
+      canonicalSemantics.clarificationPlan
+        .filter((item) => item.blocking)
+        .map((item) => item.reason)
+        .join(" "),
+    canonicalSemantics,
+    context: {
+      originalQuestion: question,
+      canonicalSemantics,
+      canonicalSemanticsVersion: canonicalSemantics.version,
+    },
+  };
+}
+
 function buildPatientClarificationResult(
   question: string,
   resolution: PatientResolutionResult,
-  resolvedEntities?: ResolvedEntitySummary[]
+  resolvedEntities?: ResolvedEntitySummary[],
+  canonicalSemantics?: CanonicalQuerySemantics
 ): InsightResult {
   if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
     return {
@@ -1510,6 +1834,7 @@ function buildPatientClarificationResult(
       thinking: [],
       requiresClarification: true,
       resolvedEntities,
+      canonicalSemantics,
       clarifications: [
         {
           placeholder: "patient_resolution_confirm",
@@ -1535,6 +1860,11 @@ function buildPatientClarificationResult(
       ],
       clarificationReasoning:
         "I found one exact full-name match and need a quick confirmation before running the query.",
+      context: {
+        originalQuestion: question,
+        canonicalSemantics: canonicalSemantics || null,
+        canonicalSemanticsVersion: canonicalSemantics?.version || null,
+      },
     };
   }
 
@@ -1548,6 +1878,7 @@ function buildPatientClarificationResult(
       question,
       thinking: [],
       requiresClarification: true,
+      canonicalSemantics,
       clarifications: [
         {
           placeholder: "patient_resolution_select",
@@ -1562,6 +1893,11 @@ function buildPatientClarificationResult(
       ],
       clarificationReasoning:
         "I found multiple exact full-name matches and need you to choose the correct patient.",
+      context: {
+        originalQuestion: question,
+        canonicalSemantics: canonicalSemantics || null,
+        canonicalSemanticsVersion: canonicalSemantics?.version || null,
+      },
     };
   }
 
@@ -1570,6 +1906,7 @@ function buildPatientClarificationResult(
     question,
     thinking: [],
     requiresClarification: true,
+    canonicalSemantics,
     clarifications: [
       {
         placeholder: "patient_lookup_input",
@@ -1587,6 +1924,11 @@ function buildPatientClarificationResult(
     ],
     clarificationReasoning:
       "I couldn't resolve the patient reference securely. Please provide an exact patient name or ID.",
+    context: {
+      originalQuestion: question,
+      canonicalSemantics: canonicalSemantics || null,
+      canonicalSemanticsVersion: canonicalSemantics?.version || null,
+    },
   };
 }
 

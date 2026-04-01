@@ -31,6 +31,11 @@ interface UseConversationReturn {
   editMessage: (messageId: string, newContent: string, modelId?: string) => Promise<void>;
   startNewConversation: () => void;
   loadConversation: (threadId: string) => Promise<void>;
+  /** Apply messages from a server snapshot (e.g. query history) without a second GET. */
+  hydrateThread: (
+    threadId: string,
+    messages: ConversationMessageState[],
+  ) => void;
 }
 
 interface SendMessageOptions {
@@ -64,9 +69,11 @@ export function useConversation(
   const [customerId, setCustomerId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const loadConversationRequestIdRef = useRef(0);
 
   useEffect(() => {
-    if (externalThreadId && !threadId) {
+    if (!externalThreadId) return;
+    if (threadId !== externalThreadId) {
       setThreadId(externalThreadId);
       if (typeof window !== "undefined") {
         localStorage.setItem("conversation_threadId", externalThreadId);
@@ -257,6 +264,23 @@ export function useConversation(
     async (messageId: string, newContent: string, modelId?: string) => {
       setIsLoading(true);
       setError(null);
+      const previousMessages = messages;
+
+      const targetIndex = previousMessages.findIndex((msg) => msg.id === messageId);
+      if (targetIndex >= 0) {
+        const original = previousMessages[targetIndex];
+        setMessages([
+          ...previousMessages.slice(0, targetIndex),
+          {
+            ...original,
+            content: newContent,
+            metadata: {
+              ...original.metadata,
+              wasEdited: true,
+            },
+          },
+        ]);
+      }
 
       try {
         const response = await fetch(
@@ -298,13 +322,14 @@ export function useConversation(
         }
       } catch (err) {
         const nextError = err instanceof Error ? err : new Error("Unknown error");
+        setMessages(previousMessages);
         setError(nextError);
         throw nextError;
       } finally {
         setIsLoading(false);
       }
     },
-    [customerId, sendMessageInternal]
+    [customerId, messages, sendMessageInternal]
   );
 
   const startNewConversation = useCallback(() => {
@@ -325,7 +350,23 @@ export function useConversation(
     setError(null);
   }, []);
 
+  const hydrateThread = useCallback(
+    (threadId: string, nextMessages: ConversationMessageState[]) => {
+      // Invalidate any in-flight loadConversation so it cannot overwrite this snapshot.
+      loadConversationRequestIdRef.current += 1;
+      setThreadId(threadId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("conversation_threadId", threadId);
+      }
+      setMessages(nextMessages);
+      setError(null);
+      setIsLoading(false);
+    },
+    [],
+  );
+
   const loadConversation = useCallback(async (loadThreadId: string) => {
+    const requestId = ++loadConversationRequestIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -338,14 +379,23 @@ export function useConversation(
 
       const data = await response.json();
 
+      if (requestId !== loadConversationRequestIdRef.current) {
+        return;
+      }
+
       setThreadId(data.thread.id);
       setCustomerId(data.thread.customerId);
       setMessages(data.messages || []);
     } catch (err) {
+      if (requestId !== loadConversationRequestIdRef.current) {
+        return;
+      }
       const nextError = err instanceof Error ? err : new Error("Unknown error");
       setError(nextError);
     } finally {
-      setIsLoading(false);
+      if (requestId === loadConversationRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -359,5 +409,6 @@ export function useConversation(
     editMessage,
     startNewConversation,
     loadConversation,
+    hydrateThread,
   };
 }

@@ -93,4 +93,34 @@ describe("AssistantMessage clarification UI", () => {
       "clar-1": "female from patient demographics",
     });
   });
+
+  it("shows the error text when result.error exists but assistant content is empty", () => {
+    render(
+      <AssistantMessage
+        customerId="cust-1"
+        message={{
+          id: "msg-error",
+          content: "",
+          createdAt: new Date().toISOString(),
+          isLoading: false,
+          result: {
+            mode: "direct",
+            question: "show me wound area chart for Fred Smith",
+            thinking: [],
+            error: {
+              message:
+                "This cached query requires secure parameters that are no longer available.",
+              step: "history",
+            },
+          },
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        "I encountered an error: This cached query requires secure parameters that are no longer available."
+      )
+    ).toBeTruthy();
+  });
 });

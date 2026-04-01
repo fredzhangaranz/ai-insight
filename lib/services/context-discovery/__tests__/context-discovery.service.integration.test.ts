@@ -54,12 +54,22 @@ vi.mock("../context-assembler.service", () => ({
   getContextAssemblerService: vi.fn(),
 }));
 
+vi.mock("../query-semantics-extractor.service", () => ({
+  getQuerySemanticsExtractorService: vi.fn(),
+}));
+
+vi.mock("@/lib/config/insights-feature-flags", () => ({
+  getInsightsFeatureFlags: vi.fn(),
+}));
+
 import { getInsightGenDbPool } from "@/lib/db";
 import { getIntentClassifierService } from "../intent-classifier.service";
 import { getSemanticSearcherService } from "../semantic-searcher.service";
 import { getTerminologyMapperService } from "../terminology-mapper.service";
 import { getJoinPathPlannerService } from "../join-path-planner.service";
 import { getContextAssemblerService } from "../context-assembler.service";
+import { getQuerySemanticsExtractorService } from "../query-semantics-extractor.service";
+import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 
 describe("ContextDiscoveryService Integration", () => {
   let service: ContextDiscoveryService;
@@ -143,9 +153,15 @@ describe("ContextDiscoveryService Integration", () => {
       query: vi.fn().mockResolvedValue({ rows: [] }),
     };
     vi.mocked(getInsightGenDbPool).mockResolvedValue(mockPool as any);
+    vi.mocked(getInsightsFeatureFlags).mockReturnValue({
+      canonicalQuerySemanticsV1: false,
+    } as any);
     vi.mocked(getTerminologyMapperService).mockReturnValue({
       mapFilters: vi.fn().mockResolvedValue([]),
       mapUserTerms: vi.fn().mockResolvedValue([]),
+    } as any);
+    vi.mocked(getQuerySemanticsExtractorService).mockReturnValue({
+      extract: vi.fn(),
     } as any);
   });
 
@@ -454,6 +470,140 @@ describe("ContextDiscoveryService Integration", () => {
     expect(mockIntentClassifier.classifyIntent).toHaveBeenCalledTimes(1);
     expect(mockSemanticSearcher.searchFormFields).toHaveBeenCalledTimes(1);
     expect(mockContextAssembler.assembleContextBundle).toHaveBeenCalledTimes(1);
+  });
+
+  it("extracts canonical semantics after filter mapping so value specs see mapped filters", async () => {
+    vi.mocked(getInsightsFeatureFlags).mockReturnValue({
+      canonicalQuerySemanticsV1: true,
+    } as any);
+
+    const mappedFilters = [
+      {
+        field: "wound_classification",
+        operator: "equals",
+        userPhrase: "diabetic wounds",
+        value: "Diabetic Foot Ulcer",
+      },
+    ];
+    const canonicalSemantics = {
+      version: "v1",
+      queryShape: "cohort",
+      analyticIntent: "outcome_analysis",
+      measureSpec: {
+        metrics: ["healing_rate"],
+        subject: "wound",
+        grain: "total",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: null,
+        preferredVisualization: null,
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [
+        {
+          field: "wound_classification",
+          operator: "equals",
+          userPhrase: "diabetic wounds",
+          value: "Diabetic Foot Ulcer",
+          resolved: true,
+        },
+      ],
+      clarificationPlan: [],
+      executionRequirements: {
+        requiresPatientResolution: false,
+        requiredBindings: [],
+        allowSqlGeneration: true,
+      },
+    };
+    const mockIntentClassifier = {
+      classifyIntent: vi.fn().mockResolvedValue({
+        ...MOCK_INTENT,
+        semanticFrame: {
+          scope: { value: "patient_cohort", confidence: 0.9 },
+          subject: { value: "wound", confidence: 0.9 },
+          measure: { value: "healing_rate", confidence: 0.9 },
+          grain: { value: "total", confidence: 0.9 },
+          groupBy: { value: [], confidence: 1 },
+          filters: [...MOCK_INTENT.filters],
+          aggregatePredicates: [],
+          presentation: { value: null, confidence: 1 },
+          preferredVisualization: { value: null, confidence: 1 },
+          entityRefs: [],
+          clarificationNeeds: [],
+          confidence: 0.9,
+        },
+      }),
+    };
+    const mockSemanticSearcher = {
+      searchFormFields: vi.fn().mockResolvedValue(MOCK_SEMANTIC_RESULTS),
+    };
+    const mockTerminologyMapper = {
+      mapUserTerms: vi.fn().mockResolvedValue(MOCK_TERMINOLOGY),
+      mapFilters: vi.fn().mockResolvedValue(mappedFilters),
+    };
+    const mockJoinPathPlanner = {
+      planJoinPath: vi.fn().mockResolvedValue(MOCK_JOIN_PATHS),
+    };
+    const mockContextAssembler = {
+      assembleContextBundle: vi.fn().mockReturnValue({
+        customerId: "STMARYS",
+        question: BASE_REQUEST.question,
+        intent: {
+          ...MOCK_INTENT,
+          filters: mappedFilters,
+        },
+        canonicalSemantics,
+        forms: [],
+        terminology: MOCK_TERMINOLOGY,
+        joinPaths: MOCK_JOIN_PATHS,
+        overallConfidence: 0.94,
+        metadata: {
+          discoveryRunId: "run-123",
+          timestamp: new Date().toISOString(),
+          durationMs: 500,
+          version: "1.0",
+          canonicalSemanticsVersion: "v1",
+        },
+      }),
+    };
+    const mockExtractor = {
+      extract: vi.fn().mockResolvedValue(canonicalSemantics),
+    };
+
+    vi.mocked(getIntentClassifierService).mockReturnValue(
+      mockIntentClassifier as any
+    );
+    vi.mocked(getSemanticSearcherService).mockReturnValue(
+      mockSemanticSearcher as any
+    );
+    vi.mocked(getTerminologyMapperService).mockReturnValue(
+      mockTerminologyMapper as any
+    );
+    vi.mocked(getJoinPathPlannerService).mockReturnValue(
+      mockJoinPathPlanner as any
+    );
+    vi.mocked(getContextAssemblerService).mockReturnValue(
+      mockContextAssembler as any
+    );
+    vi.mocked(getQuerySemanticsExtractorService).mockReturnValue(
+      mockExtractor as any
+    );
+
+    const result = await service.discoverContext(BASE_REQUEST);
+
+    expect(mockExtractor.extract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          filters: mappedFilters,
+          semanticFrame: expect.objectContaining({
+            filters: mappedFilters,
+          }),
+        }),
+      })
+    );
+    expect(result.canonicalSemantics).toEqual(canonicalSemantics);
+    expect(result.metadata.canonicalSemanticsVersion).toBe("v1");
   });
 
   it("handles intent classification failure gracefully", async () => {

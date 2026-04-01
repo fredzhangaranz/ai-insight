@@ -390,24 +390,28 @@ export function validateIntentClassificationResponse(response: unknown): {
     return { valid: false, error: "Missing or invalid 'reasoning' field" };
   }
 
-  // Optional timeRange validation
+  let normalizedTimeRange:
+    | {
+        unit: "days" | "weeks" | "months" | "years";
+        value: number;
+      }
+    | undefined;
   if (result.timeRange !== null && result.timeRange !== undefined) {
     const tr = result.timeRange as Record<string, unknown>;
-    if (typeof tr.unit !== "string" || typeof tr.value !== "number") {
-      return {
-        valid: false,
-        error:
-          "Invalid 'timeRange': must have 'unit' (string) and 'value' (number)",
-      };
-    }
     const validUnits = ["days", "weeks", "months", "years"];
-    if (!validUnits.includes(tr.unit as string)) {
-      return {
-        valid: false,
-        error: `Invalid timeRange unit: ${
-          tr.unit
-        }. Must be one of: ${validUnits.join(", ")}`,
+    if (
+      typeof tr.unit === "string" &&
+      typeof tr.value === "number" &&
+      validUnits.includes(tr.unit)
+    ) {
+      normalizedTimeRange = {
+        unit: tr.unit as "days" | "weeks" | "months" | "years",
+        value: tr.value,
       };
+    } else {
+      // Be tolerant of alternate temporal payloads from the model
+      // (for example absolute start/end ranges) instead of failing the query.
+      result.timeRange = undefined;
     }
   }
 
@@ -458,16 +462,7 @@ export function validateIntentClassificationResponse(response: unknown): {
         value: null,
       };
     }),
-    timeRange: result.timeRange
-      ? {
-          unit: (result.timeRange as Record<string, unknown>).unit as
-            | "days"
-            | "weeks"
-            | "months"
-            | "years",
-          value: (result.timeRange as Record<string, unknown>).value as number,
-        }
-      : undefined,
+    timeRange: normalizedTimeRange,
     presentationIntent:
       (result.presentationIntent as "chart" | "table" | "either" | undefined) ||
       undefined,

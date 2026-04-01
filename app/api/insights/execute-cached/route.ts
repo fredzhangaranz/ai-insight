@@ -139,7 +139,23 @@ export async function POST(req: NextRequest) {
     const trustedValidation = validateTrustedSql({
       sql: effectiveSql,
       patientParamNames: Object.keys(boundParameters || {}),
+      requiredPatientBindings: Array.isArray(
+        effectiveSemanticContext?.canonicalSemantics?.executionRequirements
+          ?.requiredBindings
+      )
+        ? effectiveSemanticContext.canonicalSemantics.executionRequirements.requiredBindings
+        : [],
       resolvedPatientIds: [],
+      resolvedPatientOpaqueRefs: Array.isArray(
+        effectiveSemanticContext?.resolvedEntities
+      )
+        ? effectiveSemanticContext.resolvedEntities
+            .filter(
+              (entity: any) =>
+                entity?.kind === "patient" && typeof entity?.opaqueRef === "string"
+            )
+            .map((entity: any) => entity.opaqueRef)
+        : [],
     });
 
     if (!trustedValidation.valid) {

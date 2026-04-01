@@ -465,7 +465,7 @@ export class IntentClassifierService {
           system: systemPrompt,
           userMessage: userMessage,
           maxTokens: 1000,
-          temperature: 0.3, // Lower temperature for more consistent JSON
+          temperature: 0, // Classification should be deterministic for identical prompts
         }),
         timeoutPromise,
         abortPromise, // Add abort promise to race (Task 1.1.5)

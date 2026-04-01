@@ -28,6 +28,113 @@ export interface TimeRange {
   value: number;
 }
 
+export const CANONICAL_QUERY_SEMANTICS_VERSION = "v1";
+
+export type CanonicalQueryShape =
+  | "aggregate"
+  | "cohort"
+  | "individual_subject"
+  | "trend"
+  | "comparison";
+
+export type CanonicalSubjectEntityType =
+  | "patient"
+  | "wound"
+  | "unit"
+  | "clinic"
+  | "assessment_type";
+
+export type CanonicalSubjectReferenceKind =
+  | "name"
+  | "domain_id"
+  | "guid"
+  | "label"
+  | "unknown";
+
+export type CanonicalSubjectReferenceStatus =
+  | "absent"
+  | "candidate"
+  | "ambiguous"
+  | "requires_resolution";
+
+export interface SubjectRef {
+  entityType: CanonicalSubjectEntityType;
+  mentionText: string;
+  referenceKind: CanonicalSubjectReferenceKind;
+  status: CanonicalSubjectReferenceStatus;
+  confidence: number;
+  explicit: boolean;
+}
+
+export interface MeasureSpec {
+  metrics: string[];
+  subject: SemanticSubject | null;
+  grain: SemanticGrain | null;
+  groupBy: string[];
+  aggregatePredicates: AggregatePredicate[];
+  presentationIntent: "chart" | "table" | "either" | null;
+  preferredVisualization: "line" | "bar" | "kpi" | "table" | null;
+}
+
+export type TemporalSpec =
+  | {
+      kind: "none";
+      rawText?: string | null;
+    }
+  | {
+      kind: "relative_range";
+      unit: TimeRange["unit"];
+      value: number;
+      rawText?: string | null;
+    }
+  | {
+      kind: "absolute_range";
+      start: string;
+      end: string;
+      rawText?: string | null;
+    }
+  | {
+      kind: "point_in_time";
+      value: string;
+      rawText?: string | null;
+    };
+
+export interface CanonicalValueSpec {
+  field?: string;
+  operator: string;
+  userPhrase: string;
+  value: string | null;
+  resolved: boolean;
+}
+
+export interface CanonicalClarificationItem {
+  slot: ClarificationSlot;
+  reason: string;
+  question: string;
+  blocking: boolean;
+  confidence: number;
+  target?: string;
+}
+
+export interface ExecutionRequirements {
+  requiresPatientResolution: boolean;
+  requiredBindings: string[];
+  allowSqlGeneration: boolean;
+  blockReason?: string;
+}
+
+export interface CanonicalQuerySemantics {
+  version: typeof CANONICAL_QUERY_SEMANTICS_VERSION;
+  queryShape: CanonicalQueryShape;
+  analyticIntent: IntentType;
+  measureSpec: MeasureSpec;
+  subjectRefs: SubjectRef[];
+  temporalSpec: TemporalSpec;
+  valueSpecs: CanonicalValueSpec[];
+  clarificationPlan: CanonicalClarificationItem[];
+  executionRequirements: ExecutionRequirements;
+}
+
 /**
  * Result from intent classification (Step 1)
  * Extracted from natural language question using LLM
@@ -269,6 +376,7 @@ export interface ContextBundle {
   customerId: string;
   question: string;
   intent: IntentClassificationResult;
+  canonicalSemantics?: CanonicalQuerySemantics;
   forms: FormInContext[];
   assessmentTypes?: AssessmentTypeInContext[]; // Phase 5A: Assessment-level context
   terminology: TerminologyMapping[];
@@ -286,6 +394,7 @@ export interface ContextBundleMetadata {
   durationMs: number;
   version: string; // API version (e.g., "1.0")
   filterMetrics?: FilterMetricsSummary;
+  canonicalSemanticsVersion?: string;
 }
 
 /**

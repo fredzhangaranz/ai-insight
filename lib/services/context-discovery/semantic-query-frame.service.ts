@@ -1,5 +1,6 @@
 import type {
   AggregatePredicate,
+  CanonicalQuerySemantics,
   ClarificationNeed,
   EntityReference,
   IntentClassificationResult,
@@ -199,6 +200,7 @@ function inferEntityRefs(question: string, scope: SemanticScope): EntityReferenc
   const patterns = [
     /\bpatient\s+([A-Za-z][a-zA-Z'-]+(?:\s+[A-Za-z][a-zA-Z'-]+)+)\b/i,
     /\bfor\s+([A-Za-z][a-zA-Z'-]+(?:\s+[A-Za-z][a-zA-Z'-]+)+)\b/i,
+    /\bdoes\s+([A-Za-z][a-zA-Z'-]+\s+[A-Za-z][a-zA-Z'-]+(?:\s+[A-Za-z][a-zA-Z'-]+)*)\s+(?:have|has|had|is|was|were|get|need|own)\b/i,
     /\bpatient\s*(?:id|number|mrn|domain id)\s*[:#-]?\s*([A-Za-z0-9_-]{3,})\b/i,
   ];
 
@@ -606,4 +608,84 @@ export function deriveSemanticQueryFrame(
 
   frame.clarificationNeeds = buildClarificationNeeds(frame);
   return frame;
+}
+
+export function projectSemanticQueryFrameFromCanonicalSemantics(
+  semantics: CanonicalQuerySemantics,
+  fallbackIntent: IntentClassificationResult
+): SemanticQueryFrame {
+  return {
+    scope: {
+      value:
+        semantics.queryShape === "individual_subject"
+          ? "individual_patient"
+          : semantics.queryShape === "cohort" ||
+              semantics.queryShape === "comparison"
+            ? "patient_cohort"
+            : "aggregate",
+      confidence: 0.98,
+      source: "fallback",
+    },
+    subject: {
+      value: semantics.measureSpec.subject,
+      confidence: 0.98,
+      source: "fallback",
+    },
+    measure: {
+      value: semantics.measureSpec.metrics[0] || null,
+      confidence: 0.98,
+      source: "fallback",
+    },
+    grain: {
+      value: semantics.measureSpec.grain,
+      confidence: 0.98,
+      source: "fallback",
+    },
+    groupBy: {
+      value: [...semantics.measureSpec.groupBy],
+      confidence: 0.98,
+      source: "fallback",
+    },
+    filters: semantics.valueSpecs.map((spec) => ({
+      field: spec.field,
+      operator: spec.operator,
+      userPhrase: spec.userPhrase,
+      value: spec.value,
+    })),
+    aggregatePredicates: [...semantics.measureSpec.aggregatePredicates],
+    timeRange:
+      semantics.temporalSpec.kind === "relative_range"
+        ? {
+            unit: semantics.temporalSpec.unit,
+            value: semantics.temporalSpec.value,
+          }
+        : fallbackIntent.timeRange,
+    presentation: {
+      value: semantics.measureSpec.presentationIntent,
+      confidence: 0.98,
+      source: "fallback",
+    },
+    preferredVisualization: {
+      value: semantics.measureSpec.preferredVisualization,
+      confidence: 0.98,
+      source: "fallback",
+    },
+    entityRefs: semantics.subjectRefs.map((ref) => ({
+      type: ref.entityType === "assessment_type" ? "assessment_type" : ref.entityType,
+      text: ref.mentionText,
+      confidence: ref.confidence,
+      explicit: ref.explicit,
+    })),
+    clarificationNeeds: semantics.clarificationPlan.map((item) => ({
+      slot: item.slot,
+      reason: item.reason,
+      question: item.question,
+      confidence: item.confidence,
+      target: item.target,
+    })),
+    confidence: average([
+      0.98,
+      semantics.subjectRefs.length > 0 ? 0.98 : fallbackIntent.confidence,
+    ]),
+  };
 }

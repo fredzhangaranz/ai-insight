@@ -353,6 +353,11 @@ export function AssistantMessage({
   const loadingText = isFollowUp
     ? "AI is analyzing your follow-up..."
     : "AI is composing your insights...";
+  const displayContent =
+    message.content ||
+    (!isLoading && message.result?.error
+      ? `I encountered an error: ${message.result.error.message}`
+      : "");
   const thinkingSteps = (message.result?.thinking ?? []) as ThinkingStep[];
   const hasThinking = thinkingSteps.length > 0;
   const thinkingCollapsed = shouldCollapseThinkingStream({
@@ -475,7 +480,9 @@ export function AssistantMessage({
                 </div>
               ) : (
                 <>
-                  <p className="text-gray-800">{message.content}</p>
+                  {displayContent ? (
+                    <p className="text-gray-800">{displayContent}</p>
+                  ) : null}
                   <span className="text-xs text-gray-400 mt-1 block">
                     {formatDistanceToNow(new Date(message.createdAt), {
                       addSuffix: true,

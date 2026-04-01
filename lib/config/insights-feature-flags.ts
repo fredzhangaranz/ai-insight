@@ -12,9 +12,15 @@ export interface InsightsFeatureFlags {
   followUpReliability: boolean;
   clarificationPipelineV2: boolean;
   clarificationPipelineV2Shadow: boolean;
+  canonicalQuerySemanticsV1: boolean;
 }
 
 export function getInsightsFeatureFlags(): InsightsFeatureFlags {
+  const canonicalQuerySemanticsV1 =
+    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 !== undefined
+      ? envFlag("INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1")
+      : process.env.NODE_ENV !== "production";
+
   return {
     patientEntityResolution: envFlag("INSIGHTS_PATIENT_ENTITY_RESOLUTION"),
     promptPhiSanitization: envFlag("INSIGHTS_PROMPT_PHI_SANITIZATION"),
@@ -25,5 +31,6 @@ export function getInsightsFeatureFlags(): InsightsFeatureFlags {
     clarificationPipelineV2Shadow: envFlag(
       "INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW"
     ),
+    canonicalQuerySemanticsV1,
   };
 }

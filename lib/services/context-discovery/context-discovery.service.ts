@@ -20,11 +20,13 @@ import { createHash, randomUUID } from "crypto";
 import type { Pool } from "pg";
 import { getInsightGenDbPool } from "@/lib/db";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
+import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { getIntentClassifierService } from "./intent-classifier.service";
 import { getSemanticSearcherService } from "./semantic-searcher.service";
 import { getTerminologyMapperService } from "./terminology-mapper.service";
 import { getJoinPathPlannerService } from "./join-path-planner.service";
 import { getContextAssemblerService } from "./context-assembler.service";
+import { getQuerySemanticsExtractorService } from "./query-semantics-extractor.service";
 import {
   ConceptSource,
   ExpandedConceptBuilder,
@@ -179,6 +181,7 @@ export class ContextDiscoveryService {
       // Step 1: Intent Classification
       logger.startTimer("step1");
       const intentResult = await this.runIntentClassification(request, logger);
+      const featureFlags = getInsightsFeatureFlags();
       const intentDuration = logger.endTimer(
         "step1",
         "context_discovery",
@@ -244,6 +247,16 @@ export class ContextDiscoveryService {
           `✅ Filter Value Mapping: ${successfulMappings}/${mappedFilters.length} filters successfully mapped`
         );
       }
+
+      const canonicalSemantics = featureFlags.canonicalQuerySemanticsV1
+        ? await getQuerySemanticsExtractorService().extract({
+            customerId: request.customerId,
+            question: request.question,
+            intent: intentResult,
+            modelId: request.modelId,
+            signal: request.signal,
+          })
+        : undefined;
 
       // Step 2, 3 & 5A: Semantic Search + Terminology Mapping + Assessment Type Search (PARALLEL EXECUTION)
       // These steps all depend on intentResult but are independent of each other
@@ -366,12 +379,18 @@ export class ContextDiscoveryService {
         customerId: request.customerId,
         question: request.question,
         intent: intentResult,
+        canonicalSemantics,
         forms,
         assessmentTypes: assessmentTypes.length > 0 ? assessmentTypes : undefined, // Phase 5A
         terminology,
         joinPaths,
         discoveryRunId,
         durationMs: 0, // Will be set below
+        metadataOverrides: canonicalSemantics
+          ? {
+              canonicalSemanticsVersion: canonicalSemantics.version,
+            }
+          : undefined,
       });
       const totalDuration = Date.now() - startTimestamp;
       bundle.metadata.durationMs = totalDuration;

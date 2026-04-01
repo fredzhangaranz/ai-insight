@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { validateAndFixQuery } from "@/lib/services/semantic/customer-query.service";
+import {
+  extractQueryRowsAndColumns,
+  validateAndFixQuery,
+} from "@/lib/services/semantic/customer-query.service";
 
 describe("validateAndFixQuery - Schema Prefix Fix", () => {
   it("should add rpt. prefix to Assessment table name in FROM clause", () => {
@@ -126,5 +129,51 @@ describe("validateAndFixQuery - Schema Prefix Fix", () => {
     expect(result).toContain("measurementValue AS Measurement");
     expect(result).not.toContain("AS rpt.Wound");
     expect(result).not.toContain("AS rpt.Measurement");
+  });
+});
+
+describe("extractQueryRowsAndColumns", () => {
+  it("prefers the primary recordset when it has rows", () => {
+    const result = {
+      recordset: [{ count: 3 }],
+      recordsets: [[{ count: 3 }]],
+    };
+
+    const extracted = extractQueryRowsAndColumns(result);
+
+    expect(extracted.rows).toEqual([{ count: 3 }]);
+    expect(extracted.columns).toEqual(["count"]);
+  });
+
+  it("falls back to later non-empty recordset for multi-statement batches", () => {
+    const emptyFirst: any[] = [];
+    const aggregateSecond: any[] = [{ patient_count: 3 }];
+    (emptyFirst as any).columns = {};
+    (aggregateSecond as any).columns = { patient_count: {} };
+
+    const result = {
+      recordset: emptyFirst,
+      recordsets: [emptyFirst, aggregateSecond],
+    };
+
+    const extracted = extractQueryRowsAndColumns(result);
+
+    expect(extracted.rows).toEqual([{ patient_count: 3 }]);
+    expect(extracted.columns).toEqual(["patient_count"]);
+  });
+
+  it("returns column metadata from selected empty recordset", () => {
+    const emptySelected: any[] = [];
+    (emptySelected as any).columns = { patient_count: {} };
+
+    const result = {
+      recordset: emptySelected,
+      recordsets: [emptySelected],
+    };
+
+    const extracted = extractQueryRowsAndColumns(result);
+
+    expect(extracted.rows).toEqual([]);
+    expect(extracted.columns).toEqual(["patient_count"]);
   });
 });

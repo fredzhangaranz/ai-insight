@@ -8,6 +8,8 @@ import type {
 import type { FieldAssumption } from "@/lib/services/semantic/sql-generator.types";
 import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
+import type { CanonicalQuerySemantics } from "@/lib/services/context-discovery/types";
+import { serializeResolvedEntitiesForPersistence } from "@/lib/utils/resolved-entities-persistence";
 
 export interface ThinkingStep {
   id: string;
@@ -140,20 +142,26 @@ export interface InsightResult {
   artifacts?: InsightArtifact[];
   resolvedEntities?: ResolvedEntitySummary[];
   boundParameters?: Record<string, string | number | boolean | null>;
+  canonicalSemantics?: CanonicalQuerySemantics;
+  queryHistoryId?: number;
 }
 
 type AnalysisStatus = "idle" | "running" | "completed" | "canceled" | "error";
 
 function buildHistorySemanticContext(result: InsightResult | any) {
+  const persistedResolved = serializeResolvedEntitiesForPersistence(
+    result?.resolvedEntities as ResolvedEntitySummary[] | undefined
+  );
   return {
     ...(result?.context || {}),
     originalQuestion: result?.question || null,
+    canonicalSemantics: result?.canonicalSemantics || result?.context?.canonicalSemantics || null,
+    canonicalSemanticsVersion:
+      result?.canonicalSemantics?.version ||
+      result?.context?.canonicalSemanticsVersion ||
+      null,
     resolvedEntities:
-      result?.resolvedEntities?.map((entity: any) => ({
-        kind: entity.kind,
-        opaqueRef: entity.opaqueRef,
-        matchType: entity.matchType,
-      })) || null,
+      persistedResolved.length > 0 ? persistedResolved : null,
     boundParameters: result?.boundParameters || null,
     boundParameterNames: Object.keys(result?.boundParameters || {}),
   };
@@ -445,7 +453,7 @@ export function useInsights() {
 
       // Auto-save successful query to history (best effort)
       try {
-        await fetch("/api/insights/history", {
+        const historyResponse = await fetch("/api/insights/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -458,6 +466,25 @@ export function useInsights() {
             sqlValidation: data.sqlValidation || null,
           }),
         });
+        if (historyResponse.ok) {
+          const historyPayload = await historyResponse.json().catch(() => null);
+          const queryHistoryId =
+            typeof historyPayload?.id === "number"
+              ? historyPayload.id
+              : typeof historyPayload?.id === "string"
+                ? Number(historyPayload.id)
+                : NaN;
+          if (Number.isFinite(queryHistoryId)) {
+            setResult((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    queryHistoryId,
+                  }
+                : prev
+            );
+          }
+        }
       } catch (historyError) {
         console.warn("Failed to save to query history:", historyError);
       }
@@ -574,7 +601,7 @@ export function useInsights() {
 
       // Auto-save successful query to history (skip if error)
       try {
-        await fetch("/api/insights/history", {
+        const historyResponse = await fetch("/api/insights/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -588,6 +615,25 @@ export function useInsights() {
             clarificationAuditIds,
           }),
         });
+        if (historyResponse.ok) {
+          const historyPayload = await historyResponse.json().catch(() => null);
+          const queryHistoryId =
+            typeof historyPayload?.id === "number"
+              ? historyPayload.id
+              : typeof historyPayload?.id === "string"
+                ? Number(historyPayload.id)
+                : NaN;
+          if (Number.isFinite(queryHistoryId)) {
+            setResult((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    queryHistoryId,
+                  }
+                : prev
+            );
+          }
+        }
       } catch (historyError) {
         console.warn("Failed to save to query history:", historyError);
       }
