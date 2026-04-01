@@ -149,11 +149,18 @@ JSON shape:
   }],
   "clarificationPlan": [{
     "slot": "scope|subject|measure|grain|groupBy|timeRange|assessmentType|aggregatePredicate|entityRef|valueFilter",
+    "reasonCode": "missing_entity|ambiguous_field|ambiguous_value|missing_time_range|missing_measure|missing_grain|missing_assessment_type|unsafe_to_execute",
     "reason": "...",
-    "question": "...",
     "blocking": true,
     "confidence": 0.0,
-    "target": "..."
+    "target": "...",
+    "evidence": {
+      "userPhrase": "...",
+      "matchedConcepts": ["..."],
+      "matchedFields": ["..."],
+      "matchedValues": ["..."],
+      "threadReference": false
+    }
   }],
   "executionRequirements": {
     "requiresPatientResolution": true,
@@ -321,20 +328,30 @@ function normalizeValueSpecs(value: unknown): CanonicalValueSpec[] {
             ? (entry.value as string | null)
             : null,
         resolved: entry.resolved === true,
-      } satisfies CanonicalValueSpec;
+      } as CanonicalValueSpec;
     })
-    .filter((entry): entry is CanonicalValueSpec => Boolean(entry));
+    .filter(Boolean) as CanonicalValueSpec[];
 }
 
 function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[] {
   if (!Array.isArray(value)) return [];
+  const reasonCodes: CanonicalClarificationItem["reasonCode"][] = [
+    "missing_entity",
+    "ambiguous_field",
+    "ambiguous_value",
+    "missing_time_range",
+    "missing_measure",
+    "missing_grain",
+    "missing_assessment_type",
+    "unsafe_to_execute",
+  ];
   return value
     .map((entry) => {
       if (!isObject(entry)) return null;
       if (
         !CLARIFICATION_SLOTS.includes(entry.slot as ClarificationSlot) ||
         typeof entry.reason !== "string" ||
-        typeof entry.question !== "string" ||
+        !reasonCodes.includes(entry.reasonCode as CanonicalClarificationItem["reasonCode"]) ||
         typeof entry.blocking !== "boolean"
       ) {
         return null;
@@ -342,14 +359,39 @@ function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[
 
       return {
         slot: entry.slot as CanonicalClarificationItem["slot"],
+        reasonCode: entry.reasonCode as CanonicalClarificationItem["reasonCode"],
         reason: entry.reason,
-        question: entry.question,
+        question: typeof entry.question === "string" ? entry.question : undefined,
         blocking: entry.blocking,
         confidence: clampConfidence(entry.confidence),
         target: typeof entry.target === "string" ? entry.target : undefined,
-      } satisfies CanonicalClarificationItem;
+        evidence: isObject(entry.evidence)
+          ? {
+              userPhrase:
+                typeof entry.evidence.userPhrase === "string"
+                  ? entry.evidence.userPhrase
+                  : undefined,
+              matchedConcepts: Array.isArray(entry.evidence.matchedConcepts)
+                ? entry.evidence.matchedConcepts.filter(
+                    (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+              matchedFields: Array.isArray(entry.evidence.matchedFields)
+                ? entry.evidence.matchedFields.filter(
+                    (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+              matchedValues: Array.isArray(entry.evidence.matchedValues)
+                ? entry.evidence.matchedValues.filter(
+                    (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+              threadReference: entry.evidence.threadReference === true,
+            }
+          : undefined,
+      } as CanonicalClarificationItem;
     })
-    .filter((entry): entry is CanonicalClarificationItem => Boolean(entry));
+    .filter(Boolean) as CanonicalClarificationItem[];
 }
 
 function normalizeExecutionRequirements(value: unknown): ExecutionRequirements {

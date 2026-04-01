@@ -139,6 +139,18 @@ export function deriveCanonicalQuerySemanticsFallback(
     frame?.clarificationNeeds || []
   ).map((need) => ({
     slot: need.slot,
+    reasonCode:
+      need.slot === "measure"
+        ? "missing_measure"
+        : need.slot === "grain" || need.slot === "groupBy"
+          ? "missing_grain"
+          : need.slot === "timeRange"
+            ? "missing_time_range"
+            : need.slot === "assessmentType"
+              ? "missing_assessment_type"
+              : need.slot === "entityRef"
+                ? "missing_entity"
+                : "ambiguous_value",
     reason: need.reason,
     question: need.question,
     blocking: true,
