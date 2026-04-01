@@ -366,7 +366,7 @@ Generated clarification response:
 - GROUP BY CASE(...) ... ORDER BY table.column — Direct column reference when using CASE grouping
 - GROUP BY column ... ORDER BY different_column — ORDER BY column must be in GROUP BY
 - COUNT(MAX(column)) — Nested aggregates are invalid
-- GROUP BY with windowed median: `PERCENTILE_CONT(...) WITHIN GROUP (...) OVER (PARTITION BY x)` + `GROUP BY x`
+- GROUP BY with windowed median: \`PERCENTILE_CONT(...) WITHIN GROUP (...) OVER (PARTITION BY x)\` + \`GROUP BY x\`
 
 ### ✅ Correct Pattern for Median by Group (SQL Server):
 - Use windowed percentile + DISTINCT, not GROUP BY
