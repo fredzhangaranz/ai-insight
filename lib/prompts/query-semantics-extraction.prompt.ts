@@ -319,7 +319,7 @@ function normalizeValueSpecs(value: unknown): CanonicalValueSpec[] {
         return null;
       }
 
-      return {
+      const spec: CanonicalValueSpec = {
         field: typeof entry.field === "string" ? entry.field : undefined,
         operator: entry.operator,
         userPhrase: entry.userPhrase,
@@ -348,8 +348,15 @@ function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[
   return value
     .map((entry) => {
       if (!isObject(entry)) return null;
+      const slot = entry.slot as ClarificationSlot;
+      const reasonCode = reasonCodes.includes(
+        entry.reasonCode as CanonicalClarificationItem["reasonCode"]
+      )
+        ? (entry.reasonCode as CanonicalClarificationItem["reasonCode"])
+        : defaultReasonCodeBySlot[slot] || "ambiguous_value";
+
       if (
-        !CLARIFICATION_SLOTS.includes(entry.slot as ClarificationSlot) ||
+        !CLARIFICATION_SLOTS.includes(slot) ||
         typeof entry.reason !== "string" ||
         !reasonCodes.includes(entry.reasonCode as CanonicalClarificationItem["reasonCode"]) ||
         typeof entry.blocking !== "boolean"

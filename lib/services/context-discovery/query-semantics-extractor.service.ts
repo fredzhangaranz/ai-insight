@@ -135,6 +135,18 @@ export function deriveCanonicalQuerySemanticsFallback(
     return normalized;
   });
 
+  const reasonCodeBySlot: Partial<
+    Record<CanonicalClarificationItem["slot"], CanonicalClarificationItem["reasonCode"]>
+  > = {
+    measure: "missing_measure",
+    grain: "missing_grain",
+    groupBy: "missing_grain",
+    timeRange: "missing_time_range",
+    assessmentType: "missing_assessment_type",
+    entityRef: "missing_entity",
+    valueFilter: "ambiguous_value",
+  };
+
   const clarificationPlan: CanonicalClarificationItem[] = (
     frame?.clarificationNeeds || []
   ).map((need) => ({
