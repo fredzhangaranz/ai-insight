@@ -713,6 +713,102 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
+  it("returns grounded canonical clarification options instead of freeform-only fallback", async () => {
+    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
+    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+
+    classifyIntentMock.mockResolvedValue({
+      type: "operational_metrics",
+      scope: "aggregate",
+      metrics: ["patient_count"],
+      filters: [],
+      confidence: 0.9,
+      reasoning: "Count patients with male filter",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "aggregate",
+      analyticIntent: "operational_metrics",
+      measureSpec: {
+        metrics: ["patient_count"],
+        subject: "patient",
+        grain: "total",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: "table",
+        preferredVisualization: "table",
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [
+        {
+          slot: "valueFilter",
+          reasonCode: "ambiguous_value",
+          reason: "Gender field is ambiguous",
+          question: "Which gender field should be used for male patients?",
+          blocking: true,
+          confidence: 0.9,
+          target: "gender",
+          evidence: {
+            userPhrase: "male",
+            matchedFields: ["Gender", "Sex"],
+            matchedValues: ["Male"],
+          },
+        },
+      ],
+      executionRequirements: {
+        requiresPatientResolution: false,
+        requiredBindings: [],
+        allowSqlGeneration: false,
+        blockReason: "Ambiguous value filter",
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi.fn(),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "how many male patients",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const payload = await res.json();
+    expect(payload.message.result.mode).toBe("clarification");
+    expect(payload.message.result.clarifications[0].options?.length).toBeGreaterThan(0);
+    expect(provider.completeWithConversation).not.toHaveBeenCalled();
+  });
+
   it("reuses bound parameters from previous query history when completeWithConversation returns SQL with params", async () => {
     process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 

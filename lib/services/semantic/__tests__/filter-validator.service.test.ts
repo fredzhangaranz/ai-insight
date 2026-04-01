@@ -360,6 +360,10 @@ describe("FilterValidatorService", () => {
           }),
         })
       );
+      expect(mockPool.query).toHaveBeenCalledWith(
+        expect.any(String),
+        ["test-customer", "Gender"]
+      );
     });
   });
 });

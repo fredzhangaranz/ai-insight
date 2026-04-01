@@ -30,6 +30,7 @@ import type {
   ResultSummary,
 } from "@/lib/types/conversation";
 import type { InsightResult } from "@/lib/hooks/useInsights";
+import type { ClarificationRequest } from "@/lib/prompts/generate-query.prompt";
 import { normalizeJson } from "@/lib/utils/normalize-json";
 import { addResultToCache, trimContextCache } from "@/lib/services/context-cache.service";
 import {
@@ -49,7 +50,11 @@ import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.se
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
 import { getIntentClassifierService } from "@/lib/services/context-discovery/intent-classifier.service";
 import { getQuerySemanticsExtractorService } from "@/lib/services/context-discovery/query-semantics-extractor.service";
-import type { CanonicalQuerySemantics } from "@/lib/services/context-discovery/types";
+import type {
+  CanonicalQuerySemantics,
+  ContextBundle,
+  IntentClassificationResult,
+} from "@/lib/services/context-discovery/types";
 import type {
   InsightArtifact,
   ResolvedEntitySummary,
@@ -60,6 +65,10 @@ import {
   isAnaphoricPatientReferenceQuestion,
   mergeInheritedThreadPatientIntoCanonicalSemantics,
 } from "@/lib/utils/canonical-thread-patient-merge";
+import {
+  GroundedClarificationPlannerService,
+  type PlannerDecisionMetadata,
+} from "@/lib/services/semantic/grounded-clarification-planner.service";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -95,6 +104,7 @@ export async function POST(req: NextRequest) {
     const normalizedUserMessageId = userMessageIdParam || null;
     const featureFlags = getInsightsFeatureFlags();
     const patientResolver = new PatientEntityResolver();
+    const groundedClarificationPlanner = new GroundedClarificationPlannerService();
     const promptSanitizer = new PromptSanitizationService();
     const artifactPlanner = new ArtifactPlannerService();
     const resolvedModelId = String(modelId || "").trim() || DEFAULT_AI_MODEL_ID;
@@ -103,7 +113,10 @@ export async function POST(req: NextRequest) {
     let boundParameters: Record<string, string | number | boolean | null> | undefined;
     let resolvedEntities: ResolvedEntitySummary[] | undefined;
     let patientResolution: PatientResolutionResult | null = null;
+    let canonicalIntent: IntentClassificationResult | null = null;
     let canonicalSemantics: CanonicalQuerySemantics | undefined;
+    let plannerDecision: PlannerDecisionMetadata | undefined;
+    let groundedPlannerClarifications: ClarificationRequest[] = [];
 
     let inheritedThreadPatient:
       | {
@@ -118,7 +131,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (featureFlags.canonicalQuerySemanticsV1) {
-      const intent = await getIntentClassifierService().classifyIntent({
+      canonicalIntent = await getIntentClassifierService().classifyIntent({
         customerId: normalizedCustomerId,
         question: normalizedQuestion,
         modelId: resolvedModelId,
@@ -126,7 +139,7 @@ export async function POST(req: NextRequest) {
       canonicalSemantics = await getQuerySemanticsExtractorService().extract({
         customerId: normalizedCustomerId,
         question: normalizedQuestion,
-        intent,
+        intent: canonicalIntent,
         modelId: resolvedModelId,
       });
 
@@ -139,6 +152,26 @@ export async function POST(req: NextRequest) {
           canonicalSemantics,
           inheritedThreadPatient
         );
+      }
+
+      if (
+        canonicalSemantics &&
+        canonicalSemantics.executionRequirements.allowSqlGeneration === false
+      ) {
+        const plannerContext = buildCanonicalPlannerContext({
+          customerId: normalizedCustomerId,
+          question: normalizedQuestion,
+          intent: canonicalIntent,
+          canonicalSemantics,
+        });
+        const groundedPlan = groundedClarificationPlanner.plan({
+          question: normalizedQuestion,
+          context: plannerContext,
+          canonicalSemantics,
+        });
+        canonicalSemantics = groundedPlan.clarifiedSemantics;
+        plannerDecision = groundedPlan.decisionMetadata;
+        groundedPlannerClarifications = groundedPlan.clarifications;
       }
     }
 
@@ -165,12 +198,6 @@ export async function POST(req: NextRequest) {
           matchType: "full_name",
           matchedText: inh.displayLabel?.trim() || "",
         };
-      } else if (
-        featureFlags.canonicalQuerySemanticsV1 &&
-        canonicalSemantics?.executionRequirements.allowSqlGeneration === false &&
-        canonicalSemantics.clarificationPlan.some((item) => item.blocking)
-      ) {
-        patientResolution = { status: "no_candidate" };
       } else if (
         featureFlags.canonicalQuerySemanticsV1 &&
         canonicalSemantics?.executionRequirements.requiresPatientResolution
@@ -257,6 +284,9 @@ export async function POST(req: NextRequest) {
         patientResolution.matchType
       ) {
         boundParameters = { patientId1: patientResolution.resolvedId };
+        canonicalSemantics = clearResolvedPatientClarificationBlocks(
+          canonicalSemantics
+        );
 
         if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
           const sanitization = promptSanitizer.sanitize({
@@ -441,14 +471,20 @@ export async function POST(req: NextRequest) {
       throw new Error("User message could not be established");
     }
 
-    if (
-      canonicalSemantics?.executionRequirements.allowSqlGeneration === false &&
-      canonicalSemantics.clarificationPlan.some((item) => item.blocking)
-    ) {
-      const clarificationResult = buildCanonicalClarificationResult(
-        normalizedQuestion,
-        canonicalSemantics
-      );
+    if (canonicalSemantics?.executionRequirements.allowSqlGeneration === false) {
+      const clarificationResult =
+        groundedPlannerClarifications.length > 0
+          ? buildGroundedCanonicalClarificationResult(
+              normalizedQuestion,
+              canonicalSemantics,
+              groundedPlannerClarifications,
+              plannerDecision
+            )
+          : buildCanonicalClarificationResult(
+              normalizedQuestion,
+              canonicalSemantics,
+              plannerDecision
+            );
       const assistantMetadata: MessageMetadata = {
         modelUsed: resolvedModelId,
         mode: "clarification",
@@ -644,6 +680,7 @@ export async function POST(req: NextRequest) {
         originalQuestion: normalizedQuestion,
         canonicalSemantics: canonicalSemantics || null,
         canonicalSemanticsVersion: canonicalSemantics?.version || null,
+        clarificationPlannerDecision: plannerDecision || null,
       },
     };
 
@@ -784,6 +821,7 @@ export async function POST(req: NextRequest) {
         compositionFallbackReason: compositionDecision?.fallbackReason || null,
         canonicalSemantics: canonicalSemantics || null,
         canonicalSemanticsVersion: canonicalSemantics?.version || null,
+        clarificationPlannerDecision: plannerDecision || null,
         resolvedEntities:
           persistedResolvedEntities.length > 0
             ? persistedResolvedEntities
@@ -1731,6 +1769,43 @@ function getCanonicalPatientSubjectRef(
   );
 }
 
+function clearResolvedPatientClarificationBlocks(
+  canonicalSemantics?: CanonicalQuerySemantics
+): CanonicalQuerySemantics | undefined {
+  if (!canonicalSemantics) {
+    return canonicalSemantics;
+  }
+
+  const filteredPlan = canonicalSemantics.clarificationPlan.filter((item) => {
+    if (!item.blocking) {
+      return true;
+    }
+    if (item.slot !== "entityRef") {
+      return true;
+    }
+    if (item.target && item.target !== "patient") {
+      return true;
+    }
+    return false;
+  });
+
+  if (filteredPlan.length === canonicalSemantics.clarificationPlan.length) {
+    return canonicalSemantics;
+  }
+
+  const firstBlocking = filteredPlan.find((item) => item.blocking);
+  return {
+    ...canonicalSemantics,
+    clarificationPlan: filteredPlan,
+    executionRequirements: {
+      ...canonicalSemantics.executionRequirements,
+      requiresPatientResolution: false,
+      allowSqlGeneration: !firstBlocking,
+      blockReason: firstBlocking ? firstBlocking.reason : undefined,
+    },
+  };
+}
+
 function buildCanonicalSemanticsInstructions(
   canonicalSemantics?: CanonicalQuerySemantics
 ): string | undefined {
@@ -1784,32 +1859,169 @@ function joinTrustedInstructions(
   return joined || undefined;
 }
 
-function buildCanonicalClarificationResult(
+function buildCanonicalPlannerContext(input: {
+  customerId: string;
+  question: string;
+  intent: IntentClassificationResult | null;
+  canonicalSemantics: CanonicalQuerySemantics;
+}): ContextBundle {
+  const fallbackScope: IntentClassificationResult["scope"] =
+    input.canonicalSemantics.queryShape === "individual_subject"
+      ? "individual_patient"
+      : input.canonicalSemantics.queryShape === "cohort"
+        ? "patient_cohort"
+        : "aggregate";
+
+  const fallbackIntent: IntentClassificationResult = {
+    type: input.canonicalSemantics.analyticIntent,
+    scope: fallbackScope,
+    metrics: input.canonicalSemantics.measureSpec.metrics,
+    filters: [],
+    confidence: 0.8,
+    reasoning: "Fallback intent for grounded clarification planning",
+  };
+
+  return {
+    customerId: input.customerId,
+    question: input.question,
+    intent: input.intent || fallbackIntent,
+    canonicalSemantics: input.canonicalSemantics,
+    forms: [],
+    assessmentTypes: [],
+    terminology: [],
+    joinPaths: [],
+    overallConfidence: input.intent?.confidence || 0.8,
+    metadata: {
+      discoveryRunId: "conversation_send_planner",
+      timestamp: new Date().toISOString(),
+      durationMs: 0,
+      version: "conversation_send_planner_v1",
+      canonicalSemanticsVersion: input.canonicalSemantics.version,
+    },
+  };
+}
+
+function buildGroundedCanonicalClarificationResult(
   question: string,
-  canonicalSemantics: CanonicalQuerySemantics
+  canonicalSemantics: CanonicalQuerySemantics,
+  clarifications: ClarificationRequest[],
+  plannerDecision?: PlannerDecisionMetadata
 ): InsightResult {
+  const byReasonCode: Record<string, number> = {};
+  clarifications.forEach((clarification) => {
+    if (!clarification.reasonCode) {
+      return;
+    }
+    byReasonCode[clarification.reasonCode] =
+      (byReasonCode[clarification.reasonCode] || 0) + 1;
+  });
+
   return {
     mode: "clarification",
     question,
     thinking: [],
     requiresClarification: true,
-    clarifications: canonicalSemantics.clarificationPlan
-      .filter((item) => item.blocking)
-      .map((item, index) => ({
-        placeholder: `canonical_${item.slot}_${index + 1}`,
-        prompt: item.question,
-        freeformAllowed: {
-          allowed: true,
-          placeholder: "Other input",
-          hint: item.reason,
-          minChars: 1,
-          maxChars: 200,
-        },
+    clarifications: clarifications.map((clarification) => ({
+      placeholder: clarification.id,
+      prompt: clarification.question,
+      options: clarification.options.map((option) => ({
+        label: option.label,
+        value: option.submissionValue || option.sqlConstraint,
       })),
+      reason: clarification.reason,
+      semantic: clarification.slot,
+      freeformAllowed: clarification.allowCustom
+        ? {
+            allowed: true,
+            placeholder:
+              clarification.freeformPolicy?.placeholder || "Other input",
+            hint:
+              clarification.freeformPolicy?.hint ||
+              "Use this only if none of the suggested options fit.",
+            minChars: clarification.freeformPolicy?.minChars || 1,
+            maxChars: clarification.freeformPolicy?.maxChars || 200,
+          }
+        : {
+            allowed: false,
+          },
+    })),
+    clarificationTelemetry: {
+      requestedCount: clarifications.length,
+      bySource: {
+        grounded_clarification_planner: clarifications.length,
+      },
+      byReasonCode,
+      byTargetType: {},
+    },
     clarificationReasoning:
       canonicalSemantics.executionRequirements.blockReason ||
-      canonicalSemantics.clarificationPlan
-        .filter((item) => item.blocking)
+      "Additional clarification is needed before SQL generation.",
+    canonicalSemantics,
+    context: {
+      originalQuestion: question,
+      canonicalSemantics,
+      canonicalSemanticsVersion: canonicalSemantics.version,
+      clarificationPlannerDecision: plannerDecision || null,
+      clarificationSource: "grounded_clarification_planner",
+    },
+  };
+}
+
+function buildCanonicalClarificationResult(
+  question: string,
+  canonicalSemantics: CanonicalQuerySemantics,
+  plannerDecision?: PlannerDecisionMetadata
+): InsightResult {
+  const blockingItems = canonicalSemantics.clarificationPlan.filter(
+    (item) => item.blocking
+  );
+  const clarifications =
+    blockingItems.length > 0
+      ? blockingItems.map((item, index) => ({
+          placeholder: `canonical_${item.slot}_${index + 1}`,
+          prompt:
+            item.question || `Please clarify ${item.target || item.slot}.`,
+          freeformAllowed: {
+            allowed: true,
+            placeholder: "Other input",
+            hint: item.reason,
+            minChars: 1,
+            maxChars: 200,
+          },
+        }))
+      : [
+          {
+            placeholder: "canonical_block_reason",
+            prompt: "Please clarify your request before I run this query.",
+            freeformAllowed: {
+              allowed: true,
+              placeholder: "Other input",
+              hint:
+                canonicalSemantics.executionRequirements.blockReason ||
+                "The query needs clarification before safe execution.",
+              minChars: 1,
+              maxChars: 200,
+            },
+          },
+        ];
+
+  return {
+    mode: "clarification",
+    question,
+    thinking: [],
+    requiresClarification: true,
+    clarifications,
+    clarificationTelemetry: {
+      requestedCount: clarifications.length,
+      bySource: {
+        canonical_fallback: clarifications.length,
+      },
+      byReasonCode: {},
+      byTargetType: {},
+    },
+    clarificationReasoning:
+      canonicalSemantics.executionRequirements.blockReason ||
+      blockingItems
         .map((item) => item.reason)
         .join(" "),
     canonicalSemantics,
@@ -1817,6 +2029,8 @@ function buildCanonicalClarificationResult(
       originalQuestion: question,
       canonicalSemantics,
       canonicalSemanticsVersion: canonicalSemantics.version,
+      clarificationPlannerDecision: plannerDecision || null,
+      clarificationSource: "canonical_fallback",
     },
   };
 }

@@ -99,7 +99,7 @@ describe("GroundedClarificationPlannerService", () => {
     context.terminology.push({
       userTerm: "male",
       semanticConcept: "gender",
-      fieldName: "Gender",
+      fieldName: "Sex",
       fieldValue: "Male",
       source: "form_option",
       confidence: 0.84,
@@ -115,6 +115,177 @@ describe("GroundedClarificationPlannerService", () => {
     expect(result.clarifications[0]?.options.length).toBeGreaterThan(0);
     expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
       false
+    );
+    expect(result.decisionMetadata.optionizedCount).toBe(1);
+  });
+
+  it("auto-resolves dominant terminology mapping for female values", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const context = buildContext();
+    context.question = "how many female patients";
+    context.terminology = [
+      {
+        userTerm: "female",
+        semanticConcept: "gender",
+        fieldName: "Gender",
+        fieldValue: "Female",
+        source: "form_option",
+        confidence: 0.94,
+      },
+    ];
+    const semantics = buildSemantics();
+    semantics.clarificationPlan[0] = {
+      ...semantics.clarificationPlan[0],
+      evidence: {
+        userPhrase: "female",
+        matchedFields: ["Gender"],
+        matchedValues: ["Female"],
+      },
+    };
+
+    const result = planner.plan({
+      question: "how many female patients",
+      context,
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.clarifications).toEqual([]);
+    expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
+      true
+    );
+    expect(result.decisionMetadata.autoResolvedCount).toBe(1);
+  });
+
+  it("optionizes ambiguous gender field candidates from mapped filters", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const context = buildContext();
+    context.terminology = [];
+    context.intent.filters = [
+      {
+        userPhrase: "male",
+        operator: "=",
+        value: "Male",
+        candidateMatches: [
+          {
+            field: "Gender",
+            value: "Male",
+            confidence: 0.84,
+          },
+          {
+            field: "Sex",
+            value: "Male",
+            confidence: 0.82,
+          },
+        ],
+      } as any,
+    ];
+
+    const result = planner.plan({
+      question: "how many male patients",
+      context,
+      canonicalSemantics: buildSemantics(),
+    });
+
+    expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
+      false
+    );
+    expect(result.clarifications).toHaveLength(1);
+    expect(result.clarifications[0]?.options.length).toBeGreaterThanOrEqual(2);
+    expect(result.clarifications[0]?.options[0]?.label).toContain("Male");
+  });
+
+  it("falls back to freeform only when no grounded candidates exist", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const context = buildContext();
+    context.terminology = [];
+    context.intent.filters = [];
+    const semantics = buildSemantics();
+    semantics.clarificationPlan[0] = {
+      ...semantics.clarificationPlan[0],
+      evidence: {
+        userPhrase: "male",
+        matchedFields: [],
+        matchedValues: [],
+      },
+    };
+
+    const result = planner.plan({
+      question: "how many male patients",
+      context,
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.clarifications).toHaveLength(1);
+    expect(result.clarifications[0]?.options).toEqual([]);
+    expect(result.clarifications[0]?.allowCustom).toBe(true);
+    expect(result.clarifications[0]?.evidence?.clarificationSource).toBe(
+      "grounded_clarification_planner"
+    );
+    expect(result.decisionMetadata.freeformFallbackCount).toBe(1);
+  });
+
+  it("defers patient entity clarification to secure patient resolver", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const semantics = buildSemantics();
+    semantics.clarificationPlan = [
+      {
+        slot: "entityRef",
+        reasonCode: "missing_entity",
+        reason: "Patient reference needs secure resolution",
+        blocking: true,
+        confidence: 0.9,
+        target: "patient",
+      },
+    ];
+    semantics.subjectRefs = [
+      {
+        entityType: "patient",
+        mentionText: "Melody Crist",
+        referenceKind: "name",
+        status: "requires_resolution",
+        confidence: 0.9,
+        explicit: true,
+      },
+    ];
+    semantics.executionRequirements.requiresPatientResolution = true;
+    semantics.executionRequirements.requiredBindings = ["patientId1"];
+    semantics.executionRequirements.allowSqlGeneration = false;
+
+    const result = planner.plan({
+      question: "show me wound area chart for this patient",
+      context: buildContext(),
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.clarifications).toEqual([]);
+    expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
+      false
+    );
+    expect(
+      result.decisionMetadata.items.some(
+        (item) => item.slot === "entityRef" && item.mode === "deferred_to_resolver"
+      )
+    ).toBe(true);
+  });
+
+  it("keeps SQL blocked when clarification plan is empty and nothing was resolved", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const semantics = buildSemantics();
+    semantics.clarificationPlan = [];
+    semantics.executionRequirements.allowSqlGeneration = false;
+    semantics.executionRequirements.blockReason = "Unsafe or incomplete semantics";
+
+    const result = planner.plan({
+      question: "how many male patients",
+      context: buildContext(),
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.autoResolvedCount).toBe(0);
+    expect(result.clarifications).toEqual([]);
+    expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(false);
+    expect(result.clarifiedSemantics.executionRequirements.blockReason).toBe(
+      "Unsafe or incomplete semantics"
     );
   });
 });

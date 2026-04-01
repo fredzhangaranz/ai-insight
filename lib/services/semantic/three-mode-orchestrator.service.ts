@@ -91,7 +91,10 @@ import {
   getSemanticExecutionDiagnosticsService,
   type SemanticExecutionDiagnostics,
 } from "./semantic-execution-diagnostics.service";
-import { getGroundedClarificationPlannerService } from "./grounded-clarification-planner.service";
+import {
+  GroundedClarificationPlannerService,
+  type PlannerDecisionMetadata,
+} from "./grounded-clarification-planner.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -1153,6 +1156,7 @@ export class ThreeModeOrchestrator {
       featureFlags.clarificationPipelineV2Shadow;
     let resolvedEntities: ResolvedEntitySummary[] = [];
     let boundParameters: Record<string, string | number | boolean | null> | undefined;
+    let canonicalPlannerDecision: PlannerDecisionMetadata | undefined;
     let sanitizedQuestion = question;
     let trustedPromptLines: string[] | undefined;
 
@@ -1481,6 +1485,17 @@ export class ThreeModeOrchestrator {
         clarifications && Object.keys(clarifications).length > 0
       );
 
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        hasUserClarifications
+      ) {
+        context.canonicalSemantics = this.applyCanonicalClarificationResponses(
+          context.canonicalSemantics,
+          clarifications || {}
+        );
+      }
+
       if (semanticFrame && hasUserClarifications) {
         semanticFrame = this.applyFrameClarifications(semanticFrame, clarifications);
       }
@@ -1507,14 +1522,14 @@ export class ThreeModeOrchestrator {
       if (
         useCanonicalSemantics &&
         context.canonicalSemantics &&
-        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
-        !hasUserClarifications
+        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false
       ) {
         const groundedPlan = this.groundedClarificationPlanner.plan({
           question,
           context,
           canonicalSemantics: context.canonicalSemantics,
         });
+        canonicalPlannerDecision = groundedPlan.decisionMetadata;
         context.canonicalSemantics = groundedPlan.clarifiedSemantics;
 
         if (
@@ -1539,65 +1554,37 @@ export class ThreeModeOrchestrator {
             clarificationReasoning:
               context.canonicalSemantics.executionRequirements.blockReason ||
               "Additional clarification is needed before SQL generation.",
+            clarificationTelemetry: this.buildClarificationTelemetry(
+              groundedPlan.clarifications,
+              "grounded_clarification_planner"
+            ),
             context: {
               canonicalSemantics: context.canonicalSemantics,
               canonicalSemanticsVersion: context.canonicalSemantics.version,
+              clarificationPlannerDecision: canonicalPlannerDecision,
             },
             canonicalSemantics: context.canonicalSemantics,
           };
-        }
-
-      }
-
-      if (
-        useCanonicalSemantics &&
-        context.canonicalSemantics &&
-        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
-        !hasUserClarifications
-      ) {
-        const groundedPlanner = getGroundedClarificationPlannerService();
-        const groundedPlan = groundedPlanner.plan({
-          question,
-          context,
-          canonicalSemantics: context.canonicalSemantics,
-        });
-        context.canonicalSemantics = groundedPlan.clarifiedSemantics;
-
-        if (
-          context.canonicalSemantics.executionRequirements.allowSqlGeneration !== false
+        } else if (
+          this.shouldDeferCanonicalClarificationToPatientResolution(
+            context.canonicalSemantics
+          )
         ) {
-          console.log(
-            "[Orchestrator] ✅ Canonical ambiguity auto-resolved by grounded clarification planner",
-            { autoResolvedCount: groundedPlan.autoResolvedCount }
-          );
-        } else if (groundedPlan.clarifications.length > 0) {
-          contextDiscoveryStep.status = "complete";
-          contextDiscoveryStep.duration = Date.now() - discoveryStart;
-          contextDiscoveryStep.message = "Semantic clarification required";
-          return {
-            mode: "clarification",
-            question,
-            thinking,
-            requiresClarification: true,
-            clarifications: groundedPlan.clarifications,
-            clarificationReasoning:
-              context.canonicalSemantics.executionRequirements.blockReason ||
-              "Additional clarification is needed before SQL generation.",
-            context: {
-              canonicalSemantics: context.canonicalSemantics,
-              canonicalSemanticsVersion: context.canonicalSemantics.version,
-            },
-            canonicalSemantics: context.canonicalSemantics,
-          };
+          if (featureFlags.clarificationPipelineV2Shadow) {
+            console.log(
+              "[Orchestrator] ⏭️ Deferring canonical entity clarification to patient resolver"
+            );
+          }
         }
-
       }
 
       if (
         useCanonicalSemantics &&
         context.canonicalSemantics &&
         context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
-        !clarifications
+        !this.shouldDeferCanonicalClarificationToPatientResolution(
+          context.canonicalSemantics
+        )
       ) {
         contextDiscoveryStep.status = "complete";
         contextDiscoveryStep.duration = Date.now() - discoveryStart;
@@ -1605,7 +1592,8 @@ export class ThreeModeOrchestrator {
         return this.buildCanonicalClarificationResult(
           question,
           thinking,
-          context.canonicalSemantics
+          context.canonicalSemantics,
+          canonicalPlannerDecision
         );
       }
 
@@ -1678,6 +1666,9 @@ export class ThreeModeOrchestrator {
           boundParameters = {
             patientId1: patientResolution.resolvedId,
           };
+          context.canonicalSemantics = this.clearResolvedPatientClarificationBlocks(
+            context.canonicalSemantics
+          );
           patientStep.message = "Resolved patient securely";
 
           if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
@@ -2353,6 +2344,7 @@ export class ThreeModeOrchestrator {
           canonicalSemantics: context.canonicalSemantics || null,
           canonicalSemanticsVersion:
             context.canonicalSemantics?.version || null,
+          clarificationPlannerDecision: canonicalPlannerDecision || null,
           forms: context.forms?.map((f: any) => f.formName) || [],
           fields: context.forms?.flatMap((f: any) => f.fields?.map((field: any) => field.fieldName) || []) || [],
           joinPaths: context.joinPaths || [],
@@ -2656,38 +2648,146 @@ export class ThreeModeOrchestrator {
   private buildCanonicalClarificationResult(
     question: string,
     thinking: ThinkingStep[],
-    canonicalSemantics: CanonicalQuerySemantics
+    canonicalSemantics: CanonicalQuerySemantics,
+    plannerDecision?: PlannerDecisionMetadata
   ): OrchestrationResult {
+    const clarifications = canonicalSemantics.clarificationPlan
+      .filter((item) => item.blocking)
+      .map((item, index) => ({
+        id: `canonical_${item.slot}_${index}`,
+        ambiguousTerm: item.target || item.slot,
+        question:
+          item.question ||
+          `Please clarify ${item.target || item.slot} to continue.`,
+        options: [],
+        allowCustom: true,
+        slot: item.slot,
+        target: item.target,
+        reason: item.reason,
+        reasonCode: item.reasonCode,
+        evidence: {
+          clarificationSource: "canonical_fallback",
+          canonicalEvidence: item.evidence || null,
+        },
+      }));
+
     return {
       mode: "clarification",
       question,
       thinking,
       requiresClarification: true,
-      clarifications: canonicalSemantics.clarificationPlan
-        .filter((item) => item.blocking)
-        .map((item, index) => ({
-          id: `canonical_${item.slot}_${index}`,
-          ambiguousTerm: item.target || item.slot,
-          question:
-            item.question ||
-            `Please clarify ${item.target || item.slot} to continue.`,
-          options: [],
-          allowCustom: true,
-          slot: item.slot,
-          target: item.target,
-          reason: item.reason,
-        })),
+      clarifications,
       clarificationReasoning:
         canonicalSemantics.executionRequirements.blockReason ||
         canonicalSemantics.clarificationPlan
           .filter((item) => item.blocking)
           .map((item) => item.reason)
           .join(" "),
+      clarificationTelemetry: this.buildClarificationTelemetry(
+        clarifications,
+        "canonical_fallback"
+      ),
       context: {
         canonicalSemantics,
         canonicalSemanticsVersion: canonicalSemantics.version,
+        clarificationPlannerDecision: plannerDecision || null,
       },
       canonicalSemantics,
+    };
+  }
+
+  private applyCanonicalClarificationResponses(
+    canonicalSemantics: CanonicalQuerySemantics,
+    clarifications: Record<string, string>
+  ): CanonicalQuerySemantics {
+    const resolvedPlan = canonicalSemantics.clarificationPlan.map((item, index) => {
+      const groundedId = `grounded_${item.slot}_${index}`;
+      const canonicalId = `canonical_${item.slot}_${index}`;
+      const templateCanonicalId = `canonical_${item.slot}_${index + 1}`;
+      const selection =
+        clarifications[groundedId] ??
+        clarifications[canonicalId] ??
+        clarifications[templateCanonicalId];
+
+      if (!selection || !selection.trim()) {
+        return item;
+      }
+
+      return {
+        ...item,
+        blocking: false,
+      };
+    });
+
+    const stillBlocking = resolvedPlan.some((item) => item.blocking);
+
+    return {
+      ...canonicalSemantics,
+      clarificationPlan: resolvedPlan,
+      executionRequirements: {
+        ...canonicalSemantics.executionRequirements,
+        allowSqlGeneration: !stillBlocking,
+        blockReason: stillBlocking
+          ? canonicalSemantics.executionRequirements.blockReason
+          : undefined,
+      },
+    };
+  }
+
+  private shouldDeferCanonicalClarificationToPatientResolution(
+    canonicalSemantics?: CanonicalQuerySemantics
+  ): boolean {
+    if (
+      !canonicalSemantics ||
+      !this.shouldUseCanonicalPatientResolution(canonicalSemantics)
+    ) {
+      return false;
+    }
+
+    const blockingItems = canonicalSemantics.clarificationPlan.filter(
+      (item) => item.blocking
+    );
+
+    return (
+      blockingItems.length > 0 &&
+      blockingItems.every((item) => item.slot === "entityRef")
+    );
+  }
+
+  private clearResolvedPatientClarificationBlocks(
+    canonicalSemantics?: CanonicalQuerySemantics
+  ): CanonicalQuerySemantics | undefined {
+    if (!canonicalSemantics) {
+      return canonicalSemantics;
+    }
+
+    const filteredPlan = canonicalSemantics.clarificationPlan.filter((item) => {
+      if (!item.blocking) {
+        return true;
+      }
+      if (item.slot !== "entityRef") {
+        return true;
+      }
+      if (item.target && item.target !== "patient") {
+        return true;
+      }
+      return false;
+    });
+
+    if (filteredPlan.length === canonicalSemantics.clarificationPlan.length) {
+      return canonicalSemantics;
+    }
+
+    const firstBlocking = filteredPlan.find((item) => item.blocking);
+    return {
+      ...canonicalSemantics,
+      clarificationPlan: filteredPlan,
+      executionRequirements: {
+        ...canonicalSemantics.executionRequirements,
+        requiresPatientResolution: false,
+        allowSqlGeneration: !firstBlocking,
+        blockReason: firstBlocking ? firstBlocking.reason : undefined,
+      },
     };
   }
 

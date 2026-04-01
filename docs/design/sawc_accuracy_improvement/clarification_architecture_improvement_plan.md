@@ -274,6 +274,23 @@ The planner should treat prior thread context as a candidate evidence source, no
 
 ## Refactor Stages
 
+## Current Implementation Snapshot (2026-04-01)
+
+What is already in code:
+
+- `GroundedClarificationPlannerService` exists and is wired in `ThreeModeOrchestrator`.
+- Canonical clarification items already carry structural fields (`reasonCode`, `evidence`) in shared types/prompt normalization.
+- The orchestrator now attempts grounded planning before one canonical fallback branch.
+- Follow-up thread-patient inheritance has been improved separately in conversation send flow.
+
+What is not complete yet:
+
+- Planner does not fully own final clarification UX across all routes.
+- Freeform-only fallback remains common for unresolved canonical items.
+- Grounded option synthesis is still narrow (mostly terminology for `valueFilter`, limited slot coverage).
+- Canonical fallback conversion (`buildCanonicalClarificationResult(...)`) still exists and still returns empty options.
+- Telemetry and replay/debug coverage for planner decisions are incomplete.
+
 ## Stage 1: Clarification Ownership Split
 
 **Goal**: Separate ambiguity detection from final clarification UX generation.
@@ -294,7 +311,12 @@ The planner should treat prior thread context as a candidate evidence source, no
 - canonical semantics regression tests still validate ambiguity detection
 - new planner tests validate output shape and source attribution
 
-**Status**: Not Started
+**Status**: In Progress (Partial)
+
+**Progress notes**:
+
+- Implemented: planner service + orchestrator pre-fallback planner call in direct ask path.
+- Remaining: remove canonical direct-to-UI fallback as default path and enforce planner ownership in all ask/follow-up entry points.
 
 ## Stage 2: Grounded Option Synthesis
 
@@ -318,7 +340,12 @@ The planner should treat prior thread context as a candidate evidence source, no
 - measure/grain/assessment-type option tests
 - thread-patient follow-up tests
 
-**Status**: Not Started
+**Status**: In Progress (Partial)
+
+**Progress notes**:
+
+- Implemented: `valueFilter` grounding from terminology candidates and assessment-type option synthesis.
+- Remaining: broaden grounding for structural slots (`measure`, `grain`, `timeRange`, `entityRef`) and ensure canonical evidence consistently maps to candidate option generation.
 
 ## Stage 3: Auto-Resolution Policy
 
@@ -345,7 +372,12 @@ The planner should treat prior thread context as a candidate evidence source, no
 - common date ranges
 - exact assessment type references
 
-**Status**: Not Started
+**Status**: In Progress (Partial)
+
+**Progress notes**:
+
+- Implemented: dominant-candidate auto-resolution in planner for `valueFilter`.
+- Remaining: harden threshold policy per slot, guarantee obvious gender-value cases avoid clarification when one dominant mapping exists, and add end-to-end non-LLM-fragile regression tests.
 
 ## Stage 4: Canonical Clarification Evidence Enrichment
 
@@ -371,7 +403,12 @@ The planner should treat prior thread context as a candidate evidence source, no
 - planner evidence tests
 - replay/history metadata tests
 
-**Status**: Not Started
+**Status**: In Progress (Partial)
+
+**Progress notes**:
+
+- Implemented: canonical item shape supports `reasonCode` + `evidence`.
+- Remaining: persist full planner decision evidence (auto-resolved vs optionized vs freeform fallback) to history/audit and make replay/debug tooling consume it.
 
 ## Stage 5: Legacy Clarification Consolidation
 
@@ -393,6 +430,11 @@ The planner should treat prior thread context as a candidate evidence source, no
 - end-to-end clarification routing tests across ask, ask-with-clarifications, conversation send, replay
 
 **Status**: Not Started
+
+**Progress notes**:
+
+- Clarification ownership is still split between canonical fallback converters and grounded planners.
+- Consolidation work has not been completed across all routes.
 
 ## Acceptance Criteria
 
@@ -490,3 +532,26 @@ These should be segmented by:
 Do not keep extending `buildCanonicalClarificationResult(...)`.
 
 That path is the architectural problem. It should be demoted to a fallback only, then removed once the grounded planner fully owns clarification output.
+
+## Implementation TODOs (Next Execution Batch)
+
+1. [x] Route canonical blocking clarifications through planner first:
+   - `ask` and `ask-with-clarifications` path via `ThreeModeOrchestrator` planner-first canonical handling
+   - `conversation/send` path now applies grounded planner before canonical fallback conversion
+2. [x] Keep canonical converter as terminal fallback only and tag fallback source:
+   - canonical fallback now emits explicit `clarificationSource: canonical_fallback`
+   - fallback telemetry source is now separable from planner source
+3. [x] Expand planner slot coverage:
+   - `valueFilter` candidate synthesis improved (terminology + mapped filter candidates + canonical evidence)
+   - added slot handling for `measure`, `grain`, `timeRange`, `assessmentType`, `entityRef`
+4. [x] Add deterministic slot policy table:
+   - centralized policy config for per-slot auto-resolution thresholds and option limits
+5. [x] Add regression tests:
+   - planner tests cover dominant `male` and `female` auto-resolution, ambiguous gender optionization, and freeform-only fallback when no grounded candidates exist
+   - conversation send integration test verifies grounded options are returned instead of freeform-only canonical fallback
+6. [x] Persist planner decision metadata into context/audit surfaces:
+   - planner decision summary is attached in result/conversation semantic context (`clarificationPlannerDecision`)
+   - canonical fallback/planner source tagging is persisted for downstream analysis
+7. [~] Add dashboard/queries for planner/fallback rates:
+   - query pack added: `docs/design/sawc_accuracy_improvement/clarification_metrics_queries.sql`
+   - dashboard visualization wiring remains pending

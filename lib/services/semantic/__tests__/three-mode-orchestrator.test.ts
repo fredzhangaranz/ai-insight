@@ -1731,4 +1731,101 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
       expect(result.error?.message).toContain("domainId");
     });
   });
+
+  describe("Canonical Clarification Responses", () => {
+    it("applies canonical clarification responses so continue does not loop", async () => {
+      process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "Which wounds are not healing as expected?",
+        intent: {
+          type: "operational_metrics",
+          confidence: 0.9,
+          scope: "patient_cohort",
+          metrics: ["wound_count"],
+          filters: [],
+          reasoning: "Needs filter clarification",
+        },
+        canonicalSemantics: {
+          version: "v1",
+          queryShape: "cohort",
+          analyticIntent: "operational_metrics",
+          measureSpec: {
+            metrics: ["wound_count"],
+            subject: "wound",
+            grain: "total",
+            groupBy: [],
+            aggregatePredicates: [],
+            presentationIntent: "table",
+            preferredVisualization: "table",
+          },
+          subjectRefs: [],
+          temporalSpec: { kind: "none", rawText: null },
+          valueSpecs: [],
+          clarificationPlan: [
+            {
+              slot: "valueFilter",
+              reasonCode: "ambiguous_value",
+              reason: "Needs clarification",
+              blocking: true,
+              confidence: 0.91,
+              target: "healing status",
+              evidence: {
+                userPhrase: "not healing as expected",
+                matchedFields: ["Healing Status"],
+                matchedValues: ["impaired/delayed healing"],
+              },
+            },
+          ],
+          executionRequirements: {
+            requiresPatientResolution: false,
+            requiredBindings: [],
+            allowSqlGeneration: false,
+            blockReason: "ambiguous_value",
+          },
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.9,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "sql",
+          generatedSql: "SELECT COUNT(*) AS cnt FROM rpt.Wound",
+          explanation: "Count wounds",
+          confidence: 0.92,
+        } satisfies LLMSQLResponse)
+      );
+
+      const result = await orchestrator.askWithClarifications(
+        "Which wounds are not healing as expected?",
+        "cust-1",
+        {
+          grounded_valueFilter_0:
+            "impaired/delayed healing (clinical signs of infection)",
+        }
+      );
+
+      expect(result.mode).toBe("direct");
+      expect(result.requiresClarification).toBeUndefined();
+      expect(mockGenerateSQLWithLLM).toHaveBeenCalledTimes(1);
+    });
+  });
 });

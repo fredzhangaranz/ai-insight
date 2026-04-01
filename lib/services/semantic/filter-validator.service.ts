@@ -294,11 +294,7 @@ export class FilterValidatorService {
           LIMIT 10
         `;
 
-        const result = await pool.query(query, [
-          customer,
-          filter.field,
-          filter.value,
-        ]);
+        const result = await pool.query(query, [customer, filter.field]);
 
         if (result.rows.length === 0) {
           continue;
