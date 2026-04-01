@@ -94,6 +94,22 @@ const CLARIFICATION_SLOTS: ClarificationSlot[] = [
   "valueFilter",
 ];
 
+const defaultReasonCodeBySlot: Record<
+  ClarificationSlot,
+  CanonicalClarificationItem["reasonCode"]
+> = {
+  scope: "unsafe_to_execute",
+  subject: "unsafe_to_execute",
+  measure: "missing_measure",
+  grain: "missing_grain",
+  groupBy: "missing_grain",
+  timeRange: "missing_time_range",
+  assessmentType: "missing_assessment_type",
+  aggregatePredicate: "unsafe_to_execute",
+  entityRef: "missing_entity",
+  valueFilter: "ambiguous_value",
+};
+
 export const QUERY_SEMANTICS_EXTRACTION_SYSTEM_PROMPT = `You are an expert healthcare analytics query semantic extractor.
 
 Your job is to transform a natural-language analytics question plus an already-classified analytic intent into one canonical query semantics contract.
@@ -358,7 +374,6 @@ function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[
       if (
         !CLARIFICATION_SLOTS.includes(slot) ||
         typeof entry.reason !== "string" ||
-        !reasonCodes.includes(entry.reasonCode as CanonicalClarificationItem["reasonCode"]) ||
         typeof entry.blocking !== "boolean"
       ) {
         return null;
@@ -366,7 +381,7 @@ function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[
 
       return {
         slot: entry.slot as CanonicalClarificationItem["slot"],
-        reasonCode: entry.reasonCode as CanonicalClarificationItem["reasonCode"],
+        reasonCode,
         reason: entry.reason,
         question: typeof entry.question === "string" ? entry.question : undefined,
         blocking: entry.blocking,

@@ -713,6 +713,90 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
+  it("returns grounded time-range options instead of temporalSpec freeform clarification", async () => {
+    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
+
+    classifyIntentMock.mockResolvedValue({
+      type: "trend_analysis",
+      scope: "individual_patient",
+      metrics: ["wound_area"],
+      filters: [],
+      confidence: 0.9,
+      reasoning: "Need a date range for charting",
+    });
+
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "trend",
+      analyticIntent: "trend_analysis",
+      measureSpec: {
+        metrics: ["wound_area"],
+        subject: "wound",
+        grain: "per_day",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: "chart",
+        preferredVisualization: "line",
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [
+        {
+          slot: "timeRange",
+          reasonCode: "missing_time_range",
+          reason: "Date range is missing for chart request",
+          blocking: true,
+          confidence: 0.8,
+          target: "temporalSpec",
+        },
+      ],
+      executionRequirements: {
+        requiresPatientResolution: false,
+        requiredBindings: [],
+        allowSqlGeneration: false,
+        blockReason: "Need date range",
+      },
+    });
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "show me wound area chart for Constance Bernier",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+    expect(payload.message.result.mode).toBe("clarification");
+    expect(payload.message.result.clarifications[0].prompt).toBe(
+      "What date range should I use?"
+    );
+    expect(payload.message.result.clarifications[0].options.length).toBeGreaterThan(0);
+  });
+
   it("reuses bound parameters from previous query history when completeWithConversation returns SQL with params", async () => {
     process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 

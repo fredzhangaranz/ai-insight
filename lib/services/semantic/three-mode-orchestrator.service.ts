@@ -78,7 +78,10 @@ import {
   projectSemanticQueryFrameFromCanonicalSemantics,
 } from "../context-discovery/semantic-query-frame.service";
 import { shouldResolvePatientLiterally } from "../patient-resolution-gate.service";
-import { extractPatientNameCandidateFromQuestion } from "../patient-entity-resolver.service";
+import {
+  extractPatientNameCandidateFromQuestion,
+  isLikelyPatientNameCandidate,
+} from "../patient-entity-resolver.service";
 import {
   applyStructuredFilterSelections,
   type ClarificationTelemetrySummary,
@@ -319,7 +322,7 @@ function getCanonicalPatientSubjectRef(
 
 export class ThreeModeOrchestrator {
   private readonly groundedClarificationPlanner =
-    new GroundedClarificationPlannerService();
+    getGroundedClarificationPlannerService();
   private contextDiscovery: ContextDiscoveryService;
   private templateInjector: TemplateInjectorService;
   private templateUsageLogger: TemplateUsageLoggerService;
@@ -1480,6 +1483,8 @@ export class ThreeModeOrchestrator {
       const hasUserClarifications = Boolean(
         clarifications && Object.keys(clarifications).length > 0
       );
+      const canonicalEntityOverride =
+        this.extractCanonicalEntityClarificationInput(clarifications);
 
       if (semanticFrame && hasUserClarifications) {
         semanticFrame = this.applyFrameClarifications(semanticFrame, clarifications);
@@ -1504,6 +1509,7 @@ export class ThreeModeOrchestrator {
         }
       }
 
+      let groundedCanonicalClarifications: ClarificationRequest[] | undefined;
       if (
         useCanonicalSemantics &&
         context.canonicalSemantics &&
@@ -1516,6 +1522,7 @@ export class ThreeModeOrchestrator {
           canonicalSemantics: context.canonicalSemantics,
         });
         context.canonicalSemantics = groundedPlan.clarifiedSemantics;
+        groundedCanonicalClarifications = groundedPlan.clarifications;
 
         if (
           context.canonicalSemantics.executionRequirements.allowSqlGeneration !== false
@@ -1539,6 +1546,10 @@ export class ThreeModeOrchestrator {
             clarificationReasoning:
               context.canonicalSemantics.executionRequirements.blockReason ||
               "Additional clarification is needed before SQL generation.",
+            clarificationTelemetry: this.buildClarificationTelemetry(
+              groundedPlan.clarifications,
+              "grounded_clarification_planner"
+            ),
             context: {
               canonicalSemantics: context.canonicalSemantics,
               canonicalSemanticsVersion: context.canonicalSemantics.version,
@@ -1553,36 +1564,29 @@ export class ThreeModeOrchestrator {
         useCanonicalSemantics &&
         context.canonicalSemantics &&
         context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
-        !hasUserClarifications
+        !clarifications &&
+        !(
+          featureFlags.patientEntityResolution &&
+          this.hasBlockingPatientEntityRef(context.canonicalSemantics)
+        )
       ) {
-        const groundedPlanner = getGroundedClarificationPlannerService();
-        const groundedPlan = groundedPlanner.plan({
-          question,
-          context,
-          canonicalSemantics: context.canonicalSemantics,
-        });
-        context.canonicalSemantics = groundedPlan.clarifiedSemantics;
-
-        if (
-          context.canonicalSemantics.executionRequirements.allowSqlGeneration !== false
-        ) {
-          console.log(
-            "[Orchestrator] ✅ Canonical ambiguity auto-resolved by grounded clarification planner",
-            { autoResolvedCount: groundedPlan.autoResolvedCount }
-          );
-        } else if (groundedPlan.clarifications.length > 0) {
-          contextDiscoveryStep.status = "complete";
-          contextDiscoveryStep.duration = Date.now() - discoveryStart;
-          contextDiscoveryStep.message = "Semantic clarification required";
+        contextDiscoveryStep.status = "complete";
+        contextDiscoveryStep.duration = Date.now() - discoveryStart;
+        contextDiscoveryStep.message = "Semantic clarification required";
+        if (groundedCanonicalClarifications && groundedCanonicalClarifications.length > 0) {
           return {
             mode: "clarification",
             question,
             thinking,
             requiresClarification: true,
-            clarifications: groundedPlan.clarifications,
+            clarifications: groundedCanonicalClarifications,
             clarificationReasoning:
               context.canonicalSemantics.executionRequirements.blockReason ||
               "Additional clarification is needed before SQL generation.",
+            clarificationTelemetry: this.buildClarificationTelemetry(
+              groundedCanonicalClarifications,
+              "grounded_clarification_planner"
+            ),
             context: {
               canonicalSemantics: context.canonicalSemantics,
               canonicalSemanticsVersion: context.canonicalSemantics.version,
@@ -1591,17 +1595,9 @@ export class ThreeModeOrchestrator {
           };
         }
 
-      }
-
-      if (
-        useCanonicalSemantics &&
-        context.canonicalSemantics &&
-        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
-        !clarifications
-      ) {
-        contextDiscoveryStep.status = "complete";
-        contextDiscoveryStep.duration = Date.now() - discoveryStart;
-        contextDiscoveryStep.message = "Semantic clarification required";
+        console.warn(
+          "[Orchestrator] Falling back to canonical clarification payload; grounded planner returned no clarifications"
+        );
         return this.buildCanonicalClarificationResult(
           question,
           thinking,
@@ -1614,7 +1610,9 @@ export class ThreeModeOrchestrator {
         context.canonicalSemantics &&
         featureFlags.patientEntityResolution &&
         resolvedEntities.length === 0 &&
-        this.shouldUseCanonicalPatientResolution(context.canonicalSemantics)
+        (this.shouldUseCanonicalPatientResolution(context.canonicalSemantics) ||
+          this.hasBlockingPatientEntityRef(context.canonicalSemantics) ||
+          Boolean(canonicalEntityOverride))
       ) {
         const patientStep: ThinkingStep = {
           id: "resolve_patient",
@@ -1624,6 +1622,17 @@ export class ThreeModeOrchestrator {
         thinking.push(patientStep);
 
         const patientRef = getCanonicalPatientSubjectRef(context.canonicalSemantics);
+        const extractedCandidate = extractPatientNameCandidateFromQuestion(question);
+        const subjectRefCandidate = this.isSpecificPatientResolverCandidate(
+          patientRef?.mentionText
+        )
+          ? patientRef?.mentionText
+          : undefined;
+        const candidateText =
+          clarifications?.patient_lookup_input ||
+          canonicalEntityOverride ||
+          extractedCandidate ||
+          subjectRefCandidate;
         const patientResolution = await this.patientResolver.resolve(
           question,
           customerId,
@@ -1634,8 +1643,8 @@ export class ThreeModeOrchestrator {
                 ? undefined
                 : clarifications?.patient_resolution_confirm,
             overrideLookup: clarifications?.patient_lookup_input,
-            candidateText: patientRef?.mentionText,
-            allowQuestionInference: false,
+            candidateText,
+            allowQuestionInference: !candidateText,
           }
         );
 
@@ -2658,6 +2667,15 @@ export class ThreeModeOrchestrator {
     thinking: ThinkingStep[],
     canonicalSemantics: CanonicalQuerySemantics
   ): OrchestrationResult {
+    const defaultPromptBySlot: Partial<Record<string, string>> = {
+      timeRange: "What date range should I use?",
+      measure: "Which metric should I analyze?",
+      grain: "How should results be grouped?",
+      groupBy: "How should results be grouped?",
+      assessmentType: "Which assessment type should I use?",
+      entityRef: "Which specific patient or entity should I use?",
+    };
+
     return {
       mode: "clarification",
       question,
@@ -2670,7 +2688,8 @@ export class ThreeModeOrchestrator {
           ambiguousTerm: item.target || item.slot,
           question:
             item.question ||
-            `Please clarify ${item.target || item.slot} to continue.`,
+            defaultPromptBySlot[item.slot] ||
+            `Please clarify ${(item.target || item.slot) === "temporalSpec" ? "date range" : item.target || item.slot} to continue.`,
           options: [],
           allowCustom: true,
           slot: item.slot,
@@ -2700,6 +2719,42 @@ export class ThreeModeOrchestrator {
     );
   }
 
+  private hasBlockingPatientEntityRef(
+    canonicalSemantics?: CanonicalQuerySemantics
+  ): boolean {
+    if (!canonicalSemantics) {
+      return false;
+    }
+
+    return canonicalSemantics.clarificationPlan.some(
+      (item) =>
+        item.blocking &&
+        item.slot === "entityRef" &&
+        (!item.target || item.target.toLowerCase() === "patient")
+    );
+  }
+
+  private extractCanonicalEntityClarificationInput(
+    clarifications?: Record<string, string>
+  ): string | undefined {
+    if (!clarifications) {
+      return undefined;
+    }
+
+    for (const [id, value] of Object.entries(clarifications)) {
+      if (
+        (id.startsWith("grounded_entityRef_") ||
+          id.startsWith("canonical_entityRef_")) &&
+        typeof value === "string" &&
+        value.trim().length > 0
+      ) {
+        return value.trim();
+      }
+    }
+
+    return undefined;
+  }
+
   private shouldUsePatientResolutionForFrame(frame: SemanticQueryFrame): boolean {
     return (
       frame.scope.value === "individual_patient" &&
@@ -2722,6 +2777,23 @@ export class ThreeModeOrchestrator {
       return true;
     }
     return Boolean(extractPatientNameCandidateFromQuestion(question));
+  }
+
+  private isSpecificPatientResolverCandidate(value?: string): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const candidate = value.trim();
+    if (!candidate) {
+      return false;
+    }
+
+    if (isLikelyPatientNameCandidate(candidate)) {
+      return true;
+    }
+
+    return /\d|[-_]/.test(candidate);
   }
 
   private hasExplicitPatientResolverInput(options: {
@@ -3068,11 +3140,19 @@ export class ThreeModeOrchestrator {
       return undefined;
     }
 
-    if (
-      fallbackSource &&
-      Object.keys(summary.bySource).length === 0
-    ) {
-      summary.bySource[fallbackSource] = summary.requestedCount;
+    if (fallbackSource) {
+      const knownSources = Object.keys(summary.bySource).filter(
+        (source) => source !== "unknown"
+      );
+      if (knownSources.length === 0) {
+        const unknownCount =
+          typeof summary.bySource.unknown === "number"
+            ? summary.bySource.unknown
+            : summary.requestedCount;
+        summary.bySource = {
+          [fallbackSource]: unknownCount,
+        };
+      }
     }
 
     return summary;

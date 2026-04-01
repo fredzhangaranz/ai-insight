@@ -49,7 +49,11 @@ import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.se
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
 import { getIntentClassifierService } from "@/lib/services/context-discovery/intent-classifier.service";
 import { getQuerySemanticsExtractorService } from "@/lib/services/context-discovery/query-semantics-extractor.service";
-import type { CanonicalQuerySemantics } from "@/lib/services/context-discovery/types";
+import type {
+  CanonicalQuerySemantics,
+  ContextBundle,
+  IntentClassificationResult,
+} from "@/lib/services/context-discovery/types";
 import type {
   InsightArtifact,
   ResolvedEntitySummary,
@@ -60,6 +64,10 @@ import {
   isAnaphoricPatientReferenceQuestion,
   mergeInheritedThreadPatientIntoCanonicalSemantics,
 } from "@/lib/utils/canonical-thread-patient-merge";
+import {
+  getGroundedClarificationPlannerService,
+} from "@/lib/services/semantic/grounded-clarification-planner.service";
+import type { ClarificationRequest as LegacyClarificationRequest } from "@/lib/prompts/generate-query.prompt";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -103,7 +111,10 @@ export async function POST(req: NextRequest) {
     let boundParameters: Record<string, string | number | boolean | null> | undefined;
     let resolvedEntities: ResolvedEntitySummary[] | undefined;
     let patientResolution: PatientResolutionResult | null = null;
+    let classifiedIntent: IntentClassificationResult | undefined;
     let canonicalSemantics: CanonicalQuerySemantics | undefined;
+    let groundedCanonicalClarifications: InsightResult["clarifications"] | undefined;
+    let threadContextAppliedForPatient = false;
 
     let inheritedThreadPatient:
       | {
@@ -118,7 +129,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (featureFlags.canonicalQuerySemanticsV1) {
-      const intent = await getIntentClassifierService().classifyIntent({
+      classifiedIntent = await getIntentClassifierService().classifyIntent({
         customerId: normalizedCustomerId,
         question: normalizedQuestion,
         modelId: resolvedModelId,
@@ -126,7 +137,7 @@ export async function POST(req: NextRequest) {
       canonicalSemantics = await getQuerySemanticsExtractorService().extract({
         customerId: normalizedCustomerId,
         question: normalizedQuestion,
-        intent,
+        intent: classifiedIntent,
         modelId: resolvedModelId,
       });
 
@@ -135,9 +146,32 @@ export async function POST(req: NextRequest) {
         inheritedThreadPatient &&
         isAnaphoricPatientReferenceQuestion(normalizedQuestion)
       ) {
+        threadContextAppliedForPatient = true;
         canonicalSemantics = mergeInheritedThreadPatientIntoCanonicalSemantics(
           canonicalSemantics,
           inheritedThreadPatient
+        );
+      }
+
+      if (
+        canonicalSemantics?.executionRequirements.allowSqlGeneration === false &&
+        canonicalSemantics.clarificationPlan.some((item) => item.blocking) &&
+        classifiedIntent
+      ) {
+        const groundedPlanner = getGroundedClarificationPlannerService();
+        const groundedPlan = groundedPlanner.plan({
+          question: normalizedQuestion,
+          context: buildCanonicalClarificationContext({
+            customerId: normalizedCustomerId,
+            question: normalizedQuestion,
+            intent: classifiedIntent,
+            canonicalSemantics,
+          }),
+          canonicalSemantics,
+        });
+        canonicalSemantics = groundedPlan.clarifiedSemantics;
+        groundedCanonicalClarifications = mapGroundedClarificationsToConversation(
+          groundedPlan.clarifications
         );
       }
     }
@@ -395,6 +429,12 @@ export async function POST(req: NextRequest) {
         resolvedEntities,
         canonicalSemantics
       );
+      logConversationClarificationCounters({
+        customerId: normalizedCustomerId,
+        canonicalEnabled: featureFlags.canonicalQuerySemanticsV1,
+        threadContextAppliedTotal: threadContextAppliedForPatient ? 1 : 0,
+        result: clarificationResult,
+      });
       const assistantMetadata: MessageMetadata = {
         modelUsed: String(modelId || "").trim() || DEFAULT_AI_MODEL_ID,
         mode: "clarification",
@@ -445,10 +485,21 @@ export async function POST(req: NextRequest) {
       canonicalSemantics?.executionRequirements.allowSqlGeneration === false &&
       canonicalSemantics.clarificationPlan.some((item) => item.blocking)
     ) {
-      const clarificationResult = buildCanonicalClarificationResult(
-        normalizedQuestion,
-        canonicalSemantics
-      );
+      const clarificationResult =
+        groundedCanonicalClarifications &&
+        groundedCanonicalClarifications.length > 0
+          ? buildGroundedCanonicalClarificationResult(
+              normalizedQuestion,
+              canonicalSemantics,
+              groundedCanonicalClarifications
+            )
+          : buildCanonicalClarificationResult(normalizedQuestion, canonicalSemantics);
+      logConversationClarificationCounters({
+        customerId: normalizedCustomerId,
+        canonicalEnabled: featureFlags.canonicalQuerySemanticsV1,
+        threadContextAppliedTotal: threadContextAppliedForPatient ? 1 : 0,
+        result: clarificationResult,
+      });
       const assistantMetadata: MessageMetadata = {
         modelUsed: resolvedModelId,
         mode: "clarification",
@@ -1784,10 +1835,179 @@ function joinTrustedInstructions(
   return joined || undefined;
 }
 
+function buildCanonicalClarificationContext(input: {
+  customerId: string;
+  question: string;
+  intent: IntentClassificationResult;
+  canonicalSemantics: CanonicalQuerySemantics;
+}): ContextBundle {
+  return {
+    customerId: input.customerId,
+    question: input.question,
+    intent: input.intent,
+    canonicalSemantics: input.canonicalSemantics,
+    forms: [],
+    terminology: [],
+    joinPaths: [],
+    overallConfidence: input.intent.confidence || 0.5,
+    metadata: {
+      discoveryRunId: "conversation_send_grounded_clarification",
+      timestamp: new Date().toISOString(),
+      durationMs: 0,
+      version: "1.0",
+      canonicalSemanticsVersion: input.canonicalSemantics.version,
+    },
+  };
+}
+
+function mapGroundedClarificationsToConversation(
+  clarifications: LegacyClarificationRequest[]
+): NonNullable<InsightResult["clarifications"]> {
+  return clarifications.map((clarification) => {
+    const options = (clarification.options || [])
+      .map((option) => {
+        const submissionValue =
+          option.submissionValue || option.sqlConstraint || option.id;
+        if (!submissionValue) {
+          return null;
+        }
+        return {
+          label: option.label,
+          value: submissionValue,
+        };
+      })
+      .filter(Boolean) as Array<{ label: string; value: string }>;
+
+    return {
+      placeholder: clarification.id,
+      prompt: clarification.question,
+      options: options.length > 0 ? options : undefined,
+      reason: clarification.reason,
+      semantic:
+        clarification.slot ||
+        clarification.targetType ||
+        clarification.reasonCode ||
+        undefined,
+      freeformAllowed: clarification.allowCustom
+        ? {
+            allowed: true,
+            placeholder:
+              clarification.freeformPolicy?.placeholder || "Other input",
+            hint:
+              clarification.freeformPolicy?.hint ||
+              "Provide a custom value if none of the options fit.",
+            minChars: clarification.freeformPolicy?.minChars ?? 1,
+            maxChars: clarification.freeformPolicy?.maxChars ?? 200,
+          }
+        : undefined,
+    };
+  });
+}
+
+function buildGroundedCanonicalClarificationResult(
+  question: string,
+  canonicalSemantics: CanonicalQuerySemantics,
+  clarifications: NonNullable<InsightResult["clarifications"]>
+): InsightResult {
+  return {
+    mode: "clarification",
+    question,
+    thinking: [],
+    requiresClarification: true,
+    clarifications,
+    clarificationReasoning:
+      canonicalSemantics.executionRequirements.blockReason ||
+      "I need one or two details to run this query safely.",
+    canonicalSemantics,
+    context: {
+      originalQuestion: question,
+      canonicalSemantics,
+      canonicalSemanticsVersion: canonicalSemantics.version,
+    },
+  };
+}
+
+function logConversationClarificationCounters(input: {
+  customerId: string;
+  canonicalEnabled: boolean;
+  threadContextAppliedTotal: number;
+  result: InsightResult;
+}) {
+  const clarifications = Array.isArray(input.result.clarifications)
+    ? input.result.clarifications
+    : [];
+
+  const optionCount = clarifications.reduce((total, clarification: any) => {
+    const options = Array.isArray(clarification?.options) ? clarification.options : [];
+    return total + options.length;
+  }, 0);
+
+  const freeformOnlyCount = clarifications.filter((clarification: any) => {
+    const options = Array.isArray(clarification?.options) ? clarification.options : [];
+    const allowsFreeform =
+      clarification?.allowCustom === true ||
+      clarification?.freeformAllowed?.allowed === true ||
+      clarification?.freeformPolicy?.allowed === true;
+    return options.length === 0 && allowsFreeform;
+  }).length;
+
+  const bySlot = clarifications.reduce((acc, clarification: any) => {
+    const slot =
+      clarification?.slot ||
+      clarification?.targetType ||
+      clarification?.semantic ||
+      "unknown";
+    acc[slot] = (acc[slot] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const byReasonCode = clarifications.reduce((acc, clarification: any) => {
+    const reasonCode = clarification?.reasonCode || "unknown";
+    acc[reasonCode] = (acc[reasonCode] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  console.log("[ClarificationMetrics]", {
+    route: "conversation_send",
+    customerId: input.customerId,
+    canonical_enabled: input.canonicalEnabled,
+    clarification_detected_total: clarifications.length,
+    clarification_auto_resolved_total: 0,
+    clarification_options_returned_total:
+      clarifications.length - freeformOnlyCount,
+    clarification_freeform_only_total: freeformOnlyCount,
+    clarification_by_slot: bySlot,
+    clarification_by_reason_code: byReasonCode,
+    clarification_option_count: optionCount,
+    clarification_thread_context_applied_total: input.threadContextAppliedTotal,
+  });
+}
+
 function buildCanonicalClarificationResult(
   question: string,
   canonicalSemantics: CanonicalQuerySemantics
 ): InsightResult {
+  const defaultPromptBySlot: Partial<Record<string, string>> = {
+    timeRange: "What date range should I use?",
+    measure: "Which metric should I analyze?",
+    grain: "How should results be grouped?",
+    groupBy: "How should results be grouped?",
+    assessmentType: "Which assessment type should I use?",
+    entityRef: "Which specific patient or entity should I use?",
+  };
+
+  const defaultOptionsBySlot: Partial<
+    Record<string, Array<{ label: string; value: string }>>
+  > = {
+    timeRange: [
+      { label: "Last 30 days", value: "last 30 days" },
+      { label: "Last 90 days", value: "last 90 days" },
+      { label: "Last 180 days", value: "last 180 days" },
+      { label: "Last 12 months", value: "last 12 months" },
+      { label: "All available dates", value: "all available dates" },
+    ],
+  };
+
   return {
     mode: "clarification",
     question,
@@ -1797,7 +2017,11 @@ function buildCanonicalClarificationResult(
       .filter((item) => item.blocking)
       .map((item, index) => ({
         placeholder: `canonical_${item.slot}_${index + 1}`,
-        prompt: item.question,
+        prompt:
+          item.question ||
+          defaultPromptBySlot[item.slot] ||
+          `Please clarify ${(item.target || item.slot) === "temporalSpec" ? "date range" : item.target || item.slot} so I can run this query safely.`,
+        options: defaultOptionsBySlot[item.slot],
         freeformAllowed: {
           allowed: true,
           placeholder: "Other input",
