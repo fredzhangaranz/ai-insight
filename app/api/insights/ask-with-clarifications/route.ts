@@ -11,17 +11,12 @@ import {
   getSessionCacheService,
   type ClarificationSelection,
 } from "@/lib/services/cache/session-cache.service";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { CANONICAL_QUERY_SEMANTICS_VERSION } from "@/lib/services/context-discovery/types";
 import type { InsightResult } from "@/lib/hooks/useInsights";
 
-const featureFlags = getInsightsFeatureFlags();
-const INSIGHTS_CACHE_VERSION =
-  process.env.INSIGHTS_CACHE_VERSION ||
+const CACHE_VERSION =
   process.env.VERCEL_GIT_COMMIT_SHA ||
-  (featureFlags.canonicalQuerySemanticsV1
-    ? `2026-04-01-canonical-semantics-${CANONICAL_QUERY_SEMANTICS_VERSION}`
-    : "2026-04-01-trusted-patient-key-v2");
+  `2026-04-01-canonical-semantics-${CANONICAL_QUERY_SEMANTICS_VERSION}`;
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -32,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { originalQuestion, customerId, clarifications, modelId, promptVersion } = await req.json();
-    const effectivePromptVersion = promptVersion || INSIGHTS_CACHE_VERSION;
+    const effectivePromptVersion = promptVersion || CACHE_VERSION;
 
     // Validate inputs
     if (!originalQuestion || !originalQuestion.trim()) {
@@ -108,7 +103,7 @@ export async function POST(req: NextRequest) {
     logClarificationCounters({
       route: "ask_with_clarifications",
       customerId,
-      canonicalEnabled: featureFlags.canonicalQuerySemanticsV1,
+      canonicalEnabled: true,
       result,
     });
 

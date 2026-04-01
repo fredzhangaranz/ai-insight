@@ -58,7 +58,6 @@ import {
   getSQLValidator,
   type SQLValidationResult,
 } from "../sql-validator.service";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import {
@@ -1149,22 +1148,15 @@ export class ThreeModeOrchestrator {
     clarificationType?: "user_provided" | "template_extracted"
   ): Promise<OrchestrationResult> {
     const startTime = Date.now();
-    const featureFlags = getInsightsFeatureFlags();
-    const useCanonicalSemantics = featureFlags.canonicalQuerySemanticsV1;
-    const useClarificationV2 =
-      featureFlags.clarificationPipelineV2 ||
-      featureFlags.clarificationPipelineV2Shadow;
+    const useCanonicalSemantics = true;
+    const useClarificationV2 = true;
     let resolvedEntities: ResolvedEntitySummary[] = [];
     let boundParameters: Record<string, string | number | boolean | null> | undefined;
     let canonicalPlannerDecision: PlannerDecisionMetadata | undefined;
     let sanitizedQuestion = question;
     let trustedPromptLines: string[] | undefined;
 
-    if (
-      featureFlags.patientEntityResolution &&
-      !useClarificationV2 &&
-      !useCanonicalSemantics
-    ) {
+    if (!useClarificationV2 && !useCanonicalSemantics) {
       const patientStep: ThinkingStep = {
         id: "resolve_patient",
         status: "running",
@@ -1242,7 +1234,7 @@ export class ThreeModeOrchestrator {
         };
         patientStep.message = `Resolved patient securely`;
 
-        if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+        if (patientResolution.matchedText) {
           const sanitization = this.promptSanitizer.sanitize({
             question,
             patientMentions: [
@@ -1452,16 +1444,14 @@ export class ThreeModeOrchestrator {
         };
       }
 
-      let semanticFrame =
-        useClarificationV2 || featureFlags.clarificationPipelineV2Shadow
-          ? this.resolveSemanticFrame(context, question)
-          : undefined;
+      let semanticFrame = useClarificationV2
+        ? this.resolveSemanticFrame(context, question)
+        : undefined;
 
       if (
         useCanonicalSemantics &&
         context.canonicalSemantics &&
-        semanticFrame &&
-        featureFlags.patientEntityResolution
+        semanticFrame
       ) {
         const legacyDecision = this.shouldUsePatientResolutionForFrame(semanticFrame);
         const canonicalDecision = this.shouldUseCanonicalPatientResolution(
@@ -1504,19 +1494,17 @@ export class ThreeModeOrchestrator {
         context.intent.semanticFrame = semanticFrame;
         (context.intent as any).filters = semanticFrame.filters;
 
-        if (featureFlags.clarificationPipelineV2Shadow) {
-          console.log("[Orchestrator] 🧭 V2 semantic frame", {
-            scope: semanticFrame.scope.value,
-            subject: semanticFrame.subject.value,
-            measure: semanticFrame.measure.value,
-            grain: semanticFrame.grain.value,
-            groupBy: semanticFrame.groupBy.value,
-            aggregatePredicates: semanticFrame.aggregatePredicates,
-            clarificationNeeds: semanticFrame.clarificationNeeds.map(
-              (need) => need.slot
-            ),
-          });
-        }
+        console.log("[Orchestrator] 🧭 V2 semantic frame", {
+          scope: semanticFrame.scope.value,
+          subject: semanticFrame.subject.value,
+          measure: semanticFrame.measure.value,
+          grain: semanticFrame.grain.value,
+          groupBy: semanticFrame.groupBy.value,
+          aggregatePredicates: semanticFrame.aggregatePredicates,
+          clarificationNeeds: semanticFrame.clarificationNeeds.map(
+            (need) => need.slot
+          ),
+        });
       }
 
       if (
@@ -1536,12 +1524,10 @@ export class ThreeModeOrchestrator {
         if (
           context.canonicalSemantics.executionRequirements.allowSqlGeneration !== false
         ) {
-          if (featureFlags.clarificationPipelineV2Shadow) {
-            console.log(
-              "[Orchestrator] ✅ Canonical ambiguity auto-resolved by grounded clarification planner",
-              { autoResolvedCount: groundedPlan.autoResolvedCount }
-            );
-          }
+          console.log(
+            "[Orchestrator] ✅ Canonical ambiguity auto-resolved by grounded clarification planner",
+            { autoResolvedCount: groundedPlan.autoResolvedCount }
+          );
         } else if (groundedPlan.clarifications.length > 0) {
           contextDiscoveryStep.status = "complete";
           contextDiscoveryStep.duration = Date.now() - discoveryStart;
@@ -1571,11 +1557,9 @@ export class ThreeModeOrchestrator {
             context.canonicalSemantics
           )
         ) {
-          if (featureFlags.clarificationPipelineV2Shadow) {
-            console.log(
-              "[Orchestrator] ⏭️ Deferring canonical entity clarification to patient resolver"
-            );
-          }
+          console.log(
+            "[Orchestrator] ⏭️ Deferring canonical entity clarification to patient resolver"
+          );
         }
       }
 
@@ -1602,7 +1586,6 @@ export class ThreeModeOrchestrator {
       if (
         useCanonicalSemantics &&
         context.canonicalSemantics &&
-        featureFlags.patientEntityResolution &&
         resolvedEntities.length === 0 &&
         this.shouldUseCanonicalPatientResolution(context.canonicalSemantics)
       ) {
@@ -1673,7 +1656,7 @@ export class ThreeModeOrchestrator {
           );
           patientStep.message = "Resolved patient securely";
 
-          if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+          if (patientResolution.matchedText) {
             const sanitization = this.promptSanitizer.sanitize({
               question,
               patientMentions: [
@@ -1696,7 +1679,6 @@ export class ThreeModeOrchestrator {
         }
       } else if (
         semanticFrame &&
-        featureFlags.patientEntityResolution &&
         resolvedEntities.length === 0 &&
         !useCanonicalSemantics &&
         this.shouldResolvePatientForSemantics(semanticFrame, question)
@@ -1766,7 +1748,7 @@ export class ThreeModeOrchestrator {
           };
           patientStep.message = "Resolved patient securely";
 
-          if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+          if (patientResolution.matchedText) {
             const sanitization = this.promptSanitizer.sanitize({
               question,
               patientMentions: [
@@ -1790,7 +1772,7 @@ export class ThreeModeOrchestrator {
       }
 
       if (
-        featureFlags.clarificationPipelineV2 &&
+        useClarificationV2 &&
         semanticFrame &&
         (!clarifications || Object.keys(clarifications).length === 0)
       ) {
@@ -2123,7 +2105,7 @@ export class ThreeModeOrchestrator {
           canonicalSemantics: context.canonicalSemantics,
         },
         {
-          allowClarificationRequests: !featureFlags.clarificationPipelineV2,
+          allowClarificationRequests: !useClarificationV2,
         }
       );
 
@@ -2371,18 +2353,16 @@ export class ThreeModeOrchestrator {
         boundParameters,
         canonicalSemantics: context.canonicalSemantics,
       };
-      orchestrationResult.artifacts = featureFlags.chartFirstResults
-        ? this.artifactPlanner.plan({
-            question,
-            rows: results.rows,
-            columns: results.columns,
-            sql,
-            assumptions,
-            resolvedEntities,
-            presentationIntent: context.intent?.presentationIntent,
-            preferredVisualization: context.intent?.preferredVisualization,
-          })
-        : undefined;
+      orchestrationResult.artifacts = this.artifactPlanner.plan({
+        question,
+        rows: results.rows,
+        columns: results.columns,
+        sql,
+        assumptions,
+        resolvedEntities,
+        presentationIntent: context.intent?.presentationIntent,
+        preferredVisualization: context.intent?.preferredVisualization,
+      });
       if (validationError) {
         orchestrationResult.error = {
           message: validationError.message,

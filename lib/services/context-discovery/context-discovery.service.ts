@@ -20,7 +20,6 @@ import { createHash, randomUUID } from "crypto";
 import type { Pool } from "pg";
 import { getInsightGenDbPool } from "@/lib/db";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { getIntentClassifierService } from "./intent-classifier.service";
 import { getSemanticSearcherService } from "./semantic-searcher.service";
 import { getTerminologyMapperService } from "./terminology-mapper.service";
@@ -181,7 +180,6 @@ export class ContextDiscoveryService {
       // Step 1: Intent Classification
       logger.startTimer("step1");
       const intentResult = await this.runIntentClassification(request, logger);
-      const featureFlags = getInsightsFeatureFlags();
       const intentDuration = logger.endTimer(
         "step1",
         "context_discovery",
@@ -248,15 +246,15 @@ export class ContextDiscoveryService {
         );
       }
 
-      const canonicalSemantics = featureFlags.canonicalQuerySemanticsV1
-        ? await getQuerySemanticsExtractorService().extract({
-            customerId: request.customerId,
-            question: request.question,
-            intent: intentResult,
-            modelId: request.modelId,
-            signal: request.signal,
-          })
-        : undefined;
+      const canonicalSemantics = await getQuerySemanticsExtractorService().extract(
+        {
+          customerId: request.customerId,
+          question: request.question,
+          intent: intentResult,
+          modelId: request.modelId,
+          signal: request.signal,
+        }
+      );
 
       // Step 2, 3 & 5A: Semantic Search + Terminology Mapping + Assessment Type Search (PARALLEL EXECUTION)
       // These steps all depend on intentResult but are independent of each other
@@ -579,9 +577,7 @@ export class ContextDiscoveryService {
       );
       const searchDuration = Date.now() - searchStart;
       const totalDuration = expansionDuration + searchDuration;
-      const semanticSearchLatencyGuardMs = Number(
-        process.env.INSIGHTS_SEMANTIC_SEARCH_LATENCY_GUARD_MS || "2200"
-      );
+      const semanticSearchLatencyGuardMs = 2200;
 
       // Task 4.S18: Latency guard with fallback to original concepts
       if (totalDuration > semanticSearchLatencyGuardMs) {

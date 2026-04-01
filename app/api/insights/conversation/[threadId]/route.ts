@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
 import { executeCustomerQuery } from "@/lib/services/semantic/customer-query.service";
 import { validateTrustedSql } from "@/lib/services/trusted-sql-guard.service";
@@ -60,7 +59,6 @@ async function replayAssistantResult(input: {
   metadata: MessageMetadata;
   historyRow?: QueryHistoryRow;
 }): Promise<InsightResult> {
-  const featureFlags = getInsightsFeatureFlags();
   const artifactPlanner = new ArtifactPlannerService();
   const sourceQuestion =
     input.historyRow?.semanticContext?.originalQuestion;
@@ -200,19 +198,17 @@ async function replayAssistantResult(input: {
       resolvedEntities: resolvedEntities,
     };
 
-    if (featureFlags.chartFirstResults) {
-      replayedResult.artifacts = artifactPlanner.plan({
-        question,
-        rows: results.rows,
-        columns: results.columns,
-        sql,
-        assumptions: (semanticContext?.assumptions as any[]) || [],
-        resolvedEntities: resolvedEntities,
-        presentationIntent: (semanticContext?.intent as any)?.presentationIntent,
-        preferredVisualization: (semanticContext?.intent as any)
-          ?.preferredVisualization,
-      });
-    }
+    replayedResult.artifacts = artifactPlanner.plan({
+      question,
+      rows: results.rows,
+      columns: results.columns,
+      sql,
+      assumptions: (semanticContext?.assumptions as any[]) || [],
+      resolvedEntities: resolvedEntities,
+      presentationIntent: (semanticContext?.intent as any)?.presentationIntent,
+      preferredVisualization: (semanticContext?.intent as any)
+        ?.preferredVisualization,
+    });
 
     return replayedResult;
   } catch (error) {

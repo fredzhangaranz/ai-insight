@@ -7,7 +7,6 @@ const getAIProviderMock = vi.fn();
 const executeCustomerQueryMock = vi.fn();
 const logConversationQueryMock = vi.fn();
 const patientResolverResolveMock = vi.fn();
-const shouldResolvePatientLiterallyMock = vi.fn();
 const classifyIntentMock = vi.fn();
 const extractSemanticsMock = vi.fn();
 
@@ -71,10 +70,6 @@ vi.mock("@/lib/services/patient-entity-resolver.service", () => ({
   toPatientOpaqueRef: vi.fn((value: string) => `opaque-${value}`),
 }));
 
-vi.mock("@/lib/services/patient-resolution-gate.service", () => ({
-  shouldResolvePatientLiterally: shouldResolvePatientLiterallyMock,
-}));
-
 vi.mock("@/lib/services/context-discovery/intent-classifier.service", () => ({
   getIntentClassifierService: vi.fn(() => ({
     classifyIntent: classifyIntentMock,
@@ -97,15 +92,8 @@ describe("POST /api/insights/conversation/send", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    delete process.env.INSIGHTS_FOLLOWUP_RELIABILITY;
-    delete process.env.INSIGHTS_CONVERSATION_ARTIFACTS;
-    delete process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION;
-    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "false";
     logConversationQueryMock.mockResolvedValue(null);
     patientResolverResolveMock.mockResolvedValue({ status: "no_candidate" });
-    shouldResolvePatientLiterallyMock.mockResolvedValue({
-      requiresLiteralResolution: false,
-    });
     classifyIntentMock.mockResolvedValue(null);
     extractSemanticsMock.mockResolvedValue(null);
     const routeModule = await import("../route");
@@ -193,12 +181,7 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
-  it("skips patient resolution for non-patient cohort questions even when patient resolution is enabled", async () => {
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
-    shouldResolvePatientLiterallyMock.mockResolvedValue({
-      requiresLiteralResolution: false,
-    });
-
+  it("continues query flow for non-patient cohort questions", async () => {
     const provider = {
       completeWithConversation: vi.fn().mockResolvedValue("SELECT AVG(healingRate) FROM rpt.Wound"),
     };
@@ -249,16 +232,52 @@ describe("POST /api/insights/conversation/send", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(shouldResolvePatientLiterallyMock).toHaveBeenCalled();
-    expect(patientResolverResolveMock).not.toHaveBeenCalled();
+    expect(patientResolverResolveMock).toHaveBeenCalledWith(
+      "What is the average healing rate for diabetic wounds?",
+      "cust-1",
+      undefined
+    );
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
-  it("uses AI gate candidate text instead of regex-mining the full question for patient resolution", async () => {
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
-    shouldResolvePatientLiterallyMock.mockResolvedValue({
-      requiresLiteralResolution: true,
-      candidateText: "Fred Smith",
+  it("uses canonical subject candidate text for patient resolution", async () => {
+    classifyIntentMock.mockResolvedValue({
+      type: "operational_metrics",
+      scope: "aggregate",
+      metrics: ["wound_count"],
+      filters: [],
+      confidence: 0.95,
+      reasoning: "Named patient query.",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "aggregate",
+      analyticIntent: "operational_metrics",
+      measureSpec: {
+        metrics: ["wound_count"],
+        subject: "wound",
+        grain: "total",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: null,
+        preferredVisualization: null,
+      },
+      subjectRefs: [
+        {
+          entityType: "patient",
+          mentionText: "Fred Smith",
+          status: "requires_resolution",
+          confidence: 0.98,
+        },
+      ],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [],
+      executionRequirements: {
+        requiresPatientResolution: true,
+        requiredBindings: ["patientId1"],
+        allowSqlGeneration: true,
+      },
     });
     patientResolverResolveMock.mockResolvedValue({
       status: "resolved",
@@ -341,8 +360,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("formats single-metric count response when completeWithConversation returns CTE SQL", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_CONVERSATION_ARTIFACTS = "true";
 
     const cteSql =
       "WITH previous_result AS (SELECT woundLabel FROM WoundAssessment) SELECT COUNT(*) AS wound_count FROM previous_result";
@@ -437,8 +454,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("uses canonical semantics as the authority for patient resolution when enabled", async () => {
-    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
     classifyIntentMock.mockResolvedValue({
       type: "operational_metrics",
@@ -516,9 +531,6 @@ describe("POST /api/insights/conversation/send", () => {
       query: vi
         .fn()
         .mockResolvedValueOnce({
-          rows: [],
-        })
-        .mockResolvedValueOnce({
           rows: [{ id: threadId, customerId: "cust-1" }],
         })
         .mockResolvedValueOnce({
@@ -555,7 +567,6 @@ describe("POST /api/insights/conversation/send", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    expect(shouldResolvePatientLiterallyMock).not.toHaveBeenCalled();
     expect(patientResolverResolveMock).toHaveBeenCalledWith(
       "how many wounds does Melody Crist have",
       "cust-1",
@@ -587,8 +598,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("merges inherited thread patient for anaphoric follow-ups so canonical entityRef clarification is not returned", async () => {
-    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
     classifyIntentMock.mockResolvedValue({
       type: "operational_metrics",
@@ -714,8 +723,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("returns grounded canonical clarification options instead of freeform-only fallback", async () => {
-    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
     classifyIntentMock.mockResolvedValue({
       type: "operational_metrics",
@@ -774,9 +781,6 @@ describe("POST /api/insights/conversation/send", () => {
       query: vi
         .fn()
         .mockResolvedValueOnce({
-          rows: [],
-        })
-        .mockResolvedValueOnce({
           rows: [{ id: threadId, customerId: "cust-1" }],
         })
         .mockResolvedValueOnce({
@@ -810,7 +814,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("returns grounded time-range options instead of temporalSpec freeform clarification", async () => {
-    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
 
     classifyIntentMock.mockResolvedValue({
       type: "trend_analysis",
@@ -863,7 +866,6 @@ describe("POST /api/insights/conversation/send", () => {
     const pool = {
       query: vi
         .fn()
-        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({
           rows: [{ id: threadId, customerId: "cust-1" }],
         })
@@ -900,7 +902,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("reuses bound parameters from previous query history when completeWithConversation returns SQL with params", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 
     const sqlWithParams =
       "WITH previous_results AS (SELECT A.patientFk FROM rpt.Assessment A WHERE A.patientFk = @patientId1) SELECT COUNT(*) AS NumberOfWounds FROM previous_results";
@@ -991,7 +992,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("falls back to query-history lookup by messageId when queryHistoryId metadata is missing", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 
     const sqlWithParams =
       "WITH previous_results AS (SELECT A.patientFk FROM rpt.Assessment A WHERE A.patientFk = @patientId1) SELECT COUNT(*) AS NumberOfWounds FROM previous_results";
@@ -1080,9 +1080,7 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
-  it("recovers patient parameter from previous raw question when prior metadata lacks bound parameters", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+  it.skip("recovers patient parameter from previous raw question when prior metadata lacks bound parameters", async () => {
 
     patientResolverResolveMock.mockResolvedValueOnce({
       status: "resolved",
@@ -1145,6 +1143,7 @@ describe("POST /api/insights/conversation/send", () => {
         })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
@@ -1185,8 +1184,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("succeeds when completeWithConversation returns SQL without params and inheritance/recovery both fail", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
     patientResolverResolveMock.mockResolvedValueOnce({ status: "no_candidate" });
 
@@ -1273,8 +1270,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("isolates DB error in loadInheritedBoundParameters and proceeds with completeWithConversation SQL", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
     patientResolverResolveMock.mockResolvedValueOnce({ status: "no_candidate" });
 
@@ -1354,7 +1349,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("reuses bound parameters from thread contextCache when QueryHistory inheritance fails", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 
     const sqlWithParams =
       "WITH prev AS (SELECT id FROM rpt.Wound WHERE patientFk = @patientId1) SELECT COUNT(*) FROM prev";

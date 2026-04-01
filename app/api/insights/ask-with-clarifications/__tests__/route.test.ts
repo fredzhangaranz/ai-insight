@@ -36,19 +36,6 @@ vi.mock("@/lib/monitoring", () => ({
   },
 }));
 
-vi.mock("@/lib/config/insights-feature-flags", () => ({
-  getInsightsFeatureFlags: vi.fn(() => ({
-    patientEntityResolution: false,
-    promptPhiSanitization: false,
-    chartFirstResults: false,
-    conversationArtifacts: false,
-    followUpReliability: false,
-    clarificationPipelineV2: false,
-    clarificationPipelineV2Shadow: false,
-    canonicalQuerySemanticsV1: true,
-  })),
-}));
-
 describe("POST /api/insights/ask-with-clarifications", () => {
   let POST: (req: NextRequest) => Promise<Response>;
 

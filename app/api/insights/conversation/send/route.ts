@@ -39,13 +39,11 @@ import {
   validateRequest,
 } from "@/lib/validation/conversation-schemas";
 import { cleanSqlQuery } from "@/lib/utils/sql-cleaning";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import {
   PatientEntityResolver,
   type PatientResolutionResult,
   toPatientOpaqueRef,
 } from "@/lib/services/patient-entity-resolver.service";
-import { shouldResolvePatientLiterally } from "@/lib/services/patient-resolution-gate.service";
 import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
 import { getIntentClassifierService } from "@/lib/services/context-discovery/intent-classifier.service";
@@ -102,7 +100,6 @@ export async function POST(req: NextRequest) {
     const normalizedCustomerId = customerId;
     const normalizedQuestion = question;
     const normalizedUserMessageId = userMessageIdParam || null;
-    const featureFlags = getInsightsFeatureFlags();
     const patientResolver = new PatientEntityResolver();
     const groundedClarificationPlanner = new GroundedClarificationPlannerService();
     const promptSanitizer = new PromptSanitizationService();
@@ -126,189 +123,153 @@ export async function POST(req: NextRequest) {
           opaqueRef?: string;
         }
       | null = null;
-    if (threadId && featureFlags.canonicalQuerySemanticsV1) {
+    if (threadId && isAnaphoricPatientReferenceQuestion(normalizedQuestion)) {
       inheritedThreadPatient =
         await loadLatestThreadSecurePatientFromQueryHistory(threadId);
     }
 
-    if (featureFlags.canonicalQuerySemanticsV1) {
-      canonicalIntent = await getIntentClassifierService().classifyIntent({
-        customerId: normalizedCustomerId,
-        question: normalizedQuestion,
-        modelId: resolvedModelId,
-      });
-      canonicalSemantics = await getQuerySemanticsExtractorService().extract({
+    canonicalIntent = await getIntentClassifierService().classifyIntent({
+      customerId: normalizedCustomerId,
+      question: normalizedQuestion,
+      modelId: resolvedModelId,
+    });
+    canonicalSemantics = await getQuerySemanticsExtractorService().extract({
+      customerId: normalizedCustomerId,
+      question: normalizedQuestion,
+      intent: canonicalIntent,
+      modelId: resolvedModelId,
+    });
+
+    if (
+      canonicalSemantics &&
+      inheritedThreadPatient &&
+      isAnaphoricPatientReferenceQuestion(normalizedQuestion)
+    ) {
+      threadContextAppliedForPatient = true;
+      canonicalSemantics = mergeInheritedThreadPatientIntoCanonicalSemantics(
+        canonicalSemantics,
+        inheritedThreadPatient
+      );
+    }
+
+    if (
+      canonicalSemantics &&
+      canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+      canonicalSemantics.clarificationPlan.some((item) => item.blocking) &&
+      canonicalIntent
+    ) {
+      const plannerContext = buildCanonicalPlannerContext({
         customerId: normalizedCustomerId,
         question: normalizedQuestion,
         intent: canonicalIntent,
-        modelId: resolvedModelId,
+        canonicalSemantics,
       });
-
-      if (
-        canonicalSemantics &&
-        inheritedThreadPatient &&
-        isAnaphoricPatientReferenceQuestion(normalizedQuestion)
-      ) {
-        threadContextAppliedForPatient = true;
-        canonicalSemantics = mergeInheritedThreadPatientIntoCanonicalSemantics(
-          canonicalSemantics,
-          inheritedThreadPatient
-        );
-      }
-
-      if (
-        canonicalSemantics &&
-        canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
-        canonicalSemantics.clarificationPlan.some((item) => item.blocking) &&
-        canonicalIntent
-      ) {
-        const plannerContext = buildCanonicalPlannerContext({
-          customerId: normalizedCustomerId,
-          question: normalizedQuestion,
-          intent: canonicalIntent,
-          canonicalSemantics,
-        });
-        const groundedPlan = groundedClarificationPlanner.plan({
-          question: normalizedQuestion,
-          context: plannerContext,
-          canonicalSemantics,
-        });
-        canonicalSemantics = groundedPlan.clarifiedSemantics;
-        plannerDecision = groundedPlan.decisionMetadata;
-        groundedPlannerClarifications = groundedPlan.clarifications;
-      }
+      const groundedPlan = groundedClarificationPlanner.plan({
+        question: normalizedQuestion,
+        context: plannerContext,
+        canonicalSemantics,
+      });
+      canonicalSemantics = groundedPlan.clarifiedSemantics;
+      plannerDecision = groundedPlan.decisionMetadata;
+      groundedPlannerClarifications = groundedPlan.clarifications;
     }
 
-    if (featureFlags.patientEntityResolution) {
-      const patientResolverOptions = buildPatientResolverOptions(
-        clarificationResponses
+    const patientResolverOptions = buildPatientResolverOptions(
+      clarificationResponses
+    );
+
+    if (
+      inheritedThreadPatient &&
+      isAnaphoricPatientReferenceQuestion(normalizedQuestion) &&
+      !patientResolverOptions
+    ) {
+      const inh = inheritedThreadPatient;
+      patientResolution = {
+        status: "resolved",
+        selectedMatch: {
+          patientName: inh.displayLabel?.trim() || "Patient",
+          unitName: null,
+        },
+        resolvedId: inh.resolvedId,
+        opaqueRef: inh.opaqueRef || toPatientOpaqueRef(inh.resolvedId),
+        matchType: "full_name",
+        matchedText: inh.displayLabel?.trim() || "",
+      };
+    } else if (canonicalSemantics?.executionRequirements.requiresPatientResolution) {
+      const patientSubjectRef = getCanonicalPatientSubjectRef(
+        canonicalSemantics
       );
-
-      if (
-        featureFlags.canonicalQuerySemanticsV1 &&
-        inheritedThreadPatient &&
-        isAnaphoricPatientReferenceQuestion(normalizedQuestion) &&
-        !patientResolverOptions
-      ) {
-        const inh = inheritedThreadPatient;
-        patientResolution = {
-          status: "resolved",
-          selectedMatch: {
-            patientName: inh.displayLabel?.trim() || "Patient",
-            unitName: null,
-          },
-          resolvedId: inh.resolvedId,
-          opaqueRef: inh.opaqueRef || toPatientOpaqueRef(inh.resolvedId),
-          matchType: "full_name",
-          matchedText: inh.displayLabel?.trim() || "",
-        };
-      } else if (
-        featureFlags.canonicalQuerySemanticsV1 &&
-        canonicalSemantics?.executionRequirements.requiresPatientResolution
-      ) {
-        const patientSubjectRef = getCanonicalPatientSubjectRef(
-          canonicalSemantics
-        );
-        if (!patientSubjectRef?.mentionText?.trim()) {
-          patientResolution = { status: "not_found" };
-        } else {
-          patientResolution = await patientResolver.resolve(
-            normalizedQuestion,
-            normalizedCustomerId,
-            {
-              selectionOpaqueRef: patientResolverOptions?.selectionOpaqueRef,
-              confirmedOpaqueRef: patientResolverOptions?.confirmedOpaqueRef,
-              overrideLookup: patientResolverOptions?.overrideLookup,
-              candidateText: patientSubjectRef.mentionText,
-              allowQuestionInference: false,
-            }
-          );
-        }
-      } else if (!featureFlags.canonicalQuerySemanticsV1 && !patientResolverOptions) {
-        const provider = await getAIProvider(resolvedModelId);
-        try {
-          const gate = await shouldResolvePatientLiterally(
-            normalizedQuestion,
-            provider,
-            {
-              threadId,
-            }
-          );
-          if (!gate.requiresLiteralResolution) {
-            patientResolution = { status: "no_candidate" };
-          } else if (gate.candidateText) {
-            patientResolution = await patientResolver.resolve(
-              normalizedQuestion,
-              normalizedCustomerId,
-              {
-                candidateText: gate.candidateText,
-                allowQuestionInference: false,
-              }
-            );
-          }
-        } catch (err) {
-          console.warn(
-            "[Conversation Send] Patient resolution gate failed; proceeding with resolver:",
-            err
-          );
-        }
-      }
-
-      if (!patientResolution) {
+      if (!patientSubjectRef?.mentionText?.trim()) {
+        patientResolution = { status: "not_found" };
+      } else {
         patientResolution = await patientResolver.resolve(
           normalizedQuestion,
           normalizedCustomerId,
-          patientResolverOptions
-        );
-      }
-
-      if (
-        patientResolution.selectedMatch &&
-        patientResolution.opaqueRef &&
-        patientResolution.matchType
-      ) {
-        resolvedEntities = [
           {
-            kind: "patient",
-            opaqueRef: patientResolution.opaqueRef,
-            displayLabel: patientResolution.selectedMatch.patientName,
-            matchType: patientResolution.matchType,
-            requiresConfirmation:
-              patientResolution.status === "confirmation_required",
-            unitName: patientResolution.selectedMatch.unitName,
-          },
-        ];
-      }
-
-      if (
-        patientResolution.status === "resolved" &&
-        patientResolution.selectedMatch &&
-        patientResolution.resolvedId &&
-        patientResolution.opaqueRef &&
-        patientResolution.matchType
-      ) {
-        boundParameters = { patientId1: patientResolution.resolvedId };
-        canonicalSemantics = clearResolvedPatientClarificationBlocks(
-          canonicalSemantics
+            selectionOpaqueRef: patientResolverOptions?.selectionOpaqueRef,
+            confirmedOpaqueRef: patientResolverOptions?.confirmedOpaqueRef,
+            overrideLookup: patientResolverOptions?.overrideLookup,
+            candidateText: patientSubjectRef.mentionText,
+            allowQuestionInference: false,
+          }
         );
+      }
+    }
 
-        if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
-          const sanitization = promptSanitizer.sanitize({
-            question: normalizedQuestion,
-            patientMentions: [
-              {
-                matchedText: patientResolution.matchedText,
-                opaqueRef: patientResolution.opaqueRef,
-              },
-            ],
-          });
-          sanitizedQuestion = sanitization.sanitizedQuestion;
-          trustedSqlInstructions = [
-            "A patient was resolved securely before SQL generation.",
-            ...sanitization.trustedContextLines,
-            "You must use @patientId1 in the SQL and must not embed literal patient identifiers.",
-          ].join("\n");
-        }
+    if (!patientResolution) {
+      patientResolution = await patientResolver.resolve(
+        normalizedQuestion,
+        normalizedCustomerId,
+        patientResolverOptions
+      );
+    }
+
+    if (
+      patientResolution.selectedMatch &&
+      patientResolution.opaqueRef &&
+      patientResolution.matchType
+    ) {
+      resolvedEntities = [
+        {
+          kind: "patient",
+          opaqueRef: patientResolution.opaqueRef,
+          displayLabel: patientResolution.selectedMatch.patientName,
+          matchType: patientResolution.matchType,
+          requiresConfirmation:
+            patientResolution.status === "confirmation_required",
+          unitName: patientResolution.selectedMatch.unitName,
+        },
+      ];
+    }
+
+    if (
+      patientResolution.status === "resolved" &&
+      patientResolution.selectedMatch &&
+      patientResolution.resolvedId &&
+      patientResolution.opaqueRef &&
+      patientResolution.matchType
+    ) {
+      boundParameters = { patientId1: patientResolution.resolvedId };
+      canonicalSemantics = clearResolvedPatientClarificationBlocks(
+        canonicalSemantics
+      );
+
+      if (patientResolution.matchedText) {
+        const sanitization = promptSanitizer.sanitize({
+          question: normalizedQuestion,
+          patientMentions: [
+            {
+              matchedText: patientResolution.matchedText,
+              opaqueRef: patientResolution.opaqueRef,
+            },
+          ],
+        });
+        sanitizedQuestion = sanitization.sanitizedQuestion;
+        trustedSqlInstructions = [
+          "A patient was resolved securely before SQL generation.",
+          ...sanitization.trustedContextLines,
+          "You must use @patientId1 in the SQL and must not embed literal patient identifiers.",
+        ].join("\n");
       }
     }
     const userId = extractUserIdFromSession(session);
@@ -494,7 +455,7 @@ export async function POST(req: NextRequest) {
             );
       logConversationClarificationCounters({
         customerId: normalizedCustomerId,
-        canonicalEnabled: featureFlags.canonicalQuerySemanticsV1,
+        canonicalEnabled: true,
         threadContextAppliedTotal: threadContextAppliedForPatient ? 1 : 0,
         result: clarificationResult,
       });
@@ -658,9 +619,7 @@ export async function POST(req: NextRequest) {
     effectiveBoundParameters = await recoverMissingBoundParameters({
       sqlText: cleanedSql,
       boundParameters: effectiveBoundParameters,
-      patientResolver: featureFlags.patientEntityResolution
-        ? patientResolver
-        : undefined,
+      patientResolver,
       customerId: normalizedCustomerId,
       previousQuestion: previousRawQuestion || previousQuestion,
     });
@@ -697,10 +656,7 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    if (
-      (featureFlags.chartFirstResults || featureFlags.conversationArtifacts) &&
-      result.results
-    ) {
+    if (result.results) {
       result.artifacts = artifactPlanner.plan({
         question: normalizedQuestion,
         rows: result.results.rows,
@@ -715,13 +671,12 @@ export async function POST(req: NextRequest) {
       result.results?.rows || [],
       result.results?.columns || []
     );
-    const artifactSummary =
-      featureFlags.followUpReliability && result.artifacts
-        ? buildArtifactSummary(
-            result.artifacts,
-            result.results?.rows || []
-          )
-        : undefined;
+    const artifactSummary = result.artifacts
+      ? buildArtifactSummary(
+          result.artifacts,
+          result.results?.rows || []
+        )
+      : undefined;
 
     const contextDependencies =
       lastAssistant?.id && compositionStrategy !== COMPOSITION_STRATEGIES.FRESH
@@ -767,7 +722,7 @@ export async function POST(req: NextRequest) {
       [
         currentThreadId,
         generateResponseText(result, {
-          followUpReliability: featureFlags.followUpReliability,
+          followUpReliability: true,
         }),
         JSON.stringify(assistantMetadata),
       ]
@@ -879,7 +834,7 @@ export async function POST(req: NextRequest) {
         id: assistantMessageId,
         role: "assistant",
         content: generateResponseText(result, {
-          followUpReliability: featureFlags.followUpReliability,
+          followUpReliability: true,
         }),
         result,
         metadata: assistantMetadata,

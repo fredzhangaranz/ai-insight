@@ -58,10 +58,6 @@ vi.mock("../query-semantics-extractor.service", () => ({
   getQuerySemanticsExtractorService: vi.fn(),
 }));
 
-vi.mock("@/lib/config/insights-feature-flags", () => ({
-  getInsightsFeatureFlags: vi.fn(),
-}));
-
 import { getInsightGenDbPool } from "@/lib/db";
 import { getIntentClassifierService } from "../intent-classifier.service";
 import { getSemanticSearcherService } from "../semantic-searcher.service";
@@ -69,7 +65,6 @@ import { getTerminologyMapperService } from "../terminology-mapper.service";
 import { getJoinPathPlannerService } from "../join-path-planner.service";
 import { getContextAssemblerService } from "../context-assembler.service";
 import { getQuerySemanticsExtractorService } from "../query-semantics-extractor.service";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 
 describe("ContextDiscoveryService Integration", () => {
   let service: ContextDiscoveryService;
@@ -153,9 +148,6 @@ describe("ContextDiscoveryService Integration", () => {
       query: vi.fn().mockResolvedValue({ rows: [] }),
     };
     vi.mocked(getInsightGenDbPool).mockResolvedValue(mockPool as any);
-    vi.mocked(getInsightsFeatureFlags).mockReturnValue({
-      canonicalQuerySemanticsV1: false,
-    } as any);
     vi.mocked(getTerminologyMapperService).mockReturnValue({
       mapFilters: vi.fn().mockResolvedValue([]),
       mapUserTerms: vi.fn().mockResolvedValue([]),
@@ -473,10 +465,6 @@ describe("ContextDiscoveryService Integration", () => {
   });
 
   it("extracts canonical semantics after filter mapping so value specs see mapped filters", async () => {
-    vi.mocked(getInsightsFeatureFlags).mockReturnValue({
-      canonicalQuerySemanticsV1: true,
-    } as any);
-
     const mappedFilters = [
       {
         field: "wound_classification",

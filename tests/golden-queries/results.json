@@ -1,197 +1,183 @@
 {
   "suiteVersion": "1.0.0",
-  "executedAt": "2026-03-30T20:31:34.218Z",
+  "executedAt": "2026-04-01T21:25:26.379Z",
   "totalQueries": 12,
-  "passed": 0,
-  "failed": 12,
-  "passRate": 0,
-  "avgLatency": 17.416666666666668,
-  "p50Latency": 6,
-  "p95Latency": 65.24999999999991,
-  "p99Latency": 111.45000000000006,
+  "passed": 7,
+  "failed": 5,
+  "passRate": 58.333333333333336,
+  "avgLatency": 1064.5833333333333,
+  "p50Latency": 680,
+  "p95Latency": 2799.799999999998,
+  "p99Latency": 4077.5600000000018,
   "templateHitRate": 0,
   "results": [
     {
       "queryId": "tp_001",
       "passed": false,
-      "actualMode": "error",
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 123,
+      "actualLatency": 4397,
       "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.131Z"
+      "executedAt": "2026-04-01T21:25:18.000Z"
     },
     {
       "queryId": "tp_002",
       "passed": false,
-      "actualMode": "error",
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 15,
+      "actualLatency": 1493,
       "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.146Z"
+      "executedAt": "2026-04-01T21:25:19.493Z"
     },
     {
       "queryId": "tp_003",
       "passed": false,
-      "actualMode": "error",
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 6,
+      "actualLatency": 673,
       "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.152Z"
+      "executedAt": "2026-04-01T21:25:20.166Z"
     },
     {
       "queryId": "tp_004",
       "passed": false,
-      "actualMode": "error",
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 6,
+      "actualLatency": 973,
       "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.158Z"
+      "executedAt": "2026-04-01T21:25:21.139Z"
     },
     {
       "queryId": "tp_005",
       "passed": false,
-      "actualMode": "error",
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 18,
+      "actualLatency": 606,
       "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
+        "Expected template 'Area Reduction at Fixed Time Point' but got 'none'"
       ],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.176Z"
+      "executedAt": "2026-04-01T21:25:21.745Z"
     },
     {
       "queryId": "sa_001",
-      "passed": false,
-      "actualMode": "error",
+      "passed": true,
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 4,
-      "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
-      ],
+      "actualLatency": 980,
+      "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.180Z"
+      "executedAt": "2026-04-01T21:25:22.725Z"
     },
     {
       "queryId": "sa_002",
-      "passed": false,
-      "actualMode": "error",
+      "passed": true,
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 4,
-      "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
-      ],
+      "actualLatency": 617,
+      "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.184Z"
+      "executedAt": "2026-04-01T21:25:23.342Z"
     },
     {
       "queryId": "sa_003",
-      "passed": false,
-      "actualMode": "error",
+      "passed": true,
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 5,
-      "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
-      ],
+      "actualLatency": 985,
+      "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.189Z"
+      "executedAt": "2026-04-01T21:25:24.327Z"
     },
     {
       "queryId": "sa_004",
-      "passed": false,
-      "actualMode": "error",
+      "passed": true,
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 16,
-      "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
-      ],
+      "actualLatency": 460,
+      "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.205Z"
+      "executedAt": "2026-04-01T21:25:24.787Z"
     },
     {
       "queryId": "sa_005",
-      "passed": false,
-      "actualMode": "error",
+      "passed": true,
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 6,
-      "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
-      ],
+      "actualLatency": 687,
+      "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.211Z"
+      "executedAt": "2026-04-01T21:25:25.474Z"
     },
     {
       "queryId": "cl_001",
-      "passed": false,
-      "actualMode": "error",
+      "passed": true,
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 3,
-      "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
-      ],
+      "actualLatency": 450,
+      "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.214Z"
+      "executedAt": "2026-04-01T21:25:25.924Z"
     },
     {
       "queryId": "cl_002",
-      "passed": false,
-      "actualMode": "error",
+      "passed": true,
+      "actualMode": "direct",
       "actualSQL": "",
       "actualColumns": [],
       "actualRowCount": 0,
-      "actualLatency": 3,
-      "errors": [
-        "Execution error: It looks like you're running in a browser-like environment.\n\nThis is disabled by default, as it risks exposing your secret API credentials to attackers.\nIf you understand the risks and have appropriate mitigations in place,\nyou can set the `dangerouslyAllowBrowser` option to `true`, e.g.,\n\nnew Anthropic({ apiKey, dangerouslyAllowBrowser: true });\n"
-      ],
+      "actualLatency": 454,
+      "errors": [],
       "warnings": [],
-      "executedAt": "2026-03-30T20:31:34.217Z"
+      "executedAt": "2026-04-01T21:25:26.378Z"
     }
   ],
   "byComplexity": {
     "simple": {
       "total": 3,
-      "passed": 0,
-      "failed": 3,
-      "passRate": 0
+      "passed": 3,
+      "failed": 0,
+      "passRate": 100
     },
     "medium": {
       "total": 2,
-      "passed": 0,
-      "failed": 2,
-      "passRate": 0
+      "passed": 2,
+      "failed": 0,
+      "passRate": 100
     },
     "complex": {
       "total": 5,
@@ -201,9 +187,9 @@
     },
     "clarification": {
       "total": 2,
-      "passed": 0,
-      "failed": 2,
-      "passRate": 0
+      "passed": 2,
+      "failed": 0,
+      "passRate": 100
     }
   },
   "byTag": {
@@ -239,57 +225,57 @@
     },
     "simple_aggregation": {
       "total": 5,
-      "passed": 0,
-      "failed": 5,
-      "passRate": 0
+      "passed": 5,
+      "failed": 0,
+      "passRate": 100
     },
     "patient_count": {
       "total": 1,
-      "passed": 0,
-      "failed": 1,
-      "passRate": 0
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
     },
     "wound_type_filtering": {
       "total": 1,
-      "passed": 0,
-      "failed": 1,
-      "passRate": 0
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
     },
     "measurement": {
       "total": 1,
-      "passed": 0,
-      "failed": 1,
-      "passRate": 0
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
     },
     "grouping": {
       "total": 1,
-      "passed": 0,
-      "failed": 1,
-      "passRate": 0
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
     },
     "window_function": {
       "total": 1,
-      "passed": 0,
-      "failed": 1,
-      "passRate": 0
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
     },
     "clarification": {
       "total": 2,
-      "passed": 0,
-      "failed": 2,
-      "passRate": 0
+      "passed": 2,
+      "failed": 0,
+      "passRate": 100
     },
     "ambiguous": {
       "total": 1,
-      "passed": 0,
-      "failed": 1,
-      "passRate": 0
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
     },
     "missing_context": {
       "total": 1,
-      "passed": 0,
-      "failed": 1,
-      "passRate": 0
+      "passed": 1,
+      "failed": 0,
+      "passRate": 100
     }
   }
 }

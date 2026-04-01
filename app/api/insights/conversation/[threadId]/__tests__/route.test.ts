@@ -19,12 +19,6 @@ vi.mock("@/lib/db", () => ({
   getInsightGenDbPool: getInsightGenDbPoolMock,
 }));
 
-vi.mock("@/lib/config/insights-feature-flags", () => ({
-  getInsightsFeatureFlags: vi.fn(() => ({
-    chartFirstResults: false,
-  })),
-}));
-
 vi.mock("@/lib/services/artifact-planner.service", () => ({
   ArtifactPlannerService: vi.fn().mockImplementation(() => ({
     plan: planArtifactsMock,
