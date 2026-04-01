@@ -579,9 +579,12 @@ export class ContextDiscoveryService {
       );
       const searchDuration = Date.now() - searchStart;
       const totalDuration = expansionDuration + searchDuration;
+      const semanticSearchLatencyGuardMs = Number(
+        process.env.INSIGHTS_SEMANTIC_SEARCH_LATENCY_GUARD_MS || "2200"
+      );
 
       // Task 4.S18: Latency guard with fallback to original concepts
-      if (totalDuration > 600) {
+      if (totalDuration > semanticSearchLatencyGuardMs) {
         logger.warn(
           "context_discovery",
           "semantic_searcher",
@@ -589,7 +592,8 @@ export class ContextDiscoveryService {
           {
             expansion_ms: expansionDuration,
             search_ms: searchDuration,
-            exceeded_by_ms: totalDuration - 600,
+            latency_guard_ms: semanticSearchLatencyGuardMs,
+            exceeded_by_ms: totalDuration - semanticSearchLatencyGuardMs,
           }
         );
 

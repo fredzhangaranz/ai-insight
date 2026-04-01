@@ -1235,6 +1235,125 @@ describe("ThreeModeOrchestrator - Clarification Flow", () => {
     });
   });
 
+  describe("Canonical clarification routing", () => {
+    it("returns grounded entity options before LLM when patient resolver is disabled", async () => {
+      process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 = "true";
+      delete process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION;
+      delete process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2;
+      delete process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW;
+
+      const mockDiscoverContext = vi.fn().mockResolvedValue({
+        customerId: "cust-1",
+        question: "show me wound area chart for Constance Bernier",
+        intent: {
+          type: "operational_metrics",
+          confidence: 0.9,
+          scope: "aggregate",
+          metrics: ["wound_area"],
+          filters: [],
+          reasoning: "Wound area chart request",
+        },
+        forms: [],
+        fields: [],
+        joinPaths: [],
+        terminology: [],
+        overallConfidence: 0.85,
+        metadata: {
+          discoveryRunId: "test-run",
+          timestamp: new Date().toISOString(),
+          durationMs: 100,
+          version: "1.0",
+        },
+        canonicalSemantics: {
+          version: "v1",
+          queryShape: "aggregate",
+          analyticIntent: "operational_metrics",
+          measureSpec: {
+            metrics: ["wound_area"],
+            subject: "patient",
+            grain: "total",
+            groupBy: [],
+            aggregatePredicates: [],
+            presentationIntent: "chart",
+            preferredVisualization: "line",
+          },
+          subjectRefs: [
+            {
+              entityType: "patient",
+              mentionText: "patient",
+              referenceKind: "unknown",
+              status: "candidate",
+              confidence: 0.71,
+              explicit: true,
+            },
+          ],
+          temporalSpec: {
+            kind: "none",
+            rawText: null,
+          },
+          valueSpecs: [],
+          clarificationPlan: [
+            {
+              slot: "entityRef",
+              reasonCode: "unsafe_to_execute",
+              reason: "Need a specific patient before execution",
+              blocking: true,
+              confidence: 0.89,
+              target: "patient",
+            },
+          ],
+          executionRequirements: {
+            requiresPatientResolution: true,
+            requiredBindings: ["patientId1"],
+            allowSqlGeneration: false,
+            blockReason: "Need patient binding",
+          },
+        },
+      });
+
+      orchestrator = new ThreeModeOrchestrator({
+        contextDiscovery: {
+          discoverContext: mockDiscoverContext,
+          discover: mockDiscoverContext,
+        } as any,
+      });
+
+      mockGenerateSQLWithLLM = vi.fn(() =>
+        Promise.resolve({
+          responseType: "clarification",
+          reasoning: "LLM clarification fallback",
+          clarifications: [],
+        } as any)
+      );
+
+      const result = await orchestrator.ask(
+        "show me wound area chart for Constance Bernier",
+        "cust-1"
+      );
+
+      expect(result.mode).toBe("clarification");
+      expect(mockGenerateSQLWithLLM).not.toHaveBeenCalled();
+      expect(result.clarifications?.[0]).toEqual(
+        expect.objectContaining({
+          slot: "entityRef",
+          reasonCode: "unsafe_to_execute",
+          allowCustom: false,
+        })
+      );
+      expect(result.clarifications?.[0]?.options).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: "Constance Bernier",
+            submissionValue: "Constance Bernier",
+          }),
+        ])
+      );
+      expect(
+        (result.clarifications?.[0] as any)?.evidence?.clarificationSource
+      ).toBe("grounded_clarification_planner");
+    });
+  });
+
   describe("Clarification Pipeline V2", () => {
     it("returns clarification telemetry for structural clarifications", async () => {
       process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 = "true";

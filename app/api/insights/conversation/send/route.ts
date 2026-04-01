@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
     let canonicalSemantics: CanonicalQuerySemantics | undefined;
     let plannerDecision: PlannerDecisionMetadata | undefined;
     let groundedPlannerClarifications: ClarificationRequest[] = [];
+    let threadContextAppliedForPatient = false;
 
     let inheritedThreadPatient:
       | {
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
         inheritedThreadPatient &&
         isAnaphoricPatientReferenceQuestion(normalizedQuestion)
       ) {
+        threadContextAppliedForPatient = true;
         canonicalSemantics = mergeInheritedThreadPatientIntoCanonicalSemantics(
           canonicalSemantics,
           inheritedThreadPatient
@@ -156,7 +158,9 @@ export async function POST(req: NextRequest) {
 
       if (
         canonicalSemantics &&
-        canonicalSemantics.executionRequirements.allowSqlGeneration === false
+        canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        canonicalSemantics.clarificationPlan.some((item) => item.blocking) &&
+        canonicalIntent
       ) {
         const plannerContext = buildCanonicalPlannerContext({
           customerId: normalizedCustomerId,
@@ -471,7 +475,10 @@ export async function POST(req: NextRequest) {
       throw new Error("User message could not be established");
     }
 
-    if (canonicalSemantics?.executionRequirements.allowSqlGeneration === false) {
+    if (
+      canonicalSemantics?.executionRequirements.allowSqlGeneration === false &&
+      canonicalSemantics.clarificationPlan.some((item) => item.blocking)
+    ) {
       const clarificationResult =
         groundedPlannerClarifications.length > 0
           ? buildGroundedCanonicalClarificationResult(
@@ -485,6 +492,12 @@ export async function POST(req: NextRequest) {
               canonicalSemantics,
               plannerDecision
             );
+      logConversationClarificationCounters({
+        customerId: normalizedCustomerId,
+        canonicalEnabled: featureFlags.canonicalQuerySemanticsV1,
+        threadContextAppliedTotal: threadContextAppliedForPatient ? 1 : 0,
+        result: clarificationResult,
+      });
       const assistantMetadata: MessageMetadata = {
         modelUsed: resolvedModelId,
         mode: "clarification",
@@ -1859,6 +1872,72 @@ function joinTrustedInstructions(
   return joined || undefined;
 }
 
+function logConversationClarificationCounters(input: {
+  customerId: string;
+  canonicalEnabled: boolean;
+  threadContextAppliedTotal: number;
+  result: InsightResult;
+}) {
+  const clarifications = Array.isArray(input.result.clarifications)
+    ? input.result.clarifications
+    : [];
+
+  const optionCount = clarifications.reduce((total, clarification: any) => {
+    const options = Array.isArray(clarification?.options)
+      ? clarification.options
+      : [];
+    return total + options.length;
+  }, 0);
+
+  const freeformOnlyCount = clarifications.filter((clarification: any) => {
+    const options = Array.isArray(clarification?.options)
+      ? clarification.options
+      : [];
+    const allowsFreeform =
+      clarification?.allowCustom === true ||
+      clarification?.freeformAllowed?.allowed === true ||
+      clarification?.freeformPolicy?.allowed === true;
+    return options.length === 0 && allowsFreeform;
+  }).length;
+
+  const bySlot = clarifications.reduce(
+    (acc, clarification: any) => {
+      const slot =
+        clarification?.slot ||
+        clarification?.targetType ||
+        clarification?.semantic ||
+        "unknown";
+      acc[slot] = (acc[slot] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  const byReasonCode = clarifications.reduce(
+    (acc, clarification: any) => {
+      const reasonCode = clarification?.reasonCode || "unknown";
+      acc[reasonCode] = (acc[reasonCode] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  console.log("[ClarificationMetrics]", {
+    route: "conversation_send",
+    customerId: input.customerId,
+    canonical_enabled: input.canonicalEnabled,
+    clarification_detected_total: clarifications.length,
+    clarification_auto_resolved_total: 0,
+    clarification_options_returned_total:
+      clarifications.length - freeformOnlyCount,
+    clarification_freeform_only_total: freeformOnlyCount,
+    clarification_by_slot: bySlot,
+    clarification_by_reason_code: byReasonCode,
+    clarification_option_count: optionCount,
+    clarification_thread_context_applied_total: input.threadContextAppliedTotal,
+  });
+}
+
 function buildCanonicalPlannerContext(input: {
   customerId: string;
   question: string;
@@ -1972,6 +2051,27 @@ function buildCanonicalClarificationResult(
   canonicalSemantics: CanonicalQuerySemantics,
   plannerDecision?: PlannerDecisionMetadata
 ): InsightResult {
+  const defaultPromptBySlot: Partial<Record<string, string>> = {
+    timeRange: "What date range should I use?",
+    measure: "Which metric should I analyze?",
+    grain: "How should results be grouped?",
+    groupBy: "How should results be grouped?",
+    assessmentType: "Which assessment type should I use?",
+    entityRef: "Which specific patient or entity should I use?",
+  };
+
+  const defaultOptionsBySlot: Partial<
+    Record<string, Array<{ label: string; value: string }>>
+  > = {
+    timeRange: [
+      { label: "Last 30 days", value: "last 30 days" },
+      { label: "Last 90 days", value: "last 90 days" },
+      { label: "Last 180 days", value: "last 180 days" },
+      { label: "Last 12 months", value: "last 12 months" },
+      { label: "All available dates", value: "all available dates" },
+    ],
+  };
+
   const blockingItems = canonicalSemantics.clarificationPlan.filter(
     (item) => item.blocking
   );
@@ -1980,7 +2080,14 @@ function buildCanonicalClarificationResult(
       ? blockingItems.map((item, index) => ({
           placeholder: `canonical_${item.slot}_${index + 1}`,
           prompt:
-            item.question || `Please clarify ${item.target || item.slot}.`,
+            item.question ||
+            defaultPromptBySlot[item.slot] ||
+            `Please clarify ${
+              (item.target || item.slot) === "temporalSpec"
+                ? "date range"
+                : item.target || item.slot
+            } so I can run this query safely.`,
+          options: defaultOptionsBySlot[item.slot],
           freeformAllowed: {
             allowed: true,
             placeholder: "Other input",

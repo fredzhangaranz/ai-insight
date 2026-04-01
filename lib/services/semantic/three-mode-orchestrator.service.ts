@@ -1522,7 +1522,8 @@ export class ThreeModeOrchestrator {
       if (
         useCanonicalSemantics &&
         context.canonicalSemantics &&
-        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false
+        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        context.canonicalSemantics.clarificationPlan.some((item) => item.blocking)
       ) {
         const groundedPlan = this.groundedClarificationPlanner.plan({
           question,
@@ -1582,6 +1583,7 @@ export class ThreeModeOrchestrator {
         useCanonicalSemantics &&
         context.canonicalSemantics &&
         context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        context.canonicalSemantics.clarificationPlan.some((item) => item.blocking) &&
         !this.shouldDeferCanonicalClarificationToPatientResolution(
           context.canonicalSemantics
         )
@@ -2651,6 +2653,15 @@ export class ThreeModeOrchestrator {
     canonicalSemantics: CanonicalQuerySemantics,
     plannerDecision?: PlannerDecisionMetadata
   ): OrchestrationResult {
+    const defaultPromptBySlot: Partial<Record<string, string>> = {
+      timeRange: "What date range should I use?",
+      measure: "Which metric should I analyze?",
+      grain: "How should results be grouped?",
+      groupBy: "How should results be grouped?",
+      assessmentType: "Which assessment type should I use?",
+      entityRef: "Which specific patient or entity should I use?",
+    };
+
     const clarifications = canonicalSemantics.clarificationPlan
       .filter((item) => item.blocking)
       .map((item, index) => ({
@@ -2658,7 +2669,12 @@ export class ThreeModeOrchestrator {
         ambiguousTerm: item.target || item.slot,
         question:
           item.question ||
-          `Please clarify ${item.target || item.slot} to continue.`,
+          defaultPromptBySlot[item.slot] ||
+          `Please clarify ${
+            (item.target || item.slot) === "temporalSpec"
+              ? "date range"
+              : item.target || item.slot
+          } to continue.`,
         options: [],
         allowCustom: true,
         slot: item.slot,

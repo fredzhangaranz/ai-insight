@@ -6,6 +6,10 @@ import type {
   ContextBundle,
   TerminologyMapping,
 } from "../context-discovery/types";
+import {
+  extractPatientNameCandidateFromQuestion,
+  isLikelyPatientNameCandidate,
+} from "../patient-entity-resolver.service";
 
 interface PlannerInput {
   question: string;
@@ -93,7 +97,7 @@ const SLOT_POLICY: Record<ClarificationSlot, PlannerSlotPolicy> = {
     autoResolveConfidence: 0.9,
     dominanceDelta: 0.1,
     maxOptions: 6,
-    allowCustomWithOptions: true,
+    allowCustomWithOptions: false,
   },
   assessmentType: {
     autoResolveConfidence: 0.85,
@@ -111,7 +115,7 @@ const SLOT_POLICY: Record<ClarificationSlot, PlannerSlotPolicy> = {
     autoResolveConfidence: 0.95,
     dominanceDelta: 0.2,
     maxOptions: 6,
-    allowCustomWithOptions: true,
+    allowCustomWithOptions: false,
   },
   valueFilter: {
     autoResolveConfidence: 0.85,
@@ -145,9 +149,58 @@ function toPlannerOptionId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function normalizeTargetLabel(item: CanonicalClarificationItem): string {
+  const target = item.target?.trim();
+  if (!target) {
+    if (item.slot === "timeRange") return "date range";
+    if (item.slot === "entityRef") return "patient or entity";
+    if (item.slot === "assessmentType") return "assessment type";
+    if (item.slot === "valueFilter") return "filter value";
+    if (item.slot === "measure") return "metric";
+    if (item.slot === "grain" || item.slot === "groupBy") return "grouping";
+    return item.slot;
+  }
+
+  const lower = target.toLowerCase();
+  if (lower === "temporalspec") return "date range";
+  return target;
+}
+
+const GENERIC_PATIENT_MENTIONS = new Set([
+  "patient",
+  "patients",
+  "entity",
+  "entities",
+  "this patient",
+  "same patient",
+  "him",
+  "her",
+  "them",
+]);
+
+function isGenericPatientMention(mentionText: string): boolean {
+  return GENERIC_PATIENT_MENTIONS.has(mentionText.trim().toLowerCase());
+}
+
 function fallbackQuestion(item: CanonicalClarificationItem): string {
   if (item.question?.trim()) return item.question;
-  return `Please clarify ${item.target || item.slot} so I can run this query safely.`;
+  const targetLabel = normalizeTargetLabel(item);
+  if (item.slot === "timeRange") {
+    return "What date range should I use?";
+  }
+  if (item.slot === "measure") {
+    return "Which metric should I analyze?";
+  }
+  if (item.slot === "grain" || item.slot === "groupBy") {
+    return "How should results be grouped?";
+  }
+  if (item.slot === "assessmentType") {
+    return "Which assessment type should I use?";
+  }
+  if (item.slot === "entityRef") {
+    return "Which specific patient or entity should I use?";
+  }
+  return `Please clarify ${targetLabel} so I can run this query safely.`;
 }
 
 function rankMappingsForItem(
@@ -472,9 +525,20 @@ function buildTemporalCandidates(input: PlannerInput): OptionCandidate[] {
   ];
 }
 
-function buildEntityRefCandidates(input: PlannerInput): OptionCandidate[] {
-  return input.canonicalSemantics.subjectRefs
-    .filter((ref) => ref.entityType === "patient" && ref.mentionText.trim().length > 0)
+function buildEntityRefCandidates(
+  input: PlannerInput,
+  item: CanonicalClarificationItem
+): OptionCandidate[] {
+  const targetEntity = (item.target || "").toLowerCase();
+
+  const fromRefs = input.canonicalSemantics.subjectRefs
+    .filter((ref) => {
+      if (!ref.mentionText?.trim()) return false;
+      if (ref.entityType !== "patient") return false;
+      if (isGenericPatientMention(ref.mentionText)) return false;
+      if (targetEntity && ref.entityType.toLowerCase() !== targetEntity) return false;
+      return true;
+    })
     .map((ref, index) => ({
       id: `entity_ref_${index}_${toPlannerOptionId(ref.mentionText)}`,
       label: ref.mentionText,
@@ -486,6 +550,27 @@ function buildEntityRefCandidates(input: PlannerInput): OptionCandidate[] {
         status: ref.status,
       },
     }));
+
+  if (fromRefs.length > 0) {
+    return fromRefs;
+  }
+
+  const extractedName = extractPatientNameCandidateFromQuestion(input.question);
+  if (!extractedName || !isLikelyPatientNameCandidate(extractedName)) {
+    return [];
+  }
+
+  return [
+    {
+      id: `entity_ref_0_${toPlannerOptionId(extractedName)}`,
+      label: extractedName,
+      submissionValue: extractedName,
+      confidence: 0.8,
+      evidence: {
+        source: "question_name_extractor",
+      },
+    },
+  ];
 }
 
 function appendPlannerEvidence(
@@ -743,6 +828,22 @@ export class GroundedClarificationPlannerService {
         return;
       }
 
+      if (
+        item.slot === "timeRange" &&
+        (input.canonicalSemantics.temporalSpec.kind === "absolute_range" ||
+          input.canonicalSemantics.temporalSpec.kind === "relative_range")
+      ) {
+        autoResolvedCount += 1;
+        recordDecision({
+          slot: item.slot,
+          reasonCode: item.reasonCode,
+          candidateCount: 0,
+          autoResolved: true,
+          mode: "auto_resolved",
+        });
+        return;
+      }
+
       if (item.slot === "timeRange") {
         const candidates = buildTemporalCandidates(input);
         if (hasDominantCandidate(candidates, policy)) {
@@ -758,7 +859,7 @@ export class GroundedClarificationPlannerService {
         }
         clarifications.push({
           id: `grounded_${item.slot}_${index}`,
-          ambiguousTerm: item.target || "time range",
+          ambiguousTerm: normalizeTargetLabel(item),
           question: fallbackQuestion(item),
           options: candidates.slice(0, policy.maxOptions).map((candidate, optionIndex) => ({
             id: candidate.id,
@@ -800,7 +901,8 @@ export class GroundedClarificationPlannerService {
           input.canonicalSemantics.subjectRefs.some(
             (ref) =>
               ref.entityType === "patient" &&
-              (ref.status === "candidate" || ref.status === "requires_resolution")
+              (ref.status === "candidate" || ref.status === "requires_resolution") &&
+              !isGenericPatientMention(ref.mentionText || "")
           );
         if (shouldDeferToResolver) {
           filteredPlan.push(item);
@@ -814,7 +916,7 @@ export class GroundedClarificationPlannerService {
           return;
         }
 
-        const candidates = buildEntityRefCandidates(input);
+        const candidates = buildEntityRefCandidates(input, item);
         if (hasDominantCandidate(candidates, policy)) {
           autoResolvedCount += 1;
           recordDecision({

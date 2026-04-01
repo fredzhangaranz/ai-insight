@@ -15,22 +15,56 @@ export interface InsightsFeatureFlags {
   canonicalQuerySemanticsV1: boolean;
 }
 
+const ALWAYS_ON_INSIGHTS_FLAGS: InsightsFeatureFlags = {
+  patientEntityResolution: true,
+  promptPhiSanitization: true,
+  chartFirstResults: true,
+  conversationArtifacts: true,
+  followUpReliability: true,
+  clarificationPipelineV2: true,
+  clarificationPipelineV2Shadow: false,
+  canonicalQuerySemanticsV1: true,
+};
+
 export function getInsightsFeatureFlags(): InsightsFeatureFlags {
-  const canonicalQuerySemanticsV1 =
-    process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 !== undefined
-      ? envFlag("INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1")
-      : process.env.NODE_ENV !== "production";
+  // Feature flags are retired for active runtime development. Keep env-based toggles
+  // only in tests so existing unit tests can exercise legacy/compat branches.
+  if (process.env.NODE_ENV !== "test") {
+    return ALWAYS_ON_INSIGHTS_FLAGS;
+  }
 
   return {
-    patientEntityResolution: envFlag("INSIGHTS_PATIENT_ENTITY_RESOLUTION"),
-    promptPhiSanitization: envFlag("INSIGHTS_PROMPT_PHI_SANITIZATION"),
-    chartFirstResults: envFlag("INSIGHTS_CHART_FIRST_RESULTS"),
-    conversationArtifacts: envFlag("INSIGHTS_CONVERSATION_ARTIFACTS"),
-    followUpReliability: envFlag("INSIGHTS_FOLLOWUP_RELIABILITY"),
-    clarificationPipelineV2: envFlag("INSIGHTS_CLARIFICATION_PIPELINE_V2"),
-    clarificationPipelineV2Shadow: envFlag(
-      "INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW"
-    ),
-    canonicalQuerySemanticsV1,
+    patientEntityResolution:
+      process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION !== undefined
+        ? envFlag("INSIGHTS_PATIENT_ENTITY_RESOLUTION")
+        : false,
+    promptPhiSanitization:
+      process.env.INSIGHTS_PROMPT_PHI_SANITIZATION !== undefined
+        ? envFlag("INSIGHTS_PROMPT_PHI_SANITIZATION")
+        : false,
+    chartFirstResults:
+      process.env.INSIGHTS_CHART_FIRST_RESULTS !== undefined
+        ? envFlag("INSIGHTS_CHART_FIRST_RESULTS")
+        : false,
+    conversationArtifacts:
+      process.env.INSIGHTS_CONVERSATION_ARTIFACTS !== undefined
+        ? envFlag("INSIGHTS_CONVERSATION_ARTIFACTS")
+        : false,
+    followUpReliability:
+      process.env.INSIGHTS_FOLLOWUP_RELIABILITY !== undefined
+        ? envFlag("INSIGHTS_FOLLOWUP_RELIABILITY")
+        : false,
+    clarificationPipelineV2:
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2 !== undefined
+        ? envFlag("INSIGHTS_CLARIFICATION_PIPELINE_V2")
+        : false,
+    clarificationPipelineV2Shadow:
+      process.env.INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW !== undefined
+        ? envFlag("INSIGHTS_CLARIFICATION_PIPELINE_V2_SHADOW")
+        : false,
+    canonicalQuerySemanticsV1:
+      process.env.INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1 !== undefined
+        ? envFlag("INSIGHTS_CANONICAL_QUERY_SEMANTICS_V1")
+        : false,
   };
 }

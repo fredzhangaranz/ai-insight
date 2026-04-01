@@ -288,4 +288,80 @@ describe("GroundedClarificationPlannerService", () => {
       "Unsafe or incomplete semantics"
     );
   });
+
+  it("provides concrete time range options instead of freeform-only temporalSpec fallback", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const semantics = buildSemantics();
+    semantics.clarificationPlan = [
+      {
+        slot: "timeRange",
+        reasonCode: "missing_time_range",
+        reason: "Time range is required",
+        blocking: true,
+        confidence: 0.82,
+        target: "temporalSpec",
+      },
+    ];
+    semantics.executionRequirements.allowSqlGeneration = false;
+    semantics.executionRequirements.blockReason = "Need date range";
+
+    const result = planner.plan({
+      question: "show me wound area chart for Constance Bernier",
+      context: buildContext(),
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.clarifications).toHaveLength(1);
+    expect(result.clarifications[0]?.ambiguousTerm).toBe("date range");
+    expect(result.clarifications[0]?.question).toBe("What date range should I use?");
+    expect(result.clarifications[0]?.options.length).toBeGreaterThan(0);
+    expect(result.clarifications[0]?.allowCustom).toBe(false);
+  });
+
+  it("uses patient name extracted from the question when canonical subject ref is generic", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const semantics = buildSemantics();
+    semantics.subjectRefs = [
+      {
+        entityType: "patient",
+        mentionText: "patient",
+        referenceKind: "unknown",
+        status: "candidate",
+        confidence: 0.7,
+        explicit: true,
+      },
+    ];
+    semantics.clarificationPlan = [
+      {
+        slot: "entityRef",
+        reasonCode: "unsafe_to_execute",
+        reason: "A specific patient is required",
+        blocking: true,
+        confidence: 0.9,
+        target: "patient",
+      },
+    ];
+    semantics.executionRequirements.allowSqlGeneration = false;
+    semantics.executionRequirements.blockReason = "Need patient";
+
+    const result = planner.plan({
+      question: "show me wound area chart for Constance Bernier",
+      context: buildContext(),
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.clarifications).toHaveLength(1);
+    expect(result.clarifications[0]?.options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Constance Bernier",
+          submissionValue: "Constance Bernier",
+        }),
+      ])
+    );
+    expect(result.clarifications[0]?.allowCustom).toBe(false);
+    expect(
+      result.clarifications[0]?.evidence?.clarificationSource
+    ).toBe("grounded_clarification_planner");
+  });
 });
