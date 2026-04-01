@@ -15,6 +15,17 @@ type SqlQueryResultLike = {
   columns?: Record<string, unknown>;
 };
 
+interface TableColumnMetadata {
+  columnName: string;
+  dataType: string;
+}
+
+const ALIASES_TO_BRACKET = new Set(["is"]);
+
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function extractQueryRowsAndColumns(result: unknown): {
   rows: any[];
   columns: string[];
@@ -63,6 +74,316 @@ export function extractQueryRowsAndColumns(result: unknown): {
           ? batchColumns
           : lastRecordsetColumns,
   };
+}
+
+function extractRptAliasTableMap(sqlQuery: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const regex =
+    /\b(?:FROM|JOIN)\s+rpt\.([A-Za-z_][A-Za-z0-9_]*)(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?/gi;
+  const sqlKeywords = new Set([
+    "on",
+    "where",
+    "group",
+    "order",
+    "having",
+    "inner",
+    "left",
+    "right",
+    "full",
+    "cross",
+    "join",
+    "union",
+    "offset",
+    "fetch",
+    "with",
+  ]);
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(sqlQuery))) {
+    const tableName = match[1];
+    const aliasCandidate = (match[2] || "").toLowerCase();
+    const alias =
+      aliasCandidate && !sqlKeywords.has(aliasCandidate)
+        ? aliasCandidate
+        : tableName.toLowerCase();
+    map.set(alias, tableName);
+  }
+  return map;
+}
+
+function sanitizeReservedKeywordAliases(sqlQuery: string): {
+  rewrittenSql: string;
+  aliases: string[];
+} {
+  const matchedAliases = new Set<string>();
+  const declarationPattern =
+    /\b(FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_.\[\]]*)(\s+(?:AS\s+)?)([A-Za-z_][A-Za-z0-9_]*)\b/gi;
+
+  let rewrittenSql = sqlQuery.replace(
+    declarationPattern,
+    (full, clause, tableRef, spacing, alias) => {
+      const aliasLower = String(alias).toLowerCase();
+      if (!ALIASES_TO_BRACKET.has(aliasLower)) {
+        return full;
+      }
+      matchedAliases.add(aliasLower);
+      return `${clause} ${tableRef}${spacing}[${aliasLower}]`;
+    }
+  );
+
+  for (const aliasLower of matchedAliases) {
+    const escapedAlias = escapeRegexLiteral(aliasLower);
+    const referencePattern = new RegExp(`\\b${escapedAlias}\\.`, "gi");
+    rewrittenSql = rewrittenSql.replace(referencePattern, `[${aliasLower}].`);
+  }
+
+  return { rewrittenSql, aliases: Array.from(matchedAliases.values()) };
+}
+
+function extractAliasDateReferences(sqlQuery: string): string[] {
+  const aliases = new Set<string>();
+  const regex = /\b(?:rpt\.)?([A-Za-z_][A-Za-z0-9_]*)\.date\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(sqlQuery))) {
+    aliases.add(match[1].toLowerCase());
+  }
+  return Array.from(aliases.values());
+}
+
+function extractDimDateAliasLinks(
+  sqlQuery: string,
+  aliasToTable: Map<string, string>
+): Map<string, string> {
+  const links = new Map<string, string>();
+  const patterns = [
+    /\b([A-Za-z_][A-Za-z0-9_]*)\.dimDateFk\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.id\b/gi,
+    /\b([A-Za-z_][A-Za-z0-9_]*)\.id\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.dimDateFk\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(sqlQuery))) {
+      const leftAlias = match[1].toLowerCase();
+      const rightAlias = match[2].toLowerCase();
+      const leftTable = aliasToTable.get(leftAlias)?.toLowerCase();
+      const rightTable = aliasToTable.get(rightAlias)?.toLowerCase();
+
+      if (rightTable === "dimdate" && leftTable && leftTable !== "dimdate") {
+        links.set(leftAlias, rightAlias);
+      }
+      if (leftTable === "dimdate" && rightTable && rightTable !== "dimdate") {
+        links.set(rightAlias, leftAlias);
+      }
+    }
+  }
+
+  return links;
+}
+
+function pickBestDateColumn(columns: TableColumnMetadata[]): string | null {
+  if (!columns.length) {
+    return null;
+  }
+
+  const isDateType = (dataType: string) =>
+    /(date|time)/i.test(dataType || "");
+  const isForeignKeyLike = (columnName: string) => /fk$/i.test(columnName);
+
+  const exact = columns.find((col) => col.columnName.toLowerCase() === "date");
+  if (exact) {
+    return exact.columnName;
+  }
+
+  const dateNamedAndTyped = columns.find(
+    (col) =>
+      isDateType(col.dataType) &&
+      /date|time/i.test(col.columnName) &&
+      !isForeignKeyLike(col.columnName)
+  );
+  if (dateNamedAndTyped) {
+    return dateNamedAndTyped.columnName;
+  }
+
+  const typed = columns.find(
+    (col) => isDateType(col.dataType) && !isForeignKeyLike(col.columnName)
+  );
+  if (typed) {
+    return typed.columnName;
+  }
+
+  const dateNamed = columns.find(
+    (col) => /date|time/i.test(col.columnName) && !isForeignKeyLike(col.columnName)
+  );
+  if (dateNamed) {
+    return dateNamed.columnName;
+  }
+
+  return null;
+}
+
+function buildAliasDateExpressionMap(input: {
+  sqlQuery: string;
+  aliasToTable: Map<string, string>;
+  tableColumnsByTable: Map<string, TableColumnMetadata[]>;
+}): Record<string, string> {
+  const result: Record<string, string> = {};
+  const dateAliases = extractAliasDateReferences(input.sqlQuery);
+  const dimDateLinks = extractDimDateAliasLinks(input.sqlQuery, input.aliasToTable);
+
+  for (const aliasLower of dateAliases) {
+    const tableName = input.aliasToTable.get(aliasLower);
+    if (!tableName) {
+      continue;
+    }
+    const columns = input.tableColumnsByTable.get(tableName.toLowerCase()) || [];
+    const bestDateColumn = pickBestDateColumn(columns);
+
+    if (bestDateColumn) {
+      result[aliasLower] = `${aliasLower}.[${bestDateColumn}]`;
+      continue;
+    }
+
+    const dimDateAlias = dimDateLinks.get(aliasLower);
+    if (dimDateAlias) {
+      result[aliasLower] = `${dimDateAlias}.[date]`;
+    }
+  }
+
+  return result;
+}
+
+export function remediateInvalidDateColumnReferences(
+  sqlQuery: string,
+  tableColumnsByTable: Record<string, TableColumnMetadata[]>
+): { rewrittenSql: string; replacements: number } {
+  const aliasToTable = extractRptAliasTableMap(sqlQuery);
+  const tableColumns = new Map<string, TableColumnMetadata[]>();
+  for (const [tableName, columns] of Object.entries(tableColumnsByTable)) {
+    tableColumns.set(tableName.toLowerCase(), columns);
+  }
+
+  const replacementExpressions = buildAliasDateExpressionMap({
+    sqlQuery,
+    aliasToTable,
+    tableColumnsByTable: tableColumns,
+  });
+
+  let rewrittenSql = sqlQuery;
+  let replacements = 0;
+  for (const [aliasLower, expression] of Object.entries(replacementExpressions)) {
+    const pattern = new RegExp(`\\b${aliasLower}\\.date\\b`, "gi");
+    const before = rewrittenSql;
+    rewrittenSql = rewrittenSql.replace(pattern, expression);
+    if (before !== rewrittenSql) {
+      replacements += 1;
+    }
+  }
+
+  return { rewrittenSql, replacements };
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message || "";
+  if (typeof error === "object") {
+    const maybe = error as { message?: string; originalError?: { message?: string } };
+    return maybe.message || maybe.originalError?.message || "";
+  }
+  return "";
+}
+
+function shouldAttemptInvalidDateRemediation(
+  error: unknown,
+  sqlQuery: string
+): boolean {
+  const message = extractErrorMessage(error);
+  if (!/invalid column name\s+'date'/i.test(message)) {
+    return false;
+  }
+  return /\b[A-Za-z_][A-Za-z0-9_]*\.date\b/.test(sqlQuery);
+}
+
+async function loadTableColumnsForDateRemediation(
+  pool: ConnectionPool,
+  tableNames: string[]
+): Promise<Map<string, TableColumnMetadata[]>> {
+  const safeNames = Array.from(new Set(tableNames))
+    .map((name) => name.trim())
+    .filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name));
+
+  if (safeNames.length === 0) {
+    return new Map();
+  }
+
+  const inClause = safeNames.map((name) => `'${name}'`).join(", ");
+  const query = `
+    SELECT TABLE_NAME AS tableName, COLUMN_NAME AS columnName, DATA_TYPE AS dataType
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = 'rpt'
+      AND TABLE_NAME IN (${inClause})
+    ORDER BY TABLE_NAME, ORDINAL_POSITION
+  `;
+
+  const rows = await pool.request().query(query);
+  const map = new Map<string, TableColumnMetadata[]>();
+  for (const row of rows.recordset || []) {
+    const tableName = String(row.tableName || "").toLowerCase();
+    if (!tableName) continue;
+    if (!map.has(tableName)) {
+      map.set(tableName, []);
+    }
+    map.get(tableName)!.push({
+      columnName: String(row.columnName || ""),
+      dataType: String(row.dataType || ""),
+    });
+  }
+  return map;
+}
+
+async function tryRemediateAndRetryInvalidDateColumn(input: {
+  pool: ConnectionPool;
+  customerId: string;
+  sqlQuery: string;
+  boundParameters?: Record<string, string | number | boolean | null>;
+  error: unknown;
+}): Promise<{ rows: any[]; columns: string[] } | null> {
+  if (!shouldAttemptInvalidDateRemediation(input.error, input.sqlQuery)) {
+    return null;
+  }
+
+  const aliasToTable = extractRptAliasTableMap(input.sqlQuery);
+  const involvedTables = Array.from(new Set(Array.from(aliasToTable.values())));
+  const tableColumnsMap = await loadTableColumnsForDateRemediation(
+    input.pool,
+    involvedTables
+  );
+
+  const tableColumnsByTable: Record<string, TableColumnMetadata[]> = {};
+  for (const [table, columns] of tableColumnsMap.entries()) {
+    tableColumnsByTable[table] = columns;
+  }
+
+  const remediated = remediateInvalidDateColumnReferences(
+    input.sqlQuery,
+    tableColumnsByTable
+  );
+  if (remediated.replacements === 0 || remediated.rewrittenSql === input.sqlQuery) {
+    return null;
+  }
+
+  console.warn("[CustomerQuery] Retrying query after date-column remediation", {
+    customerId: input.customerId,
+    replacements: remediated.replacements,
+  });
+
+  const retryBatch = `SET NOCOUNT ON;\nEXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${remediated.rewrittenSql}`;
+  const request = input.pool.request();
+  for (const [key, value] of Object.entries(input.boundParameters || {})) {
+    request.input(key, value as any);
+  }
+  const retryResult = await request.query(retryBatch);
+  return extractQueryRowsAndColumns(retryResult);
 }
 
 /**
@@ -183,26 +504,43 @@ export async function executeCustomerQuery(
     // Set session context for rpt schema / row-level security (same connection as query)
     const allAccessBatch = `SET NOCOUNT ON;\nEXEC sp_set_session_context @key = N'all_access', @value = 1;\n\n${sqlQuery}`;
 
-    const request = pool.request();
-    for (const [key, value] of Object.entries(boundParameters || {})) {
-      request.input(key, value as any);
-    }
-
-    // Execute query
     const startExecution = Date.now();
     console.log("[CustomerQuery] Starting query execution (with all_access)...");
-    const result = await request.query(allAccessBatch);
-    const executionTime = Date.now() - startExecution;
-    
-    // Transform result to standard format
-    const { rows, columns } = extractQueryRowsAndColumns(result);
-    
-    console.log(`[CustomerQuery] ✅ Query completed in ${executionTime}ms, returned ${rows.length} rows`);
 
-    return {
-      rows,
-      columns,
+    const executeWithParams = async (queryText: string) => {
+      const request = pool.request();
+      for (const [key, value] of Object.entries(boundParameters || {})) {
+        request.input(key, value as any);
+      }
+      return request.query(queryText);
     };
+
+    try {
+      const result = await executeWithParams(allAccessBatch);
+      const executionTime = Date.now() - startExecution;
+      const { rows, columns } = extractQueryRowsAndColumns(result);
+
+      console.log(
+        `[CustomerQuery] ✅ Query completed in ${executionTime}ms, returned ${rows.length} rows`
+      );
+      return { rows, columns };
+    } catch (error) {
+      const remediated = await tryRemediateAndRetryInvalidDateColumn({
+        pool,
+        customerId,
+        sqlQuery,
+        boundParameters,
+        error,
+      });
+      if (remediated) {
+        const executionTime = Date.now() - startExecution;
+        console.log(
+          `[CustomerQuery] ✅ Query completed after remediation in ${executionTime}ms, returned ${remediated.rows.length} rows`
+        );
+        return remediated;
+      }
+      throw error;
+    }
   } finally {
     // Always close the pool
     await pool.close();
@@ -263,6 +601,17 @@ export function validateAndFixQuery(sqlQuery: string): string {
     
     if (beforeFix !== fixed && process.env.NODE_ENV !== "production") {
       console.log(`[validateAndFixQuery] Added rpt. prefix to ${tableName} in FROM/JOIN`);
+    }
+  }
+
+  // 3. Bracket reserved-word aliases (e.g. "IS") to avoid syntax errors
+  const aliasSanitized = sanitizeReservedKeywordAliases(fixed);
+  if (aliasSanitized.aliases.length > 0) {
+    fixed = aliasSanitized.rewrittenSql;
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[validateAndFixQuery] Bracketed reserved aliases: ${aliasSanitized.aliases.join(", ")}`
+      );
     }
   }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   extractQueryRowsAndColumns,
+  remediateInvalidDateColumnReferences,
   validateAndFixQuery,
 } from "@/lib/services/semantic/customer-query.service";
 
@@ -113,6 +114,7 @@ describe("validateAndFixQuery - Schema Prefix Fix", () => {
     expect(result).toContain("FROM rpt.Assessment");
     // CTE name itself should NOT get prefix (it's a derived table, not a base table)
     expect(result).toContain("FROM AssessmentData");
+    expect(result).not.toContain("[where]");
   });
 
   it("should NOT modify column names that match table names", () => {
@@ -129,6 +131,22 @@ describe("validateAndFixQuery - Schema Prefix Fix", () => {
     expect(result).toContain("measurementValue AS Measurement");
     expect(result).not.toContain("AS rpt.Wound");
     expect(result).not.toContain("AS rpt.Measurement");
+  });
+
+  it("should bracket reserved keyword aliases and preserve IS NULL checks", () => {
+    const query = `
+      SELECT W.id, IS.Stage
+      FROM Wound W
+      LEFT JOIN InitialWoundStage IS ON W.id = IS.woundFk
+      WHERE IS.Stage IS NOT NULL
+    `;
+
+    const result = validateAndFixQuery(query);
+
+    expect(result).toContain("FROM rpt.Wound W");
+    expect(result).toContain("LEFT JOIN InitialWoundStage [is] ON W.id = [is].woundFk");
+    expect(result).toContain("SELECT TOP 1000 W.id, [is].Stage");
+    expect(result).toContain("WHERE [is].Stage IS NOT NULL");
   });
 });
 
@@ -175,5 +193,88 @@ describe("extractQueryRowsAndColumns", () => {
 
     expect(extracted.rows).toEqual([]);
     expect(extracted.columns).toEqual(["patient_count"]);
+  });
+});
+
+describe("remediateInvalidDateColumnReferences", () => {
+  it("rewrites alias.date to discovered date-like columns per table", () => {
+    const query = `
+      SELECT A.id, N.value
+      FROM rpt.Assessment A
+      JOIN rpt.Note N ON N.assessmentFk = A.id
+      WHERE A.date >= DATEADD(month, -12, GETDATE())
+      ORDER BY N.date DESC
+    `;
+
+    const { rewrittenSql, replacements } = remediateInvalidDateColumnReferences(
+      query,
+      {
+        assessment: [
+          { columnName: "assessmentDate", dataType: "datetime" },
+          { columnName: "dimDateFk", dataType: "uniqueidentifier" },
+        ],
+        note: [{ columnName: "serverChangeDate", dataType: "datetime" }],
+      }
+    );
+
+    expect(replacements).toBeGreaterThan(0);
+    expect(rewrittenSql).toContain("a.[assessmentDate]");
+    expect(rewrittenSql).toContain("n.[serverChangeDate]");
+  });
+
+  it("falls back to linked DimDate alias when source table has no date column", () => {
+    const query = `
+      SELECT A.id, DD.[date]
+      FROM rpt.Assessment A
+      JOIN rpt.DimDate DD ON A.dimDateFk = DD.id
+      WHERE A.date >= DATEADD(day, -30, GETDATE())
+    `;
+
+    const { rewrittenSql, replacements } = remediateInvalidDateColumnReferences(
+      query,
+      {
+        assessment: [{ columnName: "dimDateFk", dataType: "uniqueidentifier" }],
+        dimdate: [{ columnName: "date", dataType: "datetime" }],
+      }
+    );
+
+    expect(replacements).toBeGreaterThan(0);
+    expect(rewrittenSql).toContain("dd.[date] >= DATEADD(day, -30, GETDATE())");
+  });
+
+  it("supports FROM/JOIN aliases declared with AS", () => {
+    const query = `
+      SELECT A.id
+      FROM rpt.Assessment AS A
+      WHERE A.date >= DATEADD(day, -7, GETDATE())
+    `;
+
+    const { rewrittenSql, replacements } = remediateInvalidDateColumnReferences(
+      query,
+      {
+        assessment: [{ columnName: "assessmentDate", dataType: "datetime" }],
+      }
+    );
+
+    expect(replacements).toBeGreaterThan(0);
+    expect(rewrittenSql).toContain("a.[assessmentDate] >= DATEADD(day, -7, GETDATE())");
+  });
+
+  it("supports table-qualified date references without an alias", () => {
+    const query = `
+      SELECT rpt.Assessment.id
+      FROM rpt.Assessment
+      WHERE Assessment.date >= DATEADD(day, -7, GETDATE())
+    `;
+
+    const { rewrittenSql, replacements } = remediateInvalidDateColumnReferences(
+      query,
+      {
+        assessment: [{ columnName: "assessmentDate", dataType: "datetime" }],
+      }
+    );
+
+    expect(replacements).toBeGreaterThan(0);
+    expect(rewrittenSql).toContain("assessment.[assessmentDate] >= DATEADD(day, -7, GETDATE())");
   });
 });
