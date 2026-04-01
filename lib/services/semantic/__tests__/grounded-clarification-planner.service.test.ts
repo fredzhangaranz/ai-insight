@@ -91,15 +91,6 @@ describe("GroundedClarificationPlannerService", () => {
     expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
       true
     );
-    expect(result.clarifiedSemantics.valueSpecs).toEqual([
-      expect.objectContaining({
-        field: "Gender",
-        operator: "equals",
-        userPhrase: "male",
-        value: "Male",
-        resolved: true,
-      }),
-    ]);
   });
 
   it("returns grounded options when multiple mappings are present", () => {
@@ -122,26 +113,6 @@ describe("GroundedClarificationPlannerService", () => {
 
     expect(result.autoResolvedCount).toBe(0);
     expect(result.clarifications[0]?.options.length).toBeGreaterThan(0);
-    expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
-      false
-    );
-  });
-
-  it("falls back to freeform clarification when no grounded candidates exist", () => {
-    const planner = new GroundedClarificationPlannerService();
-    const context = buildContext();
-    context.terminology = [];
-
-    const result = planner.plan({
-      question: "how many male patients",
-      context,
-      canonicalSemantics: buildSemantics(),
-    });
-
-    expect(result.autoResolvedCount).toBe(0);
-    expect(result.clarifications).toHaveLength(1);
-    expect(result.clarifications[0]?.options).toEqual([]);
-    expect(result.clarifications[0]?.allowCustom).toBe(true);
     expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
       false
     );

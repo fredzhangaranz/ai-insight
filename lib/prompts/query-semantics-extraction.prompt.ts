@@ -328,10 +328,9 @@ function normalizeValueSpecs(value: unknown): CanonicalValueSpec[] {
             ? (entry.value as string | null)
             : null,
         resolved: entry.resolved === true,
-      };
-      return spec;
+      } as CanonicalValueSpec;
     })
-    .filter((entry): entry is CanonicalValueSpec => Boolean(entry));
+    .filter(Boolean) as CanonicalValueSpec[];
 }
 
 function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[] {
@@ -346,18 +345,6 @@ function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[
     "missing_assessment_type",
     "unsafe_to_execute",
   ];
-  const defaultReasonCodeBySlot: Partial<
-    Record<ClarificationSlot, CanonicalClarificationItem["reasonCode"]>
-  > = {
-    entityRef: "missing_entity",
-    measure: "missing_measure",
-    grain: "missing_grain",
-    groupBy: "missing_grain",
-    timeRange: "missing_time_range",
-    assessmentType: "missing_assessment_type",
-    valueFilter: "ambiguous_value",
-  };
-
   return value
     .map((entry) => {
       if (!isObject(entry)) return null;
@@ -371,14 +358,15 @@ function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[
       if (
         !CLARIFICATION_SLOTS.includes(slot) ||
         typeof entry.reason !== "string" ||
+        !reasonCodes.includes(entry.reasonCode as CanonicalClarificationItem["reasonCode"]) ||
         typeof entry.blocking !== "boolean"
       ) {
         return null;
       }
 
-      const item: CanonicalClarificationItem = {
-        slot,
-        reasonCode,
+      return {
+        slot: entry.slot as CanonicalClarificationItem["slot"],
+        reasonCode: entry.reasonCode as CanonicalClarificationItem["reasonCode"],
         reason: entry.reason,
         question: typeof entry.question === "string" ? entry.question : undefined,
         blocking: entry.blocking,
@@ -408,10 +396,9 @@ function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[
               threadReference: entry.evidence.threadReference === true,
             }
           : undefined,
-      };
-      return item;
+      } as CanonicalClarificationItem;
     })
-    .filter((entry): entry is CanonicalClarificationItem => Boolean(entry));
+    .filter(Boolean) as CanonicalClarificationItem[];
 }
 
 function normalizeExecutionRequirements(value: unknown): ExecutionRequirements {

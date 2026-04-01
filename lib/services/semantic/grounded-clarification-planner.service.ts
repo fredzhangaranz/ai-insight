@@ -1,7 +1,6 @@
 import type { ClarificationRequest } from "@/lib/prompts/generate-query.prompt";
 import type {
   CanonicalClarificationItem,
-  CanonicalValueSpec,
   CanonicalQuerySemantics,
   ContextBundle,
   TerminologyMapping,
@@ -56,24 +55,10 @@ function hasDominantCandidate(candidates: TerminologyMapping[]): boolean {
   );
 }
 
-function buildResolvedValueSpec(
-  item: CanonicalClarificationItem,
-  mapping: TerminologyMapping
-): CanonicalValueSpec {
-  return {
-    field: mapping.fieldName,
-    operator: "equals",
-    userPhrase: item.evidence?.userPhrase || mapping.userTerm,
-    value: mapping.fieldValue,
-    resolved: true,
-  };
-}
-
 export class GroundedClarificationPlannerService {
   plan(input: PlannerInput): PlannerResult {
     const filteredPlan: CanonicalClarificationItem[] = [];
     const clarifications: ClarificationRequest[] = [];
-    const valueSpecs: CanonicalValueSpec[] = [...input.canonicalSemantics.valueSpecs];
     let autoResolvedCount = 0;
 
     input.canonicalSemantics.clarificationPlan.forEach((item, index) => {
@@ -85,16 +70,6 @@ export class GroundedClarificationPlannerService {
       if (item.slot === "valueFilter") {
         const candidates = rankMappingsForItem(item, input.context.terminology);
         if (hasDominantCandidate(candidates)) {
-          const winning = candidates[0];
-          const resolvedSpec = buildResolvedValueSpec(item, winning);
-          const alreadyPresent = valueSpecs.some(
-            (spec) =>
-              spec.field?.toLowerCase() === resolvedSpec.field?.toLowerCase() &&
-              spec.value?.toLowerCase() === resolvedSpec.value?.toLowerCase()
-          );
-          if (!alreadyPresent) {
-            valueSpecs.push(resolvedSpec);
-          }
           autoResolvedCount += 1;
           return;
         }
@@ -197,7 +172,6 @@ export class GroundedClarificationPlannerService {
       autoResolvedCount,
       clarifiedSemantics: {
         ...input.canonicalSemantics,
-        valueSpecs,
         clarificationPlan: filteredPlan,
         executionRequirements: {
           ...input.canonicalSemantics.executionRequirements,
@@ -209,4 +183,13 @@ export class GroundedClarificationPlannerService {
       },
     };
   }
+}
+
+let plannerSingleton: GroundedClarificationPlannerService | null = null;
+
+export function getGroundedClarificationPlannerService(): GroundedClarificationPlannerService {
+  if (!plannerSingleton) {
+    plannerSingleton = new GroundedClarificationPlannerService();
+  }
+  return plannerSingleton;
 }

@@ -91,7 +91,7 @@ import {
   getSemanticExecutionDiagnosticsService,
   type SemanticExecutionDiagnostics,
 } from "./semantic-execution-diagnostics.service";
-import { GroundedClarificationPlannerService } from "./grounded-clarification-planner.service";
+import { getGroundedClarificationPlannerService } from "./grounded-clarification-planner.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -1554,6 +1554,50 @@ export class ThreeModeOrchestrator {
         context.canonicalSemantics &&
         context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
         !hasUserClarifications
+      ) {
+        const groundedPlanner = getGroundedClarificationPlannerService();
+        const groundedPlan = groundedPlanner.plan({
+          question,
+          context,
+          canonicalSemantics: context.canonicalSemantics,
+        });
+        context.canonicalSemantics = groundedPlan.clarifiedSemantics;
+
+        if (
+          context.canonicalSemantics.executionRequirements.allowSqlGeneration !== false
+        ) {
+          console.log(
+            "[Orchestrator] ✅ Canonical ambiguity auto-resolved by grounded clarification planner",
+            { autoResolvedCount: groundedPlan.autoResolvedCount }
+          );
+        } else if (groundedPlan.clarifications.length > 0) {
+          contextDiscoveryStep.status = "complete";
+          contextDiscoveryStep.duration = Date.now() - discoveryStart;
+          contextDiscoveryStep.message = "Semantic clarification required";
+          return {
+            mode: "clarification",
+            question,
+            thinking,
+            requiresClarification: true,
+            clarifications: groundedPlan.clarifications,
+            clarificationReasoning:
+              context.canonicalSemantics.executionRequirements.blockReason ||
+              "Additional clarification is needed before SQL generation.",
+            context: {
+              canonicalSemantics: context.canonicalSemantics,
+              canonicalSemanticsVersion: context.canonicalSemantics.version,
+            },
+            canonicalSemantics: context.canonicalSemantics,
+          };
+        }
+
+      }
+
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        !clarifications
       ) {
         contextDiscoveryStep.status = "complete";
         contextDiscoveryStep.duration = Date.now() - discoveryStart;
