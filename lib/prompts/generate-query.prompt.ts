@@ -537,7 +537,7 @@ export function validateLLMResponse(
       typeof obj.confidence === "number" &&
       obj.confidence >= 0 &&
       obj.confidence <= 1 &&
-      /^[\s\n]*(SELECT|WITH)/i.test(obj.generatedSql) // Allow SELECT or CTE (WITH ...)
+      isSafeReadOnlySqlResponse(obj.generatedSql)
     );
   }
 
@@ -576,6 +576,33 @@ export function validateLLMResponse(
   }
 
   return false;
+}
+
+function stripSqlComments(sql: string): string {
+  return sql
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--.*$/gm, " ");
+}
+
+function isSafeReadOnlySqlResponse(sql: string): boolean {
+  const normalized = stripSqlComments(sql).trim();
+  if (!normalized) {
+    return false;
+  }
+
+  // Keep the response contract read-only.
+  if (
+    /\b(INSERT|UPDATE|DELETE|MERGE|DROP|ALTER|CREATE|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE)\b/i.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+
+  // Allow read-only T-SQL prologue (DECLARE/SET) before the final SELECT/WITH query.
+  return /^[\s;]*(?:(?:DECLARE|SET)\b[\s\S]*?(?:;|$)\s*)*(?:WITH|SELECT)\b/i.test(
+    normalized
+  );
 }
 
 // ========================================

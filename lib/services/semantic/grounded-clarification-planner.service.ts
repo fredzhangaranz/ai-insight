@@ -10,6 +10,7 @@ import {
   extractPatientNameCandidateFromQuestion,
   isLikelyPatientNameCandidate,
 } from "../patient-entity-resolver.service";
+import { isPatientLikeEntityRefTarget } from "@/lib/utils/canonical-thread-patient-merge";
 
 interface PlannerInput {
   question: string;
@@ -198,6 +199,9 @@ function fallbackQuestion(item: CanonicalClarificationItem): string {
     return "Which assessment type should I use?";
   }
   if (item.slot === "entityRef") {
+    if (targetLabel && !isPatientLikeEntityRefTarget(targetLabel)) {
+      return `Which specific ${targetLabel} should I use?`;
+    }
     return "Which specific patient or entity should I use?";
   }
   return `Please clarify ${targetLabel} so I can run this query safely.`;

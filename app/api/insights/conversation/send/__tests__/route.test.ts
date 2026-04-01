@@ -722,6 +722,131 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
+  it("treats generic canonical entityRef target as patient-like after thread context merge", async () => {
+
+    classifyIntentMock.mockResolvedValue({
+      type: "outcome_analysis",
+      scope: "individual_patient",
+      metrics: ["healing_rate"],
+      filters: [],
+      confidence: 0.9,
+      reasoning: "Follow-up uses this patient context.",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "individual_subject",
+      analyticIntent: "outcome_analysis",
+      measureSpec: {
+        metrics: ["healing_rate"],
+        subject: "wound",
+        grain: "per_wound",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: "chart",
+        preferredVisualization: "line",
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [
+        {
+          slot: "entityRef",
+          reasonCode: "unsafe_to_execute",
+          reason: "Specific entity is required",
+          blocking: true,
+          confidence: 0.86,
+          target: "entity",
+        },
+      ],
+      executionRequirements: {
+        requiresPatientResolution: true,
+        requiredBindings: ["patientId1"],
+        allowSqlGeneration: false,
+        blockReason: "Need entity context",
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi
+        .fn()
+        .mockResolvedValue(
+          "SELECT TOP 10 W.id, AVG(M.area) AS healingRate FROM rpt.Wound W JOIN rpt.Measurement M ON M.woundFk = W.id WHERE W.patientFk = @patientId1 GROUP BY W.id;"
+        ),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    executeCustomerQueryMock.mockResolvedValue({
+      rows: [{ id: "w1", healingRate: 0.32 }],
+      columns: ["id", "healingRate"],
+    });
+
+    const inheritedPatientId = "patient-from-thread-100";
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              semanticContext: {
+                boundParameters: { patientId1: inheritedPatientId },
+                resolvedEntities: [
+                  {
+                    kind: "patient",
+                    displayLabel: "Constance Bernier",
+                    opaqueRef: "opaque-constance-1",
+                  },
+                ],
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "show me wound healing rates for these two wounds for this patient",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+    expect(payload.message.metadata.mode).toBe("direct");
+    expect(patientResolverResolveMock).not.toHaveBeenCalled();
+    expect(executeCustomerQueryMock).toHaveBeenCalledWith(
+      "cust-1",
+      expect.stringContaining("@patientId1"),
+      expect.objectContaining({ patientId1: inheritedPatientId })
+    );
+    expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
+  });
+
   it("returns grounded canonical clarification options instead of freeform-only fallback", async () => {
 
     classifyIntentMock.mockResolvedValue({

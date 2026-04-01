@@ -2764,7 +2764,7 @@ export class ThreeModeOrchestrator {
       if (item.slot !== "entityRef") {
         return true;
       }
-      if (item.target && item.target !== "patient") {
+      if (!this.isPatientLikeEntityRefTarget(item.target)) {
         return true;
       }
       return false;
@@ -2785,6 +2785,30 @@ export class ThreeModeOrchestrator {
         blockReason: firstBlocking ? firstBlocking.reason : undefined,
       },
     };
+  }
+
+  private isPatientLikeEntityRefTarget(target?: string): boolean {
+    const normalized = (target || "").trim().toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+
+    if (
+      ["wound", "unit", "clinic", "assessment"].some((keyword) =>
+        normalized.includes(keyword)
+      )
+    ) {
+      return false;
+    }
+
+    return (
+      normalized.includes("patient") ||
+      normalized === "entity" ||
+      normalized === "entities" ||
+      normalized === "subject" ||
+      normalized === "person" ||
+      normalized === "individual"
+    );
   }
 
   private shouldUseCanonicalPatientResolution(

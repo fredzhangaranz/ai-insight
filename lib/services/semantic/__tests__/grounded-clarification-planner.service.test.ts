@@ -364,4 +364,34 @@ describe("GroundedClarificationPlannerService", () => {
       result.clarifications[0]?.evidence?.clarificationSource
     ).toBe("grounded_clarification_planner");
   });
+
+  it("uses a target-specific entity clarification prompt for non-patient entityRef blocks", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const semantics = buildSemantics();
+    semantics.clarificationPlan = [
+      {
+        slot: "entityRef",
+        reasonCode: "unsafe_to_execute",
+        reason: "Need specific wound references",
+        blocking: true,
+        confidence: 0.84,
+        target: "wound",
+      },
+    ];
+    semantics.executionRequirements.allowSqlGeneration = false;
+    semantics.executionRequirements.blockReason = "Need wound references";
+
+    const result = planner.plan({
+      question: "show healing rates for these two wounds",
+      context: buildContext(),
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.clarifications).toHaveLength(1);
+    expect(result.clarifications[0]?.question).toBe(
+      "Which specific wound should I use?"
+    );
+    expect(result.clarifications[0]?.options).toEqual([]);
+    expect(result.decisionMetadata.freeformFallbackCount).toBe(1);
+  });
 });

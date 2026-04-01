@@ -75,4 +75,27 @@ describe("mergeInheritedThreadPatientIntoCanonicalSemantics", () => {
       ])
     );
   });
+
+  it("treats generic entity target as patient-like and removes the block", () => {
+    const semantics = baseSemantics();
+    semantics.clarificationPlan = [
+      {
+        ...semantics.clarificationPlan[0],
+        target: "entity",
+        question: undefined,
+      },
+    ];
+
+    const merged = mergeInheritedThreadPatientIntoCanonicalSemantics(
+      semantics,
+      {
+        resolvedId: "280b1596-cf27-402f-ade2-549a4172111c",
+        displayLabel: "Melody Crist",
+        opaqueRef: "abc",
+      }
+    );
+
+    expect(merged.clarificationPlan).toEqual([]);
+    expect(merged.executionRequirements.allowSqlGeneration).toBe(true);
+  });
 });

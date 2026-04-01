@@ -146,6 +146,33 @@ describe("generateSQLWithLLM", () => {
     expect(result.assumptions.length).toBeGreaterThan(0);
   });
 
+  it("accepts read-only SQL with DECLARE prologue before CTE", async () => {
+    mocks.mockComplete.mockResolvedValueOnce(
+      JSON.stringify({
+        responseType: "sql",
+        explanation: "Use a relative date window and then run a CTE query.",
+        generatedSql: [
+          "DECLARE @EndDate DATETIME = GETDATE();",
+          "DECLARE @StartDate DATETIME = DATEADD(week, -4, @EndDate);",
+          "",
+          "WITH ScopedPatients AS (",
+          "  SELECT P.id",
+          "  FROM rpt.Patient P",
+          ")",
+          "SELECT COUNT(*) AS totalPatients FROM ScopedPatients;",
+        ].join("\n"),
+        confidence: 0.95,
+        assumptions: [],
+      })
+    );
+
+    const result = await generateSQLWithLLM(baseContext, "customer-1");
+
+    expect(result.responseType).toBe("sql");
+    expect(result.generatedSql).toContain("DECLARE @EndDate");
+    expect(result.generatedSql).toContain("WITH ScopedPatients");
+  });
+
   it("reuses cached customer schema between calls", async () => {
     mocks.mockComplete
       .mockResolvedValueOnce(

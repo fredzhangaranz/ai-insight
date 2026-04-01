@@ -10,6 +10,10 @@ import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
 import type { CanonicalQuerySemantics } from "@/lib/services/context-discovery/types";
 import { serializeResolvedEntitiesForPersistence } from "@/lib/utils/resolved-entities-persistence";
+import {
+  mergeClarificationResponses,
+  type ClarificationResponses,
+} from "@/lib/utils/clarification-response-merge";
 
 export interface ThinkingStep {
   id: string;
@@ -232,6 +236,7 @@ export function useInsights() {
   const [error, setError] = useState<Error | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const clarificationSelectionsRef = useRef<ClarificationResponses>({});
   const analysisStartRef = useRef<number | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -405,6 +410,7 @@ export function useInsights() {
     setResult(null);
     setError(null);
     setIsLoading(true);
+    clarificationSelectionsRef.current = {};
 
     const modelLabel = resolveModelLabel(modelId);
     setAnalysisModel(modelLabel);
@@ -548,6 +554,11 @@ export function useInsights() {
     setError(null);
     setIsLoading(true);
 
+    const mergedClarifications = mergeClarificationResponses(
+      clarificationSelectionsRef.current,
+      clarifications
+    );
+
     const modelLabel = resolveModelLabel(modelId);
     setAnalysisModel(modelLabel);
     updateAnalysisStatus("running");
@@ -562,7 +573,7 @@ export function useInsights() {
         body: JSON.stringify({
           question: originalQuestion,
           customerId,
-          clarifications,
+          clarifications: mergedClarifications,
           modelId
         }),
         signal: controller.signal,
@@ -592,6 +603,11 @@ export function useInsights() {
       } else {
         // Success - show results
         setResult(data);
+        if (data.mode === "clarification") {
+          clarificationSelectionsRef.current = mergedClarifications;
+        } else {
+          clarificationSelectionsRef.current = {};
+        }
         if (data.modelId) {
           setAnalysisModel(data.modelId);
         }
@@ -672,6 +688,7 @@ export function useInsights() {
     setAnalysisSteps([]);
     setAnalysisModel(null);
     setAnalysisElapsedMs(0);
+    clarificationSelectionsRef.current = {};
     clearProgressSimulation();
     stopElapsedTimer();
     updateAnalysisStatus("idle");

@@ -60,6 +60,7 @@ import type {
 import { validateTrustedSql } from "@/lib/services/trusted-sql-guard.service";
 import { serializeResolvedEntitiesForPersistence } from "@/lib/utils/resolved-entities-persistence";
 import {
+  isPatientLikeEntityRefTarget,
   isAnaphoricPatientReferenceQuestion,
   mergeInheritedThreadPatientIntoCanonicalSemantics,
 } from "@/lib/utils/canonical-thread-patient-merge";
@@ -1751,7 +1752,7 @@ function clearResolvedPatientClarificationBlocks(
     if (item.slot !== "entityRef") {
       return true;
     }
-    if (item.target && item.target !== "patient") {
+    if (!isPatientLikeEntityRefTarget(item.target)) {
       return true;
     }
     return false;

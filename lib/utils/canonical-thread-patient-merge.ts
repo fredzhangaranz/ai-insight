@@ -3,6 +3,41 @@ import type {
   SubjectRef,
 } from "@/lib/services/context-discovery/types";
 
+const NON_PATIENT_ENTITY_TARGET_KEYWORDS = [
+  "wound",
+  "unit",
+  "clinic",
+  "assessment",
+];
+
+/**
+ * Canonical extraction can emit generic entityRef targets such as "entity"/"subject"
+ * even when the unresolved reference is still the thread patient.
+ */
+export function isPatientLikeEntityRefTarget(target?: string): boolean {
+  const normalized = (target || "").trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  if (
+    NON_PATIENT_ENTITY_TARGET_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword)
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    normalized.includes("patient") ||
+    normalized === "entity" ||
+    normalized === "entities" ||
+    normalized === "subject" ||
+    normalized === "person" ||
+    normalized === "individual"
+  );
+}
+
 /** Follow-up phrasing that refers to the patient already scoped in the thread. */
 export function isAnaphoricPatientReferenceQuestion(question: string): boolean {
   return /\b(this|that|same|the)\s+patient\b/i.test(question);
@@ -27,7 +62,7 @@ export function mergeInheritedThreadPatientIntoCanonicalSemantics(
   const filteredPlan = clone.clarificationPlan.filter((item) => {
     if (!item.blocking) return true;
     if (item.slot !== "entityRef") return true;
-    if (item.target && item.target !== "patient") return true;
+    if (!isPatientLikeEntityRefTarget(item.target)) return true;
     return false;
   });
 
