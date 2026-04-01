@@ -366,6 +366,17 @@ Generated clarification response:
 - GROUP BY CASE(...) ... ORDER BY table.column — Direct column reference when using CASE grouping
 - GROUP BY column ... ORDER BY different_column — ORDER BY column must be in GROUP BY
 - COUNT(MAX(column)) — Nested aggregates are invalid
+- GROUP BY with windowed median: `PERCENTILE_CONT(...) WITHIN GROUP (...) OVER (PARTITION BY x)` + `GROUP BY x`
+
+### ✅ Correct Pattern for Median by Group (SQL Server):
+- Use windowed percentile + DISTINCT, not GROUP BY
+- Example:
+  SELECT DISTINCT
+    WoundStage,
+    CAST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY TimeToHealingInDays)
+      OVER (PARTITION BY WoundStage) AS DECIMAL(10,2)) AS MedianTimeToHealingDays
+  FROM WoundHealingTime
+  ORDER BY WoundStage
 
 ### ✅ Correct Solution for Age Group Aggregations:
 

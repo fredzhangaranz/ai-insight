@@ -293,6 +293,423 @@ function extractErrorMessage(error: unknown): string {
   return "";
 }
 
+function matchesTopLevelKeyword(
+  upperSql: string,
+  index: number,
+  keyword: string
+): boolean {
+  if (!upperSql.startsWith(keyword, index)) {
+    return false;
+  }
+  const before = index > 0 ? upperSql[index - 1] : " ";
+  const afterIndex = index + keyword.length;
+  const after = afterIndex < upperSql.length ? upperSql[afterIndex] : " ";
+  if (/[A-Z0-9_]/.test(before)) {
+    return false;
+  }
+  if (/[A-Z0-9_]/.test(after)) {
+    return false;
+  }
+  return true;
+}
+
+function findOuterSelectClauseIndexes(sqlQuery: string): {
+  selectStart: number;
+  fromStart: number;
+  groupByStart: number;
+  havingStart: number;
+  orderByStart: number;
+} | null {
+  const upper = sqlQuery.toUpperCase();
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBracket = false;
+
+  let outerSelectStart = -1;
+  for (let i = 0; i < upper.length; i++) {
+    const char = upper[i];
+    const next = upper[i + 1];
+
+    if (!inSingle && !inDouble && !inBracket) {
+      if (char === "'") {
+        inSingle = true;
+      } else if (char === '"') {
+        inDouble = true;
+      } else if (char === "[") {
+        inBracket = true;
+      }
+    } else if (inSingle && char === "'" && next === "'") {
+      i += 1;
+      continue;
+    } else if (inSingle && char === "'") {
+      inSingle = false;
+    } else if (inDouble && char === '"' && next === '"') {
+      i += 1;
+      continue;
+    } else if (inDouble && char === '"') {
+      inDouble = false;
+    } else if (inBracket && char === "]") {
+      inBracket = false;
+    }
+
+    if (inSingle || inDouble || inBracket) {
+      continue;
+    }
+
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")" && depth > 0) {
+      depth -= 1;
+      continue;
+    }
+    if (depth !== 0) {
+      continue;
+    }
+
+    if (matchesTopLevelKeyword(upper, i, "SELECT")) {
+      outerSelectStart = i;
+      i += 5;
+    }
+  }
+
+  if (outerSelectStart < 0) {
+    return null;
+  }
+
+  depth = 0;
+  inSingle = false;
+  inDouble = false;
+  inBracket = false;
+
+  let fromStart = -1;
+  let groupByStart = -1;
+  let havingStart = -1;
+  let orderByStart = -1;
+
+  for (let i = outerSelectStart; i < upper.length; i++) {
+    const char = upper[i];
+    const next = upper[i + 1];
+
+    if (!inSingle && !inDouble && !inBracket) {
+      if (char === "'") {
+        inSingle = true;
+      } else if (char === '"') {
+        inDouble = true;
+      } else if (char === "[") {
+        inBracket = true;
+      }
+    } else if (inSingle && char === "'" && next === "'") {
+      i += 1;
+      continue;
+    } else if (inSingle && char === "'") {
+      inSingle = false;
+    } else if (inDouble && char === '"' && next === '"') {
+      i += 1;
+      continue;
+    } else if (inDouble && char === '"') {
+      inDouble = false;
+    } else if (inBracket && char === "]") {
+      inBracket = false;
+    }
+
+    if (inSingle || inDouble || inBracket) {
+      continue;
+    }
+
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")" && depth > 0) {
+      depth -= 1;
+      continue;
+    }
+    if (depth !== 0) {
+      continue;
+    }
+
+    if (fromStart < 0 && matchesTopLevelKeyword(upper, i, "FROM")) {
+      fromStart = i;
+      i += 3;
+      continue;
+    }
+
+    if (fromStart >= 0 && groupByStart < 0 && matchesTopLevelKeyword(upper, i, "GROUP BY")) {
+      groupByStart = i;
+      i += 7;
+      continue;
+    }
+
+    if (fromStart >= 0 && havingStart < 0 && matchesTopLevelKeyword(upper, i, "HAVING")) {
+      havingStart = i;
+      i += 5;
+      continue;
+    }
+
+    if (fromStart >= 0 && orderByStart < 0 && matchesTopLevelKeyword(upper, i, "ORDER BY")) {
+      orderByStart = i;
+      i += 7;
+      continue;
+    }
+  }
+
+  if (fromStart < 0) {
+    return null;
+  }
+
+  return {
+    selectStart: outerSelectStart,
+    fromStart,
+    groupByStart,
+    havingStart,
+    orderByStart,
+  };
+}
+
+function splitTopLevelExpressions(clause: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBracket = false;
+  let current = "";
+
+  for (let i = 0; i < clause.length; i++) {
+    const char = clause[i];
+    const next = clause[i + 1];
+
+    if (!inDouble && !inBracket && char === "'" && next === "'") {
+      current += "''";
+      i += 1;
+      continue;
+    }
+    if (!inSingle && !inBracket && char === '"' && next === '"') {
+      current += '""';
+      i += 1;
+      continue;
+    }
+
+    if (!inDouble && !inBracket && char === "'" && !inSingle) {
+      inSingle = true;
+      current += char;
+      continue;
+    }
+    if (inSingle && char === "'") {
+      inSingle = false;
+      current += char;
+      continue;
+    }
+
+    if (!inSingle && !inBracket && char === '"' && !inDouble) {
+      inDouble = true;
+      current += char;
+      continue;
+    }
+    if (inDouble && char === '"') {
+      inDouble = false;
+      current += char;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && char === "[" && !inBracket) {
+      inBracket = true;
+      current += char;
+      continue;
+    }
+    if (inBracket && char === "]") {
+      inBracket = false;
+      current += char;
+      continue;
+    }
+
+    if (inSingle || inDouble || inBracket) {
+      current += char;
+      continue;
+    }
+
+    if (char === "(") {
+      depth += 1;
+      current += char;
+      continue;
+    }
+    if (char === ")" && depth > 0) {
+      depth -= 1;
+      current += char;
+      continue;
+    }
+
+    if (char === "," && depth === 0) {
+      if (current.trim()) {
+        parts.push(current.trim());
+      }
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}
+
+function normalizeComparableExpression(expression: string): string {
+  return expression
+    .replace(/\s+AS\s+[\[\]\w.]+$/i, "")
+    .replace(/\s+/g, "")
+    .replace(/[\[\]"]/g, "")
+    .toLowerCase();
+}
+
+function extractParenthesizedContent(
+  input: string,
+  openParenIndex: number
+): string | null {
+  let depth = 0;
+  for (let i = openParenIndex; i < input.length; i++) {
+    const char = input[i];
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return input.slice(openParenIndex + 1, i);
+      }
+    }
+  }
+  return null;
+}
+
+function extractPartitionExpression(windowExpression: string): string | null {
+  const overMatch = /\bOVER\b/i.exec(windowExpression);
+  if (!overMatch) {
+    return null;
+  }
+
+  let cursor = overMatch.index + overMatch[0].length;
+  while (cursor < windowExpression.length && /\s/.test(windowExpression[cursor])) {
+    cursor += 1;
+  }
+
+  if (windowExpression[cursor] !== "(") {
+    return null;
+  }
+
+  const overContent = extractParenthesizedContent(windowExpression, cursor);
+  if (!overContent) {
+    return null;
+  }
+
+  const partitionMatch = /\bPARTITION\s+BY\s+([\s\S]+?)(?:\bORDER\s+BY\b|$)/i.exec(overContent);
+  if (!partitionMatch) {
+    return null;
+  }
+
+  const partitionExpression = partitionMatch[1].trim();
+  if (!partitionExpression || partitionExpression.includes(",")) {
+    return null;
+  }
+
+  return partitionExpression;
+}
+
+function rewriteWindowedPercentileGroupBy(sqlQuery: string): {
+  rewrittenSql: string;
+  remediated: boolean;
+} {
+  if (!/\bPERCENTILE_(?:CONT|DISC)\b/i.test(sqlQuery)) {
+    return { rewrittenSql: sqlQuery, remediated: false };
+  }
+
+  const outer = findOuterSelectClauseIndexes(sqlQuery);
+  if (!outer || outer.groupByStart < 0 || outer.havingStart >= 0) {
+    return { rewrittenSql: sqlQuery, remediated: false };
+  }
+
+  const groupByEnd =
+    outer.orderByStart >= 0 ? outer.orderByStart : sqlQuery.length;
+  const selectClause = sqlQuery
+    .slice(outer.selectStart + 6, outer.fromStart)
+    .trim();
+  const groupByClause = sqlQuery
+    .slice(outer.groupByStart + 8, groupByEnd)
+    .trim();
+
+  if (!/\bPERCENTILE_(?:CONT|DISC)\b/i.test(selectClause)) {
+    return { rewrittenSql: sqlQuery, remediated: false };
+  }
+
+  let normalizedSelectClause = selectClause;
+  normalizedSelectClause = normalizedSelectClause.replace(/^DISTINCT\s+/i, "");
+  normalizedSelectClause = normalizedSelectClause.replace(
+    /^TOP\s+\(?\s*\d+\s*\)?\s+/i,
+    ""
+  );
+  normalizedSelectClause = normalizedSelectClause.replace(/^DISTINCT\s+/i, "");
+
+  const selectExpressions = splitTopLevelExpressions(normalizedSelectClause);
+  const percentileExpressions = selectExpressions.filter(
+    (expr) =>
+      /\bPERCENTILE_(?:CONT|DISC)\b/i.test(expr) && /\bOVER\s*\(/i.test(expr)
+  );
+  const nonPercentileExpressions = selectExpressions.filter(
+    (expr) => !percentileExpressions.includes(expr)
+  );
+  const groupExpressions = splitTopLevelExpressions(groupByClause);
+
+  if (
+    percentileExpressions.length !== 1 ||
+    nonPercentileExpressions.length !== 1 ||
+    groupExpressions.length !== 1
+  ) {
+    return { rewrittenSql: sqlQuery, remediated: false };
+  }
+
+  const partitionExpression = extractPartitionExpression(percentileExpressions[0]);
+  if (!partitionExpression) {
+    return { rewrittenSql: sqlQuery, remediated: false };
+  }
+
+  const normalizedGroup = normalizeComparableExpression(groupExpressions[0]);
+  const normalizedNonPercentile = normalizeComparableExpression(
+    nonPercentileExpressions[0]
+  );
+  const normalizedPartition = normalizeComparableExpression(partitionExpression);
+
+  if (
+    !normalizedGroup ||
+    normalizedGroup !== normalizedNonPercentile ||
+    normalizedGroup !== normalizedPartition
+  ) {
+    return { rewrittenSql: sqlQuery, remediated: false };
+  }
+
+  const selectHead = sqlQuery.slice(outer.selectStart, outer.fromStart);
+  const alreadyDistinct = /^\s*SELECT\s+DISTINCT\b/i.test(selectHead);
+  const updatedSelectHead = alreadyDistinct
+    ? selectHead
+    : selectHead.replace(/^\s*SELECT\s+/i, (match) => `${match}DISTINCT `);
+
+  const rewrittenSql =
+    sqlQuery.slice(0, outer.selectStart) +
+    updatedSelectHead +
+    sqlQuery.slice(outer.fromStart, outer.groupByStart) +
+    sqlQuery.slice(groupByEnd);
+
+  return {
+    rewrittenSql,
+    remediated: rewrittenSql !== sqlQuery,
+  };
+}
+
 function shouldAttemptInvalidDateRemediation(
   error: unknown,
   sqlQuery: string
@@ -611,6 +1028,19 @@ export function validateAndFixQuery(sqlQuery: string): string {
     if (process.env.NODE_ENV !== "production") {
       console.log(
         `[validateAndFixQuery] Bracketed reserved aliases: ${aliasSanitized.aliases.join(", ")}`
+      );
+    }
+  }
+
+  // 4. Median window function safety:
+  // SQL Server rejects GROUP BY with windowed PERCENTILE_CONT/PERCENTILE_DISC
+  // when the ordered column is not grouped. Use DISTINCT + window partition instead.
+  const windowedPercentileRewrite = rewriteWindowedPercentileGroupBy(fixed);
+  if (windowedPercentileRewrite.remediated) {
+    fixed = windowedPercentileRewrite.rewrittenSql;
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        "[validateAndFixQuery] Rewrote windowed percentile query: replaced GROUP BY with DISTINCT"
       );
     }
   }

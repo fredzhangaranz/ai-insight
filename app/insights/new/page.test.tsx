@@ -281,4 +281,93 @@ describe("NewInsightPage", () => {
       );
     });
   });
+
+  it("clears active thread when selected history thread cannot be loaded", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+
+      if (url === "/api/insights/models") {
+        return okJson(modelResponse);
+      }
+      if (url === "/api/insights/conversation/thread-good") {
+        return okJson({
+          thread: { id: "thread-good", customerId: "cust-1" },
+          messages: [
+            {
+              id: "u1",
+              threadId: "thread-good",
+              role: "user",
+              content: "Good thread question",
+              metadata: {},
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      if (url === "/api/insights/conversation/thread-missing") {
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({}),
+        };
+      }
+      if (url === "/api/insights/execute-cached") {
+        return okJson({
+          mode: "direct",
+          question: "Replay question",
+          thinking: [],
+          sql: "SELECT 1",
+          results: { rows: [], columns: ["value"] },
+        });
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        json: async () => ({}),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<NewInsightPage />);
+
+    await waitFor(() => {
+      expect(hoisted.latestLayoutProps).toBeTruthy();
+    });
+
+    await act(async () => {
+      hoisted.latestLayoutProps.setCustomerId("cust-1");
+    });
+
+    await act(async () => {
+      await hoisted.latestLayoutProps.handleHistorySelect({
+        id: "history-good",
+        question: "Good thread question",
+        mode: "direct",
+        sql: "SELECT 1",
+        semanticContext: {},
+        conversationThreadId: "thread-good",
+      });
+    });
+
+    expect(hoisted.latestLayoutProps.conversationThreadId).toBe("thread-good");
+
+    await act(async () => {
+      await hoisted.latestLayoutProps.handleHistorySelect({
+        id: "history-missing",
+        question: "Missing thread question",
+        mode: "direct",
+        sql: "SELECT 1",
+        semanticContext: {},
+        conversationThreadId: "thread-missing",
+      });
+    });
+
+    expect(hoisted.latestLayoutProps.conversationThreadId).toBeUndefined();
+  });
 });

@@ -148,6 +148,49 @@ describe("validateAndFixQuery - Schema Prefix Fix", () => {
     expect(result).toContain("SELECT TOP 1000 W.id, [is].Stage");
     expect(result).toContain("WHERE [is].Stage IS NOT NULL");
   });
+
+  it("rewrites median window queries to DISTINCT without GROUP BY", () => {
+    const query = `
+      WITH WoundHealingTime AS (
+        SELECT
+          W.id AS woundFk,
+          'Stage II' AS WoundStage,
+          12 AS TimeToHealingInDays
+        FROM Wound W
+      )
+      SELECT
+        WHT.WoundStage,
+        CAST(
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY WHT.TimeToHealingInDays)
+          OVER (PARTITION BY WHT.WoundStage) AS DECIMAL(10, 2)
+        ) AS MedianTimeToHealingDays
+      FROM WoundHealingTime AS WHT
+      GROUP BY WHT.WoundStage
+      ORDER BY WHT.WoundStage;
+    `;
+
+    const result = validateAndFixQuery(query);
+
+    expect(result).toMatch(/SELECT\s+DISTINCT/i);
+    expect(result).not.toMatch(/GROUP\s+BY\s+WHT\.WoundStage/i);
+    expect(result).toMatch(/ORDER\s+BY\s+WHT\.WoundStage/i);
+  });
+
+  it("does not rewrite regular grouped aggregates", () => {
+    const query = `
+      SELECT
+        W.status,
+        COUNT(*) AS WoundCount
+      FROM rpt.Wound W
+      GROUP BY W.status
+      ORDER BY W.status
+    `;
+
+    const result = validateAndFixQuery(query);
+
+    expect(result).toMatch(/GROUP\s+BY\s+W\.status/i);
+    expect(result).not.toMatch(/SELECT\s+DISTINCT/i);
+  });
 });
 
 describe("extractQueryRowsAndColumns", () => {

@@ -178,6 +178,12 @@ export default function NewInsightPage() {
     setIsQuestionSubmitted(true);
     setQuestion(query.question);
 
+    // Reset active thread context before loading a selected history item so we
+    // never render stale messages from a previously opened thread.
+    setFirstThreadUserMessageId(undefined);
+    setHistoryThreadSnapshot(null);
+    setConversationThreadId(undefined);
+
     // Load thread messages once, then set thread id + snapshot in the same tick so the layout
     // hydrates from this payload instead of firing a second GET that can race and clear UI.
     if (query.conversationThreadId) {
@@ -194,19 +200,13 @@ export default function NewInsightPage() {
             threadId: query.conversationThreadId,
             messages: msgs,
           });
+          setConversationThreadId(query.conversationThreadId);
         } else {
-          setFirstThreadUserMessageId(undefined);
-          setHistoryThreadSnapshot(null);
+          setConversationThreadId(undefined);
         }
       } catch {
-        setFirstThreadUserMessageId(undefined);
-        setHistoryThreadSnapshot(null);
+        setConversationThreadId(undefined);
       }
-      setConversationThreadId(query.conversationThreadId);
-    } else {
-      setFirstThreadUserMessageId(undefined);
-      setHistoryThreadSnapshot(null);
-      setConversationThreadId(undefined);
     }
 
     // Load cached result from history instead of re-executing

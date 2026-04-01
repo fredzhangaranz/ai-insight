@@ -75,6 +75,7 @@ export function useConversation(
     if (!externalThreadId) return;
     if (threadId !== externalThreadId) {
       setThreadId(externalThreadId);
+      setMessages([]);
       if (typeof window !== "undefined") {
         localStorage.setItem("conversation_threadId", externalThreadId);
       }
@@ -391,6 +392,7 @@ export function useConversation(
         return;
       }
       const nextError = err instanceof Error ? err : new Error("Unknown error");
+      setMessages([]);
       setError(nextError);
     } finally {
       if (requestId === loadConversationRequestIdRef.current) {

@@ -130,8 +130,11 @@ export function NewLayout({
 
   const threadItems = useMemo((): ThreadItem[] => {
     const baseTime = Date.now();
+    const activeConversationMessages = conversationThreadId
+      ? conversationMessages
+      : [];
 
-    const followUpItems: ThreadItem[] = conversationMessages.map((msg) => {
+    const followUpItems: ThreadItem[] = activeConversationMessages.map((msg) => {
       if (msg.role === "user") {
         return {
           id: msg.id,
@@ -184,7 +187,7 @@ export function NewLayout({
       };
     });
 
-    const firstUserMsg = conversationMessages.find((m) => m.role === "user");
+    const firstUserMsg = activeConversationMessages.find((m) => m.role === "user");
     const firstUserLabelForMatch =
       firstUserMsg &&
       (typeof firstUserMsg.metadata?.originalQuestion === "string"
@@ -285,10 +288,11 @@ export function NewLayout({
     result,
     analysis.steps,
     conversationMessages,
+    conversationThreadId,
     firstThreadUserMessageId,
   ]);
 
-  const isFirstQuestion = !result && !conversationMessages.length;
+  const isFirstQuestion = !result && (!conversationThreadId || !conversationMessages.length);
   const isWaitingForResponse = isLoading || isConversationLoading;
   const hasBlockingClarification =
     result?.mode === "clarification" && result.clarifications;
