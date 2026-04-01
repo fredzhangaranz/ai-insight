@@ -109,11 +109,27 @@ export interface CanonicalValueSpec {
 
 export interface CanonicalClarificationItem {
   slot: ClarificationSlot;
+  reasonCode:
+    | "missing_entity"
+    | "ambiguous_field"
+    | "ambiguous_value"
+    | "missing_time_range"
+    | "missing_measure"
+    | "missing_grain"
+    | "missing_assessment_type"
+    | "unsafe_to_execute";
   reason: string;
-  question: string;
   blocking: boolean;
   confidence: number;
   target?: string;
+  question?: string;
+  evidence?: {
+    userPhrase?: string;
+    matchedConcepts?: string[];
+    matchedFields?: string[];
+    matchedValues?: string[];
+    threadReference?: boolean;
+  };
 }
 
 export interface ExecutionRequirements {
