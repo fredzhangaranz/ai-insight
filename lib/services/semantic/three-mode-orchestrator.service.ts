@@ -91,6 +91,7 @@ import {
   getSemanticExecutionDiagnosticsService,
   type SemanticExecutionDiagnostics,
 } from "./semantic-execution-diagnostics.service";
+import { GroundedClarificationPlannerService } from "./grounded-clarification-planner.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -317,6 +318,8 @@ function getCanonicalPatientSubjectRef(
 }
 
 export class ThreeModeOrchestrator {
+  private readonly groundedClarificationPlanner =
+    new GroundedClarificationPlannerService();
   private contextDiscovery: ContextDiscoveryService;
   private templateInjector: TemplateInjectorService;
   private templateUsageLogger: TemplateUsageLoggerService;
@@ -1474,7 +1477,11 @@ export class ThreeModeOrchestrator {
         }
       }
 
-      if (semanticFrame && clarifications && Object.keys(clarifications).length > 0) {
+      const hasUserClarifications = Boolean(
+        clarifications && Object.keys(clarifications).length > 0
+      );
+
+      if (semanticFrame && hasUserClarifications) {
         semanticFrame = this.applyFrameClarifications(semanticFrame, clarifications);
       }
 
@@ -1501,7 +1508,52 @@ export class ThreeModeOrchestrator {
         useCanonicalSemantics &&
         context.canonicalSemantics &&
         context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
-        !clarifications
+        !hasUserClarifications
+      ) {
+        const groundedPlan = this.groundedClarificationPlanner.plan({
+          question,
+          context,
+          canonicalSemantics: context.canonicalSemantics,
+        });
+        context.canonicalSemantics = groundedPlan.clarifiedSemantics;
+
+        if (
+          context.canonicalSemantics.executionRequirements.allowSqlGeneration !== false
+        ) {
+          if (featureFlags.clarificationPipelineV2Shadow) {
+            console.log(
+              "[Orchestrator] ✅ Canonical ambiguity auto-resolved by grounded clarification planner",
+              { autoResolvedCount: groundedPlan.autoResolvedCount }
+            );
+          }
+        } else if (groundedPlan.clarifications.length > 0) {
+          contextDiscoveryStep.status = "complete";
+          contextDiscoveryStep.duration = Date.now() - discoveryStart;
+          contextDiscoveryStep.message = "Semantic clarification required";
+          return {
+            mode: "clarification",
+            question,
+            thinking,
+            requiresClarification: true,
+            clarifications: groundedPlan.clarifications,
+            clarificationReasoning:
+              context.canonicalSemantics.executionRequirements.blockReason ||
+              "Additional clarification is needed before SQL generation.",
+            context: {
+              canonicalSemantics: context.canonicalSemantics,
+              canonicalSemanticsVersion: context.canonicalSemantics.version,
+            },
+            canonicalSemantics: context.canonicalSemantics,
+          };
+        }
+
+      }
+
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        !hasUserClarifications
       ) {
         contextDiscoveryStep.status = "complete";
         contextDiscoveryStep.duration = Date.now() - discoveryStart;
@@ -2572,7 +2624,9 @@ export class ThreeModeOrchestrator {
         .map((item, index) => ({
           id: `canonical_${item.slot}_${index}`,
           ambiguousTerm: item.target || item.slot,
-          question: item.question,
+          question:
+            item.question ||
+            `Please clarify ${item.target || item.slot} to continue.`,
           options: [],
           allowCustom: true,
           slot: item.slot,

@@ -24,6 +24,7 @@ const baseSemantics = (): CanonicalQuerySemantics => ({
   clarificationPlan: [
     {
       slot: "entityRef",
+      reasonCode: "missing_entity",
       reason: "No named patient in the message",
       question: "Which patient do you want to analyze?",
       blocking: true,

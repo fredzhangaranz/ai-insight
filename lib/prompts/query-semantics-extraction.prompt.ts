@@ -149,11 +149,18 @@ JSON shape:
   }],
   "clarificationPlan": [{
     "slot": "scope|subject|measure|grain|groupBy|timeRange|assessmentType|aggregatePredicate|entityRef|valueFilter",
+    "reasonCode": "missing_entity|ambiguous_field|ambiguous_value|missing_time_range|missing_measure|missing_grain|missing_assessment_type|unsafe_to_execute",
     "reason": "...",
-    "question": "...",
     "blocking": true,
     "confidence": 0.0,
-    "target": "..."
+    "target": "...",
+    "evidence": {
+      "userPhrase": "...",
+      "matchedConcepts": ["..."],
+      "matchedFields": ["..."],
+      "matchedValues": ["..."],
+      "threadReference": false
+    }
   }],
   "executionRequirements": {
     "requiresPatientResolution": true,
@@ -312,7 +319,7 @@ function normalizeValueSpecs(value: unknown): CanonicalValueSpec[] {
         return null;
       }
 
-      return {
+      const spec: CanonicalValueSpec = {
         field: typeof entry.field === "string" ? entry.field : undefined,
         operator: entry.operator,
         userPhrase: entry.userPhrase,
@@ -321,33 +328,88 @@ function normalizeValueSpecs(value: unknown): CanonicalValueSpec[] {
             ? (entry.value as string | null)
             : null,
         resolved: entry.resolved === true,
-      } satisfies CanonicalValueSpec;
+      };
+      return spec;
     })
     .filter((entry): entry is CanonicalValueSpec => Boolean(entry));
 }
 
 function normalizeClarificationPlan(value: unknown): CanonicalClarificationItem[] {
   if (!Array.isArray(value)) return [];
+  const reasonCodes: CanonicalClarificationItem["reasonCode"][] = [
+    "missing_entity",
+    "ambiguous_field",
+    "ambiguous_value",
+    "missing_time_range",
+    "missing_measure",
+    "missing_grain",
+    "missing_assessment_type",
+    "unsafe_to_execute",
+  ];
+  const defaultReasonCodeBySlot: Partial<
+    Record<ClarificationSlot, CanonicalClarificationItem["reasonCode"]>
+  > = {
+    entityRef: "missing_entity",
+    measure: "missing_measure",
+    grain: "missing_grain",
+    groupBy: "missing_grain",
+    timeRange: "missing_time_range",
+    assessmentType: "missing_assessment_type",
+    valueFilter: "ambiguous_value",
+  };
+
   return value
     .map((entry) => {
       if (!isObject(entry)) return null;
+      const slot = entry.slot as ClarificationSlot;
+      const reasonCode = reasonCodes.includes(
+        entry.reasonCode as CanonicalClarificationItem["reasonCode"]
+      )
+        ? (entry.reasonCode as CanonicalClarificationItem["reasonCode"])
+        : defaultReasonCodeBySlot[slot] || "ambiguous_value";
+
       if (
-        !CLARIFICATION_SLOTS.includes(entry.slot as ClarificationSlot) ||
+        !CLARIFICATION_SLOTS.includes(slot) ||
         typeof entry.reason !== "string" ||
-        typeof entry.question !== "string" ||
         typeof entry.blocking !== "boolean"
       ) {
         return null;
       }
 
-      return {
-        slot: entry.slot as CanonicalClarificationItem["slot"],
+      const item: CanonicalClarificationItem = {
+        slot,
+        reasonCode,
         reason: entry.reason,
-        question: entry.question,
+        question: typeof entry.question === "string" ? entry.question : undefined,
         blocking: entry.blocking,
         confidence: clampConfidence(entry.confidence),
         target: typeof entry.target === "string" ? entry.target : undefined,
-      } satisfies CanonicalClarificationItem;
+        evidence: isObject(entry.evidence)
+          ? {
+              userPhrase:
+                typeof entry.evidence.userPhrase === "string"
+                  ? entry.evidence.userPhrase
+                  : undefined,
+              matchedConcepts: Array.isArray(entry.evidence.matchedConcepts)
+                ? entry.evidence.matchedConcepts.filter(
+                    (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+              matchedFields: Array.isArray(entry.evidence.matchedFields)
+                ? entry.evidence.matchedFields.filter(
+                    (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+              matchedValues: Array.isArray(entry.evidence.matchedValues)
+                ? entry.evidence.matchedValues.filter(
+                    (item): item is string => typeof item === "string"
+                  )
+                : undefined,
+              threadReference: entry.evidence.threadReference === true,
+            }
+          : undefined,
+      };
+      return item;
     })
     .filter((entry): entry is CanonicalClarificationItem => Boolean(entry));
 }
