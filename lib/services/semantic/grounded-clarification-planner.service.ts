@@ -150,6 +150,26 @@ function toPlannerOptionId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function normalizeInternalPathToken(value: string): string {
+  const trimmed = value.trim().replace(/^['"]|['"]$/g, "");
+  return trimmed.replace(/[_-]+/g, " ").trim();
+}
+
+function extractValueSpecLiteral(target?: string): string | null {
+  if (!target || typeof target !== "string") {
+    return null;
+  }
+  const normalized = target.trim();
+  const match = normalized.match(
+    /^valueSpecs?(?:\[\d+\])?\.value\.(.+)$/i
+  );
+  if (!match || !match[1]) {
+    return null;
+  }
+  const literal = normalizeInternalPathToken(match[1]);
+  return literal.length > 0 ? literal : null;
+}
+
 function normalizeTargetLabel(item: CanonicalClarificationItem): string {
   const target = item.target?.trim();
   if (!target) {
@@ -164,6 +184,9 @@ function normalizeTargetLabel(item: CanonicalClarificationItem): string {
 
   const lower = target.toLowerCase();
   if (lower === "temporalspec") return "date range";
+  const literalValue = extractValueSpecLiteral(target);
+  if (literalValue) return `filter value "${literalValue}"`;
+  if (lower.startsWith("valuespec")) return "filter value";
   return target;
 }
 
@@ -223,6 +246,10 @@ function rankMappingsForItem(
   const relevanceTerms = new Set(
     [userPhrase, item.target?.toLowerCase()].filter(Boolean) as string[]
   );
+  const impliedLiteralValue = extractValueSpecLiteral(item.target);
+  if (impliedLiteralValue) {
+    matchedValues.add(impliedLiteralValue.toLowerCase());
+  }
   const candidates = new Map<string, OptionCandidate>();
 
   const addCandidate = (
@@ -314,10 +341,7 @@ function rankMappingsForItem(
   });
 
   if (matchedValues.size > 0) {
-    const fallbackField =
-      item.target ||
-      Array.from(matchedFields)[0] ||
-      "Field";
+    const fallbackField = Array.from(matchedFields)[0] || normalizeTargetLabel(item);
     Array.from(matchedValues).forEach((value) => {
       addCandidate("evidence", {
         fieldName: fallbackField,
@@ -626,6 +650,22 @@ export class GroundedClarificationPlannerService {
       const policy = SLOT_POLICY[item.slot];
 
       if (item.slot === "valueFilter") {
+        const impliedLiteralValue = extractValueSpecLiteral(item.target);
+        if (impliedLiteralValue) {
+          // valueSpec.value.<literal> is an internal canonical path that already
+          // encodes an explicit user value. Do not surface this as a user
+          // clarification because it creates confusing prompts.
+          autoResolvedCount += 1;
+          recordDecision({
+            slot: item.slot,
+            reasonCode: item.reasonCode,
+            candidateCount: 1,
+            autoResolved: true,
+            mode: "auto_resolved",
+          });
+          return;
+        }
+
         const candidates = rankMappingsForItem(
           item,
           input.context.terminology,

@@ -224,6 +224,51 @@ describe("GroundedClarificationPlannerService", () => {
     expect(result.decisionMetadata.freeformFallbackCount).toBe(1);
   });
 
+  it("auto-resolves internal valueSpec literal targets without surfacing freeform clarifications", () => {
+    const planner = new GroundedClarificationPlannerService();
+    const context = buildContext();
+    context.question =
+      "Which treatment categories are most commonly used for wounds that improved versus wounds that stalled";
+    context.terminology = [];
+    context.intent.filters = [];
+
+    const semantics = buildSemantics();
+    semantics.clarificationPlan = [
+      {
+        slot: "valueFilter",
+        reasonCode: "ambiguous_value",
+        reason: "Need confirmation for improved cohort value",
+        blocking: true,
+        confidence: 0.88,
+        target: "valueSpec.value.improved",
+      },
+      {
+        slot: "valueFilter",
+        reasonCode: "ambiguous_value",
+        reason: "Need confirmation for stalled cohort value",
+        blocking: true,
+        confidence: 0.88,
+        target: "valueSpec.value.stalled",
+      },
+    ];
+    semantics.executionRequirements.allowSqlGeneration = false;
+    semantics.executionRequirements.blockReason = "Ambiguous value filters";
+
+    const result = planner.plan({
+      question:
+        "Which treatment categories are most commonly used for wounds that improved versus wounds that stalled",
+      context,
+      canonicalSemantics: semantics,
+    });
+
+    expect(result.clarifications).toEqual([]);
+    expect(result.autoResolvedCount).toBe(2);
+    expect(result.clarifiedSemantics.executionRequirements.allowSqlGeneration).toBe(
+      true
+    );
+    expect(result.decisionMetadata.freeformFallbackCount).toBe(0);
+  });
+
   it("defers patient entity clarification to secure patient resolver", () => {
     const planner = new GroundedClarificationPlannerService();
     const semantics = buildSemantics();
