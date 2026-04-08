@@ -6,7 +6,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { extractUserIdFromSession } from "@/lib/auth/extract-user-id";
 import { getInsightGenDbPool } from "@/lib/db";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { ArtifactPlannerService } from "@/lib/services/artifact-planner.service";
 import { executeCustomerQuery } from "@/lib/services/semantic/customer-query.service";
 import { validateTrustedSql } from "@/lib/services/trusted-sql-guard.service";
@@ -48,7 +47,6 @@ export async function POST(req: NextRequest) {
 
   try {
     const { queryId, customerId, sql, question, mode, semanticContext } = await req.json();
-    const featureFlags = getInsightsFeatureFlags();
     const artifactPlanner = new ArtifactPlannerService();
 
     // Validate inputs
@@ -139,7 +137,23 @@ export async function POST(req: NextRequest) {
     const trustedValidation = validateTrustedSql({
       sql: effectiveSql,
       patientParamNames: Object.keys(boundParameters || {}),
+      requiredPatientBindings: Array.isArray(
+        effectiveSemanticContext?.canonicalSemantics?.executionRequirements
+          ?.requiredBindings
+      )
+        ? effectiveSemanticContext.canonicalSemantics.executionRequirements.requiredBindings
+        : [],
       resolvedPatientIds: [],
+      resolvedPatientOpaqueRefs: Array.isArray(
+        effectiveSemanticContext?.resolvedEntities
+      )
+        ? effectiveSemanticContext.resolvedEntities
+            .filter(
+              (entity: any) =>
+                entity?.kind === "patient" && typeof entity?.opaqueRef === "string"
+            )
+            .map((entity: any) => entity.opaqueRef)
+        : [],
     });
 
     if (!trustedValidation.valid) {
@@ -187,20 +201,18 @@ export async function POST(req: NextRequest) {
       loadedFromCache: true,
     };
 
-    if (featureFlags.chartFirstResults) {
-      response.artifacts = artifactPlanner.plan({
-        question: effectiveQuestion,
-        rows: results.rows,
-        columns: results.columns,
-        sql: effectiveSql,
-        assumptions: effectiveSemanticContext?.assumptions || [],
-        resolvedEntities: effectiveSemanticContext?.resolvedEntities || undefined,
-        presentationIntent:
-          effectiveSemanticContext?.intent?.presentationIntent,
-        preferredVisualization:
-          effectiveSemanticContext?.intent?.preferredVisualization,
-      });
-    }
+    response.artifacts = artifactPlanner.plan({
+      question: effectiveQuestion,
+      rows: results.rows,
+      columns: results.columns,
+      sql: effectiveSql,
+      assumptions: effectiveSemanticContext?.assumptions || [],
+      resolvedEntities: effectiveSemanticContext?.resolvedEntities || undefined,
+      presentationIntent:
+        effectiveSemanticContext?.intent?.presentationIntent,
+      preferredVisualization:
+        effectiveSemanticContext?.intent?.preferredVisualization,
+    });
 
     return NextResponse.json(response);
   } catch (error) {

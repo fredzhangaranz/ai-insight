@@ -37,7 +37,7 @@ export class PromptSanitizationService {
 
     const trustedContextLines = (input.patientMentions || []).map(
       (mention, index) =>
-        `Resolved patient placeholder PATIENT_REF_${index + 1}: ${mention.opaqueRef}; bind parameter @patientId${index + 1} is available.`
+        `Resolved patient placeholder PATIENT_REF_${index + 1}. This placeholder is NOT a database value and MUST NEVER appear in SQL. Use only bind parameter @patientId${index + 1}, and compare it only to patient primary key columns (rpt.Patient.id) or patient foreign keys (*.patientFk). Never use domainId for secure patient binding.`
     );
 
     return {

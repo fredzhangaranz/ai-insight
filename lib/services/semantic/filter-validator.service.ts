@@ -63,7 +63,14 @@ export function buildFilterMetricsSummary(
   const unresolvedWarnings =
     unresolvedOverride ??
     validation?.unresolvedWarnings ??
-    filters.filter((f) => !f.field || f.value === null || f.value === undefined).length;
+    filters.filter(
+      (f) =>
+        f.needsClarification ||
+        f.resolutionStatus === "ambiguous" ||
+        !f.field ||
+        f.value === null ||
+        f.value === undefined
+    ).length;
 
   return {
     totalFilters,
@@ -99,7 +106,14 @@ export class FilterValidatorService {
 
     for (const filter of filters) {
       // Skip unresolved filters (missing field/value) - clarification should handle them
-      if (!filter.field || filter.value === null || filter.value === undefined) {
+      if (
+        filter.needsClarification ||
+        filter.resolutionStatus === "ambiguous" ||
+        filter.resolutionStatus === "invalid" ||
+        !filter.field ||
+        filter.value === null ||
+        filter.value === undefined
+      ) {
         validationErrors.push({
           field: filter.field || filter.userPhrase || "unknown",
           severity: "warning",
@@ -263,41 +277,49 @@ export class FilterValidatorService {
       }
 
       try {
-        // Get all valid values for this field with similarity scoring
+        // Get all valid values for this field and rank them in-process so
+        // multi-word user phrases like "female patients" can still resolve
+        // cleanly to enum values from the semantic index.
         const query = `
           SELECT
             opt.option_value,
             opt.option_code,
-            opt.confidence as db_confidence,
-            -- Calculate similarity score
-            CASE
-              WHEN LOWER(opt.option_value) = LOWER($3) THEN 1.0
-              WHEN LOWER(opt.option_value) LIKE LOWER($3 || '%') THEN 0.9
-              WHEN LOWER(opt.option_value) LIKE LOWER('%' || $3 || '%') THEN 0.7
-              ELSE 0.5
-            END as similarity
+            opt.confidence as db_confidence
           FROM "SemanticIndexOption" opt
           JOIN "SemanticIndexField" field ON opt.semantic_index_field_id = field.id
           JOIN "SemanticIndex" idx ON field.semantic_index_id = idx.id
           WHERE idx.customer_id = $1
             AND LOWER(field.field_name) = LOWER($2)
-          ORDER BY similarity DESC, opt.confidence DESC NULLS LAST
+          ORDER BY opt.confidence DESC NULLS LAST, opt.option_value ASC
           LIMIT 10
         `;
 
-        const result = await pool.query(query, [
-          customer,
-          filter.field,
-          filter.value,
-        ]);
+        const result = await pool.query(query, [customer, filter.field]);
 
         if (result.rows.length === 0) {
           continue;
         }
 
+        const rankedOptions = result.rows
+          .map((row) => ({
+            optionValue: row.option_value as string,
+            optionCode: row.option_code as string | null,
+            dbConfidence: this.coerceConfidence(row.db_confidence),
+            matchScore: this.scoreOptionForFilterValue(
+              String(filter.value),
+              row.option_value as string
+            ),
+          }))
+          .sort((left, right) => {
+            if (right.matchScore !== left.matchScore) {
+              return right.matchScore - left.matchScore;
+            }
+            return right.dbConfidence - left.dbConfidence;
+          });
+
         // Check if exact match exists
-        const exactMatch = result.rows.find(
-          (row) => row.option_value === filter.value
+        const exactMatch = rankedOptions.find(
+          (row) => row.optionValue === filter.value
         );
 
         if (exactMatch) {
@@ -305,17 +327,30 @@ export class FilterValidatorService {
           continue;
         }
 
+        const bestOption = rankedOptions[0];
+        const secondOption = rankedOptions[1];
+        const dominantSuggestion = this.isDominantSuggestion(
+          bestOption?.matchScore ?? 0,
+          secondOption?.matchScore ?? 0
+        )
+          ? bestOption?.optionValue
+          : undefined;
+
         // Generate clarification options from top matches
-        const clarificationOptions: ClarificationOption[] = result.rows
+        const clarificationOptions: ClarificationOption[] = rankedOptions
           .slice(0, 5) // Top 5 suggestions
           .map((row, index) => ({
             id: `suggestion_${index}`,
-            label: row.option_value,
-            description: row.option_code
-              ? `Code: ${row.option_code}`
+            label: row.optionValue,
+            description: row.optionCode
+              ? `Code: ${row.optionCode}`
               : undefined,
-            sqlConstraint: `${filter.field} = '${row.option_value}'`,
+            sqlConstraint: `${filter.field} = '${row.optionValue}'`,
             isDefault: index === 0, // Mark first (best match) as default
+            evidence: {
+              matchScore: row.matchScore,
+              dbConfidence: row.dbConfidence,
+            },
           }));
 
         // Add custom input option
@@ -332,7 +367,8 @@ export class FilterValidatorService {
           severity: "error",
           message: `Could not find "${filter.value}" in field "${filter.field}". Did you mean one of these?`,
           code: "VALUE_NOT_FOUND",
-          validOptions: result.rows.map((r) => r.option_value),
+          suggestion: dominantSuggestion,
+          validOptions: rankedOptions.map((r) => r.optionValue),
           clarificationSuggestions: clarificationOptions,
         });
       } catch (error) {
@@ -345,6 +381,129 @@ export class FilterValidatorService {
 
     return errors;
   }
+
+  private scoreOptionForFilterValue(
+    rawFilterValue: string,
+    optionValue: string
+  ): number {
+    const normalizedFilterValue = normalizeTerm(rawFilterValue);
+    const normalizedOptionValue = normalizeTerm(optionValue);
+
+    if (!normalizedFilterValue || !normalizedOptionValue) return 0;
+    if (normalizedFilterValue === normalizedOptionValue) return 1;
+
+    const filterTokens = normalizedFilterValue.split(/\s+/).filter(Boolean);
+    const optionTokens = normalizedOptionValue.split(/\s+/).filter(Boolean);
+    const matchingTokens = filterTokens.filter((token) =>
+      optionTokens.includes(token)
+    ).length;
+
+    let score = 0;
+
+    if (
+      normalizedOptionValue.includes(normalizedFilterValue) ||
+      normalizedFilterValue.includes(normalizedOptionValue)
+    ) {
+      score = Math.max(
+        score,
+        Math.min(normalizedFilterValue.length, normalizedOptionValue.length) /
+          Math.max(normalizedFilterValue.length, normalizedOptionValue.length)
+      );
+    }
+
+    if (matchingTokens > 0) {
+      score = Math.max(
+        score,
+        (matchingTokens / Math.max(filterTokens.length, optionTokens.length)) *
+          0.9
+      );
+      score = Math.max(score, (matchingTokens / optionTokens.length) * 0.96);
+    }
+
+    const similarity = calculateSimilarity(
+      normalizedFilterValue,
+      normalizedOptionValue
+    );
+    if (similarity > 0.75) {
+      score = Math.max(score, similarity * 0.85);
+    }
+
+    return Math.max(0, Math.min(1, score));
+  }
+
+  private isDominantSuggestion(bestScore: number, secondScore: number): boolean {
+    return bestScore >= 0.9 && bestScore - secondScore >= 0.2;
+  }
+
+  private coerceConfidence(value: number | string | null | undefined): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.min(1, value));
+    }
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      if (!Number.isNaN(parsed)) {
+        return Math.max(0, Math.min(1, parsed));
+      }
+    }
+    return 0;
+  }
+}
+
+function normalizeTerm(value: string): string {
+  if (!value) return "";
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => singularize(token))
+    .join(" ")
+    .trim();
+}
+
+function singularize(token: string): string {
+  if (token.endsWith("ies") && token.length > 3) {
+    return `${token.slice(0, -3)}y`;
+  }
+  if (token.endsWith("s") && token.length > 3) {
+    return token.slice(0, -1);
+  }
+  return token;
+}
+
+function calculateSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 0;
+
+  const distance = levenshteinDistance(a, b);
+  return Math.max(0, Math.min(1, 1 - distance / maxLen));
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const matrix = Array.from({ length: a.length + 1 }, () =>
+    new Array<number>(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
 }
 
 /**
@@ -387,6 +546,9 @@ export function collectUnresolvedFilters(
   filters.forEach((filter, index) => {
     if (
       !filter ||
+      filter.needsClarification ||
+      filter.resolutionStatus === "ambiguous" ||
+      filter.resolutionStatus === "invalid" ||
       !filter.field ||
       filter.value === null ||
       filter.value === undefined ||
@@ -397,6 +559,7 @@ export function collectUnresolvedFilters(
         index,
         reason:
           filter?.mappingError ||
+          filter?.clarificationReasonCode ||
           (!filter?.field
             ? "field_not_assigned"
             : filter?.value === null || filter?.value === undefined

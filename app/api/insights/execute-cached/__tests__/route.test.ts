@@ -17,12 +17,6 @@ vi.mock("@/lib/db", () => ({
   getInsightGenDbPool: vi.fn(),
 }));
 
-vi.mock("@/lib/config/insights-feature-flags", () => ({
-  getInsightsFeatureFlags: vi.fn(() => ({
-    chartFirstResults: true,
-  })),
-}));
-
 vi.mock("@/lib/services/semantic/customer-query.service", () => ({
   executeCustomerQuery: executeCustomerQueryMock,
 }));

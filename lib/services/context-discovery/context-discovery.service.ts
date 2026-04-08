@@ -16,7 +16,7 @@
  * All results are logged to database for audit trail and debugging.
  */
 
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import type { Pool } from "pg";
 import { getInsightGenDbPool } from "@/lib/db";
 import { createDiscoveryLogger } from "@/lib/services/discovery-logger";
@@ -25,6 +25,7 @@ import { getSemanticSearcherService } from "./semantic-searcher.service";
 import { getTerminologyMapperService } from "./terminology-mapper.service";
 import { getJoinPathPlannerService } from "./join-path-planner.service";
 import { getContextAssemblerService } from "./context-assembler.service";
+import { getQuerySemanticsExtractorService } from "./query-semantics-extractor.service";
 import {
   ConceptSource,
   ExpandedConceptBuilder,
@@ -57,6 +58,89 @@ interface PipelineMetrics {
 
 const expandedConceptBuilder = new ExpandedConceptBuilder();
 
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+  lastAccessed: number;
+}
+
+class ContextDiscoveryCache {
+  private cache = new Map<string, CacheEntry<ContextBundle>>();
+  private readonly ttlMs = 15 * 60 * 1000;
+  private readonly maxEntries = 100;
+
+  private key(request: ContextDiscoveryRequest): string {
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          customerId: request.customerId,
+          question: request.question.trim(),
+          modelId: request.modelId ?? "",
+        })
+      )
+      .digest("hex");
+  }
+
+  get(request: ContextDiscoveryRequest): ContextBundle | null {
+    const key = this.key(request);
+    const entry = this.cache.get(key);
+    if (!entry) {
+      return null;
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    entry.lastAccessed = Date.now();
+    return cloneContextBundle(entry.value);
+  }
+
+  set(request: ContextDiscoveryRequest, bundle: ContextBundle): void {
+    const key = this.key(request);
+    if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
+      this.evictLeastRecentlyUsed();
+    }
+
+    this.cache.set(key, {
+      value: cloneContextBundle(bundle),
+      expiresAt: Date.now() + this.ttlMs,
+      lastAccessed: Date.now(),
+    });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  private evictLeastRecentlyUsed(): void {
+    let victimKey: string | null = null;
+    let victimTime = Infinity;
+
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.lastAccessed < victimTime) {
+        victimKey = key;
+        victimTime = entry.lastAccessed;
+      }
+    }
+
+    if (victimKey) {
+      this.cache.delete(victimKey);
+    }
+  }
+}
+
+function cloneContextBundle(bundle: ContextBundle): ContextBundle {
+  if (typeof structuredClone === "function") {
+    return structuredClone(bundle);
+  }
+
+  return JSON.parse(JSON.stringify(bundle)) as ContextBundle;
+}
+
+const contextDiscoveryCache = new ContextDiscoveryCache();
+
 export class ContextDiscoveryService {
   async discoverContext(
     request: ContextDiscoveryRequest
@@ -66,6 +150,15 @@ export class ContextDiscoveryService {
     }
     if (!request?.question || !request.question.trim()) {
       throw new Error("[ContextDiscovery] question is required");
+    }
+
+    const cachedBundle = contextDiscoveryCache.get(request);
+    if (cachedBundle) {
+      console.log("[ContextDiscovery] ✅ Cache hit", {
+        customerId: request.customerId,
+        question: request.question,
+      });
+      return cachedBundle;
     }
 
     const discoveryRunId = randomUUID();
@@ -152,6 +245,16 @@ export class ContextDiscoveryService {
           `✅ Filter Value Mapping: ${successfulMappings}/${mappedFilters.length} filters successfully mapped`
         );
       }
+
+      const canonicalSemantics = await getQuerySemanticsExtractorService().extract(
+        {
+          customerId: request.customerId,
+          question: request.question,
+          intent: intentResult,
+          modelId: request.modelId,
+          signal: request.signal,
+        }
+      );
 
       // Step 2, 3 & 5A: Semantic Search + Terminology Mapping + Assessment Type Search (PARALLEL EXECUTION)
       // These steps all depend on intentResult but are independent of each other
@@ -274,12 +377,18 @@ export class ContextDiscoveryService {
         customerId: request.customerId,
         question: request.question,
         intent: intentResult,
+        canonicalSemantics,
         forms,
         assessmentTypes: assessmentTypes.length > 0 ? assessmentTypes : undefined, // Phase 5A
         terminology,
         joinPaths,
         discoveryRunId,
         durationMs: 0, // Will be set below
+        metadataOverrides: canonicalSemantics
+          ? {
+              canonicalSemanticsVersion: canonicalSemantics.version,
+            }
+          : undefined,
       });
       const totalDuration = Date.now() - startTimestamp;
       bundle.metadata.durationMs = totalDuration;
@@ -330,6 +439,8 @@ export class ContextDiscoveryService {
         "orchestrator",
         `Audit record persisted: ${discoveryRunId}`
       );
+
+      contextDiscoveryCache.set(request, bundle);
 
       return bundle;
     } catch (error) {
@@ -466,9 +577,10 @@ export class ContextDiscoveryService {
       );
       const searchDuration = Date.now() - searchStart;
       const totalDuration = expansionDuration + searchDuration;
+      const semanticSearchLatencyGuardMs = 2200;
 
       // Task 4.S18: Latency guard with fallback to original concepts
-      if (totalDuration > 600) {
+      if (totalDuration > semanticSearchLatencyGuardMs) {
         logger.warn(
           "context_discovery",
           "semantic_searcher",
@@ -476,7 +588,8 @@ export class ContextDiscoveryService {
           {
             expansion_ms: expansionDuration,
             search_ms: searchDuration,
-            exceeded_by_ms: totalDuration - 600,
+            latency_guard_ms: semanticSearchLatencyGuardMs,
+            exceeded_by_ms: totalDuration - semanticSearchLatencyGuardMs,
           }
         );
 
@@ -883,6 +996,10 @@ export class ContextDiscoveryService {
 }
 
 let instance: ContextDiscoveryService | null = null;
+
+export function clearContextDiscoveryCache(): void {
+  contextDiscoveryCache.clear();
+}
 
 export function getContextDiscoveryService(): ContextDiscoveryService {
   if (!instance) {

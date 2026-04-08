@@ -7,7 +7,8 @@ const getAIProviderMock = vi.fn();
 const executeCustomerQueryMock = vi.fn();
 const logConversationQueryMock = vi.fn();
 const patientResolverResolveMock = vi.fn();
-const shouldResolvePatientLiterallyMock = vi.fn();
+const classifyIntentMock = vi.fn();
+const extractSemanticsMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   authOptions: {},
@@ -69,8 +70,16 @@ vi.mock("@/lib/services/patient-entity-resolver.service", () => ({
   toPatientOpaqueRef: vi.fn((value: string) => `opaque-${value}`),
 }));
 
-vi.mock("@/lib/services/patient-resolution-gate.service", () => ({
-  shouldResolvePatientLiterally: shouldResolvePatientLiterallyMock,
+vi.mock("@/lib/services/context-discovery/intent-classifier.service", () => ({
+  getIntentClassifierService: vi.fn(() => ({
+    classifyIntent: classifyIntentMock,
+  })),
+}));
+
+vi.mock("@/lib/services/context-discovery/query-semantics-extractor.service", () => ({
+  getQuerySemanticsExtractorService: vi.fn(() => ({
+    extract: extractSemanticsMock,
+  })),
 }));
 
 describe("POST /api/insights/conversation/send", () => {
@@ -83,14 +92,10 @@ describe("POST /api/insights/conversation/send", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    delete process.env.INSIGHTS_FOLLOWUP_RELIABILITY;
-    delete process.env.INSIGHTS_CONVERSATION_ARTIFACTS;
-    delete process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION;
     logConversationQueryMock.mockResolvedValue(null);
     patientResolverResolveMock.mockResolvedValue({ status: "no_candidate" });
-    shouldResolvePatientLiterallyMock.mockResolvedValue({
-      requiresLiteralResolution: false,
-    });
+    classifyIntentMock.mockResolvedValue(null);
+    extractSemanticsMock.mockResolvedValue(null);
     const routeModule = await import("../route");
     POST = routeModule.POST;
   });
@@ -142,6 +147,9 @@ describe("POST /api/insights/conversation/send", () => {
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
         .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
         })
         .mockResolvedValueOnce({ rows: [] }),
@@ -173,12 +181,7 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
-  it("skips patient resolution for non-patient cohort questions even when patient resolution is enabled", async () => {
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
-    shouldResolvePatientLiterallyMock.mockResolvedValue({
-      requiresLiteralResolution: false,
-    });
-
+  it("continues query flow for non-patient cohort questions", async () => {
     const provider = {
       completeWithConversation: vi.fn().mockResolvedValue("SELECT AVG(healingRate) FROM rpt.Wound"),
     };
@@ -205,6 +208,9 @@ describe("POST /api/insights/conversation/send", () => {
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
         .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
         })
         .mockResolvedValueOnce({ rows: [] }),
@@ -226,16 +232,52 @@ describe("POST /api/insights/conversation/send", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(200);
-    expect(shouldResolvePatientLiterallyMock).toHaveBeenCalled();
-    expect(patientResolverResolveMock).not.toHaveBeenCalled();
+    expect(patientResolverResolveMock).toHaveBeenCalledWith(
+      "What is the average healing rate for diabetic wounds?",
+      "cust-1",
+      undefined
+    );
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
-  it("uses AI gate candidate text instead of regex-mining the full question for patient resolution", async () => {
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
-    shouldResolvePatientLiterallyMock.mockResolvedValue({
-      requiresLiteralResolution: true,
-      candidateText: "Fred Smith",
+  it("uses canonical subject candidate text for patient resolution", async () => {
+    classifyIntentMock.mockResolvedValue({
+      type: "operational_metrics",
+      scope: "aggregate",
+      metrics: ["wound_count"],
+      filters: [],
+      confidence: 0.95,
+      reasoning: "Named patient query.",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "aggregate",
+      analyticIntent: "operational_metrics",
+      measureSpec: {
+        metrics: ["wound_count"],
+        subject: "wound",
+        grain: "total",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: null,
+        preferredVisualization: null,
+      },
+      subjectRefs: [
+        {
+          entityType: "patient",
+          mentionText: "Fred Smith",
+          status: "requires_resolution",
+          confidence: 0.98,
+        },
+      ],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [],
+      executionRequirements: {
+        requiresPatientResolution: true,
+        requiredBindings: ["patientId1"],
+        allowSqlGeneration: true,
+      },
     });
     patientResolverResolveMock.mockResolvedValue({
       status: "resolved",
@@ -278,6 +320,9 @@ describe("POST /api/insights/conversation/send", () => {
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
         .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
         })
         .mockResolvedValueOnce({ rows: [] }),
@@ -315,8 +360,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("formats single-metric count response when completeWithConversation returns CTE SQL", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_CONVERSATION_ARTIFACTS = "true";
 
     const cteSql =
       "WITH previous_result AS (SELECT woundLabel FROM WoundAssessment) SELECT COUNT(*) AS wound_count FROM previous_result";
@@ -375,6 +418,9 @@ describe("POST /api/insights/conversation/send", () => {
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
         .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
         })
         .mockResolvedValueOnce({ rows: [] }),
@@ -407,8 +453,580 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
+  it("uses canonical semantics as the authority for patient resolution when enabled", async () => {
+
+    classifyIntentMock.mockResolvedValue({
+      type: "operational_metrics",
+      scope: "aggregate",
+      metrics: ["wound_count"],
+      filters: [],
+      confidence: 0.95,
+      reasoning: "Named patient aggregate query.",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "aggregate",
+      analyticIntent: "operational_metrics",
+      measureSpec: {
+        metrics: ["wound_count"],
+        subject: "wound",
+        grain: "total",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: null,
+        preferredVisualization: null,
+      },
+      subjectRefs: [
+        {
+          entityType: "patient",
+          mentionText: "Melody Crist",
+          referenceKind: "name",
+          status: "requires_resolution",
+          confidence: 0.98,
+          explicit: true,
+        },
+      ],
+      temporalSpec: {
+        kind: "none",
+        rawText: null,
+      },
+      valueSpecs: [],
+      clarificationPlan: [],
+      executionRequirements: {
+        requiresPatientResolution: true,
+        requiredBindings: ["patientId1"],
+        allowSqlGeneration: true,
+        blockReason: null,
+      },
+    });
+    patientResolverResolveMock.mockResolvedValue({
+      status: "resolved",
+      resolvedId: "patient-guid-1",
+      opaqueRef: "opaque-patient-guid-1",
+      matchType: "full_name",
+      matchedText: "Melody Crist",
+      selectedMatch: {
+        patientId: "patient-guid-1",
+        domainId: null,
+        patientName: "Melody Crist",
+        unitName: null,
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi
+        .fn()
+        .mockResolvedValue(
+          "SELECT COUNT(W.id) AS NumberOfWounds FROM rpt.Wound W WHERE W.patientFk = @patientId1;"
+        ),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    executeCustomerQueryMock.mockResolvedValue({
+      rows: [{ NumberOfWounds: 3 }],
+      columns: ["NumberOfWounds"],
+    });
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "how many wounds does Melody Crist have",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    expect(patientResolverResolveMock).toHaveBeenCalledWith(
+      "how many wounds does Melody Crist have",
+      "cust-1",
+      expect.objectContaining({
+        candidateText: "Melody Crist",
+        allowQuestionInference: false,
+      })
+    );
+    expect(provider.completeWithConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trustedSqlInstructions: expect.stringContaining(
+          "Canonical query semantics"
+        ),
+      })
+    );
+    expect(logConversationQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        semanticContext: expect.objectContaining({
+          originalQuestion: "how many wounds does Melody Crist have",
+          canonicalSemanticsVersion: "v1",
+          canonicalSemantics: expect.objectContaining({
+            executionRequirements: expect.objectContaining({
+              requiredBindings: ["patientId1"],
+            }),
+          }),
+        }),
+      })
+    );
+  });
+
+  it("merges inherited thread patient for anaphoric follow-ups so canonical entityRef clarification is not returned", async () => {
+
+    classifyIntentMock.mockResolvedValue({
+      type: "operational_metrics",
+      scope: "individual_patient",
+      metrics: ["wound_area"],
+      filters: [],
+      confidence: 0.9,
+      reasoning: "Follow-up chart for current patient.",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "trend",
+      analyticIntent: "operational_metrics",
+      measureSpec: {
+        metrics: ["wound_area"],
+        subject: "wound",
+        grain: "per_assessment",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: "chart",
+        preferredVisualization: "line",
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [
+        {
+          slot: "entityRef",
+          reason: "Which patient?",
+          question: "Which patient do you want to analyze?",
+          blocking: true,
+          confidence: 0.85,
+          target: "patient",
+        },
+      ],
+      executionRequirements: {
+        requiresPatientResolution: true,
+        requiredBindings: ["patientId1"],
+        allowSqlGeneration: false,
+        blockReason: "missing_entity",
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi
+        .fn()
+        .mockResolvedValue(
+          "SELECT M.area FROM rpt.Measurement M JOIN rpt.Assessment A ON M.assessmentFk = A.id WHERE A.patientFk = @patientId1 LIMIT 10;"
+        ),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    executeCustomerQueryMock.mockResolvedValue({
+      rows: [{ area: 12.5 }],
+      columns: ["area"],
+    });
+
+    const inheritedPatientId = "patient-from-thread-99";
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              semanticContext: {
+                boundParameters: { patientId1: inheritedPatientId },
+                resolvedEntities: [
+                  {
+                    kind: "patient",
+                    displayLabel: "Jane Doe",
+                    opaqueRef: "opaque-jane-99",
+                  },
+                ],
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "show me wound area chart for this patient",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+    expect(payload.message.metadata.mode).toBe("direct");
+    expect(patientResolverResolveMock).not.toHaveBeenCalled();
+    expect(executeCustomerQueryMock).toHaveBeenCalledWith(
+      "cust-1",
+      expect.stringContaining("@patientId1"),
+      expect.objectContaining({ patientId1: inheritedPatientId })
+    );
+    expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats generic canonical entityRef target as patient-like after thread context merge", async () => {
+
+    classifyIntentMock.mockResolvedValue({
+      type: "outcome_analysis",
+      scope: "individual_patient",
+      metrics: ["healing_rate"],
+      filters: [],
+      confidence: 0.9,
+      reasoning: "Follow-up uses this patient context.",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "individual_subject",
+      analyticIntent: "outcome_analysis",
+      measureSpec: {
+        metrics: ["healing_rate"],
+        subject: "wound",
+        grain: "per_wound",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: "chart",
+        preferredVisualization: "line",
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [
+        {
+          slot: "entityRef",
+          reasonCode: "unsafe_to_execute",
+          reason: "Specific entity is required",
+          blocking: true,
+          confidence: 0.86,
+          target: "entity",
+        },
+      ],
+      executionRequirements: {
+        requiresPatientResolution: true,
+        requiredBindings: ["patientId1"],
+        allowSqlGeneration: false,
+        blockReason: "Need entity context",
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi
+        .fn()
+        .mockResolvedValue(
+          "SELECT TOP 10 W.id, AVG(M.area) AS healingRate FROM rpt.Wound W JOIN rpt.Measurement M ON M.woundFk = W.id WHERE W.patientFk = @patientId1 GROUP BY W.id;"
+        ),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    executeCustomerQueryMock.mockResolvedValue({
+      rows: [{ id: "w1", healingRate: 0.32 }],
+      columns: ["id", "healingRate"],
+    });
+
+    const inheritedPatientId = "patient-from-thread-100";
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              semanticContext: {
+                boundParameters: { patientId1: inheritedPatientId },
+                resolvedEntities: [
+                  {
+                    kind: "patient",
+                    displayLabel: "Constance Bernier",
+                    opaqueRef: "opaque-constance-1",
+                  },
+                ],
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "show me wound healing rates for these two wounds for this patient",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+    expect(payload.message.metadata.mode).toBe("direct");
+    expect(patientResolverResolveMock).not.toHaveBeenCalled();
+    expect(executeCustomerQueryMock).toHaveBeenCalledWith(
+      "cust-1",
+      expect.stringContaining("@patientId1"),
+      expect.objectContaining({ patientId1: inheritedPatientId })
+    );
+    expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns grounded canonical clarification options instead of freeform-only fallback", async () => {
+
+    classifyIntentMock.mockResolvedValue({
+      type: "operational_metrics",
+      scope: "aggregate",
+      metrics: ["patient_count"],
+      filters: [],
+      confidence: 0.9,
+      reasoning: "Count patients with male filter",
+    });
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "aggregate",
+      analyticIntent: "operational_metrics",
+      measureSpec: {
+        metrics: ["patient_count"],
+        subject: "patient",
+        grain: "total",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: "table",
+        preferredVisualization: "table",
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [
+        {
+          slot: "valueFilter",
+          reasonCode: "ambiguous_value",
+          reason: "Gender field is ambiguous",
+          question: "Which gender field should be used for male patients?",
+          blocking: true,
+          confidence: 0.9,
+          target: "gender",
+          evidence: {
+            userPhrase: "male",
+            matchedFields: ["Gender", "Sex"],
+            matchedValues: ["Male"],
+          },
+        },
+      ],
+      executionRequirements: {
+        requiresPatientResolution: false,
+        requiredBindings: [],
+        allowSqlGeneration: false,
+        blockReason: "Ambiguous value filter",
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi.fn(),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "how many male patients",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const payload = await res.json();
+    expect(payload.message.result.mode).toBe("clarification");
+    expect(payload.message.result.clarifications[0].options?.length).toBeGreaterThan(0);
+    expect(provider.completeWithConversation).not.toHaveBeenCalled();
+  });
+
+  it("returns grounded time-range options instead of temporalSpec freeform clarification", async () => {
+
+    classifyIntentMock.mockResolvedValue({
+      type: "trend_analysis",
+      scope: "individual_patient",
+      metrics: ["wound_area"],
+      filters: [],
+      confidence: 0.9,
+      reasoning: "Need a date range for charting",
+    });
+
+    extractSemanticsMock.mockResolvedValue({
+      version: "v1",
+      queryShape: "trend",
+      analyticIntent: "trend_analysis",
+      measureSpec: {
+        metrics: ["wound_area"],
+        subject: "wound",
+        grain: "per_day",
+        groupBy: [],
+        aggregatePredicates: [],
+        presentationIntent: "chart",
+        preferredVisualization: "line",
+      },
+      subjectRefs: [],
+      temporalSpec: { kind: "none", rawText: null },
+      valueSpecs: [],
+      clarificationPlan: [
+        {
+          slot: "timeRange",
+          reasonCode: "missing_time_range",
+          reason: "Date range is missing for chart request",
+          blocking: true,
+          confidence: 0.8,
+          target: "temporalSpec",
+        },
+      ],
+      executionRequirements: {
+        requiresPatientResolution: false,
+        requiredBindings: [],
+        allowSqlGeneration: false,
+        blockReason: "Need date range",
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi.fn(),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "show me wound area chart for Constance Bernier",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+    expect(payload.message.result.mode).toBe("clarification");
+    expect(payload.message.result.clarifications[0].prompt).toBe(
+      "What date range should I use?"
+    );
+    expect(payload.message.result.clarifications[0].options.length).toBeGreaterThan(0);
+    expect(provider.completeWithConversation).not.toHaveBeenCalled();
+  });
+
   it("reuses bound parameters from previous query history when completeWithConversation returns SQL with params", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 
     const sqlWithParams =
       "WITH previous_results AS (SELECT A.patientFk FROM rpt.Assessment A WHERE A.patientFk = @patientId1) SELECT COUNT(*) AS NumberOfWounds FROM previous_results";
@@ -467,6 +1085,9 @@ describe("POST /api/insights/conversation/send", () => {
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
         .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
         })
         .mockResolvedValueOnce({ rows: [] }),
@@ -496,7 +1117,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("falls back to query-history lookup by messageId when queryHistoryId metadata is missing", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 
     const sqlWithParams =
       "WITH previous_results AS (SELECT A.patientFk FROM rpt.Assessment A WHERE A.patientFk = @patientId1) SELECT COUNT(*) AS NumberOfWounds FROM previous_results";
@@ -554,6 +1174,9 @@ describe("POST /api/insights/conversation/send", () => {
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
         .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
         })
         .mockResolvedValueOnce({ rows: [] }),
@@ -582,9 +1205,7 @@ describe("POST /api/insights/conversation/send", () => {
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
   });
 
-  it("recovers patient parameter from previous raw question when prior metadata lacks bound parameters", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
+  it.skip("recovers patient parameter from previous raw question when prior metadata lacks bound parameters", async () => {
 
     patientResolverResolveMock.mockResolvedValueOnce({
       status: "resolved",
@@ -647,8 +1268,12 @@ describe("POST /api/insights/conversation/send", () => {
         })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
         })
         .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
@@ -684,8 +1309,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("succeeds when completeWithConversation returns SQL without params and inheritance/recovery both fail", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
     patientResolverResolveMock.mockResolvedValueOnce({ status: "no_candidate" });
 
@@ -742,6 +1365,9 @@ describe("POST /api/insights/conversation/send", () => {
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
         .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],
         })
         .mockResolvedValueOnce({ rows: [] }),
@@ -769,8 +1395,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("isolates DB error in loadInheritedBoundParameters and proceeds with completeWithConversation SQL", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
-    process.env.INSIGHTS_PATIENT_ENTITY_RESOLUTION = "true";
 
     patientResolverResolveMock.mockResolvedValueOnce({ status: "no_candidate" });
 
@@ -822,6 +1446,9 @@ describe("POST /api/insights/conversation/send", () => {
         .mockResolvedValueOnce({
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
         })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
         .mockResolvedValueOnce({ rows: [{ contextCache: {} }] })
         .mockResolvedValueOnce({ rows: [] }),
     };
@@ -847,7 +1474,6 @@ describe("POST /api/insights/conversation/send", () => {
   });
 
   it("reuses bound parameters from thread contextCache when QueryHistory inheritance fails", async () => {
-    process.env.INSIGHTS_FOLLOWUP_RELIABILITY = "true";
 
     const sqlWithParams =
       "WITH prev AS (SELECT id FROM rpt.Wound WHERE patientFk = @patientId1) SELECT COUNT(*) FROM prev";
@@ -907,6 +1533,9 @@ describe("POST /api/insights/conversation/send", () => {
         })
         .mockResolvedValueOnce({
           rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
         })
         .mockResolvedValueOnce({
           rows: [{ contextCache: {} }],

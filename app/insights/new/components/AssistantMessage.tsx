@@ -127,7 +127,13 @@ function toInlineClarificationItems(
       freeformAllowed: clarification.allowCustom
         ? {
             allowed: true,
-            placeholder: "Enter a custom constraint",
+            placeholder:
+              clarification.freeformPolicy?.placeholder ??
+              "Describe what you meant",
+            hint:
+              clarification.freeformPolicy?.hint ??
+              "Use this only if none of the suggested options fit.",
+            maxChars: clarification.freeformPolicy?.maxChars,
           }
         : undefined,
     });
@@ -174,7 +180,7 @@ function InlineClarification({ clarifications, isSubmitting, onSubmit }: InlineC
     options: normalizeOptions(c.options),
   }));
 
-  const [responses, setResponses] = useState<Record<string, string>>(() => {
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => {
     const defaults: Record<string, string> = {};
     normalizedClarifications.forEach((c) => {
       if (c.options.length > 0) {
@@ -184,9 +190,40 @@ function InlineClarification({ clarifications, isSubmitting, onSubmit }: InlineC
     return defaults;
   });
 
-  const allAnswered = normalizedClarifications.every(
-    (c) => responses[c.placeholder] && responses[c.placeholder].trim() !== ""
-  );
+  const [customResponses, setCustomResponses] = useState<Record<string, string>>({});
+  const [customMode, setCustomMode] = useState<Record<string, boolean>>({});
+
+  const allAnswered = normalizedClarifications.every((c) => {
+    if (customMode[c.placeholder]) {
+      return Boolean(customResponses[c.placeholder]?.trim());
+    }
+    return Boolean(selectedOptions[c.placeholder]?.trim());
+  });
+
+  const handleOptionSelect = (placeholder: string, value: string) => {
+    setSelectedOptions((prev) => ({ ...prev, [placeholder]: value }));
+    setCustomMode((prev) => ({ ...prev, [placeholder]: false }));
+  };
+
+  const handleCustomToggle = (placeholder: string) => {
+    setCustomMode((prev) => ({
+      ...prev,
+      [placeholder]: !prev[placeholder],
+    }));
+  };
+
+  const handleSubmit = () => {
+    const responses: Record<string, string> = {};
+    normalizedClarifications.forEach((c) => {
+      const value = customMode[c.placeholder]
+        ? customResponses[c.placeholder]?.trim()
+        : selectedOptions[c.placeholder];
+      if (value) {
+        responses[c.placeholder] = value;
+      }
+    });
+    onSubmit(responses);
+  };
 
   return (
     <div className="mt-4 pt-4 border-t space-y-4">
@@ -211,17 +248,17 @@ function InlineClarification({ clarifications, isSubmitting, onSubmit }: InlineC
                   key={opt.value}
                   type="button"
                   disabled={isSubmitting}
-                  onClick={() =>
-                    setResponses((prev) => ({ ...prev, [c.placeholder]: opt.value }))
-                  }
+                  onClick={() => handleOptionSelect(c.placeholder, opt.value)}
                   className={`w-full text-left px-3 py-2 rounded-lg border-2 text-sm transition-all ${
-                    responses[c.placeholder] === opt.value
+                    selectedOptions[c.placeholder] === opt.value &&
+                    !customMode[c.placeholder]
                       ? "border-blue-500 bg-blue-50 text-blue-900"
                       : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
                   } ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                 >
                   <div className="flex items-center gap-2">
-                    {responses[c.placeholder] === opt.value ? (
+                    {selectedOptions[c.placeholder] === opt.value &&
+                    !customMode[c.placeholder] ? (
                       <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
                     ) : (
                       <div className="h-4 w-4 rounded-full border-2 border-slate-300 flex-shrink-0" />
@@ -235,19 +272,48 @@ function InlineClarification({ clarifications, isSubmitting, onSubmit }: InlineC
 
           {c.freeformAllowed?.allowed && (
             <div className="pl-7 space-y-1">
-              {c.freeformAllowed.hint && (
-                <p className="text-xs text-slate-500">{c.freeformAllowed.hint}</p>
-              )}
-              <Textarea
-                value={responses[c.placeholder] ?? ""}
-                onChange={(e) =>
-                  setResponses((prev) => ({ ...prev, [c.placeholder]: e.target.value }))
-                }
+              <button
+                type="button"
                 disabled={isSubmitting}
-                placeholder={c.freeformAllowed.placeholder ?? "Please describe what you meant..."}
-                className="text-sm min-h-16"
-                maxLength={c.freeformAllowed.maxChars ?? 500}
-              />
+                onClick={() => handleCustomToggle(c.placeholder)}
+                className={`w-full text-left px-3 py-2 rounded-lg border-2 text-sm transition-all ${
+                  customMode[c.placeholder]
+                    ? "border-blue-500 bg-blue-50 text-blue-900"
+                    : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+                } ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <div className="flex items-center gap-2">
+                  {customMode[c.placeholder] ? (
+                    <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border-2 border-slate-300 flex-shrink-0" />
+                  )}
+                  <span>Other input</span>
+                </div>
+              </button>
+              {customMode[c.placeholder] && (
+                <>
+                  {c.freeformAllowed.hint && (
+                    <p className="text-xs text-slate-500">{c.freeformAllowed.hint}</p>
+                  )}
+                  <Textarea
+                    value={customResponses[c.placeholder] ?? ""}
+                    onChange={(e) =>
+                      setCustomResponses((prev) => ({
+                        ...prev,
+                        [c.placeholder]: e.target.value,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                    placeholder={
+                      c.freeformAllowed.placeholder ??
+                      "Please describe what you meant..."
+                    }
+                    className="text-sm min-h-16"
+                    maxLength={c.freeformAllowed.maxChars ?? 500}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>
@@ -257,7 +323,7 @@ function InlineClarification({ clarifications, isSubmitting, onSubmit }: InlineC
         <Button
           size="sm"
           disabled={!allAnswered || isSubmitting}
-          onClick={() => onSubmit(responses)}
+          onClick={handleSubmit}
           className="bg-blue-600 hover:bg-blue-700 text-white"
         >
           {isSubmitting ? "Processing..." : "Continue"}
@@ -287,6 +353,11 @@ export function AssistantMessage({
   const loadingText = isFollowUp
     ? "AI is analyzing your follow-up..."
     : "AI is composing your insights...";
+  const displayContent =
+    message.content ||
+    (!isLoading && message.result?.error
+      ? `I encountered an error: ${message.result.error.message}`
+      : "");
   const thinkingSteps = (message.result?.thinking ?? []) as ThinkingStep[];
   const hasThinking = thinkingSteps.length > 0;
   const thinkingCollapsed = shouldCollapseThinkingStream({
@@ -409,7 +480,9 @@ export function AssistantMessage({
                 </div>
               ) : (
                 <>
-                  <p className="text-gray-800">{message.content}</p>
+                  {displayContent ? (
+                    <p className="text-gray-800">{displayContent}</p>
+                  ) : null}
                   <span className="text-xs text-gray-400 mt-1 block">
                     {formatDistanceToNow(new Date(message.createdAt), {
                       addSuffix: true,

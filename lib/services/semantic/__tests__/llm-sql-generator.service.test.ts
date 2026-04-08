@@ -146,6 +146,33 @@ describe("generateSQLWithLLM", () => {
     expect(result.assumptions.length).toBeGreaterThan(0);
   });
 
+  it("accepts read-only SQL with DECLARE prologue before CTE", async () => {
+    mocks.mockComplete.mockResolvedValueOnce(
+      JSON.stringify({
+        responseType: "sql",
+        explanation: "Use a relative date window and then run a CTE query.",
+        generatedSql: [
+          "DECLARE @EndDate DATETIME = GETDATE();",
+          "DECLARE @StartDate DATETIME = DATEADD(week, -4, @EndDate);",
+          "",
+          "WITH ScopedPatients AS (",
+          "  SELECT P.id",
+          "  FROM rpt.Patient P",
+          ")",
+          "SELECT COUNT(*) AS totalPatients FROM ScopedPatients;",
+        ].join("\n"),
+        confidence: 0.95,
+        assumptions: [],
+      })
+    );
+
+    const result = await generateSQLWithLLM(baseContext, "customer-1");
+
+    expect(result.responseType).toBe("sql");
+    expect(result.generatedSql).toContain("DECLARE @EndDate");
+    expect(result.generatedSql).toContain("WITH ScopedPatients");
+  });
+
   it("reuses cached customer schema between calls", async () => {
     mocks.mockComplete
       .mockResolvedValueOnce(
@@ -181,6 +208,53 @@ describe("generateSQLWithLLM", () => {
     await expect(
       generateSQLWithLLM(baseContext, "customer-1")
     ).rejects.toThrowError(/valid JSON/);
+  });
+
+  it("rejects clarification responses in compile-only mode", async () => {
+    const simpleContext: ContextBundle = {
+      ...baseContext,
+      question: "how many patients",
+      intent: {
+        ...baseContext.intent,
+        filters: [],
+        metrics: ["patient_count"],
+      },
+    };
+
+    mocks.mockComplete.mockResolvedValueOnce(
+      JSON.stringify({
+        responseType: "clarification",
+        reasoning: "Need more information",
+        clarifications: [
+          {
+            id: "clarify_test",
+            ambiguousTerm: "recent",
+            question: "What time window?",
+            options: [
+              {
+                id: "days_30",
+                label: "Last 30 days",
+                sqlConstraint: "date >= DATEADD(day, -30, GETDATE())",
+              },
+            ],
+            allowCustom: true,
+          },
+        ],
+      })
+    );
+
+    await expect(
+      generateSQLWithLLM(
+        simpleContext,
+        "customer-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { allowClarificationRequests: false }
+      )
+    ).rejects.toThrow(/compile-only mode/);
   });
 
   it("formats resolved vs unresolved filters using merged filter state", async () => {
@@ -238,6 +312,51 @@ describe("generateSQLWithLLM", () => {
     expect(userMessage).toContain("30% area reduction");
     expect(userMessage).toContain("Filters Needing Clarification");
     expect(userMessage).toContain("gender");
+  });
+
+  it("does not leak patient opaque refs into the model prompt", async () => {
+    mocks.mockComplete.mockResolvedValueOnce(
+      JSON.stringify({
+        responseType: "sql",
+        explanation: "Count wounds for one patient.",
+        generatedSql:
+          "SELECT COUNT(*) AS NumberOfWounds FROM rpt.Wound WHERE patientFk = @patientId1;",
+        confidence: 0.95,
+        assumptions: [],
+      })
+    );
+
+    await generateSQLWithLLM(
+      {
+        ...baseContext,
+        question: "how many wounds does PATIENT_REF_1 have",
+      },
+      "customer-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        sanitizedQuestion: "how many wounds does PATIENT_REF_1 have",
+        promptLines: [
+          "Resolved patient placeholder PATIENT_REF_1. This placeholder is NOT a database value and MUST NEVER appear in SQL. Use only bind parameter @patientId1, and compare it only to patient primary key columns (rpt.Patient.id) or patient foreign keys (*.patientFk). Never use domainId for secure patient binding.",
+        ],
+        resolvedEntities: [
+          {
+            kind: "patient",
+            opaqueRef: "38a5ca28eb328731",
+            matchType: "full_name",
+          },
+        ],
+      }
+    );
+
+    const userMessage =
+      (mocks.mockComplete.mock.calls[0][0] as any).userMessage || "";
+    expect(userMessage).toContain("PATIENT_REF_1");
+    expect(userMessage).toContain("@patientId1");
+    expect(userMessage).toContain("Never use domainId");
+    expect(userMessage).not.toContain("38a5ca28eb328731");
   });
 
   // ========================================

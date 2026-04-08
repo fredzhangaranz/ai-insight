@@ -125,6 +125,11 @@ export function ClarificationPanel({
                     &quot;{clarification.ambiguousTerm}&quot;
                   </span>
                 </p>
+                {clarification.reason && (
+                  <p className="text-sm text-slate-500 mb-3">
+                    {clarification.reason}
+                  </p>
+                )}
 
                 {/* Options */}
                 <div className="space-y-2">
@@ -204,10 +209,11 @@ export function ClarificationPanel({
                           </div>
                           <div className="flex-1">
                             <span className="font-medium text-slate-900">
-                              Custom constraint
+                              Other input
                             </span>
                             <p className="text-sm text-slate-600 mb-2">
-                              Specify your own SQL constraint
+                              {clarification.freeformPolicy?.hint ||
+                                "Describe the interpretation you want to use"}
                             </p>
                           </div>
                         </div>
@@ -222,7 +228,10 @@ export function ClarificationPanel({
                               handleCustomValueChange(clarification.id, e.target.value)
                             }
                             disabled={isSubmitting}
-                            placeholder="e.g., area > 15 AND area < 30"
+                            placeholder={
+                              clarification.freeformPolicy?.placeholder ||
+                              "Enter a more specific value"
+                            }
                             className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             autoComplete="off"
                             data-form-type="other"

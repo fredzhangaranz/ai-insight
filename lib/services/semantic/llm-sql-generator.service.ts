@@ -11,6 +11,7 @@ import {
   type ClarificationRequest,
 } from "@/lib/prompts/generate-query.prompt";
 import type {
+  CanonicalQuerySemantics,
   ContextBundle,
   FormInContext,
   JoinPath,
@@ -53,6 +54,10 @@ export async function generateSQLWithLLM(
     sanitizedQuestion?: string;
     promptLines?: string[];
     resolvedEntities?: ResolvedEntitySummary[];
+    canonicalSemantics?: CanonicalQuerySemantics;
+  },
+  options?: {
+    allowClarificationRequests?: boolean;
   }
 ): Promise<LLMResponse> {
   // Check if already aborted before starting expensive operation
@@ -80,6 +85,8 @@ export async function generateSQLWithLLM(
   }
 
   const startTime = Date.now();
+  const allowClarificationRequests =
+    options?.allowClarificationRequests ?? true;
 
   let latestValidation: ValidationResult | undefined;
 
@@ -141,7 +148,7 @@ export async function generateSQLWithLLM(
             allowCustom: true,
           }));
 
-        if (clarifications.length > 0) {
+        if (clarifications.length > 0 && allowClarificationRequests) {
           // Return clarification response
           const clarificationResponse: LLMClarificationResponse = {
             responseType: "clarification",
@@ -217,7 +224,8 @@ export async function generateSQLWithLLM(
     customerId,
     clarifications,
     templateReferences,
-    trustedContext
+    trustedContext,
+    { allowClarificationRequests }
   );
 
   // DEBUG: Log formatted filters section
@@ -255,6 +263,12 @@ export async function generateSQLWithLLM(
   );
 
   const llmResponse = parseAndValidateLLMResponse(response);
+
+  if (!allowClarificationRequests && llmResponse.responseType === "clarification") {
+    throw new Error(
+      "[LLM-SQL-Generator] Clarification response received in compile-only mode"
+    );
+  }
 
   const totalDuration = Date.now() - startTime;
 
@@ -306,6 +320,10 @@ async function buildUserPrompt(
     sanitizedQuestion?: string;
     promptLines?: string[];
     resolvedEntities?: ResolvedEntitySummary[];
+    canonicalSemantics?: CanonicalQuerySemantics;
+  },
+  options?: {
+    allowClarificationRequests?: boolean;
   }
 ): Promise<string> {
   let prompt = "";
@@ -323,14 +341,42 @@ async function buildUserPrompt(
 
   if (trustedContext?.resolvedEntities?.length) {
     prompt += `# Trusted Entity Context\n\n`;
+    prompt += `- One or more entities were resolved securely outside the LLM.\n`;
     for (const entity of trustedContext.resolvedEntities) {
-      prompt += `- Resolved ${entity.kind}: ${entity.opaqueRef} (${entity.matchType})\n`;
+      prompt += `- Resolved ${entity.kind} via secure binding (${entity.matchType})\n`;
     }
     for (const line of trustedContext.promptLines || []) {
       prompt += `- ${line}\n`;
     }
     prompt +=
-      "IMPORTANT: These entities were resolved outside the LLM. You MUST use the provided parameter placeholders and MUST NOT omit them.\n\n";
+      "IMPORTANT: These entities were resolved outside the LLM. You MUST use the provided parameter placeholders, compare them only against patient primary key columns or patient foreign keys, and MUST NOT use domainId or any other identifier column for secure patient binding.\n\n";
+  }
+
+  if (trustedContext?.canonicalSemantics) {
+    const semantics = trustedContext.canonicalSemantics;
+    prompt += `# Canonical Query Semantics\n\n`;
+    prompt += `- Query shape: ${semantics.queryShape}\n`;
+    prompt += `- Analytic intent: ${semantics.analyticIntent}\n`;
+    prompt += `- Metrics: ${semantics.measureSpec.metrics.join(", ") || "None"}\n`;
+    prompt += `- Grain: ${semantics.measureSpec.grain || "None"}\n`;
+    prompt += `- Group by: ${semantics.measureSpec.groupBy.join(", ") || "None"}\n`;
+    prompt += `- Patient resolution required: ${
+      semantics.executionRequirements.requiresPatientResolution ? "yes" : "no"
+    }\n`;
+    if (semantics.subjectRefs.length > 0) {
+      prompt += `- Subject refs: ${semantics.subjectRefs
+        .map((ref) => `${ref.entityType}:${ref.mentionText}:${ref.status}`)
+        .join("; ")}\n`;
+    }
+    if (semantics.temporalSpec.kind !== "none") {
+      prompt += `- Temporal semantics: ${JSON.stringify(semantics.temporalSpec)}\n`;
+    }
+    if (semantics.executionRequirements.requiredBindings.length > 0) {
+      prompt += `- Required bindings: ${semantics.executionRequirements.requiredBindings.join(
+        ", "
+      )}\n`;
+    }
+    prompt += "\n";
   }
 
   prompt += formatSemanticFrameSection(intent.semanticFrame);
@@ -377,7 +423,12 @@ async function buildUserPrompt(
 
   prompt += `# Instructions\n\n`;
   prompt += `Analyze the question and context above.\n`;
-  prompt += `Decide if you need clarification or can generate SQL directly.\n`;
+  if (options?.allowClarificationRequests === false) {
+    prompt += `All required clarifications have already been handled upstream.\n`;
+    prompt += `You MUST generate SQL only and MUST NOT ask for clarification.\n`;
+  } else {
+    prompt += `Decide if you need clarification or can generate SQL directly.\n`;
+  }
   prompt += `Use the rpt.* reporting schema for all tables.\n`;
   prompt += `Return ONLY a valid JSON object matching the format defined in the system prompt.\n`;
 
@@ -482,11 +533,28 @@ function mapFiltersToMerged(
       filter.userPhrase || (filter as any).userTerm || filter.field || "filter";
     const valueResolved = filter.value !== null && filter.value !== undefined;
     const confidence =
-      typeof (filter as any).confidence === "number"
+      typeof (filter as any).resolutionConfidence === "number"
+        ? (filter as any).resolutionConfidence
+        : typeof (filter as any).mappingConfidence === "number"
+        ? (filter as any).mappingConfidence
+        : typeof (filter as any).confidence === "number"
         ? (filter as any).confidence
         : valueResolved
         ? 0.8
         : 0.5;
+    const resolutionStatus = (filter as any).resolutionStatus;
+    const resolved =
+      resolutionStatus === "resolved" ||
+      (!resolutionStatus &&
+        !(filter as any).needsClarification &&
+        valueResolved);
+    const warnings: string[] = [];
+    if ((filter as any).validationWarning) {
+      warnings.push((filter as any).validationWarning);
+    }
+    if ((filter as any).mappingError) {
+      warnings.push((filter as any).mappingError);
+    }
 
     return {
       originalText,
@@ -494,9 +562,9 @@ function mapFiltersToMerged(
       field: filter.field,
       operator: filter.operator,
       value: filter.value,
-      resolved: valueResolved,
+      resolved,
       confidence,
-      resolvedVia: valueResolved ? ["semantic_mapping"] : [],
+      resolvedVia: resolved ? ["semantic_mapping"] : [],
       allSources: [
         {
           source: "semantic_mapping",
@@ -507,7 +575,7 @@ function mapFiltersToMerged(
           originalText,
         },
       ],
-      warnings: [],
+      warnings,
       conflicts: [],
     };
   });

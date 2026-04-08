@@ -42,6 +42,8 @@ export interface ClarificationOption {
   submissionValue?: string;
   kind?: "sql" | "semantic";
   isDefault?: boolean;
+  selectionMapping?: Record<string, unknown>;
+  evidence?: Record<string, unknown>;
 }
 
 /**
@@ -56,6 +58,16 @@ export interface ClarificationRequest {
   slot?: string;
   target?: string;
   reason?: string;
+  reasonCode?: string;
+  targetType?: string;
+  evidence?: Record<string, unknown>;
+  freeformPolicy?: {
+    allowed: boolean;
+    placeholder?: string;
+    hint?: string;
+    minChars?: number;
+    maxChars?: number;
+  };
 }
 
 /**
@@ -354,6 +366,17 @@ Generated clarification response:
 - GROUP BY CASE(...) ... ORDER BY table.column — Direct column reference when using CASE grouping
 - GROUP BY column ... ORDER BY different_column — ORDER BY column must be in GROUP BY
 - COUNT(MAX(column)) — Nested aggregates are invalid
+- GROUP BY with windowed median: \`PERCENTILE_CONT(...) WITHIN GROUP (...) OVER (PARTITION BY x)\` + \`GROUP BY x\`
+
+### ✅ Correct Pattern for Median by Group (SQL Server):
+- Use windowed percentile + DISTINCT, not GROUP BY
+- Example:
+  SELECT DISTINCT
+    WoundStage,
+    CAST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY TimeToHealingInDays)
+      OVER (PARTITION BY WoundStage) AS DECIMAL(10,2)) AS MedianTimeToHealingDays
+  FROM WoundHealingTime
+  ORDER BY WoundStage
 
 ### ✅ Correct Solution for Age Group Aggregations:
 
@@ -525,7 +548,7 @@ export function validateLLMResponse(
       typeof obj.confidence === "number" &&
       obj.confidence >= 0 &&
       obj.confidence <= 1 &&
-      /^[\s\n]*(SELECT|WITH)/i.test(obj.generatedSql) // Allow SELECT or CTE (WITH ...)
+      isSafeReadOnlySqlResponse(obj.generatedSql)
     );
   }
 
@@ -564,6 +587,33 @@ export function validateLLMResponse(
   }
 
   return false;
+}
+
+function stripSqlComments(sql: string): string {
+  return sql
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--.*$/gm, " ");
+}
+
+function isSafeReadOnlySqlResponse(sql: string): boolean {
+  const normalized = stripSqlComments(sql).trim();
+  if (!normalized) {
+    return false;
+  }
+
+  // Keep the response contract read-only.
+  if (
+    /\b(INSERT|UPDATE|DELETE|MERGE|DROP|ALTER|CREATE|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE)\b/i.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+
+  // Allow read-only T-SQL prologue (DECLARE/SET) before the final SELECT/WITH query.
+  return /^[\s;]*(?:(?:DECLARE|SET)\b[\s\S]*?(?:;|$)\s*)*(?:WITH|SELECT)\b/i.test(
+    normalized
+  );
 }
 
 // ========================================

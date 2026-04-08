@@ -6,6 +6,7 @@ import { matchTemplate } from "./template-matcher.service";
 import { analyzeComplexity } from "./complexity-detector.service";
 import { ContextDiscoveryService } from "../context-discovery/context-discovery.service";
 import type {
+  CanonicalQuerySemantics,
   ContextBundle,
   ContextBundleMetadata,
   SemanticQueryFrame,
@@ -32,11 +33,12 @@ import {
   collectUnresolvedFilters,
   buildUnresolvedFilterClarificationId,
   buildFilterMetricsSummary,
+  getFilterValidatorService,
+  type ValidationError,
   type UnresolvedFilterInfo,
 } from "./filter-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
 import type { MappedFilter } from "../context-discovery/terminology-mapper.service";
-import { generateAIClarification } from "./ai-ambiguity-detector.service";
 import { matchSnippets } from "./template-matcher.service";
 import { selectExecutionMode } from "../snippet/execution-mode-selector.service";
 import { extractResidualFiltersWithLLM } from "../snippet/residual-filter-extractor.service";
@@ -56,7 +58,6 @@ import {
   getSQLValidator,
   type SQLValidationResult,
 } from "../sql-validator.service";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { DEFAULT_AI_MODEL_ID } from "@/lib/config/ai-models";
 import { getAIProvider } from "@/lib/ai/providers/provider-factory";
 import {
@@ -71,8 +72,28 @@ import type {
   ResolvedEntitySummary,
 } from "@/lib/types/insight-artifacts";
 import { validateTrustedSql } from "../trusted-sql-guard.service";
-import { normalizeSemanticQueryFrame } from "../context-discovery/semantic-query-frame.service";
+import {
+  normalizeSemanticQueryFrame,
+  projectSemanticQueryFrameFromCanonicalSemantics,
+} from "../context-discovery/semantic-query-frame.service";
 import { shouldResolvePatientLiterally } from "../patient-resolution-gate.service";
+import { extractPatientNameCandidateFromQuestion } from "../patient-entity-resolver.service";
+import {
+  applyStructuredFilterSelections,
+  type ClarificationTelemetrySummary,
+  decodeAssessmentTypeSelection,
+  decodeFilterSelection,
+  getDirectQueryClarificationService,
+  summarizeClarificationRequests,
+} from "./clarification-orchestrator.service";
+import {
+  getSemanticExecutionDiagnosticsService,
+  type SemanticExecutionDiagnostics,
+} from "./semantic-execution-diagnostics.service";
+import {
+  GroundedClarificationPlannerService,
+  type PlannerDecisionMetadata,
+} from "./grounded-clarification-planner.service";
 
 export type QueryMode = "template" | "direct" | "funnel" | "clarification";
 
@@ -113,6 +134,8 @@ export interface OrchestrationResult {
   question: string;
   thinking: ThinkingStep[];
   filterMetrics?: FilterMetricsSummary;
+  clarificationTelemetry?: ClarificationTelemetrySummary;
+  semanticDiagnostics?: SemanticExecutionDiagnostics;
 
   // SQL execution fields (when mode is NOT clarification)
   sql?: string;
@@ -155,6 +178,7 @@ export interface OrchestrationResult {
   artifacts?: InsightArtifact[];
   resolvedEntities?: ResolvedEntitySummary[];
   boundParameters?: Record<string, string | number | boolean | null>;
+  canonicalSemantics?: CanonicalQuerySemantics;
 }
 
 const TEMPLATE_ENABLED_INTENTS = [
@@ -169,8 +193,135 @@ const TEMPLATE_ENABLED_INTENTS = [
 // Snippet templates use 0.30 threshold (more flexible, can be composed)
 const TEMPLATE_CONFIDENCE_THRESHOLD = 0.35;
 const SNIPPET_TEMPLATE_THRESHOLD = 0.3;
+const ABSOLUTE_TEMPORAL_LITERAL_SOURCE = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{4}|\d{4}[-/](?:0?[1-9]|1[0-2])(?:[-/](?:0?[1-9]|[12]\d|3[01]))?|(?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\d|3[01])[/-]\d{2,4}`;
+const ABSOLUTE_TEMPORAL_LITERAL_PATTERN = new RegExp(
+  String.raw`\b(?:${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\b`,
+  "i"
+);
+const EXPLICIT_ABSOLUTE_TEMPORAL_RANGE_PATTERNS = [
+  new RegExp(
+    String.raw`\bbetween\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\s+and\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\b`,
+    "i"
+  ),
+  new RegExp(
+    String.raw`\bfrom\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\s+to\s+(${ABSOLUTE_TEMPORAL_LITERAL_SOURCE})\b`,
+    "i"
+  ),
+];
+
+type ExplicitAbsoluteTemporalRange = {
+  fullPhrase: string;
+  start: string;
+  end: string;
+};
+
+function extractFilterPhrase(filter: Pick<MappedFilter, "userPhrase" | "value">): string | null {
+  if (typeof filter.userPhrase === "string" && filter.userPhrase.trim().length > 0) {
+    return filter.userPhrase.trim();
+  }
+  if (typeof filter.value === "string" && filter.value.trim().length > 0) {
+    return filter.value.trim();
+  }
+  return null;
+}
+
+function isAbsoluteTemporalLiteral(phrase: string): boolean {
+  return ABSOLUTE_TEMPORAL_LITERAL_PATTERN.test(phrase);
+}
+
+function normalizeComparableText(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function extractExplicitAbsoluteTemporalRange(
+  question: string
+): ExplicitAbsoluteTemporalRange | null {
+  for (const pattern of EXPLICIT_ABSOLUTE_TEMPORAL_RANGE_PATTERNS) {
+    const match = question.match(pattern);
+    if (!match?.[0] || !match[1] || !match[2]) {
+      continue;
+    }
+    return {
+      fullPhrase: match[0],
+      start: match[1],
+      end: match[2],
+    };
+  }
+
+  return null;
+}
+
+function isExplicitAbsoluteTemporalRangePhrase(
+  phrase: string,
+  range: ExplicitAbsoluteTemporalRange
+): boolean {
+  const normalizedPhrase = normalizeComparableText(phrase);
+  const normalizedFullPhrase = normalizeComparableText(range.fullPhrase);
+  const normalizedStart = normalizeComparableText(range.start);
+  const normalizedEnd = normalizeComparableText(range.end);
+
+  if (normalizedPhrase === normalizedFullPhrase) {
+    return true;
+  }
+
+  if (
+    isAbsoluteTemporalLiteral(phrase) &&
+    (normalizedPhrase === normalizedStart || normalizedPhrase === normalizedEnd)
+  ) {
+    return true;
+  }
+
+  return (
+    normalizedPhrase.includes(normalizedStart) &&
+    normalizedPhrase.includes(normalizedEnd) &&
+    /\bbetween\b|\bfrom\b|\bto\b|\band\b/i.test(phrase)
+  );
+}
+
+function shouldDeferTemporalLiteralClarification(
+  question: string,
+  info: UnresolvedFilterInfo,
+  canonicalSemantics?: CanonicalQuerySemantics
+): boolean {
+  const explicitRange =
+    canonicalSemantics?.temporalSpec.kind === "absolute_range"
+      ? {
+          fullPhrase:
+            canonicalSemantics.temporalSpec.rawText ||
+            `${canonicalSemantics.temporalSpec.start} to ${canonicalSemantics.temporalSpec.end}`,
+          start: canonicalSemantics.temporalSpec.start,
+          end: canonicalSemantics.temporalSpec.end,
+        }
+      : extractExplicitAbsoluteTemporalRange(question);
+  if (!explicitRange) {
+    return false;
+  }
+
+  const phrase = extractFilterPhrase(info.filter);
+  if (!phrase) {
+    return false;
+  }
+
+  return isExplicitAbsoluteTemporalRangePhrase(phrase, explicitRange);
+}
+
+function getCanonicalPatientSubjectRef(
+  canonicalSemantics?: CanonicalQuerySemantics
+) {
+  if (!canonicalSemantics) {
+    return undefined;
+  }
+
+  return canonicalSemantics.subjectRefs.find(
+    (ref) =>
+      ref.entityType === "patient" &&
+      (ref.status === "requires_resolution" || ref.status === "candidate")
+  );
+}
 
 export class ThreeModeOrchestrator {
+  private readonly groundedClarificationPlanner =
+    new GroundedClarificationPlannerService();
   private contextDiscovery: ContextDiscoveryService;
   private templateInjector: TemplateInjectorService;
   private templateUsageLogger: TemplateUsageLoggerService;
@@ -447,6 +598,10 @@ export class ThreeModeOrchestrator {
           clarifications: clarifications as any,
           clarificationReasoning:
             "Template placeholders require additional details",
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            clarifications as any,
+            "template_placeholder"
+          ),
         };
       }
 
@@ -588,6 +743,10 @@ export class ThreeModeOrchestrator {
                 requiresClarification: true,
                 clarifications,
                 clarificationReasoning: `${validationResult.statistics.failed} residual filter(s) could not be validated`,
+                clarificationTelemetry: this.buildClarificationTelemetry(
+                  clarifications as any,
+                  "validation"
+                ),
               };
             }
 
@@ -602,7 +761,6 @@ export class ThreeModeOrchestrator {
         }
       }
 
-      let usageId: number | null = null;
       if (template.templateVersionId) {
         usageId = await this.templateUsageLogger.logUsageStart({
           templateVersionId: template.templateVersionId,
@@ -990,16 +1148,15 @@ export class ThreeModeOrchestrator {
     clarificationType?: "user_provided" | "template_extracted"
   ): Promise<OrchestrationResult> {
     const startTime = Date.now();
-    const featureFlags = getInsightsFeatureFlags();
-    const useClarificationV2 =
-      featureFlags.clarificationPipelineV2 ||
-      featureFlags.clarificationPipelineV2Shadow;
+    const useCanonicalSemantics = true;
+    const useClarificationV2 = true;
     let resolvedEntities: ResolvedEntitySummary[] = [];
     let boundParameters: Record<string, string | number | boolean | null> | undefined;
+    let canonicalPlannerDecision: PlannerDecisionMetadata | undefined;
     let sanitizedQuestion = question;
     let trustedPromptLines: string[] | undefined;
 
-    if (featureFlags.patientEntityResolution && !useClarificationV2) {
+    if (!useClarificationV2 && !useCanonicalSemantics) {
       const patientStep: ThinkingStep = {
         id: "resolve_patient",
         status: "running",
@@ -1077,7 +1234,7 @@ export class ThreeModeOrchestrator {
         };
         patientStep.message = `Resolved patient securely`;
 
-        if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+        if (patientResolution.matchedText) {
           const sanitization = this.promptSanitizer.sanitize({
             question,
             patientMentions: [
@@ -1287,12 +1444,49 @@ export class ThreeModeOrchestrator {
         };
       }
 
-      let semanticFrame =
-        useClarificationV2 || featureFlags.clarificationPipelineV2Shadow
-          ? this.resolveSemanticFrame(context, question)
-          : undefined;
+      let semanticFrame = useClarificationV2
+        ? this.resolveSemanticFrame(context, question)
+        : undefined;
 
-      if (semanticFrame && clarifications && Object.keys(clarifications).length > 0) {
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        semanticFrame
+      ) {
+        const legacyDecision = this.shouldUsePatientResolutionForFrame(semanticFrame);
+        const canonicalDecision = this.shouldUseCanonicalPatientResolution(
+          context.canonicalSemantics
+        );
+        if (legacyDecision !== canonicalDecision) {
+          console.log("[Orchestrator] Canonical semantics disagreed with legacy patient resolution decision", {
+            legacyDecision,
+            canonicalDecision,
+            queryShape: context.canonicalSemantics.queryShape,
+            subjectRefs: context.canonicalSemantics.subjectRefs.map((ref) => ({
+              entityType: ref.entityType,
+              status: ref.status,
+              mentionText: ref.mentionText,
+            })),
+          });
+        }
+      }
+
+      const hasUserClarifications = Boolean(
+        clarifications && Object.keys(clarifications).length > 0
+      );
+
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        hasUserClarifications
+      ) {
+        context.canonicalSemantics = this.applyCanonicalClarificationResponses(
+          context.canonicalSemantics,
+          clarifications || {}
+        );
+      }
+
+      if (semanticFrame && hasUserClarifications) {
         semanticFrame = this.applyFrameClarifications(semanticFrame, clarifications);
       }
 
@@ -1300,25 +1494,194 @@ export class ThreeModeOrchestrator {
         context.intent.semanticFrame = semanticFrame;
         (context.intent as any).filters = semanticFrame.filters;
 
-        if (featureFlags.clarificationPipelineV2Shadow) {
-          console.log("[Orchestrator] 🧭 V2 semantic frame", {
-            scope: semanticFrame.scope.value,
-            subject: semanticFrame.subject.value,
-            measure: semanticFrame.measure.value,
-            grain: semanticFrame.grain.value,
-            groupBy: semanticFrame.groupBy.value,
-            aggregatePredicates: semanticFrame.aggregatePredicates,
-            clarificationNeeds: semanticFrame.clarificationNeeds.map(
-              (need) => need.slot
+        console.log("[Orchestrator] 🧭 V2 semantic frame", {
+          scope: semanticFrame.scope.value,
+          subject: semanticFrame.subject.value,
+          measure: semanticFrame.measure.value,
+          grain: semanticFrame.grain.value,
+          groupBy: semanticFrame.groupBy.value,
+          aggregatePredicates: semanticFrame.aggregatePredicates,
+          clarificationNeeds: semanticFrame.clarificationNeeds.map(
+            (need) => need.slot
+          ),
+        });
+      }
+
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        context.canonicalSemantics.clarificationPlan.some((item) => item.blocking)
+      ) {
+        const groundedPlan = this.groundedClarificationPlanner.plan({
+          question,
+          context,
+          canonicalSemantics: context.canonicalSemantics,
+        });
+        canonicalPlannerDecision = groundedPlan.decisionMetadata;
+        context.canonicalSemantics = groundedPlan.clarifiedSemantics;
+
+        if (
+          context.canonicalSemantics.executionRequirements.allowSqlGeneration !== false
+        ) {
+          console.log(
+            "[Orchestrator] ✅ Canonical ambiguity auto-resolved by grounded clarification planner",
+            { autoResolvedCount: groundedPlan.autoResolvedCount }
+          );
+        } else if (groundedPlan.clarifications.length > 0) {
+          contextDiscoveryStep.status = "complete";
+          contextDiscoveryStep.duration = Date.now() - discoveryStart;
+          contextDiscoveryStep.message = "Semantic clarification required";
+          return {
+            mode: "clarification",
+            question,
+            thinking,
+            requiresClarification: true,
+            clarifications: groundedPlan.clarifications,
+            clarificationReasoning:
+              context.canonicalSemantics.executionRequirements.blockReason ||
+              "Additional clarification is needed before SQL generation.",
+            clarificationTelemetry: this.buildClarificationTelemetry(
+              groundedPlan.clarifications,
+              "grounded_clarification_planner"
             ),
-          });
+            context: {
+              canonicalSemantics: context.canonicalSemantics,
+              canonicalSemanticsVersion: context.canonicalSemantics.version,
+              clarificationPlannerDecision: canonicalPlannerDecision,
+            },
+            canonicalSemantics: context.canonicalSemantics,
+          };
+        } else if (
+          this.shouldDeferCanonicalClarificationToPatientResolution(
+            context.canonicalSemantics
+          )
+        ) {
+          console.log(
+            "[Orchestrator] ⏭️ Deferring canonical entity clarification to patient resolver"
+          );
         }
       }
 
       if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        context.canonicalSemantics.executionRequirements.allowSqlGeneration === false &&
+        context.canonicalSemantics.clarificationPlan.some((item) => item.blocking) &&
+        !this.shouldDeferCanonicalClarificationToPatientResolution(
+          context.canonicalSemantics
+        )
+      ) {
+        contextDiscoveryStep.status = "complete";
+        contextDiscoveryStep.duration = Date.now() - discoveryStart;
+        contextDiscoveryStep.message = "Semantic clarification required";
+        return this.buildCanonicalClarificationResult(
+          question,
+          thinking,
+          context.canonicalSemantics,
+          canonicalPlannerDecision
+        );
+      }
+
+      if (
+        useCanonicalSemantics &&
+        context.canonicalSemantics &&
+        resolvedEntities.length === 0 &&
+        this.shouldUseCanonicalPatientResolution(context.canonicalSemantics)
+      ) {
+        const patientStep: ThinkingStep = {
+          id: "resolve_patient",
+          status: "running",
+          message: "Resolving patient references...",
+        };
+        thinking.push(patientStep);
+
+        const patientRef = getCanonicalPatientSubjectRef(context.canonicalSemantics);
+        const patientResolution = await this.patientResolver.resolve(
+          question,
+          customerId,
+          {
+            selectionOpaqueRef: clarifications?.patient_resolution_select,
+            confirmedOpaqueRef:
+              clarifications?.patient_resolution_confirm === "__CHANGE_PATIENT__"
+                ? undefined
+                : clarifications?.patient_resolution_confirm,
+            overrideLookup: clarifications?.patient_lookup_input,
+            candidateText: patientRef?.mentionText,
+            allowQuestionInference: false,
+          }
+        );
+
+        patientStep.status = "complete";
+        patientStep.details = {
+          status: patientResolution.status,
+        };
+
+        if (
+          patientResolution.status === "confirmation_required" ||
+          patientResolution.status === "disambiguation_required" ||
+          patientResolution.status === "not_found"
+        ) {
+          patientStep.message = "Patient clarification required";
+        return this.buildPatientClarificationResult(
+          question,
+          thinking,
+          patientResolution,
+          semanticFrame,
+          context.canonicalSemantics
+        );
+        }
+
+        if (
+          patientResolution.status === "resolved" &&
+          patientResolution.selectedMatch &&
+          patientResolution.resolvedId &&
+          patientResolution.opaqueRef &&
+          patientResolution.matchType
+        ) {
+          const resolvedEntity: ResolvedEntitySummary = {
+            kind: "patient",
+            opaqueRef: patientResolution.opaqueRef,
+            displayLabel: patientResolution.selectedMatch.patientName,
+            matchType: patientResolution.matchType,
+            requiresConfirmation: false,
+            unitName: patientResolution.selectedMatch.unitName,
+          };
+          resolvedEntities = [resolvedEntity];
+          boundParameters = {
+            patientId1: patientResolution.resolvedId,
+          };
+          context.canonicalSemantics = this.clearResolvedPatientClarificationBlocks(
+            context.canonicalSemantics
+          );
+          patientStep.message = "Resolved patient securely";
+
+          if (patientResolution.matchedText) {
+            const sanitization = this.promptSanitizer.sanitize({
+              question,
+              patientMentions: [
+                {
+                  matchedText: patientResolution.matchedText,
+                  opaqueRef: patientResolution.opaqueRef,
+                },
+              ],
+            });
+            sanitizedQuestion = sanitization.sanitizedQuestion;
+            trustedPromptLines = sanitization.trustedContextLines;
+            patientStep.details = {
+              ...patientStep.details,
+              sanitized: true,
+              opaqueRef: patientResolution.opaqueRef,
+            };
+          }
+        } else {
+          patientStep.message = "No patient reference required";
+        }
+      } else if (
         semanticFrame &&
-        featureFlags.patientEntityResolution &&
-        this.shouldUsePatientResolutionForFrame(semanticFrame)
+        resolvedEntities.length === 0 &&
+        !useCanonicalSemantics &&
+        this.shouldResolvePatientForSemantics(semanticFrame, question)
       ) {
         const patientStep: ThinkingStep = {
           id: "resolve_patient",
@@ -1328,8 +1691,12 @@ export class ThreeModeOrchestrator {
         thinking.push(patientStep);
 
         const patientRef = semanticFrame.entityRefs.find(
-          (ref) => ref.type === "patient"
+          (ref) => ref.type === "patient" && ref.confidence >= 0.7
         );
+        const extractedName = extractPatientNameCandidateFromQuestion(question);
+        const resolutionCandidateText =
+          patientRef?.text ?? extractedName ?? undefined;
+
         const patientResolution = await this.patientResolver.resolve(question, customerId, {
           selectionOpaqueRef: clarifications?.patient_resolution_select,
           confirmedOpaqueRef:
@@ -1337,8 +1704,8 @@ export class ThreeModeOrchestrator {
               ? undefined
               : clarifications?.patient_resolution_confirm,
           overrideLookup: clarifications?.patient_lookup_input,
-          candidateText: patientRef?.text,
-          allowQuestionInference: false,
+          candidateText: resolutionCandidateText,
+          allowQuestionInference: !resolutionCandidateText,
         });
 
         patientStep.status = "complete";
@@ -1381,7 +1748,7 @@ export class ThreeModeOrchestrator {
           };
           patientStep.message = "Resolved patient securely";
 
-          if (featureFlags.promptPhiSanitization && patientResolution.matchedText) {
+          if (patientResolution.matchedText) {
             const sanitization = this.promptSanitizer.sanitize({
               question,
               patientMentions: [
@@ -1405,11 +1772,17 @@ export class ThreeModeOrchestrator {
       }
 
       if (
-        featureFlags.clarificationPipelineV2 &&
+        useClarificationV2 &&
         semanticFrame &&
-        semanticFrame.clarificationNeeds.length > 0 &&
         (!clarifications || Object.keys(clarifications).length === 0)
       ) {
+        const frameClarifications = this.buildFrameClarificationRequests(
+          semanticFrame,
+          context
+        );
+        if (frameClarifications.length === 0) {
+          // Continue to filter/SQL flow when structural clarification is not needed.
+        } else {
         contextDiscoveryStep.message =
           "Discovering semantic context... (frame clarification needed)";
         return {
@@ -1417,12 +1790,13 @@ export class ThreeModeOrchestrator {
           question,
           thinking,
           requiresClarification: true,
-          clarifications: this.buildFrameClarificationRequests(
-            semanticFrame,
-            context
-          ),
+          clarifications: frameClarifications,
           clarificationReasoning:
             "I need one or two details about how to structure this query before I run it.",
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            frameClarifications,
+            "semantic_frame"
+          ),
           partialContext: {
             intent: context.intent.type || "query",
             formsIdentified: context.forms?.map((f) => f.formName) || [],
@@ -1432,12 +1806,65 @@ export class ThreeModeOrchestrator {
             ].filter(Boolean),
           },
         };
+        }
       }
 
-      const mappedFilters = (context.intent.filters || []) as MappedFilter[];
-      const unresolvedInfos = collectUnresolvedFilters(mappedFilters);
+      if (clarifications && Object.keys(clarifications).length > 0) {
+        context = this.applyAssessmentTypeClarifications(context, clarifications);
+      }
+
+      let mappedFilters = ((context.intent.filters || []) as MappedFilter[]).map(
+        (filter) => ({ ...filter })
+      );
+
+      if (
+        clarificationType === "template_extracted" &&
+        clarifications &&
+        mappedFilters.length > 0
+      ) {
+        mappedFilters = this.applyTemplateClarificationsToFilters(
+          mappedFilters,
+          clarifications,
+          context
+        );
+      }
+
+      const structuredFilterResult = applyStructuredFilterSelections(
+        mappedFilters,
+        clarifications
+      );
+      mappedFilters = structuredFilterResult.filters;
+      mappedFilters = this.autoResolveStrongSingleCandidateFilters(mappedFilters);
+      (context.intent as any).filters = mappedFilters;
+
+      let unresolvedInfos = collectUnresolvedFilters(mappedFilters);
+      const deferredTemporalRangeFilterIndexes = new Set<number>();
+
+      unresolvedInfos.forEach((info) => {
+        if (
+          shouldDeferTemporalLiteralClarification(
+            question,
+            info,
+            context.canonicalSemantics
+          )
+        ) {
+          deferredTemporalRangeFilterIndexes.add(info.index);
+        }
+      });
+
+      if (deferredTemporalRangeFilterIndexes.size > 0) {
+        mappedFilters = mappedFilters
+          .filter((_, idx) => !deferredTemporalRangeFilterIndexes.has(idx))
+          .map((filter) => ({ ...filter }));
+        (context.intent as any).filters = mappedFilters;
+        unresolvedInfos = unresolvedInfos.filter(
+          (info) => !deferredTemporalRangeFilterIndexes.has(info.index)
+        );
+      }
+
       const handledFilterIndexes = new Set<number>();
       const removalClarificationIds = new Set<string>();
+      const handledStructuredIds = structuredFilterResult.handledIds;
 
       if (clarifications && Object.keys(clarifications).length > 0) {
         unresolvedInfos.forEach((info) => {
@@ -1446,7 +1873,7 @@ export class ThreeModeOrchestrator {
             info.index
           );
           const userSelection = clarifications[clarId];
-          if (userSelection) {
+          if (userSelection && !handledStructuredIds.has(clarId)) {
             handledFilterIndexes.add(info.index);
             if (userSelection === "__REMOVE_FILTER__") {
               removalClarificationIds.add(clarId);
@@ -1466,7 +1893,10 @@ export class ThreeModeOrchestrator {
           info.filter,
           info.index
         );
-        return !clarifications || !clarifications[clarId];
+        return (
+          !clarifications ||
+          (!clarifications[clarId] && !handledStructuredIds.has(clarId))
+        );
       });
 
       contextDiscoveryStep.status = "complete";
@@ -1479,22 +1909,6 @@ export class ThreeModeOrchestrator {
         unresolvedFilters: unresolvedInfos.length,
       };
 
-      // Only request clarification for unresolved filters if clarifications were NOT already provided
-      // If clarifications were provided by user, we should proceed to SQL generation
-      // and let the LLM use the clarifications to resolve the filters
-      // EXCEPTION: If clarifications came from template extraction, they don't map to filter IDs,
-      // so we still need to check for unresolved filters and ask for NEW ones discovered by semantic search
-      if (
-        clarificationType === "template_extracted" &&
-        clarifications &&
-        context.intent.filters?.length
-      ) {
-        (context.intent as any).filters = this.applyTemplateClarificationsToFilters(
-          context.intent.filters as MappedFilter[],
-          clarifications,
-          context
-        );
-      }
       if (unresolvedNeedingClarification.length > 0 && !clarifications) {
         contextDiscoveryStep.message =
           "Discovering semantic context... (filters unresolved)";
@@ -1512,7 +1926,8 @@ export class ThreeModeOrchestrator {
           unresolvedNeedingClarification,
           question,
           customerId,
-          modelId
+          modelId,
+          context
         );
 
         return {
@@ -1524,11 +1939,66 @@ export class ThreeModeOrchestrator {
           clarificationReasoning: this.buildUnresolvedClarificationReasoning(
             unresolvedNeedingClarification
           ),
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            clarifications as any,
+            "unresolved_filter"
+          ),
           partialContext: {
             intent: context.intent.type || "query",
             formsIdentified: context.forms?.map((f) => f.formName) || [],
             termsUnderstood: [],
           },
+          context: {
+            intent: context.intent,
+            canonicalSemantics: context.canonicalSemantics || null,
+            canonicalSemanticsVersion:
+              context.canonicalSemantics?.version || null,
+          },
+          canonicalSemantics: context.canonicalSemantics,
+          filterMetrics: unresolvedSummary,
+        };
+      }
+
+      const validationClarifications =
+        clarifications && Object.keys(clarifications).length > 0
+          ? []
+          : await this.buildValidationClarificationRequests(
+              mappedFilters,
+              customerId,
+              context
+            );
+
+      if (validationClarifications.length > 0 && !clarifications) {
+        contextDiscoveryStep.message =
+          "Discovering semantic context... (validation clarification needed)";
+
+        const unresolvedSummary = buildFilterMetricsSummary(mappedFilters);
+        (context.metadata as ContextBundleMetadata).filterMetrics = unresolvedSummary;
+
+        return {
+          mode: "clarification",
+          question,
+          thinking,
+          requiresClarification: true,
+          clarifications: validationClarifications,
+          clarificationReasoning:
+            "I found one or more filter values that need to be clarified before I can run the query.",
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            validationClarifications,
+            "validation"
+          ),
+          partialContext: {
+            intent: context.intent.type || "query",
+            formsIdentified: context.forms?.map((f) => f.formName) || [],
+            termsUnderstood: [],
+          },
+          context: {
+            intent: context.intent,
+            canonicalSemantics: context.canonicalSemantics || null,
+            canonicalSemanticsVersion:
+              context.canonicalSemantics?.version || null,
+          },
+          canonicalSemantics: context.canonicalSemantics,
           filterMetrics: unresolvedSummary,
         };
       }
@@ -1632,6 +2102,10 @@ export class ThreeModeOrchestrator {
           sanitizedQuestion,
           promptLines: trustedPromptLines,
           resolvedEntities,
+          canonicalSemantics: context.canonicalSemantics,
+        },
+        {
+          allowClarificationRequests: !useClarificationV2,
         }
       );
 
@@ -1664,7 +2138,18 @@ export class ThreeModeOrchestrator {
           requiresClarification: true,
           clarifications: llmResponse.clarifications,
           clarificationReasoning: llmResponse.reasoning,
+          clarificationTelemetry: this.buildClarificationTelemetry(
+            llmResponse.clarifications,
+            "sql_llm"
+          ),
           partialContext: llmResponse.partialContext,
+          context: {
+            intent: context.intent,
+            canonicalSemantics: context.canonicalSemantics || null,
+            canonicalSemanticsVersion:
+              context.canonicalSemantics?.version || null,
+          },
+          canonicalSemantics: context.canonicalSemantics,
           filterMetrics: context.metadata?.filterMetrics,
         };
       }
@@ -1675,11 +2160,17 @@ export class ThreeModeOrchestrator {
       const trustedSqlValidation = validateTrustedSql({
         sql,
         patientParamNames: boundParameters ? Object.keys(boundParameters) : [],
+        requiredPatientBindings:
+          context.canonicalSemantics?.executionRequirements.requiredBindings || [],
         resolvedPatientIds: boundParameters
           ? Object.values(boundParameters)
               .map((value) => (typeof value === "string" ? value : undefined))
               .filter((value): value is string => Boolean(value))
           : [],
+        resolvedPatientOpaqueRefs: resolvedEntities
+          .filter((entity) => entity.kind === "patient")
+          .map((entity) => entity.opaqueRef)
+          .filter(Boolean),
       });
 
       if (!trustedSqlValidation.valid) {
@@ -1698,6 +2189,7 @@ export class ThreeModeOrchestrator {
           },
           resolvedEntities,
           boundParameters,
+          canonicalSemantics: context.canonicalSemantics,
           filterMetrics: context.metadata?.filterMetrics,
         };
       }
@@ -1728,6 +2220,7 @@ export class ThreeModeOrchestrator {
       let results: { columns: any[]; rows: any[] };
       let sqlValidation: SQLValidationResult | undefined;
       let validationError: RuntimeSQLValidationError | null = null;
+      let semanticDiagnostics: SemanticExecutionDiagnostics | undefined;
       try {
         const execution = await this.executeSQL(sql, customerId, {
           source: "direct",
@@ -1784,6 +2277,44 @@ export class ThreeModeOrchestrator {
         };
       }
 
+      if (!validationError && semanticFrame) {
+        try {
+          semanticDiagnostics =
+            await getSemanticExecutionDiagnosticsService().analyze({
+              customerId,
+              sql,
+              context,
+              frame: semanticFrame,
+              rowCount,
+            });
+
+          if (sqlValidation && semanticDiagnostics.preExecutionIssues.length > 0) {
+            const mergedWarnings = new Set(sqlValidation.warnings);
+            semanticDiagnostics.preExecutionIssues.forEach((issue) => {
+              mergedWarnings.add(issue.message);
+            });
+            sqlValidation = {
+              ...sqlValidation,
+              warnings: Array.from(mergedWarnings),
+            };
+          }
+
+          thinking[thinking.length - 1].details = {
+            ...(thinking[thinking.length - 1].details || {}),
+            semanticWarnings: semanticDiagnostics.preExecutionIssues.length,
+            zeroResultDiagnosis:
+              semanticDiagnostics.zeroResultDiagnosis?.issues.map(
+                (issue) => issue.message
+              ) || [],
+          };
+        } catch (diagnosticError) {
+          console.warn(
+            "[Orchestrator] Semantic diagnostics failed; continuing without diagnostics",
+            diagnosticError
+          );
+        }
+      }
+
       const orchestrationResult: OrchestrationResult = {
         mode: "direct",
         question,
@@ -1791,11 +2322,17 @@ export class ThreeModeOrchestrator {
         sql,
         results,
         sqlValidation,
+        semanticDiagnostics,
         context: {
           intent: context.intent,
+          canonicalSemantics: context.canonicalSemantics || null,
+          canonicalSemanticsVersion:
+            context.canonicalSemantics?.version || null,
+          clarificationPlannerDecision: canonicalPlannerDecision || null,
           forms: context.forms?.map((f: any) => f.formName) || [],
           fields: context.forms?.flatMap((f: any) => f.fields?.map((field: any) => field.fieldName) || []) || [],
           joinPaths: context.joinPaths || [],
+          executionDiagnostics: semanticDiagnostics || null,
           // Phase 7D: Include clarification history and assumptions for query history caching
           clarificationsProvided: clarifications || null,
           assumptions: assumptions || null,
@@ -1814,19 +2351,18 @@ export class ThreeModeOrchestrator {
         filterMetrics: context.metadata?.filterMetrics,
         resolvedEntities,
         boundParameters,
+        canonicalSemantics: context.canonicalSemantics,
       };
-      orchestrationResult.artifacts = featureFlags.chartFirstResults
-        ? this.artifactPlanner.plan({
-            question,
-            rows: results.rows,
-            columns: results.columns,
-            sql,
-            assumptions,
-            resolvedEntities,
-            presentationIntent: context.intent?.presentationIntent,
-            preferredVisualization: context.intent?.preferredVisualization,
-          })
-        : undefined;
+      orchestrationResult.artifacts = this.artifactPlanner.plan({
+        question,
+        rows: results.rows,
+        columns: results.columns,
+        sql,
+        assumptions,
+        resolvedEntities,
+        presentationIntent: context.intent?.presentationIntent,
+        preferredVisualization: context.intent?.preferredVisualization,
+      });
       if (validationError) {
         orchestrationResult.error = {
           message: validationError.message,
@@ -2077,10 +2613,210 @@ export class ThreeModeOrchestrator {
     context: ContextBundle,
     question: string
   ): SemanticQueryFrame {
+    if (context.canonicalSemantics) {
+      return projectSemanticQueryFrameFromCanonicalSemantics(
+        context.canonicalSemantics,
+        context.intent
+      );
+    }
+
     return normalizeSemanticQueryFrame(
       question,
       context.intent,
       context.intent.semanticFrame
+    );
+  }
+
+  private buildCanonicalClarificationResult(
+    question: string,
+    thinking: ThinkingStep[],
+    canonicalSemantics: CanonicalQuerySemantics,
+    plannerDecision?: PlannerDecisionMetadata
+  ): OrchestrationResult {
+    const defaultPromptBySlot: Partial<Record<string, string>> = {
+      timeRange: "What date range should I use?",
+      measure: "Which metric should I analyze?",
+      grain: "How should results be grouped?",
+      groupBy: "How should results be grouped?",
+      assessmentType: "Which assessment type should I use?",
+      entityRef: "Which specific patient or entity should I use?",
+    };
+
+    const clarifications = canonicalSemantics.clarificationPlan
+      .filter((item) => item.blocking)
+      .map((item, index) => ({
+        id: `canonical_${item.slot}_${index}`,
+        ambiguousTerm: item.target || item.slot,
+        question:
+          item.question ||
+          defaultPromptBySlot[item.slot] ||
+          `Please clarify ${
+            (item.target || item.slot) === "temporalSpec"
+              ? "date range"
+              : item.target || item.slot
+          } to continue.`,
+        options: [],
+        allowCustom: true,
+        slot: item.slot,
+        target: item.target,
+        reason: item.reason,
+        reasonCode: item.reasonCode,
+        evidence: {
+          clarificationSource: "canonical_fallback",
+          canonicalEvidence: item.evidence || null,
+        },
+      }));
+
+    return {
+      mode: "clarification",
+      question,
+      thinking,
+      requiresClarification: true,
+      clarifications,
+      clarificationReasoning:
+        canonicalSemantics.executionRequirements.blockReason ||
+        canonicalSemantics.clarificationPlan
+          .filter((item) => item.blocking)
+          .map((item) => item.reason)
+          .join(" "),
+      clarificationTelemetry: this.buildClarificationTelemetry(
+        clarifications,
+        "canonical_fallback"
+      ),
+      context: {
+        canonicalSemantics,
+        canonicalSemanticsVersion: canonicalSemantics.version,
+        clarificationPlannerDecision: plannerDecision || null,
+      },
+      canonicalSemantics,
+    };
+  }
+
+  private applyCanonicalClarificationResponses(
+    canonicalSemantics: CanonicalQuerySemantics,
+    clarifications: Record<string, string>
+  ): CanonicalQuerySemantics {
+    const resolvedPlan = canonicalSemantics.clarificationPlan.map((item, index) => {
+      const groundedId = `grounded_${item.slot}_${index}`;
+      const canonicalId = `canonical_${item.slot}_${index}`;
+      const templateCanonicalId = `canonical_${item.slot}_${index + 1}`;
+      const selection =
+        clarifications[groundedId] ??
+        clarifications[canonicalId] ??
+        clarifications[templateCanonicalId];
+
+      if (!selection || !selection.trim()) {
+        return item;
+      }
+
+      return {
+        ...item,
+        blocking: false,
+      };
+    });
+
+    const stillBlocking = resolvedPlan.some((item) => item.blocking);
+
+    return {
+      ...canonicalSemantics,
+      clarificationPlan: resolvedPlan,
+      executionRequirements: {
+        ...canonicalSemantics.executionRequirements,
+        allowSqlGeneration: !stillBlocking,
+        blockReason: stillBlocking
+          ? canonicalSemantics.executionRequirements.blockReason
+          : undefined,
+      },
+    };
+  }
+
+  private shouldDeferCanonicalClarificationToPatientResolution(
+    canonicalSemantics?: CanonicalQuerySemantics
+  ): boolean {
+    if (
+      !canonicalSemantics ||
+      !this.shouldUseCanonicalPatientResolution(canonicalSemantics)
+    ) {
+      return false;
+    }
+
+    const blockingItems = canonicalSemantics.clarificationPlan.filter(
+      (item) => item.blocking
+    );
+
+    return (
+      blockingItems.length > 0 &&
+      blockingItems.every((item) => item.slot === "entityRef")
+    );
+  }
+
+  private clearResolvedPatientClarificationBlocks(
+    canonicalSemantics?: CanonicalQuerySemantics
+  ): CanonicalQuerySemantics | undefined {
+    if (!canonicalSemantics) {
+      return canonicalSemantics;
+    }
+
+    const filteredPlan = canonicalSemantics.clarificationPlan.filter((item) => {
+      if (!item.blocking) {
+        return true;
+      }
+      if (item.slot !== "entityRef") {
+        return true;
+      }
+      if (!this.isPatientLikeEntityRefTarget(item.target)) {
+        return true;
+      }
+      return false;
+    });
+
+    if (filteredPlan.length === canonicalSemantics.clarificationPlan.length) {
+      return canonicalSemantics;
+    }
+
+    const firstBlocking = filteredPlan.find((item) => item.blocking);
+    return {
+      ...canonicalSemantics,
+      clarificationPlan: filteredPlan,
+      executionRequirements: {
+        ...canonicalSemantics.executionRequirements,
+        requiresPatientResolution: false,
+        allowSqlGeneration: !firstBlocking,
+        blockReason: firstBlocking ? firstBlocking.reason : undefined,
+      },
+    };
+  }
+
+  private isPatientLikeEntityRefTarget(target?: string): boolean {
+    const normalized = (target || "").trim().toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+
+    if (
+      ["wound", "unit", "clinic", "assessment"].some((keyword) =>
+        normalized.includes(keyword)
+      )
+    ) {
+      return false;
+    }
+
+    return (
+      normalized.includes("patient") ||
+      normalized === "entity" ||
+      normalized === "entities" ||
+      normalized === "subject" ||
+      normalized === "person" ||
+      normalized === "individual"
+    );
+  }
+
+  private shouldUseCanonicalPatientResolution(
+    canonicalSemantics?: CanonicalQuerySemantics
+  ): boolean {
+    return Boolean(
+      canonicalSemantics?.executionRequirements.requiresPatientResolution &&
+        getCanonicalPatientSubjectRef(canonicalSemantics)
     );
   }
 
@@ -2091,6 +2827,21 @@ export class ThreeModeOrchestrator {
         (ref) => ref.type === "patient" && ref.confidence >= 0.7
       )
     );
+  }
+
+  /**
+   * Run secure patient resolution when the frame shows an individual patient, or when
+   * the question clearly names a person even if scope was misclassified as aggregate
+   * (e.g. "how many wounds does Jane Doe have").
+   */
+  private shouldResolvePatientForSemantics(
+    frame: SemanticQueryFrame,
+    question: string
+  ): boolean {
+    if (this.shouldUsePatientResolutionForFrame(frame)) {
+      return true;
+    }
+    return Boolean(extractPatientNameCandidateFromQuestion(question));
   }
 
   private hasExplicitPatientResolverInput(options: {
@@ -2170,6 +2921,14 @@ export class ThreeModeOrchestrator {
           confidence: 0.98,
           source: "clarification",
         };
+      } else if (id === "frame_slot_timeRange") {
+        const parsedDays = Number.parseInt(value, 10);
+        if (Number.isFinite(parsedDays) && parsedDays > 0) {
+          nextFrame.timeRange = {
+            unit: "days",
+            value: parsedDays,
+          };
+        }
       }
     });
 
@@ -2177,6 +2936,32 @@ export class ThreeModeOrchestrator {
       (need) => !clarifications[`frame_slot_${need.slot}`]
     );
     return nextFrame;
+  }
+
+  private applyAssessmentTypeClarifications(
+    context: ContextBundle,
+    clarifications: Record<string, string>
+  ): ContextBundle {
+    const selectedAssessmentTypeId = decodeAssessmentTypeSelection(
+      clarifications.frame_slot_assessment_type
+    );
+
+    if (!selectedAssessmentTypeId || !context.assessmentTypes?.length) {
+      return context;
+    }
+
+    const selected = context.assessmentTypes.filter(
+      (assessment) => assessment.assessmentTypeId === selectedAssessmentTypeId
+    );
+
+    if (selected.length === 0) {
+      return context;
+    }
+
+    return {
+      ...context,
+      assessmentTypes: selected,
+    };
   }
 
   private groupByFromGrain(grain: string): string[] {
@@ -2202,143 +2987,12 @@ export class ThreeModeOrchestrator {
 
   private buildFrameClarificationRequests(
     frame: SemanticQueryFrame,
-    _context: ContextBundle
+    context: ContextBundle
   ): ClarificationRequest[] {
-    return frame.clarificationNeeds.map((need) => {
-      if (need.slot === "measure") {
-        return {
-          id: "frame_slot_measure",
-          ambiguousTerm: frame.measure.value || "measure",
-          question: need.question,
-          slot: need.slot,
-          reason: need.reason,
-          options: [
-            {
-              id: "measure_patient_count",
-              label: "Patient count",
-              description: "Return how many patients match the criteria",
-              submissionValue: "patient_count",
-              sqlConstraint: "",
-              kind: "semantic",
-              isDefault: true,
-            },
-            {
-              id: "measure_wound_count",
-              label: "Wound count",
-              description: "Return how many wounds match the criteria",
-              submissionValue: "wound_count",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-            {
-              id: "measure_assessment_count",
-              label: "Assessment count",
-              description: "Return how many assessments match the criteria",
-              submissionValue: "assessment_count",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-          ],
-          allowCustom: false,
-        };
-      }
-
-      if (need.slot === "grain" || need.slot === "groupBy") {
-        return {
-          id: "frame_slot_grain",
-          ambiguousTerm: frame.grain.value || "grouping",
-          question: need.question,
-          slot: "grain",
-          reason: need.reason,
-          options: [
-            {
-              id: "grain_patient",
-              label: "Group by patient",
-              description: "One row or bar per patient",
-              submissionValue: "per_patient",
-              sqlConstraint: "",
-              kind: "semantic",
-              isDefault: true,
-            },
-            {
-              id: "grain_wound",
-              label: "Group by wound",
-              description: "One row or bar per wound",
-              submissionValue: "per_wound",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-            {
-              id: "grain_unit",
-              label: "Group by unit",
-              description: "One row or bar per unit/clinic",
-              submissionValue: "per_unit",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-          ],
-          allowCustom: false,
-        };
-      }
-
-      if (need.slot === "scope") {
-        return {
-          id: "frame_slot_scope",
-          ambiguousTerm: frame.scope.value || "scope",
-          question: need.question,
-          slot: need.slot,
-          reason: need.reason,
-          options: [
-            {
-              id: "scope_aggregate",
-              label: "All matching records",
-              description: "Run the query across the whole system",
-              submissionValue: "aggregate",
-              sqlConstraint: "",
-              kind: "semantic",
-              isDefault: true,
-            },
-            {
-              id: "scope_cohort",
-              label: "A cohort of patients",
-              description: "Return a patient cohort, not one patient",
-              submissionValue: "patient_cohort",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-            {
-              id: "scope_individual",
-              label: "One specific patient",
-              description: "Resolve and filter to one patient",
-              submissionValue: "individual_patient",
-              sqlConstraint: "",
-              kind: "semantic",
-            },
-          ],
-          allowCustom: false,
-        };
-      }
-
-      return {
-        id: `frame_slot_${need.slot}`,
-        ambiguousTerm: need.target || need.slot,
-        question: need.question,
-        slot: need.slot,
-        reason: need.reason,
-        options: [
-          {
-            id: "continue",
-            label: "Continue",
-            description: "Proceed using the default interpretation",
-            submissionValue: "__CONTINUE__",
-            sqlConstraint: "",
-            kind: "semantic",
-            isDefault: true,
-          },
-        ],
-        allowCustom: false,
-      };
-    });
+    return getDirectQueryClarificationService().buildFrameClarifications(
+      frame,
+      context
+    );
   }
 
   /**
@@ -2356,83 +3010,159 @@ export class ThreeModeOrchestrator {
     unresolved: UnresolvedFilterInfo[],
     originalQuestion: string,
     customerId: string,
-    modelId?: string
+    modelId: string | undefined,
+    context: ContextBundle
   ): Promise<ClarificationRequest[]> {
-    const clarifications: ClarificationRequest[] = [];
+    void originalQuestion;
+    void customerId;
+    void modelId;
+    return getDirectQueryClarificationService().buildFilterClarifications({
+      unresolved,
+      context,
+    });
+  }
 
-    // Process each unresolved filter
-    for (const info of unresolved) {
-      const phrase =
-        info.filter.userPhrase ||
-        info.filter.field ||
-        `Filter ${info.index + 1}`;
+  private async buildValidationClarificationRequests(
+    filters: MappedFilter[],
+    customerId: string,
+    context: ContextBundle
+  ): Promise<ClarificationRequest[]> {
+    const candidateFilters = filters.filter(
+      (filter) =>
+        !filter.needsClarification &&
+        filter.resolutionStatus !== "ambiguous" &&
+        filter.resolutionStatus !== "invalid" &&
+        Boolean(filter.field) &&
+        filter.value !== null &&
+        filter.value !== undefined
+    );
 
-      console.log(`[Orchestrator] 🔍 Resolving ambiguous filter: "${phrase}"`);
-
-      try {
-        // Try AI-powered clarification generation
-        const aiClarification = await generateAIClarification({
-          ambiguousTerm: phrase,
-          originalQuestion,
-          customerId,
-          modelId, // Pass user's selected model for ModelRouter
-          // Pass ambiguous matches if available (for field disambiguation)
-          ambiguousMatches: (info.filter as any).ambiguousMatches,
-        });
-
-        if (aiClarification && aiClarification.options.length > 0) {
-          console.log(
-            `[Orchestrator] ✅ AI generated ${
-              aiClarification.options.length - 1
-            } options for "${phrase}"`
-          );
-          clarifications.push(aiClarification);
-          continue;
-        }
-
-        console.log(
-          `[Orchestrator] ⚠️ AI returned no options for "${phrase}", using generic fallback`
-        );
-      } catch (error) {
-        console.error(
-          `[Orchestrator] ❌ AI clarification failed for "${phrase}":`,
-          error
-        );
-      }
-
-      // Fallback to generic "Remove or Custom" clarification
-      const clarId = buildUnresolvedFilterClarificationId(
-        info.filter,
-        info.index
-      );
-
-      clarifications.push({
-        id: clarId,
-        ambiguousTerm: phrase,
-        question: `What did you mean by "${phrase}" in this query?`,
-        slot: "valueFilter",
-        reason:
-          "I understood the overall question, but this value did not match a known filter value.",
-        options: [
-          {
-            id: `${clarId}_remove`,
-            label: "Remove this filter",
-            description: "Proceed without applying this constraint",
-            submissionValue: "__REMOVE_FILTER__",
-            sqlConstraint: "__REMOVE_FILTER__",
-            kind: "semantic",
-            isDefault: false,
-          },
-        ],
-        allowCustom: true,
-      });
-
-      console.log(
-        `[Orchestrator] 📋 Using generic clarification for "${phrase}"`
-      );
+    if (candidateFilters.length === 0) {
+      return [];
     }
 
-    return clarifications;
+    let validationErrors: ValidationError[];
+    try {
+      const validator = getFilterValidatorService();
+      validationErrors = await validator.generateClarificationSuggestions(
+        candidateFilters,
+        customerId
+      );
+    } catch (error) {
+      console.warn(
+        "[Orchestrator] Validation clarification generation failed; continuing without it",
+        error
+      );
+      return [];
+    }
+
+    if (validationErrors.length === 0) {
+      return [];
+    }
+
+    const unresolvedInfos = validationErrors.reduce<UnresolvedFilterInfo[]>(
+      (items, error) => {
+        const filterIndex = filters.findIndex(
+          (filter) =>
+            filter.field?.toLowerCase() === error.field.toLowerCase() &&
+            filter.value !== null &&
+            filter.value !== undefined
+        );
+        if (filterIndex < 0) {
+          return items;
+        }
+        if (error.suggestion) {
+          filters[filterIndex] = {
+            ...filters[filterIndex],
+            value: error.suggestion,
+            autoCorrected: true,
+            needsClarification: false,
+            resolutionStatus: "resolved",
+            clarificationReasonCode: undefined,
+            validationWarning: undefined,
+            mappingError: undefined,
+          };
+          return items;
+        }
+        items.push({
+          filter: {
+            ...filters[filterIndex],
+            needsClarification: true,
+            resolutionStatus: "invalid" as const,
+            clarificationReasonCode: "invalid_value" as const,
+          },
+          index: filterIndex,
+          reason: error.code || "invalid_value",
+        });
+        return items;
+      },
+      []
+    );
+
+    if (unresolvedInfos.length === 0) {
+      return [];
+    }
+
+    return getDirectQueryClarificationService().buildFilterClarifications({
+      unresolved: unresolvedInfos,
+      context,
+      validationErrors,
+    });
+  }
+
+  private autoResolveStrongSingleCandidateFilters(
+    filters: MappedFilter[]
+  ): MappedFilter[] {
+    return filters.map((filter) => {
+      if (
+        !filter ||
+        (!filter.needsClarification &&
+          filter.resolutionStatus !== "ambiguous" &&
+          filter.resolutionStatus !== "invalid")
+      ) {
+        return filter;
+      }
+
+      const uniqueMatches = new Map<string, NonNullable<typeof filter.candidateMatches>[number]>();
+      (filter.candidateMatches || []).forEach((match) => {
+        const key = `${match.field}::${match.value}::${match.formName || ""}`;
+        if (!uniqueMatches.has(key)) {
+          uniqueMatches.set(key, match);
+        }
+      });
+
+      const rankedMatches = Array.from(uniqueMatches.values()).sort(
+        (left, right) => right.confidence - left.confidence
+      );
+
+      if (rankedMatches.length !== 1) {
+        return filter;
+      }
+
+      const [match] = rankedMatches;
+      if (!match || match.confidence < 0.85) {
+        return filter;
+      }
+
+      return {
+        ...filter,
+        field: match.field,
+        value: match.value,
+        mappingConfidence:
+          typeof filter.mappingConfidence === "number"
+            ? Math.max(filter.mappingConfidence, match.confidence)
+            : match.confidence,
+        resolutionConfidence:
+          typeof filter.resolutionConfidence === "number"
+            ? Math.max(filter.resolutionConfidence, match.confidence)
+            : match.confidence,
+        resolutionStatus: "resolved",
+        needsClarification: false,
+        clarificationReasonCode: undefined,
+        validationWarning: undefined,
+        mappingError: undefined,
+      };
+    });
   }
 
   private buildUnresolvedClarificationReasoning(
@@ -2449,58 +3179,93 @@ export class ThreeModeOrchestrator {
     )}. Please clarify or remove them.`;
   }
 
+  private buildClarificationTelemetry(
+    clarifications?: ClarificationRequest[],
+    fallbackSource?: string
+  ): ClarificationTelemetrySummary | undefined {
+    const summary = summarizeClarificationRequests(clarifications);
+    if (!summary) {
+      return undefined;
+    }
+
+    if (
+      fallbackSource &&
+      Object.keys(summary.bySource).length === 0
+    ) {
+      summary.bySource[fallbackSource] = summary.requestedCount;
+    }
+
+    return summary;
+  }
+
   private buildPatientClarificationResult(
     question: string,
     thinking: ThinkingStep[],
     resolution: PatientResolutionResult,
-    frame?: SemanticQueryFrame
+    frame?: SemanticQueryFrame,
+    canonicalSemantics?: CanonicalQuerySemantics
   ): OrchestrationResult {
     if (resolution.status === "confirmation_required" && resolution.selectedMatch) {
+      const clarifications = [
+        {
+          id: "patient_resolution_confirm",
+          placeholder: "patient_resolution_confirm",
+          prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
+          slot: "entityRef",
+          target: "patient",
+          reason:
+            frame?.clarificationNeeds.find((need) => need.slot === "entityRef")
+              ?.reason ||
+            "A specific patient must be confirmed before running this query.",
+          options: [
+            {
+              id: "patient_resolution_confirm_use",
+              label: `Use ${resolution.selectedMatch.patientName}`,
+              submissionValue: resolution.opaqueRef!,
+              sqlConstraint: "",
+              kind: "semantic",
+              value: resolution.opaqueRef!,
+            },
+            {
+              id: "patient_resolution_confirm_change",
+              label: "Choose a different patient",
+              submissionValue: "__CHANGE_PATIENT__",
+              sqlConstraint: "",
+              kind: "semantic",
+              value: "__CHANGE_PATIENT__",
+            },
+          ],
+          freeformAllowed: {
+            allowed: true,
+            placeholder: "Enter an exact patient name or ID",
+            hint: "Use an exact full name, patient ID, or domain ID",
+            minChars: 3,
+            maxChars: 100,
+          },
+          reasonCode: "missing_entity",
+          targetType: "entity",
+          evidence: {
+            clarificationSource: "patient_resolution",
+          },
+        } as any,
+      ];
       return {
         mode: "clarification",
         question,
         thinking,
         requiresClarification: true,
-        clarifications: [
-          {
-            id: "patient_resolution_confirm",
-            placeholder: "patient_resolution_confirm",
-            prompt: `Use patient "${resolution.selectedMatch.patientName}"?`,
-            slot: "entityRef",
-            target: "patient",
-            reason:
-              frame?.clarificationNeeds.find((need) => need.slot === "entityRef")
-                ?.reason ||
-              "A specific patient must be confirmed before running this query.",
-            options: [
-              {
-                id: "patient_resolution_confirm_use",
-                label: `Use ${resolution.selectedMatch.patientName}`,
-                submissionValue: resolution.opaqueRef!,
-                sqlConstraint: "",
-                kind: "semantic",
-                value: resolution.opaqueRef!,
-              },
-              {
-                id: "patient_resolution_confirm_change",
-                label: "Choose a different patient",
-                submissionValue: "__CHANGE_PATIENT__",
-                sqlConstraint: "",
-                kind: "semantic",
-                value: "__CHANGE_PATIENT__",
-              },
-            ],
-            freeformAllowed: {
-              allowed: true,
-              placeholder: "Enter an exact patient name or ID",
-              hint: "Use an exact full name, patient ID, or domain ID",
-              minChars: 3,
-              maxChars: 100,
-            },
-          } as any,
-        ],
+        clarifications,
         clarificationReasoning:
           "I found one exact full-name match and need a quick confirmation before running the query.",
+        clarificationTelemetry: this.buildClarificationTelemetry(
+          clarifications as any,
+          "patient_resolution"
+        ),
+        context: {
+          canonicalSemantics: canonicalSemantics || null,
+          canonicalSemanticsVersion: canonicalSemantics?.version || null,
+        },
+        canonicalSemantics,
       };
     }
 
@@ -2509,62 +3274,92 @@ export class ThreeModeOrchestrator {
       Array.isArray(resolution.matches) &&
       resolution.matches.length > 0
     ) {
+      const clarifications = [
+        {
+          id: "patient_resolution_select",
+          placeholder: "patient_resolution_select",
+          prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
+          slot: "entityRef",
+          target: "patient",
+          reason: "This query needs a specific patient before it can run.",
+          options: resolution.matches.map((match) => ({
+            id: toPatientOpaqueRef(match.patientId),
+            label: match.unitName
+              ? `${match.patientName} (${match.unitName})`
+              : match.patientName,
+            submissionValue: toPatientOpaqueRef(match.patientId),
+            sqlConstraint: "",
+            kind: "semantic" as const,
+            value: toPatientOpaqueRef(match.patientId),
+          })),
+          reasonCode: "missing_entity",
+          targetType: "entity",
+          evidence: {
+            clarificationSource: "patient_resolution",
+          },
+        } as any,
+      ];
       return {
         mode: "clarification",
         question,
         thinking,
         requiresClarification: true,
-        clarifications: [
-          {
-            id: "patient_resolution_select",
-            placeholder: "patient_resolution_select",
-            prompt: `I found multiple patients matching "${resolution.candidateText}". Which patient did you mean?`,
-            slot: "entityRef",
-            target: "patient",
-            reason: "This query needs a specific patient before it can run.",
-            options: resolution.matches.map((match) => ({
-              id: toPatientOpaqueRef(match.patientId),
-              label: match.unitName
-                ? `${match.patientName} (${match.unitName})`
-                : match.patientName,
-              submissionValue: toPatientOpaqueRef(match.patientId),
-              sqlConstraint: "",
-              kind: "semantic" as const,
-              value: toPatientOpaqueRef(match.patientId),
-            })),
-          } as any,
-        ],
+        clarifications,
         clarificationReasoning:
           "I found multiple exact full-name matches and need you to choose the correct patient.",
+        clarificationTelemetry: this.buildClarificationTelemetry(
+          clarifications as any,
+          "patient_resolution"
+        ),
+        context: {
+          canonicalSemantics: canonicalSemantics || null,
+          canonicalSemanticsVersion: canonicalSemantics?.version || null,
+        },
+        canonicalSemantics,
       };
     }
 
+    const clarifications = [
+      {
+        id: "patient_lookup_input",
+        placeholder: "patient_lookup_input",
+        prompt: resolution.candidateText
+          ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
+          : "Please enter an exact full name or patient ID.",
+        slot: "entityRef",
+        target: "patient",
+        reason: "This query targets one patient and needs an exact patient reference.",
+        freeformAllowed: {
+          allowed: true,
+          placeholder: "e.g. Fred Smith or 12345",
+          hint: "Use an exact full name, patient ID, or domain ID",
+          minChars: 3,
+          maxChars: 100,
+        },
+        reasonCode: "missing_entity",
+        targetType: "entity",
+        evidence: {
+          clarificationSource: "patient_resolution",
+        },
+      } as any,
+    ];
     return {
       mode: "clarification",
       question,
       thinking,
       requiresClarification: true,
-      clarifications: [
-        {
-          id: "patient_lookup_input",
-          placeholder: "patient_lookup_input",
-          prompt: resolution.candidateText
-            ? `I couldn't find a patient matching "${resolution.candidateText}". Please enter an exact full name or patient ID.`
-            : "Please enter an exact full name or patient ID.",
-          slot: "entityRef",
-          target: "patient",
-          reason: "This query targets one patient and needs an exact patient reference.",
-          freeformAllowed: {
-            allowed: true,
-            placeholder: "e.g. Fred Smith or 12345",
-            hint: "Use an exact full name, patient ID, or domain ID",
-            minChars: 3,
-            maxChars: 100,
-          },
-        } as any,
-      ],
+      clarifications,
       clarificationReasoning:
         "I couldn't resolve the patient reference securely. Please provide an exact patient name or ID.",
+      clarificationTelemetry: this.buildClarificationTelemetry(
+        clarifications as any,
+        "patient_resolution"
+      ),
+      context: {
+        canonicalSemantics: canonicalSemantics || null,
+        canonicalSemanticsVersion: canonicalSemantics?.version || null,
+      },
+      canonicalSemantics,
     };
   }
 
@@ -2582,7 +3377,19 @@ export class ThreeModeOrchestrator {
       }
       // Handle both string and numeric values (from template placeholders)
       const stringValue = String(value ?? "");
-      return stringValue.trim() !== "";
+      if (stringValue.trim() === "") {
+        return false;
+      }
+      if (id.startsWith("frame_slot_")) {
+        return false;
+      }
+      if (decodeFilterSelection(stringValue)) {
+        return false;
+      }
+      if (decodeAssessmentTypeSelection(stringValue)) {
+        return false;
+      }
+      return true;
     });
 
     if (entries.length === 0) {

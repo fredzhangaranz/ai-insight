@@ -23,8 +23,19 @@ vi.mock("@/lib/services/semantic/customer-query.service", () => ({
 
 import {
   PatientEntityResolver,
+  extractPatientNameCandidateFromQuestion,
   isLikelyPatientNameCandidate,
 } from "@/lib/services/patient-entity-resolver.service";
+
+describe("extractPatientNameCandidateFromQuestion", () => {
+  it("extracts a two-token name after does ...", () => {
+    expect(
+      extractPatientNameCandidateFromQuestion(
+        "how many wounds does Melody Crist have"
+      )
+    ).toBe("Melody Crist");
+  });
+});
 
 describe("PatientEntityResolver", () => {
   const resolver = new PatientEntityResolver();

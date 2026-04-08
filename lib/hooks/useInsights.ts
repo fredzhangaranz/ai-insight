@@ -8,6 +8,12 @@ import type {
 import type { FieldAssumption } from "@/lib/services/semantic/sql-generator.types";
 import type { SQLValidationResult } from "@/lib/services/sql-validator.service";
 import type { FilterMetricsSummary } from "@/lib/types/filter-metrics";
+import type { CanonicalQuerySemantics } from "@/lib/services/context-discovery/types";
+import { serializeResolvedEntitiesForPersistence } from "@/lib/utils/resolved-entities-persistence";
+import {
+  mergeClarificationResponses,
+  type ClarificationResponses,
+} from "@/lib/utils/clarification-response-merge";
 
 export interface ThinkingStep {
   id: string;
@@ -38,6 +44,8 @@ export interface ClarificationOption {
   submissionValue?: string;
   kind?: "sql" | "semantic";
   isDefault?: boolean;
+  selectionMapping?: Record<string, unknown>;
+  evidence?: Record<string, unknown>;
 }
 
 export interface OldClarificationRequest {
@@ -49,6 +57,16 @@ export interface OldClarificationRequest {
   slot?: string;
   target?: string;
   reason?: string;
+  reasonCode?: string;
+  targetType?: string;
+  evidence?: Record<string, unknown>;
+  freeformPolicy?: {
+    allowed: boolean;
+    placeholder?: string;
+    hint?: string;
+    minChars?: number;
+    maxChars?: number;
+  };
 }
 
 // New clarification format (Task 4.5E onwards, user-friendly UI)
@@ -84,6 +102,12 @@ export interface InsightResult {
   question?: string;
   thinking: ThinkingStep[];
   filterMetrics?: FilterMetricsSummary;
+  clarificationTelemetry?: {
+    requestedCount: number;
+    bySource: Record<string, number>;
+    byReasonCode: Record<string, number>;
+    byTargetType: Record<string, number>;
+  };
 
   // SQL execution fields (when mode is NOT clarification)
   sql?: string;
@@ -122,20 +146,26 @@ export interface InsightResult {
   artifacts?: InsightArtifact[];
   resolvedEntities?: ResolvedEntitySummary[];
   boundParameters?: Record<string, string | number | boolean | null>;
+  canonicalSemantics?: CanonicalQuerySemantics;
+  queryHistoryId?: number;
 }
 
 type AnalysisStatus = "idle" | "running" | "completed" | "canceled" | "error";
 
 function buildHistorySemanticContext(result: InsightResult | any) {
+  const persistedResolved = serializeResolvedEntitiesForPersistence(
+    result?.resolvedEntities as ResolvedEntitySummary[] | undefined
+  );
   return {
     ...(result?.context || {}),
     originalQuestion: result?.question || null,
+    canonicalSemantics: result?.canonicalSemantics || result?.context?.canonicalSemantics || null,
+    canonicalSemanticsVersion:
+      result?.canonicalSemantics?.version ||
+      result?.context?.canonicalSemanticsVersion ||
+      null,
     resolvedEntities:
-      result?.resolvedEntities?.map((entity: any) => ({
-        kind: entity.kind,
-        opaqueRef: entity.opaqueRef,
-        matchType: entity.matchType,
-      })) || null,
+      persistedResolved.length > 0 ? persistedResolved : null,
     boundParameters: result?.boundParameters || null,
     boundParameterNames: Object.keys(result?.boundParameters || {}),
   };
@@ -206,6 +236,7 @@ export function useInsights() {
   const [error, setError] = useState<Error | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const clarificationSelectionsRef = useRef<ClarificationResponses>({});
   const analysisStartRef = useRef<number | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -379,6 +410,7 @@ export function useInsights() {
     setResult(null);
     setError(null);
     setIsLoading(true);
+    clarificationSelectionsRef.current = {};
 
     const modelLabel = resolveModelLabel(modelId);
     setAnalysisModel(modelLabel);
@@ -427,7 +459,7 @@ export function useInsights() {
 
       // Auto-save successful query to history (best effort)
       try {
-        await fetch("/api/insights/history", {
+        const historyResponse = await fetch("/api/insights/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -440,6 +472,25 @@ export function useInsights() {
             sqlValidation: data.sqlValidation || null,
           }),
         });
+        if (historyResponse.ok) {
+          const historyPayload = await historyResponse.json().catch(() => null);
+          const queryHistoryId =
+            typeof historyPayload?.id === "number"
+              ? historyPayload.id
+              : typeof historyPayload?.id === "string"
+                ? Number(historyPayload.id)
+                : NaN;
+          if (Number.isFinite(queryHistoryId)) {
+            setResult((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    queryHistoryId,
+                  }
+                : prev
+            );
+          }
+        }
       } catch (historyError) {
         console.warn("Failed to save to query history:", historyError);
       }
@@ -503,6 +554,11 @@ export function useInsights() {
     setError(null);
     setIsLoading(true);
 
+    const mergedClarifications = mergeClarificationResponses(
+      clarificationSelectionsRef.current,
+      clarifications
+    );
+
     const modelLabel = resolveModelLabel(modelId);
     setAnalysisModel(modelLabel);
     updateAnalysisStatus("running");
@@ -517,7 +573,7 @@ export function useInsights() {
         body: JSON.stringify({
           question: originalQuestion,
           customerId,
-          clarifications,
+          clarifications: mergedClarifications,
           modelId
         }),
         signal: controller.signal,
@@ -547,6 +603,11 @@ export function useInsights() {
       } else {
         // Success - show results
         setResult(data);
+        if (data.mode === "clarification") {
+          clarificationSelectionsRef.current = mergedClarifications;
+        } else {
+          clarificationSelectionsRef.current = {};
+        }
         if (data.modelId) {
           setAnalysisModel(data.modelId);
         }
@@ -556,7 +617,7 @@ export function useInsights() {
 
       // Auto-save successful query to history (skip if error)
       try {
-        await fetch("/api/insights/history", {
+        const historyResponse = await fetch("/api/insights/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -570,6 +631,25 @@ export function useInsights() {
             clarificationAuditIds,
           }),
         });
+        if (historyResponse.ok) {
+          const historyPayload = await historyResponse.json().catch(() => null);
+          const queryHistoryId =
+            typeof historyPayload?.id === "number"
+              ? historyPayload.id
+              : typeof historyPayload?.id === "string"
+                ? Number(historyPayload.id)
+                : NaN;
+          if (Number.isFinite(queryHistoryId)) {
+            setResult((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    queryHistoryId,
+                  }
+                : prev
+            );
+          }
+        }
       } catch (historyError) {
         console.warn("Failed to save to query history:", historyError);
       }
@@ -608,6 +688,7 @@ export function useInsights() {
     setAnalysisSteps([]);
     setAnalysisModel(null);
     setAnalysisElapsedMs(0);
+    clarificationSelectionsRef.current = {};
     clearProgressSimulation();
     stopElapsedTimer();
     updateAnalysisStatus("idle");

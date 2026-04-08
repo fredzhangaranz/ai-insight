@@ -605,6 +605,20 @@ describe("IntentClassifierService", () => {
       expect(validation.result?.filters[0].value).toBeNull();
     });
 
+    it("should tolerate alternate absolute timeRange payloads without failing validation", () => {
+      const valid = {
+        ...MOCK_RESPONSES.outcomeAnalysis,
+        timeRange: {
+          start: "2025-07-01",
+          end: "2026-02-28",
+        },
+      };
+      const validation = validateIntentClassificationResponse(valid);
+
+      expect(validation.valid).toBe(true);
+      expect(validation.result?.timeRange).toBeUndefined();
+    });
+
     it("should normalize presentationIntent case and synonyms (Chart, graph -> chart)", () => {
       const withChartVariant = {
         ...MOCK_RESPONSES.outcomeAnalysis,

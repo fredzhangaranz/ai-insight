@@ -7,6 +7,7 @@ import React from "react";
 import { NewLayout } from "./components/NewLayout";
 import { useInsights } from "@/lib/hooks/useInsights";
 import { useSetQueryHistorySidebar } from "@/lib/context/QueryHistorySidebarContext";
+import type { ConversationMessage } from "@/lib/types/conversation";
 
 export default function NewInsightPage() {
   const [customerId, setCustomerId] = useState<string>("");
@@ -21,6 +22,39 @@ export default function NewInsightPage() {
   >();
   const [isQuestionSubmitted, setIsQuestionSubmitted] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  /** Full thread from GET /conversation/:id when opening query history (avoids a second fetch that races). */
+  const [historyThreadSnapshot, setHistoryThreadSnapshot] = useState<{
+    threadId: string;
+    messages: ConversationMessage[];
+  } | null>(null);
+
+  // ModelSelector is rendered inside a Radix Popover; content is not mounted while closed,
+  // so its fetch/onChange never runs and modelId stays "". The orchestrator then falls back
+  // to a hardcoded Claude id (Anthropic). Resolve the server default here on first load.
+  useEffect(() => {
+    let cancelled = false;
+    async function initDefaultModel() {
+      try {
+        const response = await fetch("/api/insights/models");
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled || !data.models?.length) return;
+        setModelId((prev) => {
+          const stillValid = data.models.some(
+            (m: { id: string }) => m.id === prev,
+          );
+          if (prev && stillValid) return prev;
+          return data.defaultModelId ?? data.models[0]?.id ?? "";
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+    initDefaultModel();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     result,
@@ -43,17 +77,31 @@ export default function NewInsightPage() {
     setIsQuestionSubmitted(false);
     setConversationThreadId(undefined);
     setFirstThreadUserMessageId(undefined);
+    setHistoryThreadSnapshot(null);
     reset();
   };
 
   // Auto-create conversation thread when we get a result from the first question
   React.useEffect(() => {
+    // Query-history replay can set a valid thread id before loading cached result.
+    // Do not create a new thread in that case, or follow-up messages disappear.
+    if (conversationThreadId) return;
+
     if (
       result &&
       result.sql &&
       result.mode !== "clarification" &&
       !result.error
     ) {
+      const queryHistoryId =
+        typeof result.queryHistoryId === "number" &&
+        Number.isFinite(result.queryHistoryId)
+          ? result.queryHistoryId
+          : null;
+      if (queryHistoryId === null) {
+        return;
+      }
+
       const createConversationThread = async () => {
         try {
           const response = await fetch(
@@ -66,6 +114,7 @@ export default function NewInsightPage() {
                 initialQuestion: result.question,
                 initialSql: result.sql,
                 initialResult: result.results,
+                queryHistoryId,
               }),
             },
           );
@@ -94,7 +143,7 @@ export default function NewInsightPage() {
 
       createConversationThread();
     }
-  }, [result, customerId]);
+  }, [result, customerId, conversationThreadId]);
 
   // Refetch query history when a new result arrives (after Ask or load from history).
   React.useEffect(() => {
@@ -128,7 +177,15 @@ export default function NewInsightPage() {
     // when `isQuestionSubmitted` is true.
     setIsQuestionSubmitted(true);
     setQuestion(query.question);
-    setConversationThreadId(query.conversationThreadId);
+
+    // Reset active thread context before loading a selected history item so we
+    // never render stale messages from a previously opened thread.
+    setFirstThreadUserMessageId(undefined);
+    setHistoryThreadSnapshot(null);
+    setConversationThreadId(undefined);
+
+    // Load thread messages once, then set thread id + snapshot in the same tick so the layout
+    // hydrates from this payload instead of firing a second GET that can race and clear UI.
     if (query.conversationThreadId) {
       try {
         const res = await fetch(
@@ -136,18 +193,20 @@ export default function NewInsightPage() {
         );
         if (res.ok) {
           const data = await res.json();
-          const firstUser = (data.messages ?? []).find(
-            (m: { role: string }) => m.role === "user",
-          );
+          const msgs = (data.messages ?? []) as ConversationMessage[];
+          const firstUser = msgs.find((m) => m.role === "user");
           setFirstThreadUserMessageId(firstUser?.id);
+          setHistoryThreadSnapshot({
+            threadId: query.conversationThreadId,
+            messages: msgs,
+          });
+          setConversationThreadId(query.conversationThreadId);
         } else {
-          setFirstThreadUserMessageId(undefined);
+          setConversationThreadId(undefined);
         }
       } catch {
-        setFirstThreadUserMessageId(undefined);
+        setConversationThreadId(undefined);
       }
-    } else {
-      setFirstThreadUserMessageId(undefined);
     }
 
     // Load cached result from history instead of re-executing
@@ -286,6 +345,10 @@ export default function NewInsightPage() {
     await ask(q, customerId, modelId);
   };
 
+  const onHistoryThreadSnapshotConsumed = useCallback(() => {
+    setHistoryThreadSnapshot(null);
+  }, []);
+
   const newProps = {
     customerId,
     setCustomerId,
@@ -295,6 +358,8 @@ export default function NewInsightPage() {
     setQuestion,
     conversationThreadId,
     firstThreadUserMessageId,
+    historyThreadSnapshot,
+    onHistoryThreadSnapshotConsumed,
     handleNewQuestion,
     handleHistorySelect,
     result,

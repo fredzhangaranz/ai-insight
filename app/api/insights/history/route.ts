@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getInsightGenDbPool } from "@/lib/db";
-import { getInsightsFeatureFlags } from "@/lib/config/insights-feature-flags";
 import { PatientEntityResolver } from "@/lib/services/patient-entity-resolver.service";
 import { PromptSanitizationService } from "@/lib/services/prompt-sanitization.service";
 import { SqlValidationAuditService, type LogSqlValidationInput } from "@/lib/services/audit/sql-validation-audit.service";
@@ -113,7 +112,6 @@ export async function POST(req: NextRequest) {
       clarificationAuditIds,
       sqlValidation,
     } = body;
-    const featureFlags = getInsightsFeatureFlags();
 
     // Validate required fields
     if (!question || !customerId || !sql || !mode) {
@@ -124,26 +122,24 @@ export async function POST(req: NextRequest) {
     }
 
     let sanitizedQuestion = question;
-    if (featureFlags.promptPhiSanitization) {
-      const patientResolver = new PatientEntityResolver();
-      const promptSanitizer = new PromptSanitizationService();
-      const resolution = await patientResolver.resolve(question, customerId);
+    const patientResolver = new PatientEntityResolver();
+    const promptSanitizer = new PromptSanitizationService();
+    const resolution = await patientResolver.resolve(question, customerId);
 
-      if (
-        resolution.status !== "no_candidate" &&
-        resolution.matchedText &&
-        resolution.opaqueRef
-      ) {
-        sanitizedQuestion = promptSanitizer.sanitize({
-          question,
-          patientMentions: [
-            {
-              matchedText: resolution.matchedText,
-              opaqueRef: resolution.opaqueRef,
-            },
-          ],
-        }).sanitizedQuestion;
-      }
+    if (
+      resolution.status !== "no_candidate" &&
+      resolution.matchedText &&
+      resolution.opaqueRef
+    ) {
+      sanitizedQuestion = promptSanitizer.sanitize({
+        question,
+        patientMentions: [
+          {
+            matchedText: resolution.matchedText,
+            opaqueRef: resolution.opaqueRef,
+          },
+        ],
+      }).sanitizedQuestion;
     }
 
     const pool = await getInsightGenDbPool();

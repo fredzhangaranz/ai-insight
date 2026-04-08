@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       initialQuestion,
       initialSql,
       initialResult,
+      queryHistoryId: queryHistoryIdInput,
     } = body;
 
     if (!customerId || !initialQuestion) {
@@ -54,21 +55,42 @@ export async function POST(req: NextRequest) {
     const threadId = threadResult.rows[0].id;
 
     // Link the most recent unlinked main question to this thread (from initial ask)
-    await pool.query(
-      `
-      UPDATE "QueryHistory"
-      SET "conversationThreadId" = $1
-      WHERE id = (
-        SELECT id FROM "QueryHistory"
-        WHERE "userId" = $2 AND "customerId" = $3::uuid
-          AND "parentQueryId" IS NULL
-          AND "conversationThreadId" IS NULL
-        ORDER BY "createdAt" DESC
-        LIMIT 1
-      )
-      `,
-      [threadId, userId, customerId]
-    );
+    const explicitQueryHistoryId =
+      typeof queryHistoryIdInput === "number" &&
+      Number.isFinite(queryHistoryIdInput)
+        ? queryHistoryIdInput
+        : typeof queryHistoryIdInput === "string" && queryHistoryIdInput.trim()
+          ? Number(queryHistoryIdInput)
+          : NaN;
+    const linkedHistoryResult = Number.isFinite(explicitQueryHistoryId)
+      ? await pool.query(
+          `
+          UPDATE "QueryHistory"
+          SET "conversationThreadId" = $1
+          WHERE id = $2
+            AND "userId" = $3
+            AND "customerId" = $4::uuid
+          RETURNING id
+          `,
+          [threadId, explicitQueryHistoryId, userId, customerId]
+        )
+      : await pool.query(
+          `
+          UPDATE "QueryHistory"
+          SET "conversationThreadId" = $1
+          WHERE id = (
+            SELECT id FROM "QueryHistory"
+            WHERE "userId" = $2 AND "customerId" = $3::uuid
+              AND "parentQueryId" IS NULL
+              AND "conversationThreadId" IS NULL
+            ORDER BY "createdAt" DESC
+            LIMIT 1
+          )
+          RETURNING id
+          `,
+          [threadId, userId, customerId]
+        );
+    const linkedQueryHistoryId = Number(linkedHistoryResult.rows[0]?.id);
 
     // Insert initial user message
     const userMsgResult = await pool.query(
@@ -87,6 +109,9 @@ export async function POST(req: NextRequest) {
       sql: initialSql,
       mode: "direct",
       compositionStrategy: "fresh",
+      queryHistoryId: Number.isFinite(linkedQueryHistoryId)
+        ? linkedQueryHistoryId
+        : undefined,
       resultSummary: {
         rowCount: initialResult?.rows?.length || 0,
         columns: initialResult?.columns || [],
