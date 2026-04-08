@@ -9,6 +9,10 @@ const logConversationQueryMock = vi.fn();
 const patientResolverResolveMock = vi.fn();
 const classifyIntentMock = vi.fn();
 const extractSemanticsMock = vi.fn();
+const isTypedDomainPipelineAuthoritativeMock = vi.fn(() => false);
+const isTypedDomainPipelineShadowEnabledMock = vi.fn(() => false);
+const runTypedDomainPipelineMock = vi.fn();
+const logTypedDomainPipelineShadowResultMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   authOptions: {},
@@ -82,6 +86,16 @@ vi.mock("@/lib/services/context-discovery/query-semantics-extractor.service", ()
   })),
 }));
 
+vi.mock("@/lib/config/typed-domain-pipeline", () => ({
+  isTypedDomainPipelineAuthoritative: isTypedDomainPipelineAuthoritativeMock,
+  isTypedDomainPipelineShadowEnabled: isTypedDomainPipelineShadowEnabledMock,
+}));
+
+vi.mock("@/lib/services/domain-pipeline/pipeline.service", () => ({
+  runTypedDomainPipeline: runTypedDomainPipelineMock,
+  logTypedDomainPipelineShadowResult: logTypedDomainPipelineShadowResultMock,
+}));
+
 describe("POST /api/insights/conversation/send", () => {
   let POST: (req: NextRequest) => Promise<Response>;
   const threadId = "11111111-1111-4111-8111-111111111111";
@@ -96,6 +110,20 @@ describe("POST /api/insights/conversation/send", () => {
     patientResolverResolveMock.mockResolvedValue({ status: "no_candidate" });
     classifyIntentMock.mockResolvedValue(null);
     extractSemanticsMock.mockResolvedValue(null);
+    isTypedDomainPipelineAuthoritativeMock.mockReturnValue(false);
+    isTypedDomainPipelineShadowEnabledMock.mockReturnValue(false);
+    runTypedDomainPipelineMock.mockResolvedValue({
+      status: "fallback",
+      telemetry: {
+        routeResult: {
+          route: "legacy_fallback",
+          confidence: 0.3,
+          reasons: [],
+          unsupportedReasons: ["no_supported_domain_match"],
+        },
+        fallbackReason: "route_not_supported_in_phase1",
+      },
+    });
     const routeModule = await import("../route");
     POST = routeModule.POST;
   });
@@ -1566,5 +1594,152 @@ describe("POST /api/insights/conversation/send", () => {
       { patientId1: "melody-crist-id" }
     );
     expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the typed pipeline in authoritative mode when it handles the request", async () => {
+    isTypedDomainPipelineAuthoritativeMock.mockReturnValue(true);
+    runTypedDomainPipelineMock.mockResolvedValue({
+      status: "handled",
+      result: {
+        mode: "direct",
+        question: "Show me details for John Smith",
+        thinking: [],
+        sql: "SELECT TOP 1 * FROM rpt.Patient WHERE id = @patientId1",
+        results: { rows: [{ patientId: "1" }], columns: ["patientId"] },
+        boundParameters: { patientId1: "patient-1" },
+      },
+      telemetry: {
+        routeResult: {
+          route: "patient_details",
+          confidence: 0.9,
+          reasons: ["patient_detail_phrase_match"],
+          unsupportedReasons: [],
+        },
+        validation: {
+          status: "ok",
+          errors: [],
+          clarifications: [],
+          validatorTrace: ["ok"],
+        },
+      },
+    });
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "Show me details for John Smith",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(runTypedDomainPipelineMock).toHaveBeenCalledWith({
+      customerId: "cust-1",
+      question: "Show me details for John Smith",
+      threadContextPatient: null,
+    });
+    expect(getAIProviderMock).not.toHaveBeenCalled();
+  });
+
+  it("runs the typed pipeline in shadow mode without changing the legacy conversation flow", async () => {
+    isTypedDomainPipelineShadowEnabledMock.mockReturnValue(true);
+    runTypedDomainPipelineMock.mockResolvedValue({
+      status: "handled",
+      result: {
+        mode: "clarification",
+        question: "Show wound assessments",
+        thinking: [],
+        requiresClarification: true,
+        clarifications: [],
+      },
+      telemetry: {
+        routeResult: {
+          route: "wound_assessment",
+          confidence: 0.82,
+          reasons: ["wound_assessment_phrase_match"],
+          unsupportedReasons: [],
+        },
+      },
+    });
+
+    const provider = {
+      completeWithConversation: vi.fn().mockResolvedValue("SELECT id FROM Wound"),
+    };
+    getAIProviderMock.mockResolvedValue(provider);
+
+    executeCustomerQueryMock.mockResolvedValue({
+      rows: [{ id: 1 }],
+      columns: ["id"],
+    });
+
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: threadId, customerId: "cust-1" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: userMsg2, createdAt: "2026-03-16T00:00:00Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: assistantMsg2, createdAt: "2026-03-16T00:00:02Z" }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ id: 100 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ contextCache: {} }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    getInsightGenDbPoolMock.mockResolvedValue(pool);
+    getServerSessionMock.mockResolvedValue({ user: { id: "7" } });
+
+    const req = new NextRequest("http://localhost/api/insights/conversation/send", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        customerId: "cust-1",
+        question: "how many wounds are we displaying",
+        modelId: "gemini-2.5-pro",
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(provider.completeWithConversation).toHaveBeenCalledTimes(1);
+    expect(runTypedDomainPipelineMock).toHaveBeenCalledTimes(1);
+    expect(logTypedDomainPipelineShadowResultMock).toHaveBeenCalledTimes(1);
   });
 });

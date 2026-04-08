@@ -68,6 +68,15 @@ import {
   GroundedClarificationPlannerService,
   type PlannerDecisionMetadata,
 } from "@/lib/services/semantic/grounded-clarification-planner.service";
+import {
+  isTypedDomainPipelineAuthoritative,
+  isTypedDomainPipelineShadowEnabled,
+} from "@/lib/config/typed-domain-pipeline";
+import {
+  logTypedDomainPipelineShadowResult,
+  runTypedDomainPipeline,
+} from "@/lib/services/domain-pipeline/pipeline.service";
+import type { TypedDomainPipelineRunResult } from "@/lib/services/domain-pipeline/types";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -188,6 +197,8 @@ export async function POST(req: NextRequest) {
       patientResolution = {
         status: "resolved",
         selectedMatch: {
+          patientId: inh.resolvedId,
+          domainId: null,
           patientName: inh.displayLabel?.trim() || "Patient",
           unitName: null,
         },
@@ -379,12 +390,62 @@ export async function POST(req: NextRequest) {
       userMessageId = userMsgResult.rows[0].id;
     }
 
-      if (
-        patientResolution &&
-        (patientResolution.status === "confirmation_required" ||
-          patientResolution.status === "disambiguation_required" ||
-          patientResolution.status === "not_found")
-      ) {
+    const hasClarificationResponses =
+      Boolean(clarificationResponses) &&
+      Object.keys(clarificationResponses || {}).length > 0;
+    let typedPipelineShadowResult: TypedDomainPipelineRunResult | null = null;
+
+    if (!userMessageId) {
+      throw new Error("User message could not be established");
+    }
+
+    if (!hasClarificationResponses) {
+      if (isTypedDomainPipelineAuthoritative()) {
+        const typedAuthoritativeResult = await runTypedDomainPipeline({
+          customerId: normalizedCustomerId,
+          question: normalizedQuestion,
+          threadContextPatient: inheritedThreadPatient,
+        });
+
+        if (typedAuthoritativeResult.status === "handled" && typedAuthoritativeResult.result) {
+          return persistTypedConversationResult({
+            pool,
+            result: typedAuthoritativeResult.result,
+            typedResult: typedAuthoritativeResult,
+            threadId: ensuredThreadId,
+            userMessageId,
+            customerId: normalizedCustomerId,
+            userId,
+            normalizedQuestion,
+            resolvedModelId,
+            startTime,
+            artifactPlanner,
+          });
+        }
+      }
+
+      if (isTypedDomainPipelineShadowEnabled()) {
+        try {
+          typedPipelineShadowResult = await runTypedDomainPipeline({
+            customerId: normalizedCustomerId,
+            question: normalizedQuestion,
+            threadContextPatient: inheritedThreadPatient,
+          });
+        } catch (shadowError) {
+          console.error(
+            "[/api/insights/conversation/send] Typed pipeline shadow failure",
+            shadowError
+          );
+        }
+      }
+    }
+
+    if (
+      patientResolution &&
+      (patientResolution.status === "confirmation_required" ||
+        patientResolution.status === "disambiguation_required" ||
+        patientResolution.status === "not_found")
+    ) {
       const clarificationResult = buildPatientClarificationResult(
         normalizedQuestion,
         patientResolution,
@@ -416,6 +477,16 @@ export async function POST(req: NextRequest) {
           JSON.stringify(assistantMetadata),
         ]
       );
+
+      if (typedPipelineShadowResult) {
+        logTypedDomainPipelineShadowResult({
+          source: "conversation_send",
+          customerId: normalizedCustomerId,
+          question: normalizedQuestion,
+          legacyResult: clarificationResult,
+          typedResult: typedPipelineShadowResult,
+        });
+      }
 
       return NextResponse.json({
         threadId: ensuredThreadId,
@@ -485,6 +556,16 @@ export async function POST(req: NextRequest) {
           JSON.stringify(assistantMetadata),
         ]
       );
+
+      if (typedPipelineShadowResult) {
+        logTypedDomainPipelineShadowResult({
+          source: "conversation_send",
+          customerId: normalizedCustomerId,
+          question: normalizedQuestion,
+          legacyResult: clarificationResult,
+          typedResult: typedPipelineShadowResult,
+        });
+      }
 
       return NextResponse.json({
         threadId: ensuredThreadId,
@@ -828,6 +909,16 @@ export async function POST(req: NextRequest) {
       effectiveBoundParameters
     );
 
+    if (typedPipelineShadowResult) {
+      logTypedDomainPipelineShadowResult({
+        source: "conversation_send",
+        customerId: normalizedCustomerId,
+        question: normalizedQuestion,
+        legacyResult: result,
+        typedResult: typedPipelineShadowResult,
+      });
+    }
+
     return NextResponse.json({
       threadId: ensuredThreadId,
       userMessageId,
@@ -854,6 +945,149 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+async function persistTypedConversationResult(input: {
+  pool: Pool;
+  result: InsightResult;
+  typedResult: TypedDomainPipelineRunResult;
+  threadId: string;
+  userMessageId: string;
+  customerId: string;
+  userId: number;
+  normalizedQuestion: string;
+  resolvedModelId: string;
+  startTime: number;
+  artifactPlanner: ArtifactPlannerService;
+}): Promise<Response> {
+  const executionTimeMs = Date.now() - input.startTime;
+  const phiProtection = new PHIProtectionService();
+
+  if (input.result.results) {
+    input.result.artifacts = input.artifactPlanner.plan({
+      question: input.normalizedQuestion,
+      rows: input.result.results.rows,
+      columns: input.result.results.columns,
+      sql: input.result.sql,
+      resolvedEntities: input.result.resolvedEntities,
+    });
+  }
+
+  const safeResultSummary = phiProtection.createSafeResultSummary(
+    input.result.results?.rows || [],
+    input.result.results?.columns || []
+  );
+  const artifactSummary = input.result.artifacts
+    ? buildArtifactSummary(input.result.artifacts, input.result.results?.rows || [])
+    : undefined;
+
+  let assistantMetadata: MessageMetadata = {
+    modelUsed: input.resolvedModelId,
+    sql: input.result.sql,
+    mode: input.result.mode,
+    compositionStrategy: COMPOSITION_STRATEGIES.FRESH,
+    resultSummary: safeResultSummary,
+    artifactSummary,
+    executionTimeMs,
+    resolvedEntities: serializeResolvedEntitiesForPersistence(
+      input.result.resolvedEntities || []
+    ),
+  };
+
+  phiProtection.validateNoPHI(assistantMetadata);
+
+  const assistantMsgResult = await input.pool.query(
+    `
+    INSERT INTO "ConversationMessages"
+      ("threadId", "role", "content", "metadata")
+    VALUES ($1, 'assistant', $2, $3)
+    RETURNING id, "createdAt"
+    `,
+    [
+      input.threadId,
+      generateResponseText(input.result, {
+        followUpReliability: true,
+      }),
+      JSON.stringify(assistantMetadata),
+    ]
+  );
+
+  const assistantMessageId = assistantMsgResult.rows[0].id;
+
+  if (input.result.mode !== "clarification") {
+    const latestInThread = await getLatestQueryHistoryIdForThread(
+      input.pool,
+      input.threadId,
+      input.userId,
+      input.customerId
+    );
+    const queryHistoryId = await logQueryHistory({
+      question: input.normalizedQuestion,
+      customerId: input.customerId,
+      userId: input.userId,
+      sql:
+        input.result.sql ||
+        (input.result.error ? `-- Query failed: ${input.result.error.message}` : ""),
+      mode: input.result.error ? "error" : input.result.mode,
+      resultCount: input.result.results?.rows.length || 0,
+      sqlValidation: input.result.sqlValidation,
+      semanticContext: {
+        originalQuestion: input.normalizedQuestion,
+        typedDomainPipeline: {
+          route: input.typedResult.telemetry.routeResult.route,
+          validationStatus: input.typedResult.telemetry.validation?.status || null,
+          fallbackReason: input.typedResult.telemetry.fallbackReason || null,
+        },
+        boundParameters: input.result.boundParameters || null,
+        boundParameterNames: Object.keys(input.result.boundParameters || {}),
+      },
+      threadId: input.threadId,
+      messageId: assistantMessageId,
+      compositionStrategy: COMPOSITION_STRATEGIES.FRESH,
+      parentQueryHistoryId: latestInThread,
+    });
+
+    if (queryHistoryId) {
+      input.result.queryHistoryId = queryHistoryId;
+      assistantMetadata = {
+        ...assistantMetadata,
+        queryHistoryId,
+      };
+      await input.pool.query(
+        `
+        UPDATE "ConversationMessages"
+        SET "metadata" = $1
+        WHERE id = $2
+        `,
+        [JSON.stringify(assistantMetadata), assistantMessageId]
+      );
+    }
+  }
+
+  await updateContextCache(
+    input.threadId,
+    input.customerId,
+    assistantMessageId,
+    safeResultSummary,
+    input.result.boundParameters
+  );
+
+  return NextResponse.json({
+    threadId: input.threadId,
+    userMessageId: input.userMessageId,
+    message: {
+      id: assistantMessageId,
+      role: "assistant",
+      content: generateResponseText(input.result, {
+        followUpReliability: true,
+      }),
+      result: input.result,
+      metadata: assistantMetadata,
+      createdAt: assistantMsgResult.rows[0].createdAt,
+    },
+    compositionStrategy: COMPOSITION_STRATEGIES.FRESH,
+    executionTimeMs,
+  });
 }
 
 async function loadConversationHistory(

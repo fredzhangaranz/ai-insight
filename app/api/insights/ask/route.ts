@@ -15,6 +15,15 @@ import { getSessionCacheService, type ClarificationSelection } from "@/lib/servi
 import { MetricsMonitor } from "@/lib/monitoring";
 import { CANONICAL_QUERY_SEMANTICS_VERSION } from "@/lib/services/context-discovery/types";
 import type { InsightResult } from "@/lib/hooks/useInsights";
+import {
+  getTypedDomainPipelineMode,
+  isTypedDomainPipelineAuthoritative,
+  isTypedDomainPipelineShadowEnabled,
+} from "@/lib/config/typed-domain-pipeline";
+import {
+  logTypedDomainPipelineShadowResult,
+  runTypedDomainPipeline,
+} from "@/lib/services/domain-pipeline/pipeline.service";
 
 const CACHE_VERSION =
   process.env.VERCEL_GIT_COMMIT_SHA ||
@@ -103,6 +112,61 @@ export async function POST(req: NextRequest) {
       cache_lookup_latency_ms: cacheMissLatency,
     });
 
+    const hasClarificationResponses =
+      Boolean(clarifications) && Object.keys(clarifications).length > 0;
+    const typedPipelineMode = getTypedDomainPipelineMode();
+
+    if (!hasClarificationResponses && isTypedDomainPipelineAuthoritative()) {
+      const typedAuthoritativeResult = await runTypedDomainPipeline({
+        customerId,
+        question,
+      });
+
+      if (typedAuthoritativeResult.status === "handled" && typedAuthoritativeResult.result) {
+        const result = typedAuthoritativeResult.result;
+        console.log("[/api/insights/ask] Typed domain pipeline handled request", {
+          customerId,
+          question,
+          mode: typedPipelineMode,
+          route: typedAuthoritativeResult.telemetry.routeResult.route,
+          validation: typedAuthoritativeResult.telemetry.validation?.status || null,
+        });
+
+        if (!result.error && (result.mode === "clarification" || result.sql)) {
+          sessionCache.set(
+            {
+              customerId,
+              question,
+              modelId,
+              schemaVersion,
+              promptVersion: effectivePromptVersion,
+              clarifications: clarificationsArray,
+            },
+            result as any
+          );
+        }
+
+        const metricsMonitor = MetricsMonitor.getInstance();
+        await metricsMonitor.logQueryPerformanceMetrics({
+          question,
+          customerId,
+          mode: result.mode,
+          totalDurationMs: Date.now() - cacheStartTime,
+          filterMetrics: result.filterMetrics,
+          clarificationRequested: result.mode === "clarification",
+        });
+
+        logClarificationCounters({
+          route: "ask",
+          customerId,
+          canonicalEnabled: true,
+          result,
+        });
+
+        return NextResponse.json(result);
+      }
+    }
+
     // Initialize orchestrator and execute
     // Pass modelId to orchestrator for model selection
     const orchestrator = new ThreeModeOrchestrator();
@@ -115,6 +179,24 @@ export async function POST(req: NextRequest) {
       : await orchestrator.ask(question, customerId, modelId);
 
     const totalDurationMs = Date.now() - orchestrationStart;
+
+    if (!hasClarificationResponses && isTypedDomainPipelineShadowEnabled()) {
+      try {
+        const typedShadowResult = await runTypedDomainPipeline({
+          customerId,
+          question,
+        });
+        logTypedDomainPipelineShadowResult({
+          source: "ask",
+          customerId,
+          question,
+          legacyResult: result,
+          typedResult: typedShadowResult,
+        });
+      } catch (shadowError) {
+        console.error("[/api/insights/ask] Typed pipeline shadow failure", shadowError);
+      }
+    }
 
     // If result contains an error, return it with 200 status but include error field
     // This allows the UI to show thinking steps + error message
@@ -197,7 +279,7 @@ function logClarificationCounters(input: {
   route: "ask" | "ask_with_clarifications";
   customerId: string;
   canonicalEnabled: boolean;
-  result: InsightResult;
+  result: InsightResult | Record<string, any>;
 }) {
   const clarifications = Array.isArray(input.result.clarifications)
     ? input.result.clarifications
