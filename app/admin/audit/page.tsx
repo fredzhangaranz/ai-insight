@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "@/app/components/loading-dots";
 import { ConversationMetricsCard } from "./conversation-metrics";
+import { TypedDomainShadowCard } from "./typed-domain-shadow-card";
 
 interface AuditSummary {
   totalQueries: number;
@@ -159,6 +160,8 @@ export default function AuditDashboardPage() {
           }
 
           <ConversationMetricsCard />
+
+          <TypedDomainShadowCard />
 
           {
             <div className="grid gap-4 md:grid-cols-2">

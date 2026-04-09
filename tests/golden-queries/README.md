@@ -20,6 +20,8 @@ tests/golden-queries/
 ├── schema.ts          # TypeScript interfaces for test structure
 ├── queries.json       # 20 golden queries with expected outcomes
 ├── runner.test.ts     # Test execution engine
+├── typed-domain-goldens.json   # Phase 1 typed-pipeline fixtures
+├── typed-domain-runner.test.ts # Route/resolver/compiler golden runner
 ├── results.json       # Latest test results (generated)
 └── README.md          # This file
 ```
@@ -60,6 +62,17 @@ npm test -- --testNamePattern="template hit rate"
 # Only simple queries
 npm test -- --testNamePattern="average latency"
 ```
+
+### Run Typed Domain Goldens
+```bash
+npx vitest run tests/golden-queries/typed-domain-runner.test.ts
+```
+
+This suite does not hit the legacy orchestrator. It validates the Phase 1 typed pipeline by module:
+- route classification
+- resolver outputs
+- validator status
+- deterministic SQL compiler output
 
 ### View Results
 ```bash

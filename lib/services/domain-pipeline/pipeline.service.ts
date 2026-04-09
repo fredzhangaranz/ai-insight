@@ -5,6 +5,7 @@ import { getDomainValidatorService } from "@/lib/services/domain-pipeline/valida
 import { getDomainSqlCompilerService } from "@/lib/services/domain-pipeline/compiler.service";
 import { getDomainExecutorService } from "@/lib/services/domain-pipeline/executor.service";
 import { getDomainResultMapperService } from "@/lib/services/domain-pipeline/result-mapper.service";
+import { TypedDomainShadowMetricsService } from "@/lib/services/domain-pipeline/shadow-metrics.service";
 import type {
   TypedDomainPipelineInput,
   TypedDomainPipelineRunResult,
@@ -108,13 +109,13 @@ export function logTypedDomainPipelineShadowResult(input: {
   typedResult: TypedDomainPipelineRunResult;
 }) {
   const typedPayload = input.typedResult.result;
-  console.log("[TypedDomainPipeline][shadow]", {
+  const event = {
     source: input.source,
     customerId: input.customerId,
     question: input.question,
     typedStatus: input.typedResult.status,
     typedRoute: input.typedResult.telemetry.routeResult.route,
-    typedValidation: input.typedResult.telemetry.validation?.status || null,
+    typedValidationStatus: input.typedResult.telemetry.validation?.status || null,
     legacyMode: input.legacyResult.mode || null,
     typedMode: typedPayload?.mode || null,
     sameMode: input.legacyResult.mode === typedPayload?.mode,
@@ -124,7 +125,11 @@ export function logTypedDomainPipelineShadowResult(input: {
     legacyError: input.legacyResult.error?.message || null,
     typedError: typedPayload?.error?.message || null,
     fallbackReason: input.typedResult.telemetry.fallbackReason || null,
-  });
+    recordedAt: new Date().toISOString(),
+  };
+
+  TypedDomainShadowMetricsService.getInstance().record(event);
+  console.log("[TypedDomainPipeline][shadow]", event);
 }
 
 function normalizeSql(value?: string): string {

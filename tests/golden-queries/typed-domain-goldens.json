@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "cases": [
+    {
+      "id": "td_route_patient_details",
+      "question": "Show me details for John Smith",
+      "expectedRoute": "patient_details",
+      "expectedValidationStatus": "ok",
+      "expectedSqlIncludes": [
+        "FROM rpt.Patient AS P",
+        "WHERE P.id = @patientId1"
+      ]
+    },
+    {
+      "id": "td_route_wound_assessment_relative_time",
+      "question": "Show John Smith's wound assessments in the last 3 months",
+      "expectedRoute": "wound_assessment",
+      "expectedValidationStatus": "ok",
+      "expectedResolvedContext": {
+        "hasPatientRef": true,
+        "timeRangeKind": "relative",
+        "assessmentTypeKind": "wound_assessment"
+      },
+      "expectedSqlIncludes": [
+        "FROM rpt.Assessment AS A",
+        "INNER JOIN rpt.Wound AS W",
+        "DATEADD(MONTH, -3, GETDATE())"
+      ]
+    },
+    {
+      "id": "td_resolver_thread_patient",
+      "question": "Show wound assessments for this patient",
+      "threadContextPatient": {
+        "resolvedId": "patient-thread-1",
+        "displayLabel": "Jane Doe",
+        "opaqueRef": "opaque-thread-1"
+      },
+      "expectedRoute": "wound_assessment",
+      "expectedValidationStatus": "ok",
+      "expectedPipelineStatus": "handled",
+      "expectedResolvedContext": {
+        "patientSource": "thread_context",
+        "hasPatientRef": true
+      }
+    },
+    {
+      "id": "td_fallback_aggregate_reporting",
+      "question": "How many diabetic wounds by clinic",
+      "expectedRoute": "aggregate_reporting",
+      "expectedPipelineStatus": "fallback",
+      "expectedFallbackReason": "route_not_supported_in_phase1"
+    }
+  ]
+}
